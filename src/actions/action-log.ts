@@ -10,20 +10,20 @@ import type { CustomerStatus } from '@/actions/ledger'
 
 export type ActionType = 'call' | 'collect' | 'order'
 export type ConversionStatus = 'unknown' | 'attempt' | 'success' | 'fail'
+export type ResultType = 'none' | 'order_created' | 'payment_completed'
 
 export interface LogActionInput {
   customer_id: string
   action_type: ActionType
-  triggered_message?: string   // 실제 노출 문구 (가변)
-  message_key?: string         // 분석용 고정 식별자 (불변)
+  triggered_message?: string
+  message_key?: string
   customer_status?: CustomerStatus
-  score_at_time?: number       // 클릭 시점 긴급도 점수 스냅샷
-  amount_at_time?: number      // 클릭 시점 미수금 스냅샷 (원)
+  score_at_time?: number
+  amount_at_time?: number
 }
 
 // ============================================================
 // 버튼 클릭 기록 → action_log_id 반환
-// 스냅샷 값은 insert 후 절대 수정하지 않음
 // ============================================================
 
 export async function logAction(
@@ -47,9 +47,10 @@ export async function logAction(
         triggered_message: input.triggered_message ?? null,
         message_key:       input.message_key ?? null,
         customer_status:   input.customer_status ?? null,
-        score_at_time:     input.score_at_time ?? null,    // 스냅샷
-        amount_at_time:    input.amount_at_time ?? null,   // 스냅샷
+        score_at_time:     input.score_at_time ?? null,
+        amount_at_time:    input.amount_at_time ?? null,
         conversion_status: 'unknown',
+        result_type:       'none',
       })
       .select('id')
       .single()
@@ -62,8 +63,7 @@ export async function logAction(
 }
 
 // ============================================================
-// conversion_status 업데이트 + contact_log_id 연결
-// action_logs는 상태 컬럼만 업데이트 (스냅샷 컬럼 수정 금지)
+// conversion_status 업데이트
 // ============================================================
 
 export async function updateActionConversion(
@@ -80,7 +80,55 @@ export async function updateActionConversion(
         ...(contact_log_id ? { contact_log_id } : {}),
       })
       .eq('id', action_log_id)
+  } catch {}
+}
+
+// ============================================================
+// 결과 자동 연결
+// 주문/수금 생성 후 호출 — 24시간 이내 같은 거래처 최근 action_log에 연결
+// 실패해도 주문/수금에 영향 없음 (fire-and-forget)
+// ============================================================
+
+export async function linkActionResult(input: {
+  customer_id: string
+  tenant_id: string
+  result_type: ResultType
+  result_amount: number
+  related_order_id?: string
+  related_payment_id?: string
+}): Promise<void> {
+  try {
+    const supabase = await createSupabaseServer()
+
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+
+    // 24시간 이내 같은 거래처의 가장 최근 action_log 1건
+    // result_type = 'none'인 것만 (이미 연결된 건 재연결 안 함)
+    const { data: target } = await supabase
+      .from('action_logs')
+      .select('id')
+      .eq('tenant_id', input.tenant_id)
+      .eq('customer_id', input.customer_id)
+      .eq('result_type', 'none')
+      .gte('created_at', since)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+
+    if (!target) return  // 연결할 action_log 없음 — 정상
+
+    await supabase
+      .from('action_logs')
+      .update({
+        result_type:          input.result_type,
+        result_amount:        input.result_amount,
+        result_at:            new Date().toISOString(),
+        related_order_id:     input.related_order_id ?? null,
+        related_payment_id:   input.related_payment_id ?? null,
+        conversion_status:    'success',
+      })
+      .eq('id', target.id)
   } catch {
-    // 조용히 무시
+    // 조용히 무시 — 결과 연결 실패는 주문/수금에 영향 없음
   }
 }

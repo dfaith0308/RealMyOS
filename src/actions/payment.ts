@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { linkActionResult } from '@/actions/action-log'
 import { createSupabaseServer } from '@/lib/supabase-server'
 import type { ActionResult } from '@/types/order'
 
@@ -88,6 +89,15 @@ export async function createPayment(
     const { updateActionConversion } = await import('@/actions/action-log')
     await updateActionConversion(input.action_log_id, 'success', contactData.id)
   }
+
+  // action_log 결과 자동 연결 (실패해도 수금에 영향 없음)
+  await linkActionResult({
+    customer_id:        input.customer_id,
+    tenant_id,
+    result_type:        'payment_completed',
+    result_amount:      input.amount,
+    related_payment_id: data.id,
+  })
 
   revalidatePath('/orders')
   revalidatePath('/payments')

@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getCustomerLedger } from '@/actions/ledger'
 import { formatKRW } from '@/lib/calc'
+import { createSupabaseServer } from '@/lib/supabase-server'
 
 export const metadata = { title: '거래처 원장 — RealMyOS' }
 
@@ -23,6 +24,17 @@ export default async function CustomerLedgerPage({
   if (!result.success || !result.data) notFound()
 
   const { rows, summary } = result.data
+
+  // 최근 행동 → 결과 로그 (7일 이내, 최대 5건)
+  const supabase = await createSupabaseServer()
+  const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  const { data: actionLogs } = await supabase
+    .from('action_logs')
+    .select('id, action_type, triggered_message, result_type, result_amount, result_at, created_at, conversion_status')
+    .eq('customer_id', id)
+    .gte('created_at', since7d)
+    .order('created_at', { ascending: false })
+    .limit(5)
 
   return (
     <main style={s.page}>
@@ -59,6 +71,31 @@ export default async function CustomerLedgerPage({
           </span>
         </div>
       </div>
+
+      {/* 최근 행동 → 결과 */}
+      {actionLogs && actionLogs.length > 0 && (
+        <div style={s.actionSection}>
+          <div style={s.actionTitle}>최근 행동 기록 (7일)</div>
+          {actionLogs.map((log) => (
+            <div key={log.id} style={s.actionRow}>
+              <span style={s.actionType}>
+                {log.action_type === 'call' ? '📞 전화' : log.action_type === 'collect' ? '💰 수금' : '📦 주문'}
+              </span>
+              <span style={s.actionMsg}>{log.triggered_message ?? '-'}</span>
+              {log.result_type !== 'none' ? (
+                <span style={s.resultBadge}>
+                  → {log.result_type === 'order_created' ? '주문' : '수금'} {formatKRW(log.result_amount ?? 0)}
+                </span>
+              ) : (
+                <span style={s.noResult}>결과 없음</span>
+              )}
+              <span style={s.actionDate}>
+                {new Date(log.created_at).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* 원장 테이블 */}
       {rows.length === 0 ? (

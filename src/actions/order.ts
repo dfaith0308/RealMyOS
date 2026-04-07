@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServer } from '@/lib/supabase-server'
 import { calcLine, calcOrderTotals, formatOrderNumber } from '@/lib/calc'
+import { linkActionResult } from '@/actions/action-log'
 import type {
   CreateOrderInput,
   ActionResult,
@@ -130,6 +131,15 @@ export async function createOrder(
   await supabase
     .from('customer_product_prices')
     .upsert(cacheRows, { onConflict: 'customer_id,product_id' })
+
+  // action_log 결과 자동 연결 (실패해도 주문에 영향 없음)
+  await linkActionResult({
+    customer_id:      input.customer_id,
+    tenant_id,
+    result_type:      'order_created',
+    result_amount:    totals.total_amount,
+    related_order_id: newOrder.id,
+  })
 
   revalidatePath('/orders')
 
