@@ -253,7 +253,7 @@ function CustomerCard({ c, rank, isTop }: { c: CustomerWithScore; rank: number; 
             label="수금" btnStyle={isHigh ? bs.payHot : bs.payNormal}
             triggeredMessage={c.action.text} messageKey={c.action.key}
             customerStatus={c.status} scoreAtTime={c.action_score} amountAtTime={c.overdue_amount} />
-          <ActionButton customerId={c.id} actionType="order" href="/orders/new"
+          <ActionButton customerId={c.id} actionType="order" href={`/orders/new?customer_id=${c.id}`}
             label="주문" btnStyle={bs.order}
             triggeredMessage={c.action.text} messageKey={c.action.key}
             customerStatus={c.status} scoreAtTime={c.action_score} amountAtTime={c.overdue_amount} />

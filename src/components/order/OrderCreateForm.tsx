@@ -20,7 +20,21 @@ interface LineItem {
 
 // ── 메인 컴포넌트 ────────────────────────────────────────────
 
-export default function OrderCreateForm() {
+interface OrderCreateFormProps {
+  initialCustomerId?: string   // 거래처 pre-fill
+  reorderLines?: Array<{       // 재주문 라인 복제
+    product_id: string
+    product_name: string
+    product_code: string
+    quantity: number
+    unit_price: number
+  }>
+}
+
+export default function OrderCreateForm({
+  initialCustomerId,
+  reorderLines,
+}: OrderCreateFormProps = {}) {
   const [isPending, startTransition] = useTransition()
 
   const [customers, setCustomers] = useState<CustomerForOrder[]>([])
@@ -46,18 +60,45 @@ export default function OrderCreateForm() {
 
   useEffect(() => {
     getCustomersForOrder().then((r) => {
-      if (r.success) setCustomers(r.data ?? [])
+      if (!r.success) return
+      const list = r.data ?? []
+      setCustomers(list)
+      // initialCustomerId가 있으면 자동 선택
+      if (initialCustomerId) {
+        const found = list.find((c) => c.id === initialCustomerId)
+        if (found) {
+          setSelectedCustomer(found)
+          setCustomerQuery(found.name)
+        }
+      }
     })
-  }, [])
+  }, [initialCustomerId])
 
   useEffect(() => {
     if (!selectedCustomer) return
     setLoadingProducts(true)
     getProductsForOrder(selectedCustomer.id).then((r) => {
-      if (r.success) setProducts(r.data ?? [])
+      if (!r.success) { setLoadingProducts(false); return }
+      const prods = r.data ?? []
+      setProducts(prods)
       setLoadingProducts(false)
+
+      // 재주문: 이전 라인을 복제
+      if (reorderLines && reorderLines.length > 0) {
+        const mapped = reorderLines.flatMap((rl) => {
+          const prod = prods.find((p) => p.id === rl.product_id)
+          if (!prod) return []
+          return [{
+            uid: Math.random().toString(36).slice(2),
+            product: prod,
+            quantity: rl.quantity,
+            unit_price: rl.unit_price,
+          }]
+        })
+        if (mapped.length > 0) setLines(mapped)
+      }
     })
-  }, [selectedCustomer])
+  }, [selectedCustomer, reorderLines])
 
   // ── 필터 ─────────────────────────────────────────────────
 
