@@ -24,6 +24,14 @@ const ACTION_CFG: Record<ActionType, { label: string; color: string; bg: string 
   maintain:        { label: '유지',      color: '#15803D', bg: '#F0FDF4' },
 }
 
+function dday(dateStr: string | null): string | null {
+  if (!dateStr) return null
+  const diff = Math.floor((new Date(dateStr).getTime() - Date.now()) / 86400000)
+  if (diff < 0)  return `${Math.abs(diff)}일 지남`
+  if (diff === 0) return '오늘'
+  return `D-${diff}`
+}
+
 export default async function CustomersPage({
   searchParams,
 }: {
@@ -33,17 +41,22 @@ export default async function CustomersPage({
   const result = await getCustomersWithScore()
   const all = result.data ?? []
 
+  // action_score DESC 이미 정렬됨 — 필터만 적용
   const dangerList  = all.filter((c) => c.status === 'danger')
   const warningList = all.filter((c) => c.status === 'warning')
   const newList     = all.filter((c) => c.status === 'new')
   const normalList  = all.filter((c) => c.status === 'normal')
+
   const totalBalance = all.reduce((s, c) => s + c.current_balance, 0)
   const totalOverdue = all.reduce((s, c) => s + c.overdue_amount, 0)
   const mustAct = all.filter((c) =>
     c.status === 'danger' ||
     (c.status === 'warning' && ((c.days_since_contact ?? 99) >= 3 || !c.last_contacted_at))
   )
-  const top3 = dangerList.slice(0, 3)
+
+  // 상위 5개 강조 (action_score 기준 — 이미 정렬됨)
+  const top5ids = new Set(all.slice(0, 5).map((c) => c.id))
+  const top3    = dangerList.slice(0, 3)
 
   const displayed =
     filter === 'danger'  ? dangerList  :
@@ -77,7 +90,7 @@ export default async function CustomersPage({
         </div>
       </div>
 
-      {/* TOP 3 */}
+      {/* TOP 3 빠른 실행 */}
       {top3.length > 0 && (
         <div style={s.alertBox}>
           <p style={s.alertTitle}>🚨 지금 바로 전화해야 할 거래처 — {top3.length}건</p>
@@ -92,12 +105,12 @@ export default async function CustomersPage({
                   {c.phone && (
                     <CallButton customerId={c.id} phone={c.phone} style="red"
                       triggeredMessage={c.action.text} messageKey={c.action.key}
-                      customerStatus={c.status} scoreAtTime={c.score} amountAtTime={c.overdue_amount} />
+                      customerStatus={c.status} scoreAtTime={c.action_score} amountAtTime={c.overdue_amount} />
                   )}
                   <ActionButton customerId={c.id} actionType="collect" href="/payments/new"
                     label="수금" btnStyle={bs.collectRed}
                     triggeredMessage={c.action.text} messageKey={c.action.key}
-                    customerStatus={c.status} scoreAtTime={c.score} amountAtTime={c.overdue_amount} />
+                    customerStatus={c.status} scoreAtTime={c.action_score} amountAtTime={c.overdue_amount} />
                   <Link href={`/customers/${c.id}/ledger`} style={s.ledgerBtnSm}>원장</Link>
                 </div>
               </div>
@@ -125,24 +138,34 @@ export default async function CustomersPage({
 
       {displayed.length === 0 && <div style={s.empty}>해당 거래처가 없습니다.</div>}
       <div style={s.list}>
-        {displayed.map((c) => <CustomerCard key={c.id} c={c} />)}
+        {displayed.map((c, i) => (
+          <CustomerCard key={c.id} c={c} rank={i + 1} isTop={top5ids.has(c.id)} />
+        ))}
       </div>
     </main>
   )
 }
 
-function CustomerCard({ c }: { c: CustomerWithScore }) {
+// ── 거래처 카드 ───────────────────────────────────────────────
+
+function CustomerCard({ c, rank, isTop }: { c: CustomerWithScore; rank: number; isTop: boolean }) {
   const cfg    = STATUS_CFG[c.status]
   const actCfg = ACTION_CFG[c.action.action_type]
   const isHigh = c.action.urgency === 'high'
   const isMid  = c.action.urgency === 'mid'
   const recontact    = calcRecontactMessage(c.overdue_amount, c.days_since_contact, c.status)
   const noContactMsg = !c.last_contacted_at ? calcNoContactMessage(c.status, c.overdue_amount) : null
+  const nextDday     = dday(c.next_action_date)
 
   return (
-    <div style={{ ...s.card, borderLeft: `4px solid ${cfg.color}` }}>
+    <div style={{
+      ...s.card,
+      borderLeft: `4px solid ${cfg.color}`,
+      boxShadow: isTop ? '0 2px 8px rgba(0,0,0,0.08)' : undefined,
+    }}>
       {recontact && <div style={s.recontactBanner}>🔁 {recontact}</div>}
 
+      {/* 행동 메시지 */}
       <div style={{
         ...s.actionBanner,
         background: isHigh ? '#FEF2F2' : isMid ? '#FFFBEB' : '#F9FAFB',
@@ -153,9 +176,13 @@ function CustomerCard({ c }: { c: CustomerWithScore }) {
         <span style={{ ...s.actionText, fontWeight: isHigh ? 700 : 500, fontSize: isHigh ? 14 : 13 }}>
           {c.action.text}
         </span>
-        {c.score > 30 && <span style={s.scorePill}>긴급도 {c.score}점</span>}
+        {/* 우선순위 점수 */}
+        <span style={{ ...s.scorePill, background: isTop ? '#FEF3C7' : '#F3F4F6', color: isTop ? '#92400E' : '#9ca3af' }}>
+          #{rank} · {c.action_score}점
+        </span>
       </div>
 
+      {/* 카드 바디 */}
       <div style={s.cardBody}>
         <div style={s.cardInfo}>
           <div style={s.nameRow}>
@@ -178,29 +205,47 @@ function CustomerCard({ c }: { c: CustomerWithScore }) {
                 : '없음'} />
             <MetaItem label="주문주기"
               value={c.order_cycle_days ? `${c.order_cycle_days}일` : '-'} />
+            {/* 다음 행동일 */}
+            <MetaItem label="다음 연락일"
+              value={nextDday ?? '-'}
+              highlight={nextDday !== null && nextDday.includes('지남')}
+              warn={nextDday === '오늘'} />
             <MetaItem label="전화"
               value={c.last_contacted_at
                 ? `${c.days_since_contact}일 전`
                 : (noContactMsg ?? '기록 없음')}
               highlight={!c.last_contacted_at && (c.status === 'danger' || c.status === 'warning')}
               warn={(c.days_since_contact ?? 0) >= 5} />
+            {/* 전환율 — 데이터 충분할 때만 표시 */}
+            {c.call_connect_rate !== null && (
+              <MetaItem label="📞 연결률"
+                value={`${Math.round(c.call_connect_rate * 100)}%`}
+                warn={c.call_connect_rate < 0.3} />
+            )}
+            {c.connect_to_payment_rate !== null && (
+              <MetaItem label="💰 수금전환"
+                value={`${Math.round(c.connect_to_payment_rate * 100)}%`}
+                highlight={c.connect_to_payment_rate >= 0.3}
+                warn={c.connect_to_payment_rate < 0.1} />
+            )}
           </div>
         </div>
 
+        {/* 빠른 실행 버튼 */}
         <div style={s.cardBtns}>
           {c.phone && (
             <CallButton customerId={c.id} phone={c.phone} style={isHigh ? 'hot' : 'cold'}
               triggeredMessage={c.action.text} messageKey={c.action.key}
-              customerStatus={c.status} scoreAtTime={c.score} amountAtTime={c.overdue_amount} />
+              customerStatus={c.status} scoreAtTime={c.action_score} amountAtTime={c.overdue_amount} />
           )}
           <ActionButton customerId={c.id} actionType="collect" href="/payments/new"
             label="수금" btnStyle={isHigh ? bs.payHot : bs.payNormal}
             triggeredMessage={c.action.text} messageKey={c.action.key}
-            customerStatus={c.status} scoreAtTime={c.score} amountAtTime={c.overdue_amount} />
+            customerStatus={c.status} scoreAtTime={c.action_score} amountAtTime={c.overdue_amount} />
           <ActionButton customerId={c.id} actionType="order" href="/orders/new"
             label="주문" btnStyle={bs.order}
             triggeredMessage={c.action.text} messageKey={c.action.key}
-            customerStatus={c.status} scoreAtTime={c.score} amountAtTime={c.overdue_amount} />
+            customerStatus={c.status} scoreAtTime={c.action_score} amountAtTime={c.overdue_amount} />
           <Link href={`/customers/${c.id}/ledger`} style={s.ledgerBtn}>원장 →</Link>
         </div>
       </div>
@@ -261,7 +306,7 @@ const s: Record<string, React.CSSProperties> = {
   actionBanner:    { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px' },
   actionIcon:      { fontSize: 13, flexShrink: 0 },
   actionText:      { flex: 1, lineHeight: 1.4 },
-  scorePill:       { fontSize: 10, padding: '2px 8px', background: '#FEF3C7', color: '#92400E', borderRadius: 10, fontWeight: 600, flexShrink: 0 },
+  scorePill:       { fontSize: 10, padding: '2px 8px', borderRadius: 10, fontWeight: 600, flexShrink: 0 },
   cardBody:        { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '12px 16px', gap: 12, flexWrap: 'wrap' },
   cardInfo:        { display: 'flex', flexDirection: 'column', gap: 8, flex: 1 },
   nameRow:         { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' },

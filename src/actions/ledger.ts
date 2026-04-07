@@ -3,7 +3,7 @@
 import { createSupabaseServer } from '@/lib/supabase-server'
 import { getSettings } from '@/actions/settings'
 import { DEFAULT_SETTINGS } from '@/constants/settings'
-import { calcScore, calcAction, calcOrderCycle, calcCustomerStatus } from '@/lib/customer-logic'
+import { calcScore, calcAction, calcOrderCycle, calcCustomerStatus, calcActionScore, calcNextActionDate } from '@/lib/customer-logic'
 import type { ActionMessage } from '@/lib/customer-logic'
 import type { ActionResult } from '@/types/order'
 
@@ -145,6 +145,12 @@ export interface CustomerWithBalance {
   last_contacted_at: string | null
   days_since_contact: number | null
   status: CustomerStatus
+  // 7일 전환율 지표
+  call_attempts_7d: number           // 전화 시도 수
+  connected_7d: number               // 통화 연결 수
+  payments_7d: number                // 수금 전환 수
+  call_connect_rate: number | null   // 연결률 (0~1), null = 데이터 부족
+  connect_to_payment_rate: number | null  // 수금전환률 (0~1), null = 데이터 부족
 }
 
 export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWithBalance[]>> {
@@ -184,10 +190,21 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
   // 전화 로그 (call / call_attempt만 — payment 제외)
   const { data: contactRows } = await supabase
     .from('contact_logs')
-    .select('customer_id, contacted_at')
+    .select('customer_id, contacted_at, contact_method, outcome')
     .in('customer_id', ids)
     .in('contact_method', ['call', 'call_attempt'])
     .order('contacted_at', { ascending: false })
+
+  // 최근 7일 action_logs (result_type 포함 — 수금 전환 여부)
+  // 전환율 기준 기간 — 모든 7일 지표는 이 상수 하나만 사용
+  const WINDOW_7D = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+
+  const { data: actionRows7d } = await supabase
+    .from('action_logs')
+    .select('customer_id, action_type, result_type, created_at')
+    .in('customer_id', ids)
+    .eq('action_type', 'call')
+    .gte('created_at', WINDOW_7D)
 
   // ── 집계 맵 구성 ─────────────────────────────────────────
 
@@ -210,6 +227,26 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
   const lastContactMap = new Map<string, string>()
   for (const cl of contactRows ?? []) {
     if (!lastContactMap.has(cl.customer_id)) lastContactMap.set(cl.customer_id, cl.contacted_at)
+  }
+
+  // 7일 전환율 집계 — 기준 기간 WINDOW_7D 단일 상수 사용
+  const callAttempts7d = new Map<string, number>()
+  const connected7d    = new Map<string, number>()
+  for (const cl of contactRows ?? []) {
+    if (cl.contacted_at < WINDOW_7D) continue  // 동일 기간 기준
+    if (cl.contact_method === 'call_attempt') {
+      callAttempts7d.set(cl.customer_id, (callAttempts7d.get(cl.customer_id) ?? 0) + 1)
+    }
+    if (cl.outcome === 'connected') {
+      connected7d.set(cl.customer_id, (connected7d.get(cl.customer_id) ?? 0) + 1)
+    }
+  }
+  // payment_completed 수 (7일 내 action_logs)
+  const payments7d = new Map<string, number>()
+  for (const al of actionRows7d ?? []) {
+    if (al.result_type === 'payment_completed') {
+      payments7d.set(al.customer_id, (payments7d.get(al.customer_id) ?? 0) + 1)
+    }
   }
 
   const today     = new Date()
@@ -276,6 +313,17 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
       danger_days:              cfg.danger_days,
     })
 
+    const call_attempts_7d = callAttempts7d.get(c.id) ?? 0
+    const connected_7d     = connected7d.get(c.id) ?? 0
+    const payments_7d      = payments7d.get(c.id) ?? 0
+    // 최소 5건 이상일 때만 유의미한 전환율 계산
+    const call_connect_rate = call_attempts_7d >= 5
+      ? connected_7d / call_attempts_7d
+      : null
+    const connect_to_payment_rate = connected_7d >= 3
+      ? payments_7d / connected_7d
+      : null
+
     return {
       id: c.id, name: c.name, phone: c.phone,
       payment_terms_days: c.payment_terms_days,
@@ -284,6 +332,8 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
       order_cycle_days, monthly_revenue,
       last_contacted_at, days_since_contact,
       status,
+      call_attempts_7d, connected_7d, payments_7d,
+      call_connect_rate, connect_to_payment_rate,
     }
   })
 
@@ -302,6 +352,8 @@ export type { ActionMessage }
 export interface CustomerWithScore extends CustomerWithBalance {
   score: number
   action: ActionMessage
+  action_score: number        // 우선순위 점수 (높을수록 먼저 행동)
+  next_action_date: string | null  // 다음 연락 예정일
 }
 
 export async function getCustomersWithScore(): Promise<ActionResult<CustomerWithScore[]>> {
@@ -311,10 +363,34 @@ export async function getCustomersWithScore(): Promise<ActionResult<CustomerWith
   const settingsResult = await getSettings()
   const cfg = settingsResult.success && settingsResult.data ? settingsResult.data : DEFAULT_SETTINGS
 
-  const result: CustomerWithScore[] = base.data.map((c) => ({
-    ...c,
-    score: calcScore(c.current_balance, c.days_since_order),
-    action: calcAction(
+  const is_new_map = new Map(base.data.map((c) => [
+    c.id,
+    c.last_order_date !== null && c.days_since_order !== null && c.days_since_order <= cfg.new_customer_days,
+  ]))
+
+  const result: CustomerWithScore[] = base.data.map((c) => {
+    const is_new = c.last_order_date !== null
+      ? (c.days_since_order ?? 999) <= cfg.new_customer_days
+      : false
+
+    const action_score = calcActionScore({
+      overdue_amount:            c.overdue_amount,
+      days_since_order:          c.days_since_order,
+      order_cycle_days:          c.order_cycle_days,
+      days_since_contact:        c.days_since_contact,
+      is_new,
+      call_connect_rate:         c.call_connect_rate,
+      connect_to_payment_rate:   c.connect_to_payment_rate,
+      call_attempts_7d:          c.call_attempts_7d,
+      payments_7d:               c.payments_7d,
+    })
+
+    return {
+      ...c,
+      score: action_score,
+      action_score,
+      next_action_date: calcNextActionDate(c.last_order_date, c.order_cycle_days),
+      action: calcAction(
       c.status,
       c.current_balance,
       c.days_since_order,
@@ -324,13 +400,18 @@ export async function getCustomersWithScore(): Promise<ActionResult<CustomerWith
       c.last_order_date,
       c.overdue_amount,
     ),
+    action_score: calcActionScore({
+      overdue_amount:     c.overdue_amount,
+      days_since_order:   c.days_since_order,
+      order_cycle_days:   c.order_cycle_days,
+      days_since_contact: c.days_since_contact,
+      is_new:             is_new_map.get(c.id) ?? false,
+    }),
+    next_action_date: calcNextActionDate(c.last_order_date, c.order_cycle_days),
   }))
 
-  const statusOrder: Record<CustomerStatus, number> = { danger: 0, warning: 1, new: 2, normal: 3 }
-  result.sort((a, b) => {
-    const sd = statusOrder[a.status] - statusOrder[b.status]
-    return sd !== 0 ? sd : b.score - a.score
-  })
+  // action_score DESC 정렬
+  result.sort((a, b) => b.action_score - a.action_score)
 
   return { success: true, data: result }
 }
