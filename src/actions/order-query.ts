@@ -26,6 +26,7 @@ export interface LastOrderData {
     product_code: string
     quantity: number
     unit_price: number
+    tax_type: string
   }>
 }
 
@@ -76,7 +77,7 @@ export async function getLastOrder(
 
   const { data: order } = await supabase
     .from('orders')
-    .select('id, customer_id, order_lines(product_id, product_name, product_code, quantity, unit_price)')
+    .select('id, customer_id, order_lines(product_id, product_name, product_code, quantity, unit_price, tax_type)')
     .eq('customer_id', customer_id)
     .eq('status', 'confirmed')
     .is('deleted_at', null)

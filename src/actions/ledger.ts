@@ -3,7 +3,7 @@
 import { createSupabaseServer } from '@/lib/supabase-server'
 import { getSettings } from '@/actions/settings'
 import { DEFAULT_SETTINGS } from '@/constants/settings'
-import { calcScore, calcAction, calcOrderCycle, calcCustomerStatus, calcActionScore, calcNextActionDate } from '@/lib/customer-logic'
+import { calcActionScore, calcAction, calcOrderCycle, calcCustomerStatus, calcNextActionDate } from '@/lib/customer-logic'
 import type { ActionMessage } from '@/lib/customer-logic'
 import type { ActionResult } from '@/types/order'
 
@@ -135,26 +135,78 @@ export interface CustomerWithBalance {
   name: string
   phone: string | null
   payment_terms_days: number
-  current_balance: number
-  overdue_amount: number
+  // ── 잔액 ───────────────────────────────────────────────────
+  current_balance: number      // opening + confirmed주문 - 수금
+  receivable_amount: number    // 미수금 = confirmed주문 - 수금 (opening 제외, min 0)
+  overdue_amount: number       // 연체금 = due_date 지난 미수금 (min 0)
+  // ── 주문 ───────────────────────────────────────────────────
   last_order_date: string | null
   last_order_amount: number | null
   days_since_order: number | null
   order_cycle_days: number | null
   monthly_revenue: number
+  avg_monthly_revenue: number
+  target_monthly_revenue: number
+  revenue_gap: number
+  // ── 연락 ───────────────────────────────────────────────────
   last_contacted_at: string | null
   days_since_contact: number | null
-  status: CustomerStatus
-  // 7일 전환율 지표
+  // ── 전환율 지표 (7일) ───────────────────────────────────────
   call_attempts_7d: number
   connected_7d: number
   payments_7d: number
   call_connect_rate: number | null
   connect_to_payment_rate: number | null
-  // 매출 지표
-  avg_monthly_revenue: number        // 최근 3개월 평균 월매출
-  target_monthly_revenue: number     // 목표 월매출
-  revenue_gap: number                // 이번달매출 - 목표 (음수 = 부족)
+  // ── 상태 ───────────────────────────────────────────────────
+  status: CustomerStatus
+}
+
+// ============================================================
+// 일별 현금흐름 (최근 7일)
+// ============================================================
+
+export interface DailyCashflow {
+  date: string         // YYYY-MM-DD
+  revenue: number      // confirmed 주문 합계
+  collected: number    // 수금 합계
+  net: number          // collected - revenue (양수 = 흑자)
+}
+
+export async function getDailyCashflow(): Promise<ActionResult<DailyCashflow[]>> {
+  const supabase = await createSupabaseServer()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: '로그인 필요' }
+
+  const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+
+  const [{ data: orders }, { data: payments }] = await Promise.all([
+    supabase.from('orders')
+      .select('order_date, total_amount')
+      .eq('status', 'confirmed')
+      .is('deleted_at', null)
+      .gte('order_date', since7d),
+    supabase.from('payments')
+      .select('payment_date, amount')
+      .eq('status', 'confirmed')
+      .gte('payment_date', since7d),
+  ])
+
+  const revenueByDate  = new Map<string, number>()
+  const collectedByDate = new Map<string, number>()
+  for (const o of orders ?? [])   revenueByDate.set(o.order_date, (revenueByDate.get(o.order_date) ?? 0) + o.total_amount)
+  for (const p of payments ?? []) collectedByDate.set(p.payment_date, (collectedByDate.get(p.payment_date) ?? 0) + p.amount)
+
+  const today = new Date()
+  const result: DailyCashflow[] = []
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(today)
+    d.setDate(d.getDate() - i)
+    const date = d.toISOString().slice(0, 10)
+    const revenue   = revenueByDate.get(date)  ?? 0
+    const collected = collectedByDate.get(date) ?? 0
+    result.push({ date, revenue, collected, net: collected - revenue })
+  }
+  return { success: true, data: result }
 }
 
 export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWithBalance[]>> {
@@ -175,47 +227,39 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
   if (!customers?.length) return { success: true, data: [] }
   const ids = customers.map((c) => c.id)
 
-  // confirmed 주문만 — draft/cancelled 제외
-  const { data: allOrders } = await supabase
-    .from('orders')
-    .select('customer_id, total_amount, order_date')
-    .in('customer_id', ids)
-    .eq('status', 'confirmed')
-    .is('deleted_at', null)
-    .order('order_date', { ascending: false })
+  const [{ data: allOrders }, { data: paymentRows }, { data: contactRows }, { data: actionRows7d }] =
+    await Promise.all([
+      supabase.from('orders')
+        .select('customer_id, total_amount, order_date')
+        .in('customer_id', ids)
+        .eq('status', 'confirmed')
+        .is('deleted_at', null)
+        .order('order_date', { ascending: false }),
 
-  // confirmed 수금
-  const { data: paymentRows } = await supabase
-    .from('payments')
-    .select('customer_id, amount')
-    .in('customer_id', ids)
-    .eq('status', 'confirmed')
+      supabase.from('payments')
+        .select('customer_id, amount')
+        .in('customer_id', ids)
+        .eq('status', 'confirmed'),
 
-  // 전화 로그 (call / call_attempt만 — payment 제외)
-  const { data: contactRows } = await supabase
-    .from('contact_logs')
-    .select('customer_id, contacted_at, contact_method, outcome')
-    .in('customer_id', ids)
-    .in('contact_method', ['call', 'call_attempt'])
-    .order('contacted_at', { ascending: false })
+      supabase.from('contact_logs')
+        .select('customer_id, contacted_at, contact_method, outcome')
+        .in('customer_id', ids)
+        .in('contact_method', ['call', 'call_attempt'])
+        .order('contacted_at', { ascending: false }),
 
-  // 최근 7일 action_logs (result_type 포함 — 수금 전환 여부)
-  // 전환율 기준 기간 — 모든 7일 지표는 이 상수 하나만 사용
-  const WINDOW_7D = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+      supabase.from('action_logs')
+        .select('customer_id, action_type, result_type, created_at')
+        .in('customer_id', ids)
+        .eq('action_type', 'call')
+        .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
+    ])
 
-  const { data: actionRows7d } = await supabase
-    .from('action_logs')
-    .select('customer_id, action_type, result_type, created_at')
-    .in('customer_id', ids)
-    .eq('action_type', 'call')
-    .gte('created_at', WINDOW_7D)
+  // ── 집계 맵 ──────────────────────────────────────────────
 
-  // ── 집계 맵 구성 ─────────────────────────────────────────
+  const WINDOW_7D   = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  const termsMap    = new Map(customers.map((c) => [c.id, c.payment_terms_days ?? 0]))
+  const openingMap  = new Map(customers.map((c) => [c.id, c.opening_balance ?? 0]))
 
-  const termsMap = new Map(customers.map((c) => [c.id, c.payment_terms_days ?? 0]))
-  const openingMap = new Map(customers.map((c) => [c.id, c.opening_balance ?? 0]))
-
-  // 거래처별 주문 리스트 (이미 내림차순 정렬)
   const ordersByCustomer = new Map<string, Array<{ total_amount: number; order_date: string }>>()
   for (const o of allOrders ?? []) {
     const list = ordersByCustomer.get(o.customer_id) ?? []
@@ -224,40 +268,31 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
   }
 
   const paymentMap = new Map<string, number>()
-  for (const p of paymentRows ?? []) {
+  for (const p of paymentRows ?? [])
     paymentMap.set(p.customer_id, (paymentMap.get(p.customer_id) ?? 0) + p.amount)
-  }
 
   const lastContactMap = new Map<string, string>()
-  for (const cl of contactRows ?? []) {
+  for (const cl of contactRows ?? [])
     if (!lastContactMap.has(cl.customer_id)) lastContactMap.set(cl.customer_id, cl.contacted_at)
-  }
 
-  // 7일 전환율 집계 — 기준 기간 WINDOW_7D 단일 상수 사용
   const callAttempts7d = new Map<string, number>()
   const connected7d    = new Map<string, number>()
   for (const cl of contactRows ?? []) {
-    if (cl.contacted_at < WINDOW_7D) continue  // 동일 기간 기준
-    if (cl.contact_method === 'call_attempt') {
+    if (cl.contacted_at < WINDOW_7D) continue
+    if (cl.contact_method === 'call_attempt')
       callAttempts7d.set(cl.customer_id, (callAttempts7d.get(cl.customer_id) ?? 0) + 1)
-    }
-    if (cl.outcome === 'connected') {
+    if (cl.outcome === 'connected')
       connected7d.set(cl.customer_id, (connected7d.get(cl.customer_id) ?? 0) + 1)
-    }
   }
-  // payment_completed 수 (7일 내 action_logs)
   const payments7d = new Map<string, number>()
-  for (const al of actionRows7d ?? []) {
-    if (al.result_type === 'payment_completed') {
+  for (const al of actionRows7d ?? [])
+    if (al.result_type === 'payment_completed')
       payments7d.set(al.customer_id, (payments7d.get(al.customer_id) ?? 0) + 1)
-    }
-  }
 
-  const today     = new Date()
+  const today      = new Date()
   today.setHours(0, 0, 0, 0)
-  const todayStr  = today.toISOString().slice(0, 10)
-  const monthStart    = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10)
-  const threeMonthAgo = new Date(today.getFullYear(), today.getMonth() - 3, 1).toISOString().slice(0, 10)
+  const todayStr   = today.toISOString().slice(0, 10)
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10)
 
   const result: CustomerWithBalance[] = customers.map((c) => {
     const orders  = ordersByCustomer.get(c.id) ?? []
@@ -265,10 +300,13 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
     const opening = openingMap.get(c.id) ?? 0
     const paid    = paymentMap.get(c.id) ?? 0
 
-    const totalOrdersAmt = orders.reduce((s, o) => s + o.total_amount, 0)
+    const totalOrdersAmt  = orders.reduce((s, o) => s + o.total_amount, 0)
     const current_balance = opening + totalOrdersAmt - paid
 
-    // 연체금: due_date < today인 confirmed 주문 합계 - 수금
+    // receivable: confirmed 주문합 - 수금 (opening 제외, 0 미만 방지)
+    const receivable_amount = Math.max(0, totalOrdersAmt - paid)
+
+    // overdue: due_date 지난 주문 합 - 수금 (0 미만 방지)
     let overdueSum = 0
     for (const o of orders) {
       const due = new Date(o.order_date)
@@ -277,34 +315,43 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
     }
     const overdue_amount = Math.max(0, overdueSum - paid)
 
-    // 마지막 주문
     const last_order_date   = orders[0]?.order_date ?? null
     const last_order_amount = orders[0]?.total_amount ?? null
     const days_since_order  = last_order_date
       ? Math.floor((today.getTime() - new Date(last_order_date).getTime()) / 86400000)
       : null
 
-    // 주문주기: 최근 5건 날짜 기준, confirmed만
-    const recentDates  = orders.slice(0, 5).map((o) => o.order_date)
+    const recentDates      = orders.slice(0, 5).map((o) => o.order_date)
     const order_cycle_days = calcOrderCycle(recentDates)
 
-    // 이번달 매출
     const monthly_revenue = orders
       .filter((o) => o.order_date >= monthStart)
       .reduce((s, o) => s + o.total_amount, 0)
 
-    // 전화 연락
+    // 평균 월매출: 월별 합산 후 3으로 나눔
+    const monthlyTotals = new Map<string, number>()
+    const threeMonthAgo = new Date(today.getFullYear(), today.getMonth() - 3, 1).toISOString().slice(0, 10)
+    for (const o of orders.filter((o) => o.order_date >= threeMonthAgo)) {
+      const ym = o.order_date.slice(0, 7)
+      monthlyTotals.set(ym, (monthlyTotals.get(ym) ?? 0) + o.total_amount)
+    }
+    const m1 = monthlyTotals.get(new Date(today.getFullYear(), today.getMonth() - 1, 1).toISOString().slice(0, 7)) ?? 0
+    const m2 = monthlyTotals.get(new Date(today.getFullYear(), today.getMonth() - 2, 1).toISOString().slice(0, 7)) ?? 0
+    const m3 = monthlyTotals.get(new Date(today.getFullYear(), today.getMonth() - 3, 1).toISOString().slice(0, 7)) ?? 0
+    const avg_monthly_revenue = Math.round((m1 + m2 + m3) / 3)
+
+    const target_monthly_revenue = (c as any).target_monthly_revenue ?? cfg.default_target_monthly_revenue ?? 0
+    const revenue_gap = monthly_revenue - target_monthly_revenue
+
     const last_contacted_at  = lastContactMap.get(c.id) ?? null
     const days_since_contact = last_contacted_at
       ? Math.floor((today.getTime() - new Date(last_contacted_at).getTime()) / 86400000)
       : null
 
-    // 신규 여부
     const is_new = last_order_date !== null
       ? days_since_order !== null && days_since_order <= cfg.new_customer_days
       : false
 
-    // 상태 계산 (연체금 + 주문주기 기반 — 미수금 기준 사용 안 함)
     const status = calcCustomerStatus({
       overdue_amount,
       days_since_order,
@@ -318,44 +365,31 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
       danger_days:              cfg.danger_days,
     })
 
-    // 평균 월매출 (최근 3개월 confirmed 주문)
-    const orders3m = orders.filter((o) => o.order_date >= threeMonthAgo)
-    const avg_monthly_revenue = orders3m.length > 0
-      ? Math.round(orders3m.reduce((s, o) => s + o.total_amount, 0) / 3)
-      : 0
-
-    // 목표 매출 — 거래처 개별값 우선, 없으면 settings fallback
-    const target_monthly_revenue = (c as any).target_monthly_revenue ?? cfg.default_target_monthly_revenue ?? 0
-    const revenue_gap = monthly_revenue - target_monthly_revenue
-
     const call_attempts_7d = callAttempts7d.get(c.id) ?? 0
     const connected_7d     = connected7d.get(c.id) ?? 0
-    const payments_7d      = payments7d.get(c.id) ?? 0
-    // 최소 5건 이상일 때만 유의미한 전환율 계산
+    const payments_7d_val  = payments7d.get(c.id) ?? 0
     const call_connect_rate = call_attempts_7d >= 5
-      ? connected_7d / call_attempts_7d
-      : null
+      ? connected_7d / call_attempts_7d : null
     const connect_to_payment_rate = connected_7d >= 3
-      ? payments_7d / connected_7d
-      : null
+      ? payments_7d_val / connected_7d : null
 
     return {
       id: c.id, name: c.name, phone: c.phone,
       payment_terms_days: c.payment_terms_days,
-      current_balance, overdue_amount,
+      current_balance, receivable_amount, overdue_amount,
       last_order_date, last_order_amount, days_since_order,
-      order_cycle_days, monthly_revenue,
+      order_cycle_days, monthly_revenue, avg_monthly_revenue,
+      target_monthly_revenue, revenue_gap,
       last_contacted_at, days_since_contact,
-      status,
-      call_attempts_7d, connected_7d, payments_7d,
+      call_attempts_7d, connected_7d,
+      payments_7d: payments_7d_val,
       call_connect_rate, connect_to_payment_rate,
-      avg_monthly_revenue, target_monthly_revenue, revenue_gap,
+      status,
     }
   })
 
   const statusOrder: Record<CustomerStatus, number> = { danger: 0, warning: 1, new: 2, normal: 3 }
   result.sort((a, b) => statusOrder[a.status] - statusOrder[b.status])
-
   return { success: true, data: result }
 }
 
@@ -367,9 +401,9 @@ export type { ActionMessage }
 
 export interface CustomerWithScore extends CustomerWithBalance {
   score: number
+  action_score: number
+  next_action_date: string | null
   action: ActionMessage
-  action_score: number        // 우선순위 점수 (높을수록 먼저 행동)
-  next_action_date: string | null  // 다음 연락 예정일
 }
 
 export async function getCustomersWithScore(): Promise<ActionResult<CustomerWithScore[]>> {
@@ -379,27 +413,23 @@ export async function getCustomersWithScore(): Promise<ActionResult<CustomerWith
   const settingsResult = await getSettings()
   const cfg = settingsResult.success && settingsResult.data ? settingsResult.data : DEFAULT_SETTINGS
 
-  const is_new_map = new Map(base.data.map((c) => [
-    c.id,
-    c.last_order_date !== null && c.days_since_order !== null && c.days_since_order <= cfg.new_customer_days,
-  ]))
-
   const result: CustomerWithScore[] = base.data.map((c) => {
     const is_new = c.last_order_date !== null
       ? (c.days_since_order ?? 999) <= cfg.new_customer_days
       : false
 
     const action_score = calcActionScore({
-      overdue_amount:            c.overdue_amount,
-      days_since_order:          c.days_since_order,
-      order_cycle_days:          c.order_cycle_days,
-      days_since_contact:        c.days_since_contact,
+      overdue_amount:          c.overdue_amount,
+      receivable_amount:       c.receivable_amount,
+      days_since_order:        c.days_since_order,
+      order_cycle_days:        c.order_cycle_days,
+      days_since_contact:      c.days_since_contact,
       is_new,
-      call_connect_rate:         c.call_connect_rate,
-      connect_to_payment_rate:   c.connect_to_payment_rate,
-      call_attempts_7d:          c.call_attempts_7d,
-      payments_7d:               c.payments_7d,
-      revenue_gap:               c.revenue_gap,
+      call_connect_rate:       c.call_connect_rate,
+      connect_to_payment_rate: c.connect_to_payment_rate,
+      call_attempts_7d:        c.call_attempts_7d,
+      payments_7d:             c.payments_7d,
+      revenue_gap:             c.revenue_gap,
     })
 
     return {
@@ -408,28 +438,19 @@ export async function getCustomersWithScore(): Promise<ActionResult<CustomerWith
       action_score,
       next_action_date: calcNextActionDate(c.last_order_date, c.order_cycle_days),
       action: calcAction(
-      c.status,
-      c.current_balance,
-      c.days_since_order,
-      cfg.warning_days,
-      cfg.danger_days,
-      cfg.new_customer_days,
-      c.last_order_date,
-      c.overdue_amount,
-      c.revenue_gap,
-    ),
-    action_score: calcActionScore({
-      overdue_amount:     c.overdue_amount,
-      days_since_order:   c.days_since_order,
-      order_cycle_days:   c.order_cycle_days,
-      days_since_contact: c.days_since_contact,
-      is_new:             is_new_map.get(c.id) ?? false,
-    }),
-    next_action_date: calcNextActionDate(c.last_order_date, c.order_cycle_days),
-  }))
+        c.status,
+        c.current_balance,
+        c.days_since_order,
+        cfg.warning_days,
+        cfg.danger_days,
+        cfg.new_customer_days,
+        c.last_order_date,
+        c.overdue_amount,
+        c.revenue_gap,
+      ),
+    }
+  })
 
-  // action_score DESC 정렬
   result.sort((a, b) => b.action_score - a.action_score)
-
   return { success: true, data: result }
 }

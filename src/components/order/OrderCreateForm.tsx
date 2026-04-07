@@ -28,6 +28,7 @@ interface OrderCreateFormProps {
     product_code: string
     quantity: number
     unit_price: number
+    tax_type?: string            // snapshot — products 현재값 아님
   }>
 }
 
@@ -88,9 +89,13 @@ export default function OrderCreateForm({
         const mapped = reorderLines.flatMap((rl) => {
           const prod = prods.find((p) => p.id === rl.product_id)
           if (!prod) return []
+          // tax_type: order_lines 스냅샷 우선, 없으면 product 현재값
+          const snapProduct = rl.tax_type
+            ? { ...prod, tax_type: rl.tax_type as 'taxable' | 'exempt' }
+            : prod
           return [{
             uid: Math.random().toString(36).slice(2),
-            product: prod,
+            product: snapProduct,
             quantity: rl.quantity,
             unit_price: rl.unit_price,
           }]

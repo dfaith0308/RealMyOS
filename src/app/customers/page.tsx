@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { getCustomersWithScore } from '@/actions/ledger'
+import { getCustomersWithScore, getDailyCashflow } from '@/actions/ledger'
 import { formatKRW } from '@/lib/calc'
 import { calcRecontactMessage, calcNoContactMessage } from '@/lib/customer-logic'
 import type { CustomerStatus, CustomerWithScore } from '@/actions/ledger'
@@ -21,16 +21,23 @@ const ACTION_CFG: Record<ActionType, { label: string; color: string; bg: string 
   visit:           { label: '방문 필요', color: '#7C3AED', bg: '#F5F3FF' },
   call:            { label: '주문 독려', color: '#B45309', bg: '#FFFBEB' },
   new_customer:    { label: '신규 관리', color: '#1D4ED8', bg: '#EFF6FF' },
-  upsell:          { label: '매출 확대',  color: '#0369A1', bg: '#F0F9FF' },
+  upsell:          { label: '매출 확대', color: '#0369A1', bg: '#F0F9FF' },
   maintain:        { label: '유지',      color: '#15803D', bg: '#F0FDF4' },
 }
 
 function dday(dateStr: string | null): string | null {
   if (!dateStr) return null
   const diff = Math.floor((new Date(dateStr).getTime() - Date.now()) / 86400000)
-  if (diff < 0)  return `${Math.abs(diff)}일 지남`
+  if (diff < 0)   return `${Math.abs(diff)}일 지남`
   if (diff === 0) return '오늘'
   return `D-${diff}`
+}
+
+// 수금 색상: 연체금 > 0 → 빨강 / 미수금만 → 노랑 / 없음 → 초록
+function receivableColor(overdue: number, receivable: number): string {
+  if (overdue > 0)     return '#B91C1C'
+  if (receivable > 0)  return '#B45309'
+  return '#15803D'
 }
 
 export default async function CustomersPage({
@@ -39,31 +46,40 @@ export default async function CustomersPage({
   searchParams: Promise<{ filter?: string }>
 }) {
   const { filter } = await searchParams
-  const result = await getCustomersWithScore()
-  const all = result.data ?? []
+  const [result, cashflowResult] = await Promise.all([
+    getCustomersWithScore(),
+    getDailyCashflow(),
+  ])
+  const all      = result.data ?? []
+  const cashflow = cashflowResult.data ?? []
 
-  // action_score DESC 이미 정렬됨 — 필터만 적용
   const dangerList  = all.filter((c) => c.status === 'danger')
   const warningList = all.filter((c) => c.status === 'warning')
   const newList     = all.filter((c) => c.status === 'new')
   const normalList  = all.filter((c) => c.status === 'normal')
+  const overdueList = all.filter((c) => c.overdue_amount > 0)
 
-  const totalBalance = all.reduce((s, c) => s + c.current_balance, 0)
-  const totalOverdue = all.reduce((s, c) => s + c.overdue_amount, 0)
+  const totalBalance   = all.reduce((s, c) => s + c.current_balance, 0)
+  const totalOverdue   = all.reduce((s, c) => s + c.overdue_amount, 0)
+  const totalReceivable = all.reduce((s, c) => s + c.receivable_amount, 0)
   const mustAct = all.filter((c) =>
     c.status === 'danger' ||
     (c.status === 'warning' && ((c.days_since_contact ?? 99) >= 3 || !c.last_contacted_at))
   )
-
-  // 상위 5개 강조 (action_score 기준 — 이미 정렬됨)
   const top5ids = new Set(all.slice(0, 5).map((c) => c.id))
   const top3    = dangerList.slice(0, 3)
+
+  // 오늘/이번주 수금
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const todayCf  = cashflow.find((d) => d.date === todayStr)
+  const weekCollected = cashflow.reduce((s, d) => s + d.collected, 0)
 
   const displayed =
     filter === 'danger'  ? dangerList  :
     filter === 'warning' ? warningList :
     filter === 'new'     ? newList     :
-    filter === 'normal'  ? normalList  : all
+    filter === 'normal'  ? normalList  :
+    filter === 'overdue' ? overdueList : all
 
   return (
     <main style={s.page}>
@@ -76,11 +92,8 @@ export default async function CustomersPage({
               <span style={s.mustBadge}>⚡ 오늘 반드시 {mustAct.length}건 행동 필요</span>
             )}
             <span style={s.subtitle}>
-              전체 {all.length}개 · 연체금{' '}
-              <strong style={{ color: totalOverdue > 0 ? '#B91C1C' : '#15803D' }}>
-                {formatKRW(totalOverdue)}
-              </strong>
-              {' '}· 미수금 {formatKRW(totalBalance)}
+              연체금 <strong style={{ color: totalOverdue > 0 ? '#B91C1C' : '#15803D' }}>{formatKRW(totalOverdue)}</strong>
+              {' '}· 미수금 <strong style={{ color: totalReceivable > 0 ? '#B45309' : '#15803D' }}>{formatKRW(totalReceivable)}</strong>
             </span>
           </div>
         </div>
@@ -91,7 +104,31 @@ export default async function CustomersPage({
         </div>
       </div>
 
-      {/* TOP 3 빠른 실행 */}
+      {/* 오늘/이번주 수금 요약 */}
+      <div style={s.cashRow}>
+        <div style={s.cashCard}>
+          <span style={s.cashLabel}>오늘 수금</span>
+          <span style={{ ...s.cashVal, color: (todayCf?.collected ?? 0) > 0 ? '#15803D' : '#9ca3af' }}>
+            {formatKRW(todayCf?.collected ?? 0)}
+          </span>
+        </div>
+        <div style={s.cashCard}>
+          <span style={s.cashLabel}>이번주 수금</span>
+          <span style={{ ...s.cashVal, color: weekCollected > 0 ? '#15803D' : '#9ca3af' }}>
+            {formatKRW(weekCollected)}
+          </span>
+        </div>
+        <div style={s.cashCard}>
+          <span style={s.cashLabel}>오늘 매출</span>
+          <span style={s.cashVal}>{formatKRW(todayCf?.revenue ?? 0)}</span>
+        </div>
+        <div style={s.cashCard}>
+          <span style={s.cashLabel}>이번주 매출</span>
+          <span style={s.cashVal}>{formatKRW(cashflow.reduce((s, d) => s + d.revenue, 0))}</span>
+        </div>
+      </div>
+
+      {/* TOP 3 */}
       {top3.length > 0 && (
         <div style={s.alertBox}>
           <p style={s.alertTitle}>🚨 지금 바로 전화해야 할 거래처 — {top3.length}건</p>
@@ -126,6 +163,7 @@ export default async function CustomersPage({
           { key: undefined,   label: `전체 ${all.length}` },
           { key: 'danger',    label: `🔴 위험 ${dangerList.length}` },
           { key: 'warning',   label: `🟡 주의 ${warningList.length}` },
+          { key: 'overdue',   label: `💸 연체 ${overdueList.length}` },
           { key: 'new',       label: `🔵 신규 ${newList.length}` },
           { key: 'normal',    label: `🟢 정상 ${normalList.length}` },
         ].map(({ key, label }) => (
@@ -147,8 +185,6 @@ export default async function CustomersPage({
   )
 }
 
-// ── 거래처 카드 ───────────────────────────────────────────────
-
 function CustomerCard({ c, rank, isTop }: { c: CustomerWithScore; rank: number; isTop: boolean }) {
   const cfg    = STATUS_CFG[c.status]
   const actCfg = ACTION_CFG[c.action.action_type]
@@ -157,18 +193,13 @@ function CustomerCard({ c, rank, isTop }: { c: CustomerWithScore; rank: number; 
   const recontact    = calcRecontactMessage(c.overdue_amount, c.days_since_contact, c.status)
   const noContactMsg = !c.last_contacted_at ? calcNoContactMessage(c.status, c.overdue_amount) : null
   const nextDday     = dday(c.next_action_date)
+  const rcColor      = receivableColor(c.overdue_amount, c.receivable_amount)
 
   return (
-    <div style={{
-      ...s.card,
-      borderLeft: `4px solid ${cfg.color}`,
-      boxShadow: isTop ? '0 2px 8px rgba(0,0,0,0.08)' : undefined,
-    }}>
+    <div style={{ ...s.card, borderLeft: `4px solid ${cfg.color}`, boxShadow: isTop ? '0 2px 8px rgba(0,0,0,0.08)' : undefined }}>
       {recontact && <div style={s.recontactBanner}>🔁 {recontact}</div>}
 
-      {/* 행동 메시지 */}
-      <div style={{
-        ...s.actionBanner,
+      <div style={{ ...s.actionBanner,
         background: isHigh ? '#FEF2F2' : isMid ? '#FFFBEB' : '#F9FAFB',
         borderBottom: `1px solid ${cfg.border}`,
         color: isHigh ? '#B91C1C' : isMid ? '#B45309' : '#6b7280',
@@ -177,13 +208,11 @@ function CustomerCard({ c, rank, isTop }: { c: CustomerWithScore; rank: number; 
         <span style={{ ...s.actionText, fontWeight: isHigh ? 700 : 500, fontSize: isHigh ? 14 : 13 }}>
           {c.action.text}
         </span>
-        {/* 우선순위 점수 */}
         <span style={{ ...s.scorePill, background: isTop ? '#FEF3C7' : '#F3F4F6', color: isTop ? '#92400E' : '#9ca3af' }}>
           #{rank} · {c.action_score}점
         </span>
       </div>
 
-      {/* 카드 바디 */}
       <div style={s.cardBody}>
         <div style={s.cardInfo}>
           <div style={s.nameRow}>
@@ -197,27 +226,33 @@ function CustomerCard({ c, rank, isTop }: { c: CustomerWithScore; rank: number; 
           </div>
 
           <div style={s.metaRow}>
-            <MetaItem label="연체금" value={formatKRW(c.overdue_amount)}
+            {/* 연체금/미수금 — 색상으로 구분 */}
+            <MetaItem label="연체금"
+              value={formatKRW(c.overdue_amount)}
               highlight={c.overdue_amount > 0} />
-            <MetaItem label="이번달" value={formatKRW(c.monthly_revenue)} />
+            <MetaItem label="미수금"
+              value={formatKRW(c.receivable_amount)}
+              style={{ color: c.receivable_amount > c.overdue_amount ? '#B45309' : '#6b7280' }} />
+            <MetaItem label="이번달"    value={formatKRW(c.monthly_revenue)} />
+            <MetaItem label="평균월매출" value={formatKRW(c.avg_monthly_revenue)} />
+            {c.target_monthly_revenue > 0 && (
+              <MetaItem label="목표대비"
+                value={c.revenue_gap >= 0 ? `+${formatKRW(c.revenue_gap)}` : `-${formatKRW(Math.abs(c.revenue_gap))}`}
+                highlight={c.revenue_gap < 0} />
+            )}
             <MetaItem label="최근주문"
               value={c.last_order_date
                 ? `${c.days_since_order}일 전${c.last_order_amount ? ` · ${formatKRW(c.last_order_amount)}` : ''}`
                 : '없음'} />
-            <MetaItem label="주문주기"
-              value={c.order_cycle_days ? `${c.order_cycle_days}일` : '-'} />
-            {/* 다음 행동일 */}
+            <MetaItem label="주문주기"  value={c.order_cycle_days ? `${c.order_cycle_days}일` : '-'} />
             <MetaItem label="다음 연락일"
               value={nextDday ?? '-'}
-              highlight={nextDday !== null && nextDday.includes('지남')}
+              highlight={nextDday?.includes('지남') ?? false}
               warn={nextDday === '오늘'} />
             <MetaItem label="전화"
-              value={c.last_contacted_at
-                ? `${c.days_since_contact}일 전`
-                : (noContactMsg ?? '기록 없음')}
+              value={c.last_contacted_at ? `${c.days_since_contact}일 전` : (noContactMsg ?? '기록 없음')}
               highlight={!c.last_contacted_at && (c.status === 'danger' || c.status === 'warning')}
               warn={(c.days_since_contact ?? 0) >= 5} />
-            {/* 전환율 — 데이터 충분할 때만 표시 */}
             {c.call_connect_rate !== null && (
               <MetaItem label="📞 연결률"
                 value={`${Math.round(c.call_connect_rate * 100)}%`}
@@ -229,20 +264,9 @@ function CustomerCard({ c, rank, isTop }: { c: CustomerWithScore; rank: number; 
                 highlight={c.connect_to_payment_rate >= 0.3}
                 warn={c.connect_to_payment_rate < 0.1} />
             )}
-            {/* 매출 지표 */}
-            <MetaItem label="평균월매출" value={formatKRW(c.avg_monthly_revenue)} />
-            {c.target_monthly_revenue > 0 && (
-              <MetaItem label="목표대비"
-                value={c.revenue_gap >= 0
-                  ? `+${formatKRW(c.revenue_gap)}`
-                  : `-${formatKRW(Math.abs(c.revenue_gap))}`}
-                highlight={c.revenue_gap < 0}
-                warn={false} />
-            )}
           </div>
         </div>
 
-        {/* 빠른 실행 버튼 */}
         <div style={s.cardBtns}>
           {c.phone && (
             <CallButton customerId={c.id} phone={c.phone} style={isHigh ? 'hot' : 'cold'}
@@ -264,8 +288,10 @@ function CustomerCard({ c, rank, isTop }: { c: CustomerWithScore; rank: number; 
   )
 }
 
-function MetaItem({ label, value, highlight, warn }: {
-  label: string; value: string; highlight?: boolean; warn?: boolean
+function MetaItem({ label, value, highlight, warn, style: extStyle }: {
+  label: string; value: string
+  highlight?: boolean; warn?: boolean
+  style?: React.CSSProperties
 }) {
   return (
     <div style={s.metaItem}>
@@ -274,6 +300,7 @@ function MetaItem({ label, value, highlight, warn }: {
         ...s.metaVal,
         color: highlight ? '#B91C1C' : warn ? '#B45309' : '#374151',
         fontWeight: (highlight || warn) ? 600 : 400,
+        ...extStyle,
       }}>
         {value}
       </span>
@@ -290,7 +317,7 @@ const bs: Record<string, React.CSSProperties> = {
 
 const s: Record<string, React.CSSProperties> = {
   page:            { maxWidth: 960, margin: '0 auto', padding: '32px 24px 60px' },
-  header:          { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 },
+  header:          { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 },
   title:           { fontSize: 22, fontWeight: 700, margin: '0 0 6px 0' },
   subtitleRow:     { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
   mustBadge:       { display: 'inline-block', padding: '4px 12px', background: '#B91C1C', color: '#fff', borderRadius: 20, fontSize: 12, fontWeight: 700 },
@@ -298,7 +325,11 @@ const s: Record<string, React.CSSProperties> = {
   headerBtns:      { display: 'flex', gap: 8, flexShrink: 0 },
   subBtn:          { padding: '8px 14px', background: '#fff', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13, color: '#374151', textDecoration: 'none' },
   newBtn:          { padding: '8px 16px', background: '#111827', color: '#fff', borderRadius: 8, fontSize: 13, fontWeight: 500, textDecoration: 'none' },
-  alertBox:        { background: '#FFF1F2', border: '2px solid #FCA5A5', borderRadius: 10, padding: '16px 20px', marginBottom: 20 },
+  cashRow:         { display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' },
+  cashCard:        { flex: 1, minWidth: 120, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 4 },
+  cashLabel:       { fontSize: 10, color: '#9ca3af', fontWeight: 500 },
+  cashVal:         { fontSize: 15, fontWeight: 600, fontVariantNumeric: 'tabular-nums' },
+  alertBox:        { background: '#FFF1F2', border: '2px solid #FCA5A5', borderRadius: 10, padding: '16px 20px', marginBottom: 16 },
   alertTitle:      { fontSize: 13, fontWeight: 700, color: '#B91C1C', margin: '0 0 12px 0' },
   alertList:       { display: 'flex', flexDirection: 'column', gap: 10 },
   alertRow:        { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' },
@@ -323,7 +354,7 @@ const s: Record<string, React.CSSProperties> = {
   nameRow:         { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   custName:        { fontSize: 15, fontWeight: 600, color: '#111827' },
   badge:           { display: 'inline-block', padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600 },
-  metaRow:         { display: 'flex', gap: 20, flexWrap: 'wrap' },
+  metaRow:         { display: 'flex', gap: 16, flexWrap: 'wrap' },
   metaItem:        { display: 'flex', flexDirection: 'column', gap: 2 },
   metaLabel:       { fontSize: 10, color: '#9ca3af', fontWeight: 500 },
   metaVal:         { fontSize: 12, fontVariantNumeric: 'tabular-nums' },

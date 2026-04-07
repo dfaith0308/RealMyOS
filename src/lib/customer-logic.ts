@@ -10,7 +10,7 @@ export type ActionType =
   | 'collect_payment'
   | 'visit'
   | 'call'
-  | 'upsell'        // 연체 없고 매출 부족 → 추가 주문 유도
+  | 'upsell'
   | 'maintain'
 
 export interface ActionMessage {
@@ -21,7 +21,7 @@ export interface ActionMessage {
 }
 
 // ============================================================
-// 주문주기 계산
+// 주문주기
 // ============================================================
 
 export function calcOrderCycle(orderDates: string[]): number | null {
@@ -61,9 +61,8 @@ export function calcCustomerStatus(p: {
     if (p.days_since_order > cycle * p.danger_cycle_multiplier)  return 'danger'
     if (p.days_since_order > cycle * p.warning_cycle_multiplier) return 'warning'
   }
-  if (p.days_since_order === null) {
+  if (p.days_since_order === null)
     return p.overdue_amount > 0 ? 'danger' : 'new'
-  }
   return 'normal'
 }
 
@@ -81,17 +80,17 @@ export function calcActionType(
   if (overdueAmount > 0)          return 'collect_payment'
   if (status === 'danger')        return 'visit'
   if (status === 'warning')       return 'call'
-  // 연체 없고 정상인데 목표 미달 → 추가 주문 유도
   if (revenueGap < 0 && overdueAmount === 0 && status === 'normal') return 'upsell'
   return 'maintain'
 }
 
 // ============================================================
-// 우선순위 점수 (action_score)
+// 우선순위 점수
 // ============================================================
 
 export function calcActionScore(p: {
   overdue_amount: number
+  receivable_amount?: number
   days_since_order: number | null
   order_cycle_days: number | null
   days_since_contact: number | null
@@ -100,14 +99,20 @@ export function calcActionScore(p: {
   connect_to_payment_rate?: number | null
   call_attempts_7d?: number
   payments_7d?: number
-  revenue_gap?: number               // 이번달매출 - 목표 (음수 = 부족)
+  revenue_gap?: number
 }): number {
   let score = 0
 
-  // 1. 연체금
-  score += p.overdue_amount / 1000
+  // 1. 연체금 (overdue 기준 강화 — /500)
+  if (p.overdue_amount > 0)
+    score += p.overdue_amount / 500
 
-  // 2. 주문주기 초과 (0 나눗셈 방지)
+  // 2. 미수금 (overdue 없는 일반 미수금 — /2000)
+  const receivable = p.receivable_amount ?? 0
+  if (receivable > p.overdue_amount)
+    score += (receivable - p.overdue_amount) / 2000
+
+  // 3. 주문주기 초과 (0 나눗셈 방지)
   if (
     p.days_since_order !== null &&
     p.order_cycle_days !== null &&
@@ -120,24 +125,19 @@ export function calcActionScore(p: {
     score += Math.min(p.days_since_order, 60)
   }
 
-  // 3. 연락 없음
+  // 4. 연락 없음
   score += (p.days_since_contact ?? 60) * 2
 
-  // 4. 신규 보정
+  // 5. 신규 보정
   if (p.is_new) score *= 0.5
 
-  // 5. 전환율 보정
-  if (p.connect_to_payment_rate !== null && p.connect_to_payment_rate !== undefined) {
-    if (p.connect_to_payment_rate >= 0.3) score *= 1.2
-  }
-  if ((p.call_attempts_7d ?? 0) >= 5 && (p.payments_7d ?? 0) === 0) {
-    score *= 0.8
-  }
+  // 6. 전환율 보정
+  if ((p.connect_to_payment_rate ?? 0) >= 0.3) score *= 1.2
+  if ((p.call_attempts_7d ?? 0) >= 5 && (p.payments_7d ?? 0) === 0) score *= 0.8
 
-  // 6. 매출 부족 보정 (목표 대비 미달 시 우선순위 상승)
-  if (p.revenue_gap !== undefined && p.revenue_gap < 0) {
-    score += Math.abs(p.revenue_gap) / 10000
-  }
+  // 7. 매출 부족
+  if ((p.revenue_gap ?? 0) < 0)
+    score += Math.abs(p.revenue_gap!) / 10000
 
   return Math.round(score)
 }
@@ -224,7 +224,6 @@ export function calcAction(
   if (action_type === 'new_customer')
     return { action_type, key: 'NEW_DEFAULT', urgency: 'mid', text: '첫 주문 유도 — 오늘 연락하면 바로 시작 가능' }
 
-  // upsell: 연체 없고 목표 미달
   if (action_type === 'upsell')
     return { action_type, key: 'UPSELL_DEFAULT', urgency: 'mid',
       text: `이번달 목표 ${fmt(Math.abs(revenueGap))} 부족 — 추가 주문 제안 기회` }
