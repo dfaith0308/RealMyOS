@@ -146,11 +146,15 @@ export interface CustomerWithBalance {
   days_since_contact: number | null
   status: CustomerStatus
   // 7일 전환율 지표
-  call_attempts_7d: number           // 전화 시도 수
-  connected_7d: number               // 통화 연결 수
-  payments_7d: number                // 수금 전환 수
-  call_connect_rate: number | null   // 연결률 (0~1), null = 데이터 부족
-  connect_to_payment_rate: number | null  // 수금전환률 (0~1), null = 데이터 부족
+  call_attempts_7d: number
+  connected_7d: number
+  payments_7d: number
+  call_connect_rate: number | null
+  connect_to_payment_rate: number | null
+  // 매출 지표
+  avg_monthly_revenue: number        // 최근 3개월 평균 월매출
+  target_monthly_revenue: number     // 목표 월매출
+  revenue_gap: number                // 이번달매출 - 목표 (음수 = 부족)
 }
 
 export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWithBalance[]>> {
@@ -163,7 +167,7 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
 
   const { data: customers } = await supabase
     .from('customers')
-    .select('id, name, phone, opening_balance, payment_terms_days')
+    .select('id, name, phone, opening_balance, payment_terms_days, target_monthly_revenue')
     .eq('is_buyer', true)
     .is('deleted_at', null)
     .order('name')
@@ -252,7 +256,8 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
   const today     = new Date()
   today.setHours(0, 0, 0, 0)
   const todayStr  = today.toISOString().slice(0, 10)
-  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10)
+  const monthStart    = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10)
+  const threeMonthAgo = new Date(today.getFullYear(), today.getMonth() - 3, 1).toISOString().slice(0, 10)
 
   const result: CustomerWithBalance[] = customers.map((c) => {
     const orders  = ordersByCustomer.get(c.id) ?? []
@@ -313,6 +318,16 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
       danger_days:              cfg.danger_days,
     })
 
+    // 평균 월매출 (최근 3개월 confirmed 주문)
+    const orders3m = orders.filter((o) => o.order_date >= threeMonthAgo)
+    const avg_monthly_revenue = orders3m.length > 0
+      ? Math.round(orders3m.reduce((s, o) => s + o.total_amount, 0) / 3)
+      : 0
+
+    // 목표 매출 — 거래처 개별값 우선, 없으면 settings fallback
+    const target_monthly_revenue = (c as any).target_monthly_revenue ?? cfg.default_target_monthly_revenue ?? 0
+    const revenue_gap = monthly_revenue - target_monthly_revenue
+
     const call_attempts_7d = callAttempts7d.get(c.id) ?? 0
     const connected_7d     = connected7d.get(c.id) ?? 0
     const payments_7d      = payments7d.get(c.id) ?? 0
@@ -334,6 +349,7 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
       status,
       call_attempts_7d, connected_7d, payments_7d,
       call_connect_rate, connect_to_payment_rate,
+      avg_monthly_revenue, target_monthly_revenue, revenue_gap,
     }
   })
 
@@ -383,6 +399,7 @@ export async function getCustomersWithScore(): Promise<ActionResult<CustomerWith
       connect_to_payment_rate:   c.connect_to_payment_rate,
       call_attempts_7d:          c.call_attempts_7d,
       payments_7d:               c.payments_7d,
+      revenue_gap:               c.revenue_gap,
     })
 
     return {
@@ -399,6 +416,7 @@ export async function getCustomersWithScore(): Promise<ActionResult<CustomerWith
       cfg.new_customer_days,
       c.last_order_date,
       c.overdue_amount,
+      c.revenue_gap,
     ),
     action_score: calcActionScore({
       overdue_amount:     c.overdue_amount,

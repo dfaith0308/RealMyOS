@@ -21,6 +21,7 @@ const ACTION_CFG: Record<ActionType, { label: string; color: string; bg: string 
   visit:           { label: '방문 필요', color: '#7C3AED', bg: '#F5F3FF' },
   call:            { label: '주문 독려', color: '#B45309', bg: '#FFFBEB' },
   new_customer:    { label: '신규 관리', color: '#1D4ED8', bg: '#EFF6FF' },
+  upsell:          { label: '매출 확대',  color: '#0369A1', bg: '#F0F9FF' },
   maintain:        { label: '유지',      color: '#15803D', bg: '#F0FDF4' },
 }
 
@@ -227,6 +228,16 @@ function CustomerCard({ c, rank, isTop }: { c: CustomerWithScore; rank: number; 
                 value={`${Math.round(c.connect_to_payment_rate * 100)}%`}
                 highlight={c.connect_to_payment_rate >= 0.3}
                 warn={c.connect_to_payment_rate < 0.1} />
+            )}
+            {/* 매출 지표 */}
+            <MetaItem label="평균월매출" value={formatKRW(c.avg_monthly_revenue)} />
+            {c.target_monthly_revenue > 0 && (
+              <MetaItem label="목표대비"
+                value={c.revenue_gap >= 0
+                  ? `+${formatKRW(c.revenue_gap)}`
+                  : `-${formatKRW(Math.abs(c.revenue_gap))}`}
+                highlight={c.revenue_gap < 0}
+                warn={false} />
             )}
           </div>
         </div>

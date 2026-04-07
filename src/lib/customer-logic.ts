@@ -10,6 +10,7 @@ export type ActionType =
   | 'collect_payment'
   | 'visit'
   | 'call'
+  | 'upsell'        // 연체 없고 매출 부족 → 추가 주문 유도
   | 'maintain'
 
 export interface ActionMessage {
@@ -55,17 +56,14 @@ export function calcCustomerStatus(p: {
 }): CustomerStatus {
   if (p.overdue_amount >= p.overdue_danger_amount)  return 'danger'
   if (p.overdue_amount >= p.overdue_warning_amount) return 'warning'
-
   if (p.days_since_order !== null) {
     const cycle = p.order_cycle_days ?? p.warning_days
     if (p.days_since_order > cycle * p.danger_cycle_multiplier)  return 'danger'
     if (p.days_since_order > cycle * p.warning_cycle_multiplier) return 'warning'
   }
-
   if (p.days_since_order === null) {
     return p.overdue_amount > 0 ? 'danger' : 'new'
   }
-
   return 'normal'
 }
 
@@ -77,17 +75,19 @@ export function calcActionType(
   status: CustomerStatus,
   overdueAmount: number,
   isNew: boolean,
+  revenueGap: number = 0,
 ): ActionType {
-  if (isNew && status === 'new') return 'new_customer'
-  if (overdueAmount > 0)         return 'collect_payment'
-  if (status === 'danger')       return 'visit'
-  if (status === 'warning')      return 'call'
+  if (isNew && status === 'new')  return 'new_customer'
+  if (overdueAmount > 0)          return 'collect_payment'
+  if (status === 'danger')        return 'visit'
+  if (status === 'warning')       return 'call'
+  // 연체 없고 정상인데 목표 미달 → 추가 주문 유도
+  if (revenueGap < 0 && overdueAmount === 0 && status === 'normal') return 'upsell'
   return 'maintain'
 }
 
 // ============================================================
 // 우선순위 점수 (action_score)
-// 기존 score를 대체 — 높을수록 먼저 행동
 // ============================================================
 
 export function calcActionScore(p: {
@@ -96,18 +96,18 @@ export function calcActionScore(p: {
   order_cycle_days: number | null
   days_since_contact: number | null
   is_new: boolean
-  call_connect_rate?: number | null       // 연결률 (null = 데이터 부족)
-  connect_to_payment_rate?: number | null // 수금전환률
+  call_connect_rate?: number | null
+  connect_to_payment_rate?: number | null
   call_attempts_7d?: number
   payments_7d?: number
+  revenue_gap?: number               // 이번달매출 - 목표 (음수 = 부족)
 }): number {
   let score = 0
 
-  // 1. 연체금 기여
+  // 1. 연체금
   score += p.overdue_amount / 1000
 
-  // 2. 주문주기 초과 기여
-  // order_cycle_days가 null 또는 0이면 ratio 계산 금지 (0 나눗셈 → Infinity 방지)
+  // 2. 주문주기 초과 (0 나눗셈 방지)
   if (
     p.days_since_order !== null &&
     p.order_cycle_days !== null &&
@@ -117,36 +117,33 @@ export function calcActionScore(p: {
     if (ratio > 1) score += ratio * 50
     if (ratio > 2) score += 100
   } else if (p.days_since_order !== null && !p.order_cycle_days) {
-    // 주기 계산 불가(주문 1건 이하)인 경우 경과일로 대체
     score += Math.min(p.days_since_order, 60)
   }
-  // order_cycle_days === 0인 경우: ratio 계산 완전 skip
 
-  // 3. 연락 없음 기간
+  // 3. 연락 없음
   score += (p.days_since_contact ?? 60) * 2
 
-  // 4. 신규 보정 (긴급도 절반)
+  // 4. 신규 보정
   if (p.is_new) score *= 0.5
 
-  // 5. 전환율 보정 — 최소 데이터 있을 때만 적용
-  // 수금 전환률 높으면 +20% (전화하면 돈 됨)
+  // 5. 전환율 보정
   if (p.connect_to_payment_rate !== null && p.connect_to_payment_rate !== undefined) {
     if (p.connect_to_payment_rate >= 0.3) score *= 1.2
   }
-  // call_attempt 많은데 7일 내 payment 0건이면 -20% (전화가 효과 없음)
-  if (
-    (p.call_attempts_7d ?? 0) >= 5 &&
-    (p.payments_7d ?? 0) === 0
-  ) {
+  if ((p.call_attempts_7d ?? 0) >= 5 && (p.payments_7d ?? 0) === 0) {
     score *= 0.8
+  }
+
+  // 6. 매출 부족 보정 (목표 대비 미달 시 우선순위 상승)
+  if (p.revenue_gap !== undefined && p.revenue_gap < 0) {
+    score += Math.abs(p.revenue_gap) / 10000
   }
 
   return Math.round(score)
 }
 
 // ============================================================
-// 다음 행동일 계산
-// next_action_date = last_order_date + order_cycle_days
+// 다음 행동일
 // ============================================================
 
 export function calcNextActionDate(
@@ -172,16 +169,16 @@ export function calcAction(
   newCustomerDays: number = 30,
   firstOrderDate: string | null = null,
   overdueAmount: number = 0,
+  revenueGap: number = 0,
 ): ActionMessage {
   const isNew = firstOrderDate !== null
     ? Math.floor((Date.now() - new Date(firstOrderDate).getTime()) / 86400000) <= newCustomerDays
     : false
 
-  const action_type = calcActionType(status, overdueAmount, isNew)
+  const action_type = calcActionType(status, overdueAmount, isNew, revenueGap)
 
   if (status === 'danger') {
     const over = daysSince !== null ? daysSince - dangerDays : null
-
     if (overdueAmount >= 500000 && over !== null && over > 14)
       return { action_type, key: 'DANGER_HIGH_OVERDUE_LONG', urgency: 'high',
         text: `지금 방문 안 하면 회수 불가 — ${fmt(overdueAmount)} 연체, ${daysSince}일 방치됨` }
@@ -197,13 +194,11 @@ export function calcAction(
     if (daysSince !== null)
       return { action_type, key: 'DANGER_NO_ORDER', urgency: 'high',
         text: `${daysSince}일째 주문 없음 — 이번 주 안 보이면 거래 단절 위험` }
-    return { action_type, key: 'DANGER_DEFAULT', urgency: 'high',
-      text: '오늘 안으로 반드시 연락하세요' }
+    return { action_type, key: 'DANGER_DEFAULT', urgency: 'high', text: '오늘 안으로 반드시 연락하세요' }
   }
 
   if (status === 'warning') {
     const toDanger = daysSince !== null ? dangerDays - daysSince : null
-
     if (overdueAmount > 0 && toDanger !== null && toDanger <= 3)
       return { action_type, key: 'WARNING_D3_OVERDUE', urgency: 'mid',
         text: `${toDanger}일 후 위험 전환 — 오늘 수금 전화가 마지막 기회` }
@@ -223,16 +218,18 @@ export function calcAction(
       return { action_type, key: 'WARNING_NO_ORDER', urgency: 'mid',
         text: `${daysSince}일째 주문 없음 — 이번 주 안에 연락하세요` }
     }
-    return { action_type, key: 'WARNING_DEFAULT', urgency: 'mid',
-      text: '오늘 확인하세요 — 미루면 위험해집니다' }
+    return { action_type, key: 'WARNING_DEFAULT', urgency: 'mid', text: '오늘 확인하세요 — 미루면 위험해집니다' }
   }
 
   if (action_type === 'new_customer')
-    return { action_type, key: 'NEW_DEFAULT', urgency: 'mid',
-      text: '첫 주문 유도 — 오늘 연락하면 바로 시작 가능' }
+    return { action_type, key: 'NEW_DEFAULT', urgency: 'mid', text: '첫 주문 유도 — 오늘 연락하면 바로 시작 가능' }
 
-  return { action_type: 'maintain', key: 'NORMAL_DEFAULT', urgency: 'low',
-    text: '정상 거래 중' }
+  // upsell: 연체 없고 목표 미달
+  if (action_type === 'upsell')
+    return { action_type, key: 'UPSELL_DEFAULT', urgency: 'mid',
+      text: `이번달 목표 ${fmt(Math.abs(revenueGap))} 부족 — 추가 주문 제안 기회` }
+
+  return { action_type: 'maintain', key: 'NORMAL_DEFAULT', urgency: 'low', text: '정상 거래 중' }
 }
 
 // ============================================================

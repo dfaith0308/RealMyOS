@@ -49,7 +49,8 @@ export async function getSettings(): Promise<ActionResult<TenantSettings>> {
     warning_days:              parseNum(existing.get('warning_days'),              DEFAULT_SETTINGS.warning_days),
     danger_days:               parseNum(existing.get('danger_days'),               DEFAULT_SETTINGS.danger_days),
     warning_cycle_multiplier:  parseNum(existing.get('warning_cycle_multiplier'),  DEFAULT_SETTINGS.warning_cycle_multiplier),
-    danger_cycle_multiplier:   parseNum(existing.get('danger_cycle_multiplier'),   DEFAULT_SETTINGS.danger_cycle_multiplier),
+    danger_cycle_multiplier:         parseNum(existing.get('danger_cycle_multiplier'),         DEFAULT_SETTINGS.danger_cycle_multiplier),
+    default_target_monthly_revenue:  parseNum(existing.get('default_target_monthly_revenue'),  DEFAULT_SETTINGS.default_target_monthly_revenue),
   }
 
   return { success: true, data: settings }

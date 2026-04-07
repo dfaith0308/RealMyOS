@@ -14,6 +14,7 @@ export interface TenantSettings {
   danger_days: number
   warning_cycle_multiplier: number       // 주문주기 × N 초과 시 주의
   danger_cycle_multiplier: number        // 주문주기 × N 초과 시 위험
+  default_target_monthly_revenue: number  // 기본 목표 월매출 (원)
 }
 
 export const DEFAULT_SETTINGS: TenantSettings = {
@@ -27,4 +28,5 @@ export const DEFAULT_SETTINGS: TenantSettings = {
   danger_days: 30,
   warning_cycle_multiplier: 1.5,         // 주문주기 × 1.5 초과 시 주의
   danger_cycle_multiplier: 2.0,          // 주문주기 × 2.0 초과 시 위험
+  default_target_monthly_revenue: 0,      // 0 = 목표 없음
 }
