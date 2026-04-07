@@ -21,16 +21,33 @@ export async function middleware(request: NextRequest) {
     },
   )
 
-  // 세션 갱신
   const { data: { user } } = await supabase.auth.getUser()
-
-  // 로그인 안 된 경우 /login으로 리다이렉트 (/login, /auth 경로 제외)
   const { pathname } = request.nextUrl
-  const isPublic = pathname.startsWith('/login') || pathname.startsWith('/auth')
 
-  if (!user && !isPublic) {
+  // 공개 경로
+  const isPublic = pathname.startsWith('/login') || pathname.startsWith('/auth')
+  if (isPublic) return supabaseResponse
+
+  // 비로그인 → /login
+  if (!user) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
+    return NextResponse.redirect(url)
+  }
+
+  // /onboarding 자체는 통과
+  if (pathname.startsWith('/onboarding')) return supabaseResponse
+
+  // tenant_id 확인 — 없으면 /onboarding으로
+  const { data: me } = await supabase
+    .from('users')
+    .select('tenant_id')
+    .eq('id', user.id)
+    .single()
+
+  if (!me?.tenant_id) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/onboarding'
     return NextResponse.redirect(url)
   }
 
