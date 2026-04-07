@@ -24,8 +24,10 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   const { pathname } = request.nextUrl
 
-  // 공개 경로
-  const isPublic = pathname.startsWith('/login') || pathname.startsWith('/auth')
+  // 공개 경로 — 인증 불필요
+  const isPublic =
+    pathname.startsWith('/login') ||
+    pathname.startsWith('/auth')
   if (isPublic) return supabaseResponse
 
   // 비로그인 → /login
@@ -35,19 +37,27 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // /onboarding 자체는 통과
+  // /onboarding 자체는 통과 (tenant 없어도 접근 가능)
   if (pathname.startsWith('/onboarding')) return supabaseResponse
 
-  // tenant_id 확인 — 없으면 /onboarding으로
+  // tenant_id 확인
   const { data: me } = await supabase
     .from('users')
     .select('tenant_id')
     .eq('id', user.id)
     .single()
 
+  // tenant_id 없음 → /onboarding
   if (!me?.tenant_id) {
     const url = request.nextUrl.clone()
     url.pathname = '/onboarding'
+    return NextResponse.redirect(url)
+  }
+
+  // 루트(/) 접근 → /customers
+  if (pathname === '/') {
+    const url = request.nextUrl.clone()
+    url.pathname = '/customers'
     return NextResponse.redirect(url)
   }
 
