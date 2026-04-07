@@ -174,6 +174,7 @@ export interface CustomerWithBalance {
   phone: string | null
   payment_terms_days: number
   current_balance: number
+  overdue_amount: number            // 연체금 = due_date 지난 주문 합계
   last_order_date: string | null    // 마지막 주문일
   days_since_order: number | null   // 마지막 주문일로부터 경과일
   last_contacted_at: string | null  // 마지막 연락 시각 (ISO string)
@@ -221,7 +222,7 @@ export async function getCustomersWithBalance(): Promise<
 
   const ids = customers.map((c) => c.id)
 
-  // 주문 합계 + 마지막 주문일
+  // 주문 합계 + 마지막 주문일 + 연체금 계산용 개별 주문
   const { data: orderSums } = await supabase
     .from('orders')
     .select('customer_id, total_amount, order_date')
@@ -236,20 +237,42 @@ export async function getCustomersWithBalance(): Promise<
     .in('customer_id', ids)
     .eq('status', 'confirmed')
 
-  // 마지막 연락 로그 (customer_id별 최신 1건)
+  // 마지막 전화 로그 (call / call_attempt만 — payment 제외)
   const { data: contactLogs } = await supabase
     .from('contact_logs')
     .select('customer_id, contacted_at')
     .in('customer_id', ids)
+    .in('contact_method', ['call', 'call_attempt'])
     .order('contacted_at', { ascending: false })
 
   // 집계
+  // customer별 payment_terms_days 맵
+  const termsMap = new Map(customers.map((c) => [c.id, c.payment_terms_days ?? 0]))
+
   const orderMap = new Map<string, number>()
   const lastOrderMap = new Map<string, string>()
+  const overdueMap = new Map<string, number>()   // 연체금 (due_date 지난 주문)
+
+  const todayStr = new Date().toISOString().slice(0, 10)
+
   for (const o of orderSums ?? []) {
     orderMap.set(o.customer_id, (orderMap.get(o.customer_id) ?? 0) + o.total_amount)
     const prev = lastOrderMap.get(o.customer_id)
     if (!prev || o.order_date > prev) lastOrderMap.set(o.customer_id, o.order_date)
+
+    // due_date = order_date + payment_terms_days
+    const terms = termsMap.get(o.customer_id) ?? 0
+    if (terms === 0) {
+      // 즉시결제 → 주문일이 곧 due_date
+      overdueMap.set(o.customer_id, (overdueMap.get(o.customer_id) ?? 0) + o.total_amount)
+    } else {
+      const due = new Date(o.order_date)
+      due.setDate(due.getDate() + terms)
+      const dueStr = due.toISOString().slice(0, 10)
+      if (dueStr < todayStr) {
+        overdueMap.set(o.customer_id, (overdueMap.get(o.customer_id) ?? 0) + o.total_amount)
+      }
+    }
   }
   const paymentMap = new Map<string, number>()
   for (const p of paymentSums ?? []) {
@@ -281,12 +304,17 @@ export async function getCustomersWithBalance(): Promise<
       ? Math.floor((today.getTime() - new Date(lastContactedAt).getTime()) / 86400000)
       : null
 
+    // 연체금 = 연체된 주문 합계 - 수금 합계 (0 미만이면 0)
+    const rawOverdue = (overdueMap.get(c.id) ?? 0) - (paymentMap.get(c.id) ?? 0)
+    const overdue_amount = Math.max(0, rawOverdue)
+
     return {
       id: c.id,
       name: c.name,
       phone: c.phone,
       payment_terms_days: c.payment_terms_days,
       current_balance: balance,
+      overdue_amount,
       last_order_date: lastDate,
       days_since_order: daysSince,
       last_contacted_at: lastContactedAt,
@@ -346,6 +374,9 @@ export async function getCustomersWithScore(): Promise<
       c.days_since_order,
       cfg.warning_days,
       cfg.danger_days,
+      cfg.new_customer_days,
+      c.last_order_date,      // firstOrderDate (isNew 판단용)
+      c.overdue_amount,       // 연체금 기준
     ),
   }))
 

@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { getCustomerLedger } from '@/actions/ledger'
 import { formatKRW } from '@/lib/calc'
 import { createSupabaseServer } from '@/lib/supabase-server'
+import CallOutcomeButtons from '@/components/customer/CallOutcomeButtons'
 
 export const metadata = { title: '거래처 원장 — RealMyOS' }
 
@@ -35,6 +36,20 @@ export default async function CustomerLedgerPage({
     .gte('created_at', since7d)
     .order('created_at', { ascending: false })
     .limit(5)
+
+  // 각 action_log에 연결된 통화 결과(outcome) 조회
+  const actionLogIds = (actionLogs ?? []).map((l: any) => l.id)
+  const { data: outcomeMap } = actionLogIds.length > 0
+    ? await supabase
+        .from('contact_logs')
+        .select('action_log_id, outcome')
+        .in('action_log_id', actionLogIds)
+        .not('outcome', 'is', null)
+    : { data: [] }
+
+  const outcomeByActionLog = new Map(
+    (outcomeMap ?? []).map((o: any) => [o.action_log_id, o.outcome])
+  )
 
   return (
     <main style={s.page}>
@@ -76,24 +91,37 @@ export default async function CustomerLedgerPage({
       {actionLogs && actionLogs.length > 0 && (
         <div style={s.actionSection}>
           <div style={s.actionTitle}>최근 행동 기록 (7일)</div>
-          {actionLogs.map((log) => (
-            <div key={log.id} style={s.actionRow}>
-              <span style={s.actionType}>
-                {log.action_type === 'call' ? '📞 전화' : log.action_type === 'collect' ? '💰 수금' : '📦 주문'}
-              </span>
-              <span style={s.actionMsg}>{log.triggered_message ?? '-'}</span>
-              {log.result_type !== 'none' ? (
-                <span style={s.resultBadge}>
-                  → {log.result_type === 'order_created' ? '주문' : '수금'} {formatKRW(log.result_amount ?? 0)}
-                </span>
-              ) : (
-                <span style={s.noResult}>결과 없음</span>
-              )}
-              <span style={s.actionDate}>
-                {new Date(log.created_at).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}
-              </span>
-            </div>
-          ))}
+          {actionLogs.map((log: any) => {
+            const existingOutcome = outcomeByActionLog.get(log.id) ?? null
+            return (
+              <div key={log.id} style={{ ...s.actionRow, flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', width: '100%' }}>
+                  <span style={s.actionType}>
+                    {log.action_type === 'call' ? '📞 전화' : log.action_type === 'collect' ? '💰 수금' : '📦 주문'}
+                  </span>
+                  <span style={s.actionMsg}>{log.triggered_message ?? '-'}</span>
+                  {log.result_type !== 'none' ? (
+                    <span style={s.resultBadge}>
+                      → {log.result_type === 'order_created' ? '주문' : '수금'} {formatKRW(log.result_amount ?? 0)}
+                    </span>
+                  ) : (
+                    <span style={s.noResult}>결과 없음</span>
+                  )}
+                  <span style={s.actionDate}>
+                    {new Date(log.created_at).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}
+                  </span>
+                </div>
+                {/* 전화 시도에만 통화 결과 버튼 표시 */}
+                {log.action_type === 'call' && (
+                  <CallOutcomeButtons
+                    customerId={id}
+                    actionLogId={log.id}
+                    existingOutcome={existingOutcome}
+                  />
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
 

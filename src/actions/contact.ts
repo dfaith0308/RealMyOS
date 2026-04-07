@@ -48,13 +48,14 @@ export async function createContactLog(
   const { data, error } = await supabase
     .from('contact_logs')
     .insert({
-      tenant_id: me.tenant_id,
-      customer_id: input.customer_id,
+      tenant_id:      me.tenant_id,
+      customer_id:    input.customer_id,
       contact_method: input.contact_method,
-      memo: input.memo ?? null,
-      contacted_by: user.id,
-      contacted_at: new Date().toISOString(),
-      action_log_id: input.action_log_id ?? null,
+      memo:           input.memo ?? null,
+      contacted_by:   user.id,
+      contacted_at:   new Date().toISOString(),
+      action_log_id:  input.action_log_id ?? null,
+      outcome:        input.outcome ?? null,
     })
     .select('id')
     .single()

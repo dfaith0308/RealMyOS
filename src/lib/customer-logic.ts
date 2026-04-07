@@ -1,14 +1,44 @@
 // ============================================================
-// RealMyOS - 거래처 점수 + 행동 메시지
+// RealMyOS - 거래처 점수 + 행동 메시지 + 예상행동
 // src/lib/customer-logic.ts
 // ============================================================
 
 import type { CustomerStatus } from '@/actions/ledger'
 
+// 예상행동 타입
+export type ActionType =
+  | 'new_customer'      // 첫 주문 후 N일 이내 신규 관리
+  | 'collect_payment'   // 연체금 존재
+  | 'visit'             // 위험 — 주문공백 dangerDays 초과
+  | 'call'              // 주의 — 주문공백 warningDays 초과
+  | 'maintain'          // 정상 유지
+
 export interface ActionMessage {
   text: string
   urgency: 'high' | 'mid' | 'low'
-  key: string   // 분석용 고정 식별자 (message_key)
+  key: string
+  action_type: ActionType  // 예상행동 enum
+}
+
+// ── 예상행동 계산 ─────────────────────────────────────────────
+// DB 저장 없이 순수 계산
+// new_customer_days 이내 첫 주문 → new_customer
+// 연체금 존재 → collect_payment
+// dangerDays 초과 → visit
+// warningDays 초과 → call
+// 그 외 → maintain
+
+export function calcActionType(
+  status: CustomerStatus,
+  overdueAmount: number,    // 연체금 (due_date 지난 금액)
+  daysSince: number | null,
+  isNew: boolean,
+): ActionType {
+  if (isNew) return 'new_customer'
+  if (overdueAmount > 0) return 'collect_payment'  // 연체금 기준 (미수금 전체 아님)
+  if (status === 'danger') return 'visit'
+  if (status === 'warning') return 'call'
+  return 'maintain'
 }
 
 // ── 점수 ─────────────────────────────────────────────────────
@@ -31,37 +61,46 @@ export function calcAction(
   daysSince: number | null,
   warningDays: number = 14,
   dangerDays: number  = 30,
+  newCustomerDays: number = 30,
+  firstOrderDate: string | null = null,
+  overdueAmount: number = 0,   // 연체금 — calcActionType에 전달
 ): ActionMessage {
+  // isNew 판단: 첫 주문일로부터 newCustomerDays 이내
+  const isNew = firstOrderDate !== null
+    ? Math.floor((Date.now() - new Date(firstOrderDate).getTime()) / 86400000) <= newCustomerDays
+    : false
+
+  const action_type = calcActionType(status, overdueAmount, daysSince, isNew)
 
   // ── 위험 ──────────────────────────────────────────────────
   if (status === 'danger') {
     const overDanger = daysSince !== null ? daysSince - dangerDays : null
 
     if (balance >= 500000 && overDanger !== null && overDanger > 14)
-      return { key: 'DANGER_HIGH_AMOUNT_LONG_OVERDUE', urgency: 'high',
+      return { action_type, key: 'DANGER_HIGH_AMOUNT_LONG_OVERDUE', urgency: 'high',
         text: `지금 방문 안 하면 회수 불가 — ${fmt(balance)} 미수, ${daysSince}일 방치됨` }
 
     if (balance >= 500000)
-      return { key: 'DANGER_HIGH_AMOUNT', urgency: 'high',
+      return { action_type, key: 'DANGER_HIGH_AMOUNT', urgency: 'high',
         text: `오늘 수금 전화 안 하면 더 늦어집니다 — ${fmt(balance)} 미회수` }
 
     if (balance > 0 && overDanger !== null && overDanger > 7)
-      return { key: 'DANGER_AMOUNT_OVER7', urgency: 'high',
+      return { action_type, key: 'DANGER_AMOUNT_OVER7', urgency: 'high',
         text: `지금 연락 안 하면 회수 점점 어려워집니다 — ${fmt(balance)} 미수` }
 
     if (balance > 0 && overDanger !== null && overDanger > 0)
-      return { key: 'DANGER_AMOUNT_OVERDUE', urgency: 'high',
+      return { action_type, key: 'DANGER_AMOUNT_OVERDUE', urgency: 'high',
         text: `위험 기준 ${overDanger}일 초과 — 오늘 안으로 수금 전화` }
 
     if (balance > 0)
-      return { key: 'DANGER_AMOUNT_ONLY', urgency: 'high',
+      return { action_type, key: 'DANGER_AMOUNT_ONLY', urgency: 'high',
         text: `오늘 전화하세요 — ${fmt(balance)} 미수금, 방치하면 회수 어려워짐` }
 
     if (daysSince !== null && daysSince > dangerDays)
-      return { key: 'DANGER_NO_ORDER_LONG', urgency: 'high',
+      return { action_type, key: 'DANGER_NO_ORDER_LONG', urgency: 'high',
         text: `${daysSince}일째 연락 없음 — 이번 주 안 보이면 거래 단절 위험` }
 
-    return { key: 'DANGER_DEFAULT', urgency: 'high',
+    return { action_type, key: 'DANGER_DEFAULT', urgency: 'high',
       text: '오늘 안으로 반드시 연락하세요' }
   }
 
@@ -70,48 +109,52 @@ export function calcAction(
     const toDanger = daysSince !== null ? dangerDays - daysSince : null
 
     if (balance > 0 && toDanger !== null && toDanger <= 3)
-      return { key: 'WARNING_D3_AMOUNT', urgency: 'mid',
+      return { action_type, key: 'WARNING_D3_AMOUNT', urgency: 'mid',
         text: `${toDanger}일 후 위험 전환 — 오늘 수금 전화가 마지막 기회` }
 
     if (balance > 0 && toDanger !== null && toDanger <= 7)
-      return { key: 'WARNING_D7_AMOUNT', urgency: 'mid',
+      return { action_type, key: 'WARNING_D7_AMOUNT', urgency: 'mid',
         text: `이번 주 안에 수금 안 하면 위험 전환 — ${toDanger}일 남음, ${fmt(balance)}` }
 
     if (balance >= 300000 && daysSince !== null && daysSince > warningDays)
-      return { key: 'WARNING_HIGH_AMOUNT_OVERDUE', urgency: 'mid',
+      return { action_type, key: 'WARNING_HIGH_AMOUNT_OVERDUE', urgency: 'mid',
         text: `오늘 수금 전화 안 하면 지연됩니다 — ${fmt(balance)}, ${daysSince}일 경과` }
 
     if (balance > 0 && daysSince !== null && daysSince > warningDays)
-      return { key: 'WARNING_AMOUNT_OVERDUE', urgency: 'mid',
+      return { action_type, key: 'WARNING_AMOUNT_OVERDUE', urgency: 'mid',
         text: `이번 주 내 미수 해결 필요 — 미루면 위험 전환` }
 
     if (balance >= 300000)
-      return { key: 'WARNING_HIGH_AMOUNT', urgency: 'mid',
+      return { action_type, key: 'WARNING_HIGH_AMOUNT', urgency: 'mid',
         text: `지금 연락 안 하면 회수 늦어집니다 — ${fmt(balance)} 미수금` }
 
     if (balance > 0)
-      return { key: 'WARNING_AMOUNT_ONLY', urgency: 'mid',
+      return { action_type, key: 'WARNING_AMOUNT_ONLY', urgency: 'mid',
         text: `오늘 수금 일정 확인하세요 — ${fmt(balance)}, 미루지 마세요` }
 
     if (daysSince !== null && toDanger !== null) {
       if (toDanger <= 7)
-        return { key: 'WARNING_D7_NO_AMOUNT', urgency: 'mid',
+        return { action_type, key: 'WARNING_D7_NO_AMOUNT', urgency: 'mid',
           text: `${toDanger}일 후 위험 전환 — 지금 연락하면 막을 수 있습니다` }
-      return { key: 'WARNING_NO_ORDER', urgency: 'mid',
+      return { action_type, key: 'WARNING_NO_ORDER', urgency: 'mid',
         text: `${daysSince}일째 주문 없음 — 이번 주 안에 연락하세요` }
     }
 
-    return { key: 'WARNING_DEFAULT', urgency: 'mid',
+    return { action_type, key: 'WARNING_DEFAULT', urgency: 'mid',
       text: '오늘 확인하세요 — 미루면 위험해집니다' }
   }
 
   // ── 신규 ──────────────────────────────────────────────────
+  if (isNew)
+    return { action_type: 'new_customer', key: 'NEW_DEFAULT', urgency: 'mid',
+      text: '첫 주문 유도 — 오늘 연락하면 바로 시작 가능' }
+
   if (status === 'new')
-    return { key: 'NEW_DEFAULT', urgency: 'mid',
+    return { action_type: 'new_customer', key: 'NEW_DEFAULT', urgency: 'mid',
       text: '첫 주문 유도 — 오늘 연락하면 바로 시작 가능' }
 
   // ── 정상 ──────────────────────────────────────────────────
-  return { key: 'NORMAL_DEFAULT', urgency: 'low',
+  return { action_type: 'maintain', key: 'NORMAL_DEFAULT', urgency: 'low',
     text: '정상 거래 중' }
 }
 

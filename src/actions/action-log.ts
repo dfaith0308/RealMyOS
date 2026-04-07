@@ -17,6 +17,7 @@ export interface LogActionInput {
   action_type: ActionType
   triggered_message?: string
   message_key?: string
+  message_template_id?: string   // 선택한 템플릿 id (선택 옵션 — 강제 아님)
   customer_status?: CustomerStatus
   score_at_time?: number
   amount_at_time?: number
@@ -49,8 +50,9 @@ export async function logAction(
         customer_status:   input.customer_status ?? null,
         score_at_time:     input.score_at_time ?? null,
         amount_at_time:    input.amount_at_time ?? null,
-        conversion_status: 'unknown',
-        result_type:       'none',
+        conversion_status:    'unknown',
+        result_type:          'none',
+        message_template_id:  input.message_template_id ?? null,
       })
       .select('id')
       .single()

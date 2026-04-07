@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { getCustomersWithScore } from '@/actions/ledger'
 import { formatKRW } from '@/lib/calc'
 import { calcRecontactMessage, calcNoContactMessage } from '@/lib/customer-logic'
+import type { ActionType } from '@/lib/customer-logic'
 import type { CustomerStatus, CustomerWithScore } from '@/actions/ledger'
 import CallButton from '@/components/customer/CallButton'
 import ActionButton from '@/components/customer/ActionButton'
@@ -188,6 +189,7 @@ function CustomerCard({ c }: { c: CustomerWithScore }) {
             <span style={{ ...s.badge, color: cfg.color, background: cfg.bg, border: `1px solid ${cfg.border}` }}>
               {cfg.label}
             </span>
+            <ActionTypeBadge actionType={c.action.action_type} />
           </div>
           <div style={s.meta}>
             <span style={{ ...s.metaBal, color: c.current_balance > 0 ? '#B91C1C' : '#6b7280', fontWeight: c.current_balance > 0 ? 700 : 400 }}>
@@ -204,7 +206,7 @@ function CustomerCard({ c }: { c: CustomerWithScore }) {
                 color: (c.days_since_contact ?? 0) >= 5 ? '#B45309' : (c.days_since_contact ?? 0) >= 3 ? '#D97706' : '#6b7280',
                 fontWeight: (c.days_since_contact ?? 0) >= 3 ? 600 : 400,
               }}>
-                연락 {c.days_since_contact}일 전
+                전화 {c.days_since_contact}일 전
               </span>
             ) : (
               <span style={{ ...s.metaContact, color: isHigh ? '#B91C1C' : '#B45309', fontWeight: 600 }}>
@@ -256,6 +258,29 @@ function CustomerCard({ c }: { c: CustomerWithScore }) {
         </div>
       </div>
     </div>
+  )
+}
+
+// ── 예상행동 뱃지 컴포넌트 ─────────────────────────────────────
+
+const ACTION_TYPE_CFG: Record<ActionType, { label: string; color: string; bg: string }> = {
+  collect_payment: { label: '수금 요청',  color: '#B91C1C', bg: '#FEF2F2' },
+  visit:           { label: '방문 필요',  color: '#7C3AED', bg: '#F5F3FF' },
+  call:            { label: '주문 독려',  color: '#B45309', bg: '#FFFBEB' },
+  new_customer:    { label: '신규 관리',  color: '#1D4ED8', bg: '#EFF6FF' },
+  maintain:        { label: '유지',       color: '#15803D', bg: '#F0FDF4' },
+}
+
+function ActionTypeBadge({ actionType }: { actionType: ActionType }) {
+  const cfg = ACTION_TYPE_CFG[actionType]
+  return (
+    <span style={{
+      display: 'inline-block', padding: '2px 8px',
+      borderRadius: 10, fontSize: 10, fontWeight: 600,
+      color: cfg.color, background: cfg.bg,
+    }}>
+      {cfg.label}
+    </span>
   )
 }
 
