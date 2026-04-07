@@ -123,3 +123,60 @@ async function issueProductCode(
 
   return `P-${String(data).padStart(3, '0')}`
 }
+
+// ============================================================
+// 상품 수정 (오류 수정 목적 — 이력 관리 없음)
+// ============================================================
+
+export interface UpdateProductInput {
+  id: string
+  name: string
+  selling_price?: number
+  cost_price?: number
+}
+
+export async function updateProduct(
+  input: UpdateProductInput,
+): Promise<ActionResult> {
+  const supabase = await createSupabaseServer()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: '로그인 필요' }
+
+  const { data: me } = await supabase
+    .from('users').select('tenant_id').eq('id', user.id).single()
+  if (!me?.tenant_id) return { success: false, error: '테넌트 없음' }
+
+  const name = input.name.trim()
+  if (!name) return { success: false, error: '상품명을 입력해주세요.' }
+
+  // 1. 상품명 수정
+  const { error: nameErr } = await supabase
+    .from('products')
+    .update({ name })
+    .eq('id', input.id)
+    .eq('tenant_id', me.tenant_id)
+  if (nameErr) return { success: false, error: nameErr.message }
+
+  // 2. 판매가 수정
+  if (input.selling_price !== undefined) {
+    await supabase
+      .from('product_prices')
+      .upsert(
+        { product_id: input.id, price_type: 'normal', price: input.selling_price },
+        { onConflict: 'product_id,price_type' },
+      )
+  }
+
+  // 3. 매입가 수정 — end_date = null인 현재 row 직접 업데이트
+  if (input.cost_price !== undefined && input.cost_price > 0) {
+    await supabase
+      .from('product_costs')
+      .update({ cost_price: input.cost_price })
+      .eq('product_id', input.id)
+      .is('end_date', null)
+  }
+
+  revalidatePath('/products')
+  return { success: true }
+}
