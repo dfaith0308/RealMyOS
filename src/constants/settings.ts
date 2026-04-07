@@ -1,6 +1,6 @@
 // ============================================================
 // RealMyOS - Settings 기본값 상수
-// "use server" 파일에는 객체 export 불가 → 별도 분리
+// src/constants/settings.ts
 // ============================================================
 
 export interface TenantSettings {
@@ -9,8 +9,11 @@ export interface TenantSettings {
   margin_warning_threshold: number
   new_customer_days: number
   overdue_warning_amount: number
+  overdue_danger_amount: number          // 연체금 위험 기준 (원)
   warning_days: number
   danger_days: number
+  warning_cycle_multiplier: number       // 주문주기 × N 초과 시 주의
+  danger_cycle_multiplier: number        // 주문주기 × N 초과 시 위험
 }
 
 export const DEFAULT_SETTINGS: TenantSettings = {
@@ -19,6 +22,9 @@ export const DEFAULT_SETTINGS: TenantSettings = {
   margin_warning_threshold: 5,
   new_customer_days: 30,
   overdue_warning_amount: 100000,
+  overdue_danger_amount: 500000,
   warning_days: 14,
   danger_days: 30,
+  warning_cycle_multiplier: 1.5,         // 주문주기 × 1.5 초과 시 주의
+  danger_cycle_multiplier: 2.0,          // 주문주기 × 2.0 초과 시 위험
 }

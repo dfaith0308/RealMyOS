@@ -5,55 +5,107 @@
 
 import type { CustomerStatus } from '@/actions/ledger'
 
-// 예상행동 타입
 export type ActionType =
-  | 'new_customer'      // 첫 주문 후 N일 이내 신규 관리
-  | 'collect_payment'   // 연체금 존재
-  | 'visit'             // 위험 — 주문공백 dangerDays 초과
-  | 'call'              // 주의 — 주문공백 warningDays 초과
-  | 'maintain'          // 정상 유지
+  | 'new_customer'
+  | 'collect_payment'
+  | 'visit'
+  | 'call'
+  | 'maintain'
 
 export interface ActionMessage {
   text: string
   urgency: 'high' | 'mid' | 'low'
   key: string
-  action_type: ActionType  // 예상행동 enum
+  action_type: ActionType
 }
 
-// ── 예상행동 계산 ─────────────────────────────────────────────
-// DB 저장 없이 순수 계산
-// new_customer_days 이내 첫 주문 → new_customer
-// 연체금 존재 → collect_payment
-// dangerDays 초과 → visit
-// warningDays 초과 → call
-// 그 외 → maintain
+// ============================================================
+// 주문주기 계산
+// confirmed 주문 날짜 배열 → 평균 간격 (일)
+// 0~1건 → null
+// ============================================================
+
+export function calcOrderCycle(orderDates: string[]): number | null {
+  if (orderDates.length < 2) return null
+  const sorted = [...orderDates].sort()
+  const gaps: number[] = []
+  for (let i = 1; i < sorted.length; i++) {
+    const diff = Math.floor(
+      (new Date(sorted[i]).getTime() - new Date(sorted[i - 1]).getTime()) / 86400000
+    )
+    if (diff > 0) gaps.push(diff)
+  }
+  if (gaps.length === 0) return null
+  return Math.round(gaps.reduce((a, b) => a + b, 0) / gaps.length)
+}
+
+// ============================================================
+// 상태 계산
+// 우선순위: 연체금 → 주문주기 이탈 → 신규 → 정상
+// ============================================================
+
+export function calcCustomerStatus(p: {
+  overdue_amount: number
+  days_since_order: number | null
+  order_cycle_days: number | null
+  is_new: boolean
+  overdue_warning_amount: number
+  overdue_danger_amount: number
+  warning_cycle_multiplier: number
+  danger_cycle_multiplier: number
+  warning_days: number
+  danger_days: number
+}): CustomerStatus {
+  // 1. 연체금 기준
+  if (p.overdue_amount >= p.overdue_danger_amount)  return 'danger'
+  if (p.overdue_amount >= p.overdue_warning_amount) return 'warning'
+
+  // 2. 주문주기 이탈 (주기 있는 경우 우선, 없으면 warning_days fallback)
+  if (p.days_since_order !== null) {
+    const cycle = p.order_cycle_days ?? p.warning_days
+    if (p.days_since_order > cycle * p.danger_cycle_multiplier)  return 'danger'
+    if (p.days_since_order > cycle * p.warning_cycle_multiplier) return 'warning'
+  }
+
+  // 3. 주문 이력 없음
+  if (p.days_since_order === null) {
+    if (p.overdue_amount > 0) return 'danger'
+    return 'new'
+  }
+
+  return 'normal'
+}
+
+// ============================================================
+// 예상행동 계산
+// ============================================================
 
 export function calcActionType(
   status: CustomerStatus,
-  overdueAmount: number,    // 연체금 (due_date 지난 금액)
-  daysSince: number | null,
+  overdueAmount: number,
   isNew: boolean,
 ): ActionType {
-  if (isNew) return 'new_customer'
-  if (overdueAmount > 0) return 'collect_payment'  // 연체금 기준 (미수금 전체 아님)
-  if (status === 'danger') return 'visit'
-  if (status === 'warning') return 'call'
+  if (isNew && status === 'new') return 'new_customer'
+  if (overdueAmount > 0)         return 'collect_payment'
+  if (status === 'danger')       return 'visit'
+  if (status === 'warning')      return 'call'
   return 'maintain'
 }
 
-// ── 점수 ─────────────────────────────────────────────────────
+// ============================================================
+// 점수
+// ============================================================
 
-export function calcScore(
-  balance: number,
-  daysSince: number | null,
-): number {
+export function calcScore(balance: number, daysSince: number | null): number {
   const balanceScore = Math.min(Math.floor(balance / 100000) * 5, 50)
   const daysScore    = Math.min(daysSince ?? 60, 40)
   const noOrderBonus = daysSince === null ? 10 : 0
   return balanceScore + daysScore + noOrderBonus
 }
 
-// ── 행동 메시지 ───────────────────────────────────────────────
+// ============================================================
+// 행동 메시지
+// ============================================================
 
 export function calcAction(
   status: CustomerStatus,
@@ -63,137 +115,106 @@ export function calcAction(
   dangerDays: number  = 30,
   newCustomerDays: number = 30,
   firstOrderDate: string | null = null,
-  overdueAmount: number = 0,   // 연체금 — calcActionType에 전달
+  overdueAmount: number = 0,
 ): ActionMessage {
-  // isNew 판단: 첫 주문일로부터 newCustomerDays 이내
   const isNew = firstOrderDate !== null
     ? Math.floor((Date.now() - new Date(firstOrderDate).getTime()) / 86400000) <= newCustomerDays
     : false
 
-  const action_type = calcActionType(status, overdueAmount, daysSince, isNew)
+  const action_type = calcActionType(status, overdueAmount, isNew)
 
-  // ── 위험 ──────────────────────────────────────────────────
   if (status === 'danger') {
-    const overDanger = daysSince !== null ? daysSince - dangerDays : null
+    const over = daysSince !== null ? daysSince - dangerDays : null
 
-    if (balance >= 500000 && overDanger !== null && overDanger > 14)
-      return { action_type, key: 'DANGER_HIGH_AMOUNT_LONG_OVERDUE', urgency: 'high',
-        text: `지금 방문 안 하면 회수 불가 — ${fmt(balance)} 미수, ${daysSince}일 방치됨` }
+    if (overdueAmount >= 500000 && over !== null && over > 14)
+      return { action_type, key: 'DANGER_HIGH_OVERDUE_LONG', urgency: 'high',
+        text: `지금 방문 안 하면 회수 불가 — ${fmt(overdueAmount)} 연체, ${daysSince}일 방치됨` }
 
-    if (balance >= 500000)
-      return { action_type, key: 'DANGER_HIGH_AMOUNT', urgency: 'high',
-        text: `오늘 수금 전화 안 하면 더 늦어집니다 — ${fmt(balance)} 미회수` }
+    if (overdueAmount >= 500000)
+      return { action_type, key: 'DANGER_HIGH_OVERDUE', urgency: 'high',
+        text: `오늘 수금 전화 안 하면 더 늦어집니다 — ${fmt(overdueAmount)} 연체` }
 
-    if (balance > 0 && overDanger !== null && overDanger > 7)
-      return { action_type, key: 'DANGER_AMOUNT_OVER7', urgency: 'high',
-        text: `지금 연락 안 하면 회수 점점 어려워집니다 — ${fmt(balance)} 미수` }
+    if (overdueAmount > 0 && over !== null && over > 7)
+      return { action_type, key: 'DANGER_OVERDUE_OVER7', urgency: 'high',
+        text: `지금 연락 안 하면 회수 점점 어려워집니다 — ${fmt(overdueAmount)} 연체` }
 
-    if (balance > 0 && overDanger !== null && overDanger > 0)
-      return { action_type, key: 'DANGER_AMOUNT_OVERDUE', urgency: 'high',
-        text: `위험 기준 ${overDanger}일 초과 — 오늘 안으로 수금 전화` }
+    if (overdueAmount > 0)
+      return { action_type, key: 'DANGER_OVERDUE_ONLY', urgency: 'high',
+        text: `오늘 전화하세요 — ${fmt(overdueAmount)} 연체, 방치하면 회수 어려워짐` }
 
-    if (balance > 0)
-      return { action_type, key: 'DANGER_AMOUNT_ONLY', urgency: 'high',
-        text: `오늘 전화하세요 — ${fmt(balance)} 미수금, 방치하면 회수 어려워짐` }
+    if (daysSince !== null)
+      return { action_type, key: 'DANGER_NO_ORDER', urgency: 'high',
+        text: `${daysSince}일째 주문 없음 — 이번 주 안 보이면 거래 단절 위험` }
 
-    if (daysSince !== null && daysSince > dangerDays)
-      return { action_type, key: 'DANGER_NO_ORDER_LONG', urgency: 'high',
-        text: `${daysSince}일째 연락 없음 — 이번 주 안 보이면 거래 단절 위험` }
-
-    return { action_type, key: 'DANGER_DEFAULT', urgency: 'high',
-      text: '오늘 안으로 반드시 연락하세요' }
+    return { action_type, key: 'DANGER_DEFAULT', urgency: 'high', text: '오늘 안으로 반드시 연락하세요' }
   }
 
-  // ── 주의 ──────────────────────────────────────────────────
   if (status === 'warning') {
     const toDanger = daysSince !== null ? dangerDays - daysSince : null
 
-    if (balance > 0 && toDanger !== null && toDanger <= 3)
-      return { action_type, key: 'WARNING_D3_AMOUNT', urgency: 'mid',
+    if (overdueAmount > 0 && toDanger !== null && toDanger <= 3)
+      return { action_type, key: 'WARNING_D3_OVERDUE', urgency: 'mid',
         text: `${toDanger}일 후 위험 전환 — 오늘 수금 전화가 마지막 기회` }
 
-    if (balance > 0 && toDanger !== null && toDanger <= 7)
-      return { action_type, key: 'WARNING_D7_AMOUNT', urgency: 'mid',
-        text: `이번 주 안에 수금 안 하면 위험 전환 — ${toDanger}일 남음, ${fmt(balance)}` }
+    if (overdueAmount > 0 && toDanger !== null && toDanger <= 7)
+      return { action_type, key: 'WARNING_D7_OVERDUE', urgency: 'mid',
+        text: `이번 주 수금 필요 — ${toDanger}일 남음, ${fmt(overdueAmount)} 연체` }
 
-    if (balance >= 300000 && daysSince !== null && daysSince > warningDays)
-      return { action_type, key: 'WARNING_HIGH_AMOUNT_OVERDUE', urgency: 'mid',
-        text: `오늘 수금 전화 안 하면 지연됩니다 — ${fmt(balance)}, ${daysSince}일 경과` }
+    if (overdueAmount >= 300000)
+      return { action_type, key: 'WARNING_HIGH_OVERDUE', urgency: 'mid',
+        text: `오늘 수금 전화 안 하면 지연됩니다 — ${fmt(overdueAmount)} 연체` }
 
-    if (balance > 0 && daysSince !== null && daysSince > warningDays)
-      return { action_type, key: 'WARNING_AMOUNT_OVERDUE', urgency: 'mid',
-        text: `이번 주 내 미수 해결 필요 — 미루면 위험 전환` }
-
-    if (balance >= 300000)
-      return { action_type, key: 'WARNING_HIGH_AMOUNT', urgency: 'mid',
-        text: `지금 연락 안 하면 회수 늦어집니다 — ${fmt(balance)} 미수금` }
-
-    if (balance > 0)
-      return { action_type, key: 'WARNING_AMOUNT_ONLY', urgency: 'mid',
-        text: `오늘 수금 일정 확인하세요 — ${fmt(balance)}, 미루지 마세요` }
+    if (overdueAmount > 0)
+      return { action_type, key: 'WARNING_OVERDUE_ONLY', urgency: 'mid',
+        text: `오늘 수금 일정 확인하세요 — ${fmt(overdueAmount)} 연체` }
 
     if (daysSince !== null && toDanger !== null) {
       if (toDanger <= 7)
-        return { action_type, key: 'WARNING_D7_NO_AMOUNT', urgency: 'mid',
+        return { action_type, key: 'WARNING_D7_NO_OVERDUE', urgency: 'mid',
           text: `${toDanger}일 후 위험 전환 — 지금 연락하면 막을 수 있습니다` }
       return { action_type, key: 'WARNING_NO_ORDER', urgency: 'mid',
         text: `${daysSince}일째 주문 없음 — 이번 주 안에 연락하세요` }
     }
 
-    return { action_type, key: 'WARNING_DEFAULT', urgency: 'mid',
-      text: '오늘 확인하세요 — 미루면 위험해집니다' }
+    return { action_type, key: 'WARNING_DEFAULT', urgency: 'mid', text: '오늘 확인하세요 — 미루면 위험해집니다' }
   }
 
-  // ── 신규 ──────────────────────────────────────────────────
-  if (isNew)
-    return { action_type: 'new_customer', key: 'NEW_DEFAULT', urgency: 'mid',
-      text: '첫 주문 유도 — 오늘 연락하면 바로 시작 가능' }
+  if (action_type === 'new_customer')
+    return { action_type, key: 'NEW_DEFAULT', urgency: 'mid', text: '첫 주문 유도 — 오늘 연락하면 바로 시작 가능' }
 
-  if (status === 'new')
-    return { action_type: 'new_customer', key: 'NEW_DEFAULT', urgency: 'mid',
-      text: '첫 주문 유도 — 오늘 연락하면 바로 시작 가능' }
-
-  // ── 정상 ──────────────────────────────────────────────────
-  return { action_type: 'maintain', key: 'NORMAL_DEFAULT', urgency: 'low',
-    text: '정상 거래 중' }
+  return { action_type: 'maintain', key: 'NORMAL_DEFAULT', urgency: 'low', text: '정상 거래 중' }
 }
 
-// ── 재압박 메시지 ─────────────────────────────────────────────
+// ============================================================
+// 재압박 메시지
+// ============================================================
 
 export function calcRecontactMessage(
-  balance: number,
+  overdueAmount: number,
   daysSinceContact: number | null,
   status: CustomerStatus,
 ): string | null {
-  if (daysSinceContact === null || balance <= 0) return null
-
+  if (daysSinceContact === null || overdueAmount <= 0) return null
   if (status === 'danger') {
-    if (daysSinceContact >= 7)
-      return `${daysSinceContact}일 전 연락했지만 미수금 그대로 — 지금 방문하세요`
-    if (daysSinceContact >= 3)
-      return `${daysSinceContact}일 전 연락 이후 해결 안 됨 — 오늘 다시 전화`
+    if (daysSinceContact >= 7) return `${daysSinceContact}일 전 연락했지만 연체 그대로 — 지금 방문하세요`
+    if (daysSinceContact >= 3) return `${daysSinceContact}일 전 연락 이후 해결 안 됨 — 오늘 다시 전화`
   }
   if (status === 'warning' && daysSinceContact >= 5)
-    return `${daysSinceContact}일 전 연락 이후 미수금 유지 — 재확인 필요`
-
+    return `${daysSinceContact}일 전 연락 이후 연체 유지 — 재확인 필요`
   return null
 }
 
-// ── 연락 없음 메시지 ─────────────────────────────────────────
+// ============================================================
+// 전화 기록 없음 메시지
+// ============================================================
 
-export function calcNoContactMessage(
-  status: CustomerStatus,
-  balance: number,
-): string {
-  if (status === 'danger' && balance > 0) return '연락 기록 없음 — 오늘 첫 수금 전화 필요'
-  if (status === 'danger')                return '최근 접촉 없음 — 즉시 연락 필요'
-  if (status === 'warning' && balance > 0) return '연락 기록 없음 — 오늘 수금 확인 전화 권장'
-  if (status === 'warning')               return '최근 접촉 없음 — 관계 단절 위험'
-  if (status === 'new')                   return '아직 연락 없음 — 오늘 첫 연락 시작하세요'
-  return '연락 기록 없음'
+export function calcNoContactMessage(status: CustomerStatus, overdueAmount: number): string {
+  if (status === 'danger'  && overdueAmount > 0) return '전화 기록 없음 — 오늘 첫 수금 전화 필요'
+  if (status === 'danger')                       return '전화 기록 없음 — 즉시 연락 필요'
+  if (status === 'warning' && overdueAmount > 0) return '전화 기록 없음 — 오늘 수금 확인 전화 권장'
+  if (status === 'warning')                      return '전화 기록 없음 — 관계 단절 위험'
+  return '전화 기록 없음'
 }
-
-// ── 금액 축약 ─────────────────────────────────────────────────
 
 function fmt(amount: number): string {
   if (amount >= 10000000) return `${(amount / 10000000).toFixed(0)}천만원`
