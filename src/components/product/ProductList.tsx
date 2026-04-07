@@ -40,12 +40,11 @@ export default function ProductList({ products }: { products: Product[] }) {
   )
 }
 
-// ── 행 컴포넌트 ───────────────────────────────────────────────
-
 function ProductRow({ product }: { product: Product }) {
   const [isPending, startTransition] = useTransition()
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(product.name)
+  const [taxType, setTaxType] = useState<'taxable' | 'exempt'>(product.tax_type)
   const [costPrice, setCostPrice] = useState(String(product.cost_price))
   const [sellingPrice, setSellingPrice] = useState(String(product.selling_price))
   const [error, setError] = useState<string | null>(null)
@@ -56,6 +55,7 @@ function ProductRow({ product }: { product: Product }) {
       const result = await updateProduct({
         id: product.id,
         name,
+        tax_type: taxType,
         cost_price: Number(costPrice) || undefined,
         selling_price: Number(sellingPrice) || undefined,
       })
@@ -69,6 +69,7 @@ function ProductRow({ product }: { product: Product }) {
 
   function handleCancel() {
     setName(product.name)
+    setTaxType(product.tax_type)
     setCostPrice(String(product.cost_price))
     setSellingPrice(String(product.selling_price))
     setError(null)
@@ -106,16 +107,28 @@ function ProductRow({ product }: { product: Product }) {
               onChange={(e) => setSellingPrice(e.target.value)}
             />
           </td>
-          <td style={{ ...td, color: '#6b7280' }}>
-            {product.tax_type === 'taxable' ? '과세' : '면세'}
+          <td style={td}>
+            {/* 세그먼트 버튼 */}
+            <div style={seg.wrap}>
+              <button
+                type="button"
+                style={taxType === 'taxable' ? seg.active : seg.btn}
+                onClick={() => setTaxType('taxable')}
+              >
+                과세
+              </button>
+              <button
+                type="button"
+                style={taxType === 'exempt' ? seg.active : seg.btn}
+                onClick={() => setTaxType('exempt')}
+              >
+                면세
+              </button>
+            </div>
           </td>
           <td style={td}>
             <div style={{ display: 'flex', gap: 6 }}>
-              <button
-                style={saveBtn}
-                onClick={handleSave}
-                disabled={isPending}
-              >
+              <button style={saveBtn} onClick={handleSave} disabled={isPending}>
                 {isPending ? '저장 중' : '저장'}
               </button>
               <button style={cancelBtn} onClick={handleCancel}>취소</button>
@@ -159,29 +172,28 @@ function ProductRow({ product }: { product: Product }) {
 
 const th: React.CSSProperties = {
   padding: '8px 12px', textAlign: 'left',
-  fontSize: 11, fontWeight: 500, color: '#6b7280',
-  background: '#f9fafb',
+  fontSize: 11, fontWeight: 500, color: '#6b7280', background: '#f9fafb',
 }
-const td: React.CSSProperties = {
-  padding: '10px 12px', verticalAlign: 'middle',
-}
+const td: React.CSSProperties = { padding: '10px 12px', verticalAlign: 'middle' }
 const inputStyle: React.CSSProperties = {
   padding: '5px 8px', border: '1px solid #d1d5db',
   borderRadius: 6, fontSize: 13, width: '100%',
   outline: 'none', boxSizing: 'border-box',
 }
+const seg = {
+  wrap: { display: 'flex', border: '1px solid #d1d5db', borderRadius: 6, overflow: 'hidden' } as React.CSSProperties,
+  btn:  { flex: 1, padding: '4px 8px', border: 'none', borderRight: '1px solid #d1d5db', background: '#fff', fontSize: 12, cursor: 'pointer', color: '#374151' } as React.CSSProperties,
+  active: { flex: 1, padding: '4px 8px', border: 'none', borderRight: '1px solid #d1d5db', background: '#111827', color: '#fff', fontSize: 12, cursor: 'pointer', fontWeight: 500 } as React.CSSProperties,
+}
 const editBtn: React.CSSProperties = {
   padding: '4px 10px', background: '#f3f4f6',
-  border: '1px solid #e5e7eb', borderRadius: 6,
-  fontSize: 12, color: '#374151', cursor: 'pointer',
+  border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 12, color: '#374151', cursor: 'pointer',
 }
 const saveBtn: React.CSSProperties = {
   padding: '4px 10px', background: '#111827',
-  border: 'none', borderRadius: 6,
-  fontSize: 12, color: '#fff', cursor: 'pointer',
+  border: 'none', borderRadius: 6, fontSize: 12, color: '#fff', cursor: 'pointer',
 }
 const cancelBtn: React.CSSProperties = {
   padding: '4px 10px', background: '#fff',
-  border: '1px solid #d1d5db', borderRadius: 6,
-  fontSize: 12, color: '#374151', cursor: 'pointer',
+  border: '1px solid #d1d5db', borderRadius: 6, fontSize: 12, color: '#374151', cursor: 'pointer',
 }

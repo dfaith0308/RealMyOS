@@ -131,6 +131,7 @@ async function issueProductCode(
 export interface UpdateProductInput {
   id: string
   name: string
+  tax_type: 'taxable' | 'exempt'
   selling_price?: number
   cost_price?: number
 }
@@ -150,10 +151,10 @@ export async function updateProduct(
   const name = input.name.trim()
   if (!name) return { success: false, error: '상품명을 입력해주세요.' }
 
-  // 1. 상품명 수정
+  // 1. 상품명 + tax_type 수정
   const { error: nameErr } = await supabase
     .from('products')
-    .update({ name })
+    .update({ name, tax_type: input.tax_type })
     .eq('id', input.id)
     .eq('tenant_id', me.tenant_id)
   if (nameErr) return { success: false, error: nameErr.message }
