@@ -67,7 +67,7 @@ export default async function CustomerListPage({
           <option value="lead">잠재</option>
         </select>
         <button type="submit" style={s.searchBtn}>검색</button>
-        <Link href="/customers/list" style={s.resetBtn}>초기화</Link>
+        <Link href="/customers/all" style={s.resetBtn}>초기화</Link>
       </form>
 
       {filtered.length === 0 && (

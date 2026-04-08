@@ -93,7 +93,7 @@ export async function createCustomer(
   }
 
   revalidatePath('/customers')
-  revalidatePath('/customers/list')
+  revalidatePath('/customers/all')
   return { success: true, data: { id: data.id, name: data.name } }
 }
 
@@ -159,7 +159,7 @@ export async function updateCustomer(
   }
 
   revalidatePath('/customers')
-  revalidatePath('/customers/list')
+  revalidatePath('/customers/all')
   revalidatePath(`/customers/${id}/edit`)
   return { success: true }
 }
