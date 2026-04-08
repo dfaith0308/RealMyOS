@@ -9,9 +9,9 @@ export const metadata = { title: '주문 목록 — RealMyOS' }
 export default async function OrdersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ customer_id?: string; from?: string; to?: string; status?: string }>
+  searchParams: { customer_id?: string; from?: string; to?: string; status?: string }
 }) {
-  const sp = await searchParams
+  const sp = searchParams
 
   // 기본 조회: 이번 달 1일 ~ 오늘
   const today     = new Date().toISOString().slice(0, 10)

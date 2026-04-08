@@ -7,9 +7,9 @@ export const metadata = { title: '주문 등록 — RealMyOS' }
 export default async function OrderNewPage({
   searchParams,
 }: {
-  searchParams: Promise<{ customer_id?: string }>
+  searchParams: { customer_id?: string }
 }) {
-  const { customer_id } = await searchParams
+  const { customer_id } = searchParams
 
   let initialCustomerId: string | undefined
   let reorderLines: Array<{

@@ -10,9 +10,9 @@ export const metadata = { title: '상품 수정 — RealMyOS' }
 export default async function ProductEditPage({
   params,
 }: {
-  params: Promise<{ id: string }>
+  params: { id: string }
 }) {
-  const { id } = await params
+  const { id } = params
   const supabase = await createSupabaseServer()
   const { data: { user } } = await supabase.auth.getUser()
 

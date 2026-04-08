@@ -43,9 +43,9 @@ function receivableColor(overdue: number, receivable: number): string {
 export default async function CustomersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ filter?: string }>
+  searchParams: { filter?: string }
 }) {
-  const { filter } = await searchParams
+  const { filter } = searchParams
   const [result, cashflowResult] = await Promise.all([
     getCustomersWithScore(),
     getDailyCashflow(),

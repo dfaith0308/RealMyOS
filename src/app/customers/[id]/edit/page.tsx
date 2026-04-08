@@ -8,9 +8,9 @@ export const metadata = { title: '거래처 수정 — RealMyOS' }
 export default async function CustomerEditPage({
   params,
 }: {
-  params: Promise<{ id: string }>
+  params: { id: string }
 }) {
-  const { id } = await params
+  const { id } = params
   const [detailResult, channelsResult] = await Promise.all([
     getCustomerDetail(id),
     getAcquisitionChannels(),

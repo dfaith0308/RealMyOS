@@ -18,9 +18,9 @@ const STATUS_CFG: Record<string, { label: string; color: string }> = {
 export default async function CustomerListPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; type?: string; status?: string }>
+  searchParams: { q?: string; type?: string; status?: string }
 }) {
-  const { q, type, status } = await searchParams
+  const { q, type, status } = searchParams
   const result = await getCustomerList()
   const all = result.data ?? []
 

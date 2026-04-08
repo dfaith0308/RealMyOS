@@ -9,9 +9,9 @@ export const metadata = { title: '주문 수정 — RealMyOS' }
 export default async function OrderEditPage({
   params,
 }: {
-  params: Promise<{ id: string }>
+  params: { id: string }
 }) {
-  const { id } = await params
+  const { id } = params
   const supabase = await createSupabaseServer()
 
   const [{ data: order }, settingsResult] = await Promise.all([

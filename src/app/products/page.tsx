@@ -11,9 +11,9 @@ export const metadata = { title: '상품 목록 — RealMyOS' }
 export default async function ProductsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; category_id?: string; tax_type?: string }>
+  searchParams: { q?: string; category_id?: string; tax_type?: string }
 }) {
-  const { q, category_id, tax_type } = await searchParams
+  const { q, category_id, tax_type } = searchParams
 
   const [productsResult, categoriesResult, settingsResult] = await Promise.all([
     getProducts({ q, category_id, tax_type }),
