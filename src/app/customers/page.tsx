@@ -98,9 +98,10 @@ export default async function CustomersPage({
           </div>
         </div>
         <div style={s.headerBtns}>
-          <Link href="/payments/new" style={s.subBtn}>수금 등록</Link>
-          <Link href="/orders/new"   style={s.subBtn}>주문 등록</Link>
-          <Link href="/customers/new" style={s.newBtn}>+ 거래처 등록</Link>
+          <Link href="/customers/all"  style={s.subBtn}>거래처 목록</Link>
+          <Link href="/payments/new"   style={s.subBtn}>수금 등록</Link>
+          <Link href="/orders/new"     style={s.subBtn}>주문 등록</Link>
+          <Link href="/customers/new"  style={s.newBtn}>+ 거래처 등록</Link>
         </div>
       </div>
 

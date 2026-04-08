@@ -92,7 +92,7 @@ export default function CustomerEditForm({ customer, channels: init }: Props) {
 
       if (result.success) {
         setSuccess(true)
-        setTimeout(() => router.push('/customers/list'), 800)
+        setTimeout(() => router.push('/customers'), 800)
       } else {
         setError(result.error ?? '저장 실패')
       }
@@ -226,7 +226,7 @@ export default function CustomerEditForm({ customer, channels: init }: Props) {
 
         <div style={{ display: 'flex', gap: 8 }}>
           <button type="button" style={s.cancelBtn}
-            onClick={() => router.push('/customers/list')}>취소</button>
+            onClick={() => router.push('/customers')}>취소</button>
           <button type="submit" style={isPending ? s.submitOff : s.submit}
             disabled={isPending}>
             {isPending ? '저장 중...' : '저장'}

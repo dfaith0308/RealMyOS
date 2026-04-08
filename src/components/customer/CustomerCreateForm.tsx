@@ -92,7 +92,7 @@ export default function CustomerCreateForm({ channels: init }: Props) {
         is_buyer:  isBuyer,
         is_supplier: isSupplier,
       })
-      if (result.success) router.push('/customers/list')
+      if (result.success) router.push('/customers')
       else setError(result.error ?? '저장 실패')
     })
   }

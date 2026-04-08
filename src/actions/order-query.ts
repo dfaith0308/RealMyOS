@@ -16,6 +16,7 @@ export interface OrderListItem {
   customer_name: string
   total_amount: number
   status: string
+  order_lines: Array<{ product_name: string; quantity: number; unit_price: number; line_total: number }>
 }
 
 export interface LastOrderData {
@@ -34,19 +35,31 @@ export interface LastOrderData {
 // 주문 목록 (최신순)
 // ============================================================
 
-export async function getOrderList(): Promise<ActionResult<OrderListItem[]>> {
+export async function getOrderList(filters?: {
+  from?: string
+  to?: string
+  status?: string
+  customer_id?: string
+}): Promise<ActionResult<OrderListItem[]>> {
   const supabase = await createSupabaseServer()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, error: '로그인 필요' }
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('orders')
-    .select('id, order_number, order_date, customer_id, total_amount, status, customers(name)')
+    .select('id, order_number, order_date, customer_id, total_amount, status, customers(name), order_lines(product_name, quantity, unit_price, line_total)')
     .is('deleted_at', null)
-    .in('status', ['draft', 'confirmed', 'cancelled'])
     .order('order_date', { ascending: false })
     .order('created_at', { ascending: false })
-    .limit(200)
+    .limit(500)
+
+  if (filters?.from)        query = query.gte('order_date', filters.from)
+  if (filters?.to)          query = query.lte('order_date', filters.to)
+  if (filters?.status)      query = query.eq('status', filters.status)
+  else                      query = query.in('status', ['draft', 'confirmed', 'cancelled'])
+  if (filters?.customer_id) query = query.eq('customer_id', filters.customer_id)
+
+  const { data, error } = await query
 
   if (error) return { success: false, error: error.message }
 
@@ -60,6 +73,7 @@ export async function getOrderList(): Promise<ActionResult<OrderListItem[]>> {
       customer_name: o.customers?.name ?? '-',
       total_amount:  o.total_amount,
       status:        o.status,
+      order_lines:   o.order_lines ?? [],
     })),
   }
 }
