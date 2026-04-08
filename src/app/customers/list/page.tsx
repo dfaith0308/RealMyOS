@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import CustomerBulkUpload from '@/components/customer/CustomerBulkUpload'
 import { getCustomerList } from '@/actions/customer-query'
 import { formatKRW } from '@/lib/calc'
 import { formatPaymentTerms } from '@/lib/payment-terms'
@@ -39,10 +40,15 @@ export default async function CustomerListPage({
             전체 {all.length}개 · 표시 {filtered.length}개
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <Link href="/customers" style={s.subBtn}>← 행동 대시보드</Link>
           <Link href="/customers/new" style={s.newBtn}>+ 거래처 등록</Link>
         </div>
+      </div>
+
+      {/* 대량등록 */}
+      <div style={{ marginBottom: 16 }}>
+        <CustomerBulkUpload />
       </div>
 
       <form method="get" style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>

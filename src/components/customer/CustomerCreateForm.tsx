@@ -1,8 +1,9 @@
+import Link from 'next/link'
 'use client'
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { createCustomer } from '@/actions/customer'
+import { createCustomer, checkCustomerDuplicate } from '@/actions/customer'
 import { addAcquisitionChannel } from '@/actions/acquisition-channel'
 import { formatPaymentTerms } from '@/lib/payment-terms'
 import type { AcquisitionChannel } from '@/actions/acquisition-channel'
@@ -18,6 +19,8 @@ export default function CustomerCreateForm({ channels: init }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const [dupWarning, setDupWarning] = useState<string | null>(null)   // 경고 (계속 가능)
+  const [dupBlock, setDupBlock] = useState<{ id: string; name: string } | null>(null) // 차단
 
   const [customerType, setCustomerType] = useState<CustomerType>('business')
   const [bizNumber, setBizNumber] = useState('')
@@ -66,6 +69,7 @@ export default function CustomerCreateForm({ channels: init }: Props) {
     e.preventDefault()
     setError(null)
     if (!name.trim()) { setError('거래처명을 입력해주세요.'); return }
+    if (dupBlock) { setError('이미 등록된 사업자번호입니다. 기존 거래처를 수정해주세요.'); return }
 
     startTransition(async () => {
       const result = await createCustomer({
@@ -115,8 +119,28 @@ export default function CustomerCreateForm({ channels: init }: Props) {
         {customerType === 'business' && (
           <F label="사업자등록번호">
             <input style={s.input} value={bizNumber}
-              onChange={(e) => setBizNumber(e.target.value.replace(/-/g, ''))}
+              onChange={(e) => {
+                const val = e.target.value.replace(/-/g, '')
+                setBizNumber(val)
+                setDupBlock(null)
+                setDupWarning(null)
+              }}
+              onBlur={async () => {
+                if (bizNumber.length < 10) return
+                const r = await checkCustomerDuplicate({ business_number: bizNumber })
+                if (r.success && r.data?.hasDuplicate) {
+                  setDupBlock({ id: r.data.existingId!, name: r.data.existingName! })
+                }
+              }}
               placeholder="숫자만 입력" maxLength={10} />
+            {dupBlock && (
+              <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#B91C1C', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>이미 등록된 거래처입니다 — {dupBlock.name}</span>
+                <Link href={`/customers/${dupBlock.id}/edit`} style={{ color: '#1D4ED8', textDecoration: 'underline', fontSize: 12 }}>
+                  거래처 보기
+                </Link>
+              </div>
+            )}
           </F>
         )}
 
@@ -140,7 +164,20 @@ export default function CustomerCreateForm({ channels: init }: Props) {
 
         <F label="연락처">
           <input style={s.input} value={phone}
-            onChange={(e) => setPhone(e.target.value)} placeholder="010-0000-0000" />
+            onChange={(e) => { setPhone(e.target.value); setDupWarning(null) }}
+            onBlur={async () => {
+              if (!name.trim() || !phone.trim()) return
+              const r = await checkCustomerDuplicate({ name, phone })
+              if (r.success && r.data?.hasSimilar) {
+                setDupWarning(`동일한 이름과 연락처의 거래처가 있습니다 (${r.data.existingName}). 계속 등록하시겠습니까?`)
+              }
+            }}
+            placeholder="010-0000-0000" />
+          {dupWarning && (
+            <div style={{ background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#B45309' }}>
+              ⚠️ {dupWarning}
+            </div>
+          )}
         </F>
 
         <F label="주소">

@@ -3,241 +3,231 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { createProduct } from '@/actions/product'
-import { calcMarginRate } from '@/lib/calc'
+import { addCategory } from '@/actions/category'
+import { calcMarginRate, formatKRW } from '@/lib/calc'
+import SearchableSelectWithAdd from '@/components/common/SearchableSelectWithAdd'
+import type { Category } from '@/actions/category'
+import type { SelectOption } from '@/components/common/SearchableSelectWithAdd'
 
-export default function ProductCreateForm() {
+interface Supplier { id: string; name: string }
+
+interface Props {
+  categories: Category[]
+  suppliers: Supplier[]
+}
+
+export default function ProductCreateForm({ categories: initCats, suppliers }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
 
+  const [categories, setCategories] = useState<SelectOption[]>(initCats)
+  const [categoryId, setCategoryId] = useState('')
+  const [supplierId, setSupplierId] = useState('')
   const [name, setName] = useState('')
+  const [taxType, setTaxType] = useState<'taxable' | 'exempt'>('taxable')
+  const [barcode, setBarcode] = useState('')
+  const [minMargin, setMinMargin] = useState('')
+
   const [costPrice, setCostPrice] = useState('')
   const [sellingPrice, setSellingPrice] = useState('')
-  const [taxType, setTaxType] = useState<'taxable' | 'exempt'>('taxable')
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
+  const [siksikiPrice, setSiksikiPrice] = useState('')
+  const [subscriptionPrice, setSubscriptionPrice] = useState('')
+  const [bulkPrice, setBulkPrice] = useState('')
 
-  // 마진율 실시간 계산
-  const cost = parseNum(costPrice)
-  const selling = parseNum(sellingPrice)
-  const margin = cost > 0 && selling > 0 ? calcMarginRate(selling, cost) : null
+  // 마진 모드: 'price' → 판매가 입력, 'margin' → 마진율 입력
+  const [marginMode, setMarginMode] = useState<'price' | 'margin'>('price')
+  const [marginInput, setMarginInput] = useState('')
+
+  const cost = Number(costPrice) || 0
+  const selling = Number(sellingPrice) || 0
+  const marginRate = cost > 0 && selling > 0 ? calcMarginRate(selling, cost) : null
+
+  // 마진 모드에서 자동 계산
+  function handleMarginInput(v: string) {
+    setMarginInput(v)
+    const m = Number(v) / 100
+    if (cost > 0 && m > 0 && m < 1) {
+      const autoPrice = Math.round(cost / (1 - m))
+      setSellingPrice(String(autoPrice))
+    }
+  }
+
+  async function handleAddCategory(name: string): Promise<SelectOption | null> {
+    const r = await addCategory(name)
+    if (r.success && r.data) {
+      setCategories((p) => [...p, r.data!])
+      return r.data
+    }
+    return null
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!name.trim()) { setError('상품명을 입력해주세요.'); return }
-    if (cost <= 0) { setError('매입가를 입력해주세요.'); return }
     setError(null)
-    setSuccess(null)
+    if (!name.trim()) { setError('상품명을 입력해주세요.'); return }
+    if (!costPrice || Number(costPrice) <= 0) { setError('매입가를 입력해주세요.'); return }
 
     startTransition(async () => {
       const result = await createProduct({
         name,
-        cost_price: cost,
-        selling_price: selling > 0 ? selling : undefined,
         tax_type: taxType,
+        category_id: categoryId || undefined,
+        supplier_id: supplierId || undefined,
+        barcode: barcode || undefined,
+        min_margin_rate: minMargin ? Number(minMargin) : undefined,
+        cost_price: Number(costPrice),
+        selling_price: sellingPrice ? Number(sellingPrice) : undefined,
+        siksiki_price: siksikiPrice ? Number(siksikiPrice) : undefined,
+        subscription_price: subscriptionPrice ? Number(subscriptionPrice) : undefined,
+        bulk_price: bulkPrice ? Number(bulkPrice) : undefined,
       })
-
-      if (result.success && result.data) {
-        setSuccess(`등록 완료: ${result.data.product_code} — ${name}`)
-        // 폼 초기화 (연속 등록 가능)
-        setName('')
-        setCostPrice('')
-        setSellingPrice('')
-        setTaxType('taxable')
-      } else {
-        setError(result.error ?? '저장 실패')
-      }
+      if (result.success) router.push('/products')
+      else setError(result.error ?? '저장 실패')
     })
   }
 
   return (
-    <form onSubmit={handleSubmit} style={s.form}>
-      {error && <div style={s.errBox}>{error}</div>}
-      {success && (
-        <div style={s.okBox}>
-          ✓ {success}
-          <button
-            type="button"
-            style={s.goListBtn}
-            onClick={() => router.push('/products')}
-          >
-            목록으로 →
-          </button>
-        </div>
-      )}
+    <div style={s.wrap}>
+      <h1 style={s.title}>상품 등록</h1>
+      {error && <div style={s.err}>{error}</div>}
 
-      {/* 상품명 */}
-      <div style={s.field}>
-        <label style={s.label}>상품명 *</label>
-        <input
-          style={s.input}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="예: 국내산 고추가루 1kg"
-          autoFocus
-          required
-        />
-      </div>
+      <form onSubmit={handleSubmit} style={s.form}>
 
-      {/* 과세 여부 */}
-      <div style={s.field}>
-        <label style={s.label}>과세 구분</label>
-        <div style={s.segmented}>
-          <button
-            type="button"
-            style={taxType === 'taxable' ? s.segActive : s.segBtn}
-            onClick={() => setTaxType('taxable')}
-          >
-            과세
-          </button>
-          <button
-            type="button"
-            style={taxType === 'exempt' ? s.segActive : s.segBtn}
-            onClick={() => setTaxType('exempt')}
-          >
-            면세
-          </button>
-        </div>
-      </div>
+        {/* 카테고리 */}
+        <SearchableSelectWithAdd
+          label="카테고리"
+          options={categories}
+          value={categoryId}
+          onChange={(id) => setCategoryId(id)}
+          onAdd={handleAddCategory}
+          placeholder="카테고리 검색 또는 추가" />
 
-      {/* 매입가 */}
-      <div style={s.field}>
-        <label style={s.label}>매입가 *</label>
-        <div style={s.inputWrap}>
-          <input
-            style={{ ...s.input, textAlign: 'right', paddingRight: 36 }}
-            type="text"
-            inputMode="numeric"
-            value={costPrice}
-            onChange={(e) => setCostPrice(sanitizeNum(e.target.value))}
-            placeholder="0"
-            required
-          />
-          <span style={s.suffix}>원</span>
-        </div>
-      </div>
+        {/* 상품명 */}
+        <F label="상품명 *">
+          <input style={s.input} value={name}
+            onChange={(e) => setName(e.target.value)} placeholder="예: 국내산 고추가루 1kg" required />
+        </F>
 
-      {/* 판매가 */}
-      <div style={s.field}>
-        <label style={s.label}>
-          판매가
-          {margin !== null && (
-            <span style={margin < 5 ? s.marginBad : s.marginOk}>
-              {' '}마진 {margin.toFixed(1)}%
-            </span>
+        {/* 과세/면세 */}
+        <F label="과세 구분">
+          <Seg options={[{ value: 'taxable', label: '과세' }, { value: 'exempt', label: '면세' }]}
+            value={taxType} onChange={(v) => setTaxType(v as 'taxable' | 'exempt')} />
+        </F>
+
+        {/* 매입처 */}
+        <F label="매입처">
+          <SearchableSelectWithAdd
+            options={suppliers}
+            value={supplierId}
+            onChange={(id) => setSupplierId(id)}
+            placeholder="매입처 검색" />
+        </F>
+
+        {/* 바코드 */}
+        <F label="바코드">
+          <input style={s.input} value={barcode}
+            onChange={(e) => setBarcode(e.target.value.replace(/\D/g, ''))}
+            placeholder="숫자만 입력" />
+        </F>
+
+        <div style={s.divider} />
+
+        {/* 매입가 */}
+        <F label="매입가 *">
+          <input style={s.input} type="number" value={costPrice}
+            onChange={(e) => setCostPrice(e.target.value)} placeholder="0" min={0} />
+        </F>
+
+        {/* 판매가 / 마진 토글 */}
+        <F label={`판매가 ${marginRate !== null ? `— 마진 ${marginRate.toFixed(1)}%` : ''}`}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+            <button type="button"
+              style={{ ...s.modeBtn, background: marginMode === 'price' ? '#111827' : '#fff',
+                color: marginMode === 'price' ? '#fff' : '#374151' }}
+              onClick={() => setMarginMode('price')}>판매가 입력</button>
+            <button type="button"
+              style={{ ...s.modeBtn, background: marginMode === 'margin' ? '#111827' : '#fff',
+                color: marginMode === 'margin' ? '#fff' : '#374151' }}
+              onClick={() => setMarginMode('margin')}>마진율 입력</button>
+          </div>
+          {marginMode === 'price' ? (
+            <input style={s.input} type="number" value={sellingPrice}
+              onChange={(e) => setSellingPrice(e.target.value)} placeholder="0" min={0} />
+          ) : (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input style={{ ...s.input, flex: 1 }} type="number" value={marginInput}
+                onChange={(e) => handleMarginInput(e.target.value)}
+                placeholder="마진율 %" min={0} max={99} />
+              {sellingPrice && <span style={{ fontSize: 13, color: '#6b7280' }}>→ {formatKRW(Number(sellingPrice))}</span>}
+            </div>
           )}
-        </label>
-        <div style={s.inputWrap}>
-          <input
-            style={{ ...s.input, textAlign: 'right', paddingRight: 36 }}
-            type="text"
-            inputMode="numeric"
-            value={sellingPrice}
-            onChange={(e) => setSellingPrice(sanitizeNum(e.target.value))}
-            placeholder="0 (선택)"
-          />
-          <span style={s.suffix}>원</span>
-        </div>
-        <span style={s.hint}>입력하지 않으면 주문 시 직접 입력</span>
-      </div>
+        </F>
 
-      {/* 버튼 */}
-      <div style={s.footer}>
-        <button
-          type="button"
-          style={s.cancelBtn}
-          onClick={() => router.back()}
-          disabled={isPending}
-        >
-          취소
-        </button>
-        <button
-          type="submit"
-          style={isPending ? s.btnOff : s.btn}
-          disabled={isPending}
-        >
+        {/* 추가 가격 */}
+        <F label="식식이가">
+          <input style={s.input} type="number" value={siksikiPrice}
+            onChange={(e) => setSiksikiPrice(e.target.value)} placeholder="0" min={0} />
+        </F>
+        <F label="구독회원가">
+          <input style={s.input} type="number" value={subscriptionPrice}
+            onChange={(e) => setSubscriptionPrice(e.target.value)} placeholder="0" min={0} />
+        </F>
+        <F label="대량구매가">
+          <input style={s.input} type="number" value={bulkPrice}
+            onChange={(e) => setBulkPrice(e.target.value)} placeholder="0" min={0} />
+        </F>
+
+        <div style={s.divider} />
+
+        {/* 최소 마진율 */}
+        <F label="최소 마진율 (%) — 미입력 시 전역 기준 적용">
+          <input style={s.input} type="number" value={minMargin}
+            onChange={(e) => setMinMargin(e.target.value)} placeholder="미입력 시 설정값 사용" min={0} max={100} />
+        </F>
+
+        <button type="submit" style={isPending ? s.submitOff : s.submit} disabled={isPending}>
           {isPending ? '저장 중...' : '상품 등록'}
         </button>
-      </div>
-    </form>
+      </form>
+    </div>
   )
 }
 
-// ── 유틸 ─────────────────────────────────────────────────────
-
-function parseNum(val: string): number {
-  return parseInt(val.replace(/,/g, ''), 10) || 0
+function F({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <label style={{ fontSize: 12, fontWeight: 500, color: '#374151' }}>{label}</label>
+      {children}
+    </div>
+  )
 }
 
-function sanitizeNum(val: string): string {
-  const raw = val.replace(/[^0-9]/g, '')
-  return raw ? Number(raw).toLocaleString() : ''
+function Seg({ options, value, onChange }: { options: { value: string; label: string }[]; value: string; onChange: (v: string) => void }) {
+  return (
+    <div style={{ display: 'flex', border: '1px solid #d1d5db', borderRadius: 8, overflow: 'hidden' }}>
+      {options.map((o, i) => (
+        <button key={o.value} type="button" onClick={() => onChange(o.value)}
+          style={{ flex: 1, padding: '8px', border: 'none',
+            borderRight: i < options.length - 1 ? '1px solid #d1d5db' : 'none',
+            background: value === o.value ? '#111827' : '#fff',
+            color: value === o.value ? '#fff' : '#374151',
+            fontSize: 13, cursor: 'pointer', fontWeight: value === o.value ? 500 : 400 }}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  )
 }
-
-// ── 스타일 ───────────────────────────────────────────────────
 
 const s: Record<string, React.CSSProperties> = {
-  form: { display: 'flex', flexDirection: 'column', gap: 20 },
-  errBox: {
-    background: '#FEF2F2', color: '#DC2626',
-    border: '1px solid #FECACA', borderRadius: 8,
-    padding: '10px 14px', fontSize: 13,
-  },
-  okBox: {
-    background: '#F0FDF4', color: '#15803D',
-    border: '1px solid #BBF7D0', borderRadius: 8,
-    padding: '10px 14px', fontSize: 13,
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-  },
-  goListBtn: {
-    background: 'none', border: 'none',
-    color: '#15803D', fontSize: 13,
-    cursor: 'pointer', fontWeight: 500,
-    textDecoration: 'underline',
-  },
-  field: { display: 'flex', flexDirection: 'column', gap: 6 },
-  label: { fontSize: 12, fontWeight: 500, color: '#374151' },
-  input: {
-    padding: '10px 12px', border: '1px solid #d1d5db',
-    borderRadius: 8, fontSize: 14, outline: 'none',
-    background: '#fff', width: '100%', boxSizing: 'border-box',
-  },
-  inputWrap: { position: 'relative' },
-  suffix: {
-    position: 'absolute', right: 12, top: '50%',
-    transform: 'translateY(-50%)', color: '#9ca3af',
-    fontSize: 13, pointerEvents: 'none',
-  },
-  hint: { fontSize: 11, color: '#9ca3af' },
-  marginOk: { color: '#16A34A', fontWeight: 400 },
-  marginBad: { color: '#DC2626', fontWeight: 500 },
-  segmented: {
-    display: 'flex', border: '1px solid #d1d5db',
-    borderRadius: 8, overflow: 'hidden',
-  },
-  segBtn: {
-    flex: 1, padding: '9px 0', border: 'none',
-    borderRight: '1px solid #d1d5db', background: '#fff',
-    fontSize: 13, cursor: 'pointer', color: '#374151',
-  },
-  segActive: {
-    flex: 1, padding: '9px 0', border: 'none',
-    borderRight: '1px solid #d1d5db', background: '#111827',
-    color: '#fff', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-  },
-  footer: { display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 4 },
-  cancelBtn: {
-    padding: '10px 20px', background: '#fff',
-    border: '1px solid #d1d5db', borderRadius: 8,
-    fontSize: 14, cursor: 'pointer', color: '#374151',
-  },
-  btn: {
-    padding: '10px 24px', background: '#111827',
-    color: '#fff', border: 'none', borderRadius: 8,
-    fontSize: 14, fontWeight: 500, cursor: 'pointer',
-  },
-  btnOff: {
-    padding: '10px 24px', background: '#9ca3af',
-    color: '#fff', border: 'none', borderRadius: 8,
-    fontSize: 14, fontWeight: 500, cursor: 'not-allowed',
-  },
+  wrap:      { maxWidth: 560, margin: '0 auto', padding: '32px 24px 60px' },
+  title:     { fontSize: 18, fontWeight: 600, marginBottom: 24 },
+  err:       { background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 16 },
+  form:      { display: 'flex', flexDirection: 'column', gap: 16 },
+  input:     { padding: '9px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, outline: 'none', width: '100%', boxSizing: 'border-box' },
+  modeBtn:   { padding: '6px 14px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 12, cursor: 'pointer' },
+  divider:   { height: 1, background: '#f3f4f6', margin: '4px 0' },
+  submit:    { padding: '12px', background: '#111827', color: '#fff', border: 'none', borderRadius: 8, fontSize: 15, fontWeight: 500, cursor: 'pointer' },
+  submitOff: { padding: '12px', background: '#9ca3af', color: '#fff', border: 'none', borderRadius: 8, fontSize: 15, cursor: 'not-allowed' },
 }

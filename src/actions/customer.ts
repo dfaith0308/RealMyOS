@@ -163,3 +163,81 @@ export async function updateCustomer(
   revalidatePath(`/customers/${id}/edit`)
   return { success: true }
 }
+
+// ── 단건 등록 중복 체크 ───────────────────────────────────────
+
+export interface DuplicateCheckResult {
+  hasDuplicate: boolean         // 차단 수준 (business_number 일치)
+  hasSimilar: boolean           // 경고 수준 (name+phone 일치)
+  existingId?: string           // 기존 거래처 id (hasDuplicate일 때)
+  existingName?: string
+}
+
+export async function checkCustomerDuplicate(input: {
+  business_number?: string
+  name?: string
+  phone?: string
+}): Promise<ActionResult<DuplicateCheckResult>> {
+  const supabase = await createSupabaseServer()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: '로그인 필요' }
+
+  const tenant_id = await getTenantId(supabase, user.id)
+  if (!tenant_id) return { success: false, error: '테넌트 없음' }
+
+  const bizNum = input.business_number?.replace(/-/g, '').trim()
+
+  // 1. business_number 중복 체크 (차단)
+  if (bizNum) {
+    const { data } = await supabase
+      .from('customers')
+      .select('id, name')
+      .eq('tenant_id', tenant_id)
+      .eq('biz_number', bizNum)
+      .is('deleted_at', null)
+      .single()
+
+    if (data) {
+      return {
+        success: true,
+        data: {
+          hasDuplicate: true,
+          hasSimilar: false,
+          existingId: data.id,
+          existingName: data.name,
+        },
+      }
+    }
+  }
+
+  // 2. name + phone 유사 체크 (경고만)
+  const normalizedPhone = input.phone?.replace(/-/g, '').trim()
+  if (input.name?.trim() && normalizedPhone) {
+    const { data } = await supabase
+      .from('customers')
+      .select('id, name, phone')
+      .eq('tenant_id', tenant_id)
+      .eq('name', input.name.trim())
+      .is('deleted_at', null)
+      .is('deleted_at', null)
+      .single()
+
+    // phone 정규화 후 비교 (하이픈 차이 무시)
+    const match = (data as any[])?.find(
+      (c: any) => (c.phone ?? '').replace(/-/g, '') === normalizedPhone
+    )
+    if (match) {
+      return {
+        success: true,
+        data: {
+          hasDuplicate: false,
+          hasSimilar: true,
+          existingId: match.id,
+          existingName: match.name,
+        },
+      }
+    }
+  }
+
+  return { success: true, data: { hasDuplicate: false, hasSimilar: false } }
+}
