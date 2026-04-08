@@ -3,19 +3,21 @@
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServer } from '@/lib/supabase-server'
 import type { ActionResult } from '@/types/order'
+import type { PaymentTermsType } from '@/lib/payment-terms'
 
-export interface CreateCustomerInput {
-  customer_type: 'business' | 'individual' | 'prospect'
+export interface CustomerInput {
+  customer_type?: 'business' | 'individual' | 'prospect'
   name: string
   phone?: string
-  email?: string
   address?: string
-  business_number?: string       // 하이픈 자동 제거
+  biz_number?: string
   representative_name?: string
   business_type?: string
   opening_balance?: number
-  opening_balance_date?: string  // YYYY-MM-DD
-  payment_terms_days?: 0 | 30 | 45 | 60
+  opening_balance_date?: string
+  payment_terms_type?: PaymentTermsType
+  payment_terms_days?: number
+  payment_day?: number
   target_monthly_revenue?: number
   target_per_order?: number
   acquisition_channel_id?: string
@@ -24,23 +26,28 @@ export interface CreateCustomerInput {
   trade_status?: 'active' | 'inactive' | 'lead'
 }
 
+// ── 공통: tenant 조회 ─────────────────────────────────────────
+
+async function getTenantId(supabase: any, userId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from('users').select('tenant_id').eq('id', userId).single()
+  return data?.tenant_id ?? null
+}
+
+// ── 거래처 등록 ───────────────────────────────────────────────
+
 export async function createCustomer(
-  input: CreateCustomerInput,
+  input: CustomerInput,
 ): Promise<ActionResult<{ id: string; name: string }>> {
   const supabase = await createSupabaseServer()
-
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, error: '로그인 필요' }
 
-  const { data: me } = await supabase
-    .from('users').select('tenant_id').eq('id', user.id).single()
-  if (!me?.tenant_id) return { success: false, error: '테넌트 정보를 불러올 수 없습니다.' }
+  const tenant_id = await getTenantId(supabase, user.id)
+  if (!tenant_id) return { success: false, error: '테넌트 정보를 불러올 수 없습니다.' }
 
   const name = input.name.trim()
   if (!name) return { success: false, error: '거래처명을 입력해주세요.' }
-
-  // 사업자번호 하이픈 제거
-  const biz = input.business_number?.replace(/-/g, '').trim() || null
 
   const today = new Date().toISOString().slice(0, 10)
   const openingBalance = input.opening_balance ?? 0
@@ -48,18 +55,19 @@ export async function createCustomer(
   const { data, error } = await supabase
     .from('customers')
     .insert({
-      tenant_id:              me.tenant_id,
+      tenant_id,
       customer_type:          input.customer_type ?? 'business',
       name,
       phone:                  input.phone?.trim() || null,
-      email:                  input.email?.trim() || null,
       address:                input.address?.trim() || null,
-      biz_number:             biz,
+      biz_number:             input.biz_number?.replace(/-/g, '').trim() || null,
       representative_name:    input.representative_name?.trim() || null,
       business_type:          input.business_type?.trim() || null,
       opening_balance:        openingBalance,
       opening_balance_date:   input.opening_balance_date || today,
+      payment_terms_type:     input.payment_terms_type ?? 'immediate',
       payment_terms_days:     input.payment_terms_days ?? 0,
+      payment_day:            input.payment_day ?? null,
       target_monthly_revenue: input.target_monthly_revenue || null,
       target_per_order:       input.target_per_order || null,
       acquisition_channel_id: input.acquisition_channel_id || null,
@@ -73,62 +81,85 @@ export async function createCustomer(
 
   if (error || !data) return { success: false, error: `저장 실패: ${error?.message}` }
 
-  // opening_balance 이력 기록
   if (openingBalance !== 0) {
     await supabase.from('opening_balance_logs').insert({
-      tenant_id:    me.tenant_id,
-      customer_id:  data.id,
+      tenant_id,
+      customer_id:   data.id,
       before_amount: 0,
       after_amount:  openingBalance,
-      changed_by:   user.id,
-      reason:       '최초 등록',
+      changed_by:    user.id,
+      reason:        '최초 등록',
     })
   }
 
   revalidatePath('/customers')
+  revalidatePath('/customers/list')
   return { success: true, data: { id: data.id, name: data.name } }
 }
 
-export async function updateOpeningBalance(input: {
-  customer_id: string
-  new_amount: number
-  reason: string
-}): Promise<ActionResult> {
-  const supabase = await createSupabaseServer()
+// ── 거래처 수정 ───────────────────────────────────────────────
 
+export async function updateCustomer(
+  id: string,
+  input: Partial<CustomerInput>,
+  openingBalanceReason?: string,
+): Promise<ActionResult> {
+  const supabase = await createSupabaseServer()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, error: '로그인 필요' }
 
-  const { data: me } = await supabase
-    .from('users').select('tenant_id').eq('id', user.id).single()
-  if (!me?.tenant_id) return { success: false, error: '테넌트 없음' }
+  const tenant_id = await getTenantId(supabase, user.id)
+  if (!tenant_id) return { success: false, error: '테넌트 없음' }
 
+  // opening_balance 변경 감지
   const { data: current } = await supabase
     .from('customers')
     .select('opening_balance')
-    .eq('id', input.customer_id)
-    .eq('tenant_id', me.tenant_id)
-    .single()
+    .eq('id', id).eq('tenant_id', tenant_id).single()
 
-  if (!current) return { success: false, error: '거래처를 찾을 수 없습니다.' }
+  const payload: Record<string, any> = {}
+  if (input.name)                               payload.name = input.name.trim()
+  if (input.phone !== undefined)                payload.phone = input.phone?.trim() || null
+  if (input.address !== undefined)              payload.address = input.address?.trim() || null
+  if (input.biz_number !== undefined)           payload.biz_number = input.biz_number?.replace(/-/g, '') || null
+  if (input.representative_name !== undefined)  payload.representative_name = input.representative_name?.trim() || null
+  if (input.business_type !== undefined)        payload.business_type = input.business_type?.trim() || null
+  if (input.customer_type)                      payload.customer_type = input.customer_type
+  if (input.payment_terms_type)                 payload.payment_terms_type = input.payment_terms_type
+  if (input.payment_terms_days !== undefined)   payload.payment_terms_days = input.payment_terms_days
+  if (input.payment_day !== undefined)          payload.payment_day = input.payment_day ?? null
+  if (input.target_monthly_revenue !== undefined) payload.target_monthly_revenue = input.target_monthly_revenue || null
+  if (input.acquisition_channel_id !== undefined) payload.acquisition_channel_id = input.acquisition_channel_id || null
+  if (input.is_buyer !== undefined)             payload.is_buyer = input.is_buyer
+  if (input.is_supplier !== undefined)          payload.is_supplier = input.is_supplier
+  if (input.trade_status)                       payload.trade_status = input.trade_status
+  if (input.opening_balance !== undefined)      payload.opening_balance = input.opening_balance
 
   const { error } = await supabase
     .from('customers')
-    .update({ opening_balance: input.new_amount })
-    .eq('id', input.customer_id)
-    .eq('tenant_id', me.tenant_id)
+    .update(payload)
+    .eq('id', id).eq('tenant_id', tenant_id)
 
   if (error) return { success: false, error: error.message }
 
-  await supabase.from('opening_balance_logs').insert({
-    tenant_id:     me.tenant_id,
-    customer_id:   input.customer_id,
-    before_amount: current.opening_balance ?? 0,
-    after_amount:  input.new_amount,
-    changed_by:    user.id,
-    reason:        input.reason,
-  })
+  // opening_balance 변경 시 로그
+  if (
+    input.opening_balance !== undefined &&
+    current &&
+    input.opening_balance !== current.opening_balance
+  ) {
+    await supabase.from('opening_balance_logs').insert({
+      tenant_id,
+      customer_id:   id,
+      before_amount: current.opening_balance ?? 0,
+      after_amount:  input.opening_balance,
+      changed_by:    user.id,
+      reason:        openingBalanceReason ?? '수정',
+    })
+  }
 
   revalidatePath('/customers')
+  revalidatePath('/customers/list')
+  revalidatePath(`/customers/${id}/edit`)
   return { success: true }
 }
