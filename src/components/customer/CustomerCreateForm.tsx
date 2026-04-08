@@ -1,8 +1,6 @@
 'use client'
 
 import Link from 'next/link'
-'use client'
-
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { createCustomer, checkCustomerDuplicate } from '@/actions/customer'
