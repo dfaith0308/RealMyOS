@@ -40,6 +40,7 @@ export async function createContactLog(
 
   const { data: customer } = await supabase
     .from('customers').select('id')
+    .is('deleted_at', null)
     .eq('id', input.customer_id)
     .eq('tenant_id', me.tenant_id)
     .single()

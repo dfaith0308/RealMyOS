@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import CustomerBulkUpload from '@/components/customer/CustomerBulkUpload'
+import CustomerDeleteButton from '@/components/customer/CustomerDeleteButton'
 import { getCustomerList } from '@/actions/customer-query'
 import { formatKRW } from '@/lib/calc'
 import { formatPaymentTerms } from '@/lib/payment-terms'
@@ -99,8 +100,9 @@ export default async function CustomerListPage({
                   <td style={td}>
                     <span style={{ fontSize: 12, fontWeight: 500, color: st.color }}>{st.label}</span>
                   </td>
-                  <td style={td}>
+                  <td style={{ ...td, display: 'flex', gap: 6, alignItems: 'center' }}>
                     <Link href={`/customers/${c.id}/edit`} style={s.editBtn}>수정</Link>
+                    <CustomerDeleteButton customerId={c.id} customerName={c.name} />
                   </td>
                 </tr>
               )

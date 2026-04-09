@@ -138,7 +138,9 @@ export interface CustomerWithBalance {
   // ── 잔액 ───────────────────────────────────────────────────
   current_balance: number      // opening + confirmed주문 - 수금
   receivable_amount: number    // 미수금 = confirmed주문 - 수금 (opening 제외, min 0)
+  deposit_amount: number       // 예치금 = 수금 초과분 누적
   overdue_amount: number       // 연체금 = due_date 지난 미수금 (min 0)
+  deposit_amount: number       // 예치금 = payments.deposit_amount 합계
   // ── 주문 ───────────────────────────────────────────────────
   last_order_date: string | null
   last_order_amount: number | null
@@ -237,7 +239,7 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
         .order('order_date', { ascending: false }),
 
       supabase.from('payments')
-        .select('customer_id, amount')
+        .select('customer_id, amount, deposit_amount')
         .in('customer_id', ids)
         .eq('status', 'confirmed'),
 
@@ -267,9 +269,12 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
     ordersByCustomer.set(o.customer_id, list)
   }
 
-  const paymentMap = new Map<string, number>()
-  for (const p of paymentRows ?? [])
+  const paymentMap  = new Map<string, number>()
+  const depositMap  = new Map<string, number>()
+  for (const p of paymentRows ?? []) {
     paymentMap.set(p.customer_id, (paymentMap.get(p.customer_id) ?? 0) + p.amount)
+    depositMap.set(p.customer_id, (depositMap.get(p.customer_id) ?? 0) + (p.deposit_amount ?? 0))
+  }
 
   const lastContactMap = new Map<string, string>()
   for (const cl of contactRows ?? [])
@@ -298,13 +303,15 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
     const orders  = ordersByCustomer.get(c.id) ?? []
     const terms   = termsMap.get(c.id) ?? 0
     const opening = openingMap.get(c.id) ?? 0
-    const paid    = paymentMap.get(c.id) ?? 0
+    const paid          = paymentMap.get(c.id) ?? 0
+    const deposit_amount = depositMap.get(c.id) ?? 0
 
     const totalOrdersAmt  = orders.reduce((s, o) => s + o.total_amount, 0)
     const current_balance = opening + totalOrdersAmt - paid
 
     // receivable: confirmed 주문합 - 수금 (opening 제외, 0 미만 방지)
     const receivable_amount = Math.max(0, totalOrdersAmt - paid)
+    const deposit_amount    = depositMap.get(c.id) ?? 0
 
     // overdue: due_date 지난 주문 합 - 수금 (0 미만 방지)
     let overdueSum = 0
@@ -376,7 +383,7 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
     return {
       id: c.id, name: c.name, phone: c.phone,
       payment_terms_days: c.payment_terms_days,
-      current_balance, receivable_amount, overdue_amount,
+      current_balance, receivable_amount, overdue_amount, deposit_amount,
       last_order_date, last_order_amount, days_since_order,
       order_cycle_days, monthly_revenue, avg_monthly_revenue,
       target_monthly_revenue, revenue_gap,

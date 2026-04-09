@@ -93,7 +93,7 @@ export async function createCustomer(
   }
 
   revalidatePath('/customers')
-  revalidatePath('/customers/all')
+  revalidatePath('/customers/list')
   return { success: true, data: { id: data.id, name: data.name } }
 }
 
@@ -115,7 +115,9 @@ export async function updateCustomer(
   const { data: current } = await supabase
     .from('customers')
     .select('opening_balance')
-    .eq('id', id).eq('tenant_id', tenant_id).single()
+    .eq('id', id).eq('tenant_id', tenant_id)
+    .is('deleted_at', null)
+    .single()
 
   const payload: Record<string, any> = {}
   if (input.name)                               payload.name = input.name.trim()
@@ -139,6 +141,7 @@ export async function updateCustomer(
     .from('customers')
     .update(payload)
     .eq('id', id).eq('tenant_id', tenant_id)
+    .is('deleted_at', null)  // 삭제된 거래처 수정 차단
 
   if (error) return { success: false, error: error.message }
 
@@ -159,7 +162,7 @@ export async function updateCustomer(
   }
 
   revalidatePath('/customers')
-  revalidatePath('/customers/all')
+  revalidatePath('/customers/list')
   revalidatePath(`/customers/${id}/edit`)
   return { success: true }
 }
@@ -220,6 +223,7 @@ export async function checkCustomerDuplicate(input: {
       .eq('name', input.name.trim())
       .is('deleted_at', null)
       .is('deleted_at', null)
+      .is('deleted_at', null)
       .single()
 
     // phone 정규화 후 비교 (하이픈 차이 무시)
@@ -240,4 +244,37 @@ export async function checkCustomerDuplicate(input: {
   }
 
   return { success: true, data: { hasDuplicate: false, hasSimilar: false } }
+}
+
+// ── 거래처 삭제 (soft delete) ─────────────────────────────────
+
+export async function deleteCustomer(
+  customer_id: string,
+): Promise<ActionResult> {
+  const supabase = await createSupabaseServer()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: '로그인 필요' }
+
+  const tenant_id = await getTenantId(supabase, user.id)
+  if (!tenant_id) return { success: false, error: '테넌트 없음' }
+
+  const { data, error } = await supabase.rpc('soft_delete_customer', {
+    p_customer_id: customer_id,
+    p_tenant_id:   tenant_id,
+    p_deleted_by:  user.id,
+  })
+
+  if (error) {
+    if (error.message.includes('has_orders'))
+      return { success: false, error: '확정 주문이 있는 거래처는 삭제할 수 없습니다.' }
+    if (error.message.includes('has_payments'))
+      return { success: false, error: '수금 내역이 있는 거래처는 삭제할 수 없습니다.' }
+    if (error.message.includes('already deleted'))
+      return { success: false, error: '이미 삭제된 거래처입니다.' }
+    return { success: false, error: error.message }
+  }
+
+  revalidatePath('/customers')
+  revalidatePath('/customers/all')
+  return { success: true }
 }
