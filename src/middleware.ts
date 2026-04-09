@@ -21,7 +21,6 @@ export async function middleware(request: NextRequest) {
     },
   )
 
-  const { data: { user } } = await supabase.auth.getUser()
   const { pathname } = request.nextUrl
 
   // 공개 경로 — 인증 불필요
@@ -30,34 +29,32 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/auth')
   if (isPublic) return supabaseResponse
 
+  // getSession() — 쿠키 파싱만 (네트워크 호출 없음)
+  // getUser()는 Server Component에서 1회만 실행 (getAuthCtx)
+  const { data: { session } } = await supabase.auth.getSession()
+
   // 비로그인 → /login
-  if (!user) {
+  if (!session) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
   }
 
-  // /onboarding 자체는 통과 (tenant 없어도 접근 가능)
+  // /onboarding 자체는 통과
   if (pathname.startsWith('/onboarding')) return supabaseResponse
 
-  // tenant_id 확인
-  const { data: me } = await supabase
-    .from('users')
-    .select('tenant_id')
-    .eq('id', user.id)
-    .single()
-
-  // tenant_id 없음 → /onboarding
-  if (!me?.tenant_id) {
+  // tenant_id는 user_metadata에서 읽음 — users 테이블 조회 없음
+  const tenant_id = session.user?.user_metadata?.tenant_id
+  if (!tenant_id) {
     const url = request.nextUrl.clone()
     url.pathname = '/onboarding'
     return NextResponse.redirect(url)
   }
 
-  // 루트(/) 접근 → /customers
+  // 루트(/) → /dashboard
   if (pathname === '/') {
     const url = request.nextUrl.clone()
-    url.pathname = '/customers'
+    url.pathname = '/dashboard'
     return NextResponse.redirect(url)
   }
 
