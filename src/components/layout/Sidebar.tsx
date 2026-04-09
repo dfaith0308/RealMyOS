@@ -85,13 +85,22 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
     })
   }
 
+  // 그룹 내 중메뉴 href 전체 목록 — 정확 매칭에서 제외할 경로
+  const allItemHrefs = new Set(
+    MENU.flatMap((g) => g.items?.map((i) => i.href).filter(Boolean) ?? [])
+  )
+
   function isActive(href: string) {
+    // 1. 정확히 일치하면 active
     if (pathname === href) return true
-    if (
-      href !== '/customers/new' && href !== '/orders/new' &&
-      href !== '/products/new' && href !== '/products/bulk' &&
-      href !== '/payments/new' && href !== '/customers/all'
-    ) return pathname.startsWith(href + '/')
+    // 2. 하위 경로일 때: 해당 경로가 다른 중메뉴와 정확히 겹치지 않아야 active
+    //    예: /customers/[id] → /customers active O
+    //        /customers/new  → /customers active X (new가 별도 중메뉴이므로)
+    if (pathname.startsWith(href + '/')) {
+      // pathname이 다른 중메뉴 href와 정확히 일치하면 active 양보
+      if (allItemHrefs.has(pathname)) return false
+      return true
+    }
     return false
   }
 
