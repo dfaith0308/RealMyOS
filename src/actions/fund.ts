@@ -398,3 +398,209 @@ export async function completeFundTransfer(
   revalidatePath('/funds')
   return { success: true }
 }
+
+// ============================================================
+// settings용 추가 함수
+// ============================================================
+
+// 비활성 계좌 포함 전체 목록
+export async function getAllAccounts(): Promise<ActionResult<Account[]>> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const { data, error } = await supabase
+    .from('accounts')
+    .select('id, bank_name, account_number, account_name, purpose_id, current_balance, is_active, account_purposes(name)')
+    .eq('tenant_id', ctx.tenant_id)
+    .order('created_at')
+
+  if (error) return { success: false, error: error.message }
+  return {
+    success: true,
+    data: (data ?? []).map((a: any) => ({
+      id: a.id, bank_name: a.bank_name, account_number: a.account_number,
+      account_name: a.account_name, purpose_id: a.purpose_id,
+      purpose_name: a.account_purposes?.name ?? null,
+      current_balance: a.current_balance, is_active: a.is_active,
+    })),
+  }
+}
+
+// 계좌 활성/비활성 토글
+export async function toggleAccount(account_id: string, is_active: boolean): Promise<ActionResult> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const { error } = await supabase
+    .from('accounts').update({ is_active })
+    .eq('id', account_id).eq('tenant_id', ctx.tenant_id)
+
+  if (error) return { success: false, error: error.message }
+  revalidatePath('/funds')
+  revalidatePath('/funds/settings')
+  return { success: true }
+}
+
+// 자금 규칙 비활성화 (soft delete)
+export async function toggleFundRule(rule_id: string, is_active: boolean): Promise<ActionResult> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const { error } = await supabase
+    .from('fund_rules').update({ is_active })
+    .eq('id', rule_id).eq('tenant_id', ctx.tenant_id)
+
+  if (error) return { success: false, error: error.message }
+  revalidatePath('/funds')
+  revalidatePath('/funds/settings')
+  return { success: true }
+}
+
+// 비활성 목적 포함 전체 목록
+export async function getAllAccountPurposes(): Promise<ActionResult<AccountPurpose[]>> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const { data, error } = await supabase
+    .from('account_purposes').select('id, name, is_active')
+    .eq('tenant_id', ctx.tenant_id).order('name')
+
+  if (error) return { success: false, error: error.message }
+  return { success: true, data: data ?? [] }
+}
+
+// 자금 목적 비활성화 토글
+export async function toggleAccountPurpose(purpose_id: string, is_active: boolean): Promise<ActionResult> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const { error } = await supabase
+    .from('account_purposes').update({ is_active })
+    .eq('id', purpose_id).eq('tenant_id', ctx.tenant_id)
+
+  if (error) return { success: false, error: error.message }
+  revalidatePath('/funds/settings')
+  return { success: true }
+}
+
+// 비활성 규칙 포함 전체 목록
+export async function getAllFundRules(): Promise<ActionResult<FundRule[]>> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const { data, error } = await supabase
+    .from('fund_rules')
+    .select('id, account_id, rule_name, calculation_type, base_type, amount, priority, is_active, accounts(account_name)')
+    .eq('tenant_id', ctx.tenant_id)
+    .order('priority')
+
+  if (error) return { success: false, error: error.message }
+  return {
+    success: true,
+    data: (data ?? []).map((r: any) => ({
+      id: r.id, account_id: r.account_id, account_name: r.accounts?.account_name ?? '-',
+      rule_name: r.rule_name, calculation_type: r.calculation_type, base_type: r.base_type,
+      amount: r.amount, priority: r.priority, is_active: r.is_active,
+    })),
+  }
+}
+
+// ============================================================
+// 자금 규칙 미리보기 (settings UI용)
+// ============================================================
+
+export interface FundRulePreview {
+  rule_id:        string
+  rule_name:      string
+  account_id:     string
+  account_name:   string
+  calculation_type: 'fixed' | 'percentage'
+  amount:         number
+  daily_amount:   number    // 오늘 기준 일 이체 금액
+  is_active:      boolean
+}
+
+export interface FundPreviewResult {
+  monthly_sales:        number
+  biz_days:             number
+  rules:                FundRulePreview[]
+  total_daily:          number           // 활성 규칙 일 이체 합계
+  pct_total:            number           // percentage 합계
+  warnings:             string[]
+}
+
+export async function getFundPreview(): Promise<ActionResult<FundPreviewResult>> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const kst   = new Date(Date.now() + 9 * 3600000)
+  const year  = kst.getUTCFullYear()
+  const month = kst.getUTCMonth() + 1
+
+  const biz_days     = getBusinessDays(year, month)
+  const monthly_sales = await getMonthlySales(supabase, ctx.tenant_id, year, month)
+
+  const { data: rulesRaw, error } = await supabase
+    .from('fund_rules')
+    .select('id, account_id, rule_name, calculation_type, amount, priority, is_active, accounts(account_name, current_balance)')
+    .eq('tenant_id', ctx.tenant_id)
+    .order('priority')
+
+  if (error) return { success: false, error: error.message }
+
+  const rules: FundRulePreview[] = (rulesRaw ?? []).map((r: any) => {
+    let daily_amount = 0
+    if (r.is_active && biz_days > 0) {
+      daily_amount = r.calculation_type === 'fixed'
+        ? Math.round(r.amount / biz_days)
+        : Math.round((monthly_sales * (r.amount / 100)) / biz_days)
+      daily_amount = Math.max(0, daily_amount)
+    }
+    return {
+      rule_id:          r.id,
+      rule_name:        r.rule_name,
+      account_id:       r.account_id,
+      account_name:     r.accounts?.account_name ?? '-',
+      calculation_type: r.calculation_type,
+      amount:           r.amount,
+      daily_amount,
+      is_active:        r.is_active,
+    }
+  })
+
+  const activeRules  = rules.filter((r) => r.is_active)
+  const total_daily  = activeRules.reduce((s, r) => s + r.daily_amount, 0)
+  const pct_total    = activeRules
+    .filter((r) => r.calculation_type === 'percentage')
+    .reduce((s, r) => s + r.amount, 0)
+
+  const warnings: string[] = []
+  if (pct_total > 100)
+    warnings.push(`비율 규칙 합계가 ${pct_total}%로 100%를 초과합니다. 설정을 검토해주세요.`)
+  if (pct_total > 80 && pct_total <= 100)
+    warnings.push(`비율 규칙 합계가 ${pct_total}%로 매우 높습니다.`)
+
+  // 계좌별 잔액 vs 일 이체 합계 검증
+  const accountDailyMap = new Map<string, number>()
+  for (const r of activeRules)
+    accountDailyMap.set(r.account_id, (accountDailyMap.get(r.account_id) ?? 0) + r.daily_amount)
+
+  for (const r of rulesRaw ?? []) {
+    const daily = accountDailyMap.get(r.account_id) ?? 0
+    const bal   = r.accounts?.current_balance ?? 0
+    if (daily > 0 && bal > 0 && daily > bal)
+      warnings.push(`[${r.accounts?.account_name}] 일 이체 합계(${daily.toLocaleString()}원)가 계좌 잔액(${bal.toLocaleString()}원)보다 큽니다.`)
+  }
+
+  return {
+    success: true,
+    data: { monthly_sales, biz_days, rules, total_daily, pct_total, warnings },
+  }
+}
