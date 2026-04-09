@@ -54,6 +54,17 @@ export async function createProduct(
   if (!input.name.trim()) return { success: false, error: '상품명을 입력해주세요.' }
   if (!input.cost_price || input.cost_price <= 0) return { success: false, error: '매입가를 입력해주세요.' }
 
+  // category_id 존재 여부 검증 (FK 에러 방지)
+  if (input.category_id) {
+    const { data: cat } = await supabase
+      .from('product_categories')
+      .select('id')
+      .eq('id', input.category_id)
+      .eq('tenant_id', ctx.tenant_id)
+      .single()
+    if (!cat) return { success: false, error: '유효하지 않은 카테고리입니다.' }
+  }
+
   // product_code 채번
   // 1순위: product_code_seq (sequence 기반, 동시 생성 안전)
   // 2순위: max + 1 fallback (sequence 없을 때)
@@ -310,7 +321,7 @@ export async function getProducts(filters?: {
     .from('products')
     .select(`
       id, product_code, name, tax_type, category_id, supplier_id, barcode, min_margin_rate,
-      categories ( name ),
+      product_categories ( name ),
       customers!supplier_id ( name ),
       product_costs ( cost_price, end_date ),
       product_prices ( price_type, price ),
@@ -336,7 +347,7 @@ export async function getProducts(filters?: {
       name: p.name,
       tax_type: p.tax_type,
       category_id: p.category_id,
-      category_name: p.categories?.name ?? null,
+      category_name: p.product_categories?.name ?? null,
       supplier_id: p.supplier_id,
       supplier_name: p.customers?.name ?? null,
       barcode: p.barcode,
