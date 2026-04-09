@@ -546,20 +546,31 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
       is_new: isNew,
     })
 
+    const anyCfg = cfg as any
     return {
       id: c.id, name: c.name, phone: c.phone,
-      payment_terms_days: terms,
+      payment_terms_days:     c.payment_terms_days ?? 0,
       current_balance, receivable_amount, deposit_amount, overdue_amount,
-      last_order_date: last_payment_date, last_order_amount: null,
-      days_since_order, order_cycle_days,
-      avg_monthly_revenue: Math.round(total_sales / 3),
-      revenue_gap: (cfg.target_monthly_revenue ?? 0) - Math.round(total_sales / 3),
-      last_contacted_at, days_since_contact,
-      payments_7d: 0, payment_terms: cfg.payment_terms ?? 'monthly_end',
-      payment_day: cfg.payment_day ?? null,
-      overdue_warning_amount: cfg.overdue_warning_amount ?? 100000,
-      overdue_danger_amount:  cfg.overdue_danger_amount  ?? 500000,
+      last_order_date:        last_payment_date,
+      last_order_amount:      null,
+      days_since_order,       order_cycle_days,
+      monthly_revenue:        0,
+      avg_monthly_revenue:    Math.round(total_sales / 3),
+      target_monthly_revenue: Number(c.target_monthly_revenue ?? 0),
+      revenue_gap:            Number(c.target_monthly_revenue ?? 0) - Math.round(total_sales / 3),
+      last_contacted_at,      days_since_contact,
+      call_attempts_7d:       0,
+      connected_7d:           0,
+      payments_7d:            0,
+      call_connect_rate:      null,
+      connect_to_payment_rate: null,
+      payment_terms:          anyCfg.payment_terms          ?? 'monthly_end',
+      payment_day:            anyCfg.payment_day            ?? null,
+      overdue_warning_amount: anyCfg.overdue_warning_amount ?? 100000,
+      overdue_danger_amount:  anyCfg.overdue_danger_amount  ?? 500000,
       status, action_score, score: action_score,
+      next_action_date: null,
+      action: { type: 'normal', message: '', priority: 0 } as any,
     }
   })
 

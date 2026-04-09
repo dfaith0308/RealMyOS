@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { getCustomersWithStats, getDailyCashflow } from '@/actions/ledger'
+import { getCustomersWithScore, getDailyCashflow } from '@/actions/ledger'
 import { formatKRW } from '@/lib/calc'
 import { calcRecontactMessage, calcNoContactMessage } from '@/lib/customer-logic'
 import type { CustomerStatus, CustomerWithScore } from '@/actions/ledger'
@@ -48,11 +48,10 @@ export default async function CustomersPage({
   const { filter } = searchParams
 
   const _t0 = Date.now()
-  const [statsResult, cashflowResult] = await Promise.all([
-    getCustomersWithStats(),
+  const [result, cashflowResult] = await Promise.all([
+    getCustomersWithScore(),
     getDailyCashflow(),
   ])
-  const result = statsResult  // stats 기반으로 전환
   const all      = result.data ?? []
   const cashflow = cashflowResult.data ?? []
 
