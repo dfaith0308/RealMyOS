@@ -146,7 +146,7 @@ export default async function CustomersPage({
                       triggeredMessage={c.action.text} messageKey={c.action.key}
                       customerStatus={c.status} scoreAtTime={c.action_score} amountAtTime={c.overdue_amount} />
                   )}
-                  <ActionButton customerId={c.id} actionType="collect" href="/payments/new"
+                  <ActionButton customerId={c.id} actionType="collect" href={`/payments/new?customer_id=${c.id}`}
                     label="수금" btnStyle={bs.collectRed}
                     triggeredMessage={c.action.text} messageKey={c.action.key}
                     customerStatus={c.status} scoreAtTime={c.action_score} amountAtTime={c.overdue_amount} />
@@ -227,13 +227,18 @@ function CustomerCard({ c, rank, isTop }: { c: CustomerWithScore; rank: number; 
           </div>
 
           <div style={s.metaRow}>
-            {/* 연체금/미수금 — 색상으로 구분 */}
+            {/* 연체금/미수금/예치금 — 색상으로 구분 */}
             <MetaItem label="연체금"
               value={formatKRW(c.overdue_amount)}
               highlight={c.overdue_amount > 0} />
             <MetaItem label="미수금"
               value={formatKRW(c.receivable_amount)}
               style={{ color: c.receivable_amount > c.overdue_amount ? '#B45309' : '#6b7280' }} />
+            {(c as any).deposit_amount > 0 && (
+              <MetaItem label="예치금"
+                value={formatKRW((c as any).deposit_amount)}
+                style={{ color: '#1D4ED8' }} />
+            )}
             <MetaItem label="이번달"    value={formatKRW(c.monthly_revenue)} />
             <MetaItem label="평균월매출" value={formatKRW(c.avg_monthly_revenue)} />
             {c.target_monthly_revenue > 0 && (
@@ -274,7 +279,7 @@ function CustomerCard({ c, rank, isTop }: { c: CustomerWithScore; rank: number; 
               triggeredMessage={c.action.text} messageKey={c.action.key}
               customerStatus={c.status} scoreAtTime={c.action_score} amountAtTime={c.overdue_amount} />
           )}
-          <ActionButton customerId={c.id} actionType="collect" href="/payments/new"
+          <ActionButton customerId={c.id} actionType="collect" href={`/payments/new?customer_id=${c.id}`}
             label="수금" btnStyle={isHigh ? bs.payHot : bs.payNormal}
             triggeredMessage={c.action.text} messageKey={c.action.key}
             customerStatus={c.status} scoreAtTime={c.action_score} amountAtTime={c.overdue_amount} />

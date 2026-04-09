@@ -15,7 +15,9 @@ const METHOD_OPTIONS: { value: PaymentMethod; label: string }[] = [
   { value: 'platform',  label: '플랫폼' },
 ]
 
-export default function PaymentCreateForm() {
+interface Props { initialCustomerId?: string }
+
+export default function PaymentCreateForm({ initialCustomerId = '' }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -38,8 +40,17 @@ export default function PaymentCreateForm() {
   const [resultDeposit, setResultDeposit] = useState<number | null>(null)
 
   useEffect(() => {
-    getCustomersForOrder().then((r) => { if (r.success) setCustomers(r.data ?? []) })
-  }, [])
+    getCustomersForOrder().then((r) => {
+      if (!r.success) return
+      const list = r.data ?? []
+      setCustomers(list)
+      // URL query로 거래처 자동 선택
+      if (initialCustomerId) {
+        const found = list.find((c) => c.id === initialCustomerId)
+        if (found) setSelectedCustomer(found)
+      }
+    })
+  }, [initialCustomerId])
 
   useEffect(() => {
     if (!selectedCustomer) { setBalance(null); setDeposit(null); return }
