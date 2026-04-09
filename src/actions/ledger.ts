@@ -294,10 +294,12 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
     if (al.result_type === 'payment_completed')
       payments7d.set(al.customer_id, (payments7d.get(al.customer_id) ?? 0) + 1)
 
-  const today      = new Date()
-  today.setHours(0, 0, 0, 0)
-  const todayStr   = today.toISOString().slice(0, 10)
-  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10)
+  // KST 기준 오늘 날짜 (Vercel 서버는 UTC)
+  const nowKST     = new Date(Date.now() + 9 * 3600000)
+  const todayStr   = nowKST.toISOString().slice(0, 10)
+  const monthStart = `${nowKST.getUTCFullYear()}-${String(nowKST.getUTCMonth() + 1).padStart(2, '0')}-01`
+  // days_since 계산용 (UTC midnight)
+  const today      = new Date(todayStr + 'T00:00:00Z')
 
   const result: CustomerWithBalance[] = customers.map((c) => {
     const orders  = ordersByCustomer.get(c.id) ?? []
@@ -312,12 +314,15 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
     // receivable: confirmed 주문합 - 수금 (opening 제외, 0 미만 방지)
     const receivable_amount = Math.max(0, totalOrdersAmt - paid)
 
-    // overdue: due_date 지난 주문 합 - 수금 (0 미만 방지)
+    // overdue: terms > 0인 경우만 계산 (terms=0은 즉시결제, 연체 개념 없음)
     let overdueSum = 0
-    for (const o of orders) {
-      const due = new Date(o.order_date)
-      due.setDate(due.getDate() + terms)
-      if (due.toISOString().slice(0, 10) < todayStr) overdueSum += o.total_amount
+    if (terms > 0) {
+      for (const o of orders) {
+        const dueDate = new Date(o.order_date + 'T00:00:00Z')
+        dueDate.setUTCDate(dueDate.getUTCDate() + terms)
+        const dueDateStr = dueDate.toISOString().slice(0, 10)
+        if (dueDateStr < todayStr) overdueSum += o.total_amount
+      }
     }
     const overdue_amount = Math.max(0, overdueSum - paid)
 
