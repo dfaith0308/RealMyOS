@@ -132,6 +132,14 @@ export default function FundsClient({ today, accounts, rules, plan: initPlan }: 
                     <span style={s.amtLabel}>계획</span>
                     <span style={s.amtVal}>{formatKRW(t.planned_amount)}</span>
                   </div>
+                  {t.carry_over_amount > 0 && (
+                    <div title="전일 미이행 금액 이월">
+                      <span style={{ ...s.amtLabel, color: '#B45309' }}>이월 ↗</span>
+                      <span style={{ ...s.amtVal, color: '#B45309', fontSize: 12 }}>
+                        +{formatKRW(t.carry_over_amount)}
+                      </span>
+                    </div>
+                  )}
                   {t.actual_amount !== null && (
                     <div>
                       <span style={s.amtLabel}>실행</span>
