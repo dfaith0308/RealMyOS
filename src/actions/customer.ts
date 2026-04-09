@@ -26,13 +26,6 @@ export interface CustomerInput {
   trade_status?: 'active' | 'inactive' | 'lead'
 }
 
-// ── 공통: tenant 조회 ─────────────────────────────────────────
-
-async function getTenantId(supabase: any, ctx.user_id: string): Promise<string | null> {
-  const { data } = await supabase
-  return data?.tenant_id ?? null
-}
-
 // ── 거래처 등록 ───────────────────────────────────────────────
 
 export async function createCustomer(
@@ -41,9 +34,6 @@ export async function createCustomer(
   const supabase = await createSupabaseServer()
   const ctx = await getAuthCtx(supabase)
   if (!ctx) return { success: false, error: '로그인 필요' }
-
-  const tenant_id = await getTenantId(supabase, user.id)
-  if (!tenant_id) return { success: false, error: '테넌트 정보를 불러올 수 없습니다.' }
 
   const name = input.name.trim()
   if (!name) return { success: false, error: '거래처명을 입력해주세요.' }
@@ -54,7 +44,7 @@ export async function createCustomer(
   const { data, error } = await supabase
     .from('customers')
     .insert({
-      tenant_id,
+      tenant_id:              ctx.tenant_id,
       customer_type:          input.customer_type ?? 'business',
       name,
       phone:                  input.phone?.trim() || null,
@@ -82,11 +72,11 @@ export async function createCustomer(
 
   if (openingBalance !== 0) {
     await supabase.from('opening_balance_logs').insert({
-      tenant_id,
+      tenant_id:     ctx.tenant_id,
       customer_id:   data.id,
       before_amount: 0,
       after_amount:  openingBalance,
-      changed_by:    user.id,
+      changed_by:    ctx.user_id,
       reason:        '최초 등록',
     })
   }
@@ -107,55 +97,50 @@ export async function updateCustomer(
   const ctx = await getAuthCtx(supabase)
   if (!ctx) return { success: false, error: '로그인 필요' }
 
-  const tenant_id = await getTenantId(supabase, user.id)
-  if (!tenant_id) return { success: false, error: '테넌트 없음' }
-
-  // opening_balance 변경 감지
   const { data: current } = await supabase
     .from('customers')
     .select('opening_balance')
-    .eq('id', id).eq('tenant_id', tenant_id)
+    .eq('id', id).eq('tenant_id', ctx.tenant_id)
     .is('deleted_at', null)
     .single()
 
   const payload: Record<string, any> = {}
-  if (input.name)                               payload.name = input.name.trim()
-  if (input.phone !== undefined)                payload.phone = input.phone?.trim() || null
-  if (input.address !== undefined)              payload.address = input.address?.trim() || null
-  if (input.biz_number !== undefined)           payload.biz_number = input.biz_number?.replace(/-/g, '') || null
-  if (input.representative_name !== undefined)  payload.representative_name = input.representative_name?.trim() || null
-  if (input.business_type !== undefined)        payload.business_type = input.business_type?.trim() || null
-  if (input.customer_type)                      payload.customer_type = input.customer_type
-  if (input.payment_terms_type)                 payload.payment_terms_type = input.payment_terms_type
-  if (input.payment_terms_days !== undefined)   payload.payment_terms_days = input.payment_terms_days
-  if (input.payment_day !== undefined)          payload.payment_day = input.payment_day ?? null
+  if (input.name)                                 payload.name = input.name.trim()
+  if (input.phone !== undefined)                  payload.phone = input.phone?.trim() || null
+  if (input.address !== undefined)                payload.address = input.address?.trim() || null
+  if (input.biz_number !== undefined)             payload.biz_number = input.biz_number?.replace(/-/g, '') || null
+  if (input.representative_name !== undefined)    payload.representative_name = input.representative_name?.trim() || null
+  if (input.business_type !== undefined)          payload.business_type = input.business_type?.trim() || null
+  if (input.customer_type)                        payload.customer_type = input.customer_type
+  if (input.payment_terms_type)                   payload.payment_terms_type = input.payment_terms_type
+  if (input.payment_terms_days !== undefined)     payload.payment_terms_days = input.payment_terms_days
+  if (input.payment_day !== undefined)            payload.payment_day = input.payment_day ?? null
   if (input.target_monthly_revenue !== undefined) payload.target_monthly_revenue = input.target_monthly_revenue || null
   if (input.acquisition_channel_id !== undefined) payload.acquisition_channel_id = input.acquisition_channel_id || null
-  if (input.is_buyer !== undefined)             payload.is_buyer = input.is_buyer
-  if (input.is_supplier !== undefined)          payload.is_supplier = input.is_supplier
-  if (input.trade_status)                       payload.trade_status = input.trade_status
-  if (input.opening_balance !== undefined)      payload.opening_balance = input.opening_balance
+  if (input.is_buyer !== undefined)               payload.is_buyer = input.is_buyer
+  if (input.is_supplier !== undefined)            payload.is_supplier = input.is_supplier
+  if (input.trade_status)                         payload.trade_status = input.trade_status
+  if (input.opening_balance !== undefined)        payload.opening_balance = input.opening_balance
 
   const { error } = await supabase
     .from('customers')
     .update(payload)
-    .eq('id', id).eq('tenant_id', tenant_id)
-    .is('deleted_at', null)  // 삭제된 거래처 수정 차단
+    .eq('id', id).eq('tenant_id', ctx.tenant_id)
+    .is('deleted_at', null)
 
   if (error) return { success: false, error: error.message }
 
-  // opening_balance 변경 시 로그
   if (
     input.opening_balance !== undefined &&
     current &&
     input.opening_balance !== current.opening_balance
   ) {
     await supabase.from('opening_balance_logs').insert({
-      tenant_id,
+      tenant_id:     ctx.tenant_id,
       customer_id:   id,
       before_amount: current.opening_balance ?? 0,
       after_amount:  input.opening_balance,
-      changed_by:    user.id,
+      changed_by:    ctx.user_id,
       reason:        openingBalanceReason ?? '수정',
     })
   }
@@ -166,12 +151,12 @@ export async function updateCustomer(
   return { success: true }
 }
 
-// ── 단건 등록 중복 체크 ───────────────────────────────────────
+// ── 중복 체크 ─────────────────────────────────────────────────
 
 export interface DuplicateCheckResult {
-  hasDuplicate: boolean         // 차단 수준 (business_number 일치)
-  hasSimilar: boolean           // 경고 수준 (name+phone 일치)
-  existingId?: string           // 기존 거래처 id (hasDuplicate일 때)
+  hasDuplicate: boolean
+  hasSimilar:   boolean
+  existingId?:  string
   existingName?: string
 }
 
@@ -184,61 +169,38 @@ export async function checkCustomerDuplicate(input: {
   const ctx = await getAuthCtx(supabase)
   if (!ctx) return { success: false, error: '로그인 필요' }
 
-  const tenant_id = await getTenantId(supabase, user.id)
-  if (!tenant_id) return { success: false, error: '테넌트 없음' }
-
   const bizNum = input.business_number?.replace(/-/g, '').trim()
 
-  // 1. business_number 중복 체크 (차단)
   if (bizNum) {
     const { data } = await supabase
       .from('customers')
       .select('id, name')
-      .eq('tenant_id', tenant_id)
+      .eq('tenant_id', ctx.tenant_id)
       .eq('biz_number', bizNum)
       .is('deleted_at', null)
       .single()
 
-    if (data) {
-      return {
-        success: true,
-        data: {
-          hasDuplicate: true,
-          hasSimilar: false,
-          existingId: data.id,
-          existingName: data.name,
-        },
-      }
+    if (data) return {
+      success: true,
+      data: { hasDuplicate: true, hasSimilar: false, existingId: data.id, existingName: data.name },
     }
   }
 
-  // 2. name + phone 유사 체크 (경고만)
   const normalizedPhone = input.phone?.replace(/-/g, '').trim()
   if (input.name?.trim() && normalizedPhone) {
-    const { data } = await supabase
+    const { data: list } = await supabase
       .from('customers')
       .select('id, name, phone')
-      .eq('tenant_id', tenant_id)
+      .eq('tenant_id', ctx.tenant_id)
       .eq('name', input.name.trim())
       .is('deleted_at', null)
-      .is('deleted_at', null)
-      .is('deleted_at', null)
-      .single()
 
-    // phone 정규화 후 비교 (하이픈 차이 무시)
-    const match = (data as any[])?.find(
+    const match = (list ?? []).find(
       (c: any) => (c.phone ?? '').replace(/-/g, '') === normalizedPhone
     )
-    if (match) {
-      return {
-        success: true,
-        data: {
-          hasDuplicate: false,
-          hasSimilar: true,
-          existingId: match.id,
-          existingName: match.name,
-        },
-      }
+    if (match) return {
+      success: true,
+      data: { hasDuplicate: false, hasSimilar: true, existingId: match.id, existingName: match.name },
     }
   }
 
@@ -247,20 +209,15 @@ export async function checkCustomerDuplicate(input: {
 
 // ── 거래처 삭제 (soft delete) ─────────────────────────────────
 
-export async function deleteCustomer(
-  customer_id: string,
-): Promise<ActionResult> {
+export async function deleteCustomer(customer_id: string): Promise<ActionResult> {
   const supabase = await createSupabaseServer()
   const ctx = await getAuthCtx(supabase)
   if (!ctx) return { success: false, error: '로그인 필요' }
 
-  const tenant_id = await getTenantId(supabase, user.id)
-  if (!tenant_id) return { success: false, error: '테넌트 없음' }
-
   const { data, error } = await supabase.rpc('soft_delete_customer', {
     p_customer_id: customer_id,
-    p_tenant_id:   tenant_id,
-    p_deleted_by:  user.id,
+    p_tenant_id:   ctx.tenant_id,
+    p_deleted_by:  ctx.user_id,
   })
 
   if (error) {
