@@ -195,7 +195,7 @@ export default async function CustomersPage({
 
 function CustomerCard({ c, rank, isTop }: { c: CustomerWithScore; rank: number; isTop: boolean }) {
   const cfg    = STATUS_CFG[c.status]
-  const actCfg = ACTION_CFG[c.action.action_type]
+  const actCfg = ACTION_CFG[c.action?.action_type as ActionType] ?? ACTION_CFG['maintain']
   const isHigh = c.action.urgency === 'high'
   const isMid  = c.action.urgency === 'mid'
   const recontact    = calcRecontactMessage(c.overdue_amount, c.days_since_contact, c.status)
@@ -226,8 +226,8 @@ function CustomerCard({ c, rank, isTop }: { c: CustomerWithScore; rank: number; 
             <span style={{ ...s.badge, color: cfg.color, background: cfg.bg, border: `1px solid ${cfg.border}` }}>
               {cfg.label}
             </span>
-            <span style={{ ...s.badge, color: actCfg.color, background: actCfg.bg }}>
-              {actCfg.label}
+            <span style={{ ...s.badge, color: actCfg?.color ?? '#6b7280', background: actCfg?.bg ?? '#F3F4F6' }}>
+              {actCfg?.label ?? '-'}
             </span>
           </div>
 

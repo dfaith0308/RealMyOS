@@ -572,8 +572,8 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
       overdue_warning_amount: anyCfg.overdue_warning_amount ?? 100000,
       overdue_danger_amount:  anyCfg.overdue_danger_amount  ?? 500000,
       status, action_score, score: action_score,
-      next_action_date: null,
-      action: { type: 'normal', message: '', priority: 0 } as any,
+      next_action_date: calcNextActionDate(last_payment_date, order_cycle_days),
+      action: calcAction(status, current_balance, days_since_order, 14, 30, new_customer_days, null, overdue_amount, 0),
     }
   })
 
