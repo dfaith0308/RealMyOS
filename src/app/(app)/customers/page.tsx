@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { getCustomersWithScore, getDailyCashflow } from '@/actions/ledger'
+import { getCustomersWithStats, getDailyCashflow } from '@/actions/ledger'
 import { formatKRW } from '@/lib/calc'
 import { calcRecontactMessage, calcNoContactMessage } from '@/lib/customer-logic'
 import type { CustomerStatus, CustomerWithScore } from '@/actions/ledger'
@@ -48,12 +48,13 @@ export default async function CustomersPage({
   const { filter } = searchParams
 
   const _t0 = Date.now()
-  const _s0 = Date.now()
+
+  const _db0 = Date.now()
   const [result, cashflowResult] = await Promise.all([
-    getCustomersWithScore(),
+    getCustomersWithStats(),
     getDailyCashflow(),
   ])
-  console.error(`[PERF:PAGE] getCustomersWithScore+getDailyCashflow: ${Date.now() - _s0}ms`)
+  console.error(`[PERF:DB] getCustomersWithStats+getDailyCashflow: ${Date.now() - _db0}ms | customers:${result.data?.length ?? 0}건`)
   const all      = result.data ?? []
   const cashflow = cashflowResult.data ?? []
 
