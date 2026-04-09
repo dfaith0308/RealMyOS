@@ -221,3 +221,77 @@ export async function getAiInsight(ctx: DashboardData['ai_context']): Promise<st
     return fallbackMessage(ctx)
   }
 }
+
+// ============================================================
+// 오늘 수금할 거래처
+// 기준: 잔액 > 0 + 최근 3일 이상 수금 없음
+// 정렬: 잔액 DESC, 상위 5개
+// ============================================================
+
+export interface CollectionTarget {
+  id:               string
+  name:             string
+  current_balance:  number
+  last_payment_date: string | null  // 마지막 수금일 (null = 수금 이력 없음)
+  days_since_payment: number | null // 마지막 수금 후 경과일
+}
+
+export async function getTodayCollections(): Promise<ActionResult<CollectionTarget[]>> {
+  const supabase = await createSupabaseServer()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: '로그인 필요' }
+
+  const { data: me } = await supabase
+    .from('users').select('tenant_id').eq('id', user.id).single()
+  if (!me?.tenant_id) return { success: false, error: '테넌트 없음' }
+
+  const todayStr = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10)
+  const tid      = me.tenant_id
+
+  // 거래처별 잔액 (opening + confirmed주문 - confirmed수금)
+  const [{ data: customers }, { data: orders }, { data: payments }] = await Promise.all([
+    supabase.from('customers')
+      .select('id, name, opening_balance')
+      .eq('tenant_id', tid)
+      .is('deleted_at', null),
+    supabase.from('orders')
+      .select('customer_id, total_amount')
+      .eq('tenant_id', tid).eq('status', 'confirmed').is('deleted_at', null),
+    supabase.from('payments')
+      .select('customer_id, amount, payment_date')
+      .eq('tenant_id', tid).eq('status', 'confirmed'),
+  ])
+
+  // 거래처별 집계
+  const orderMap   = new Map<string, number>()
+  const payMap     = new Map<string, number>()
+  const lastPayMap = new Map<string, string>()   // customer_id → 최신 payment_date
+
+  for (const o of orders  ?? []) orderMap.set(o.customer_id, (orderMap.get(o.customer_id) ?? 0) + o.total_amount)
+  for (const p of payments ?? []) {
+    payMap.set(p.customer_id, (payMap.get(p.customer_id) ?? 0) + p.amount)
+    const prev = lastPayMap.get(p.customer_id)
+    if (!prev || p.payment_date > prev) lastPayMap.set(p.customer_id, p.payment_date)
+  }
+
+  const result: CollectionTarget[] = []
+
+  for (const c of customers ?? []) {
+    const balance = (c.opening_balance ?? 0) + (orderMap.get(c.id) ?? 0) - (payMap.get(c.id) ?? 0)
+    if (balance <= 0) continue  // 잔액 없으면 제외
+
+    const lastPay = lastPayMap.get(c.id) ?? null
+    const daysSince = lastPay
+      ? Math.floor((new Date(todayStr).getTime() - new Date(lastPay).getTime()) / 86400000)
+      : null
+
+    // 최근 3일 이내 수금이 있으면 제외
+    if (daysSince !== null && daysSince < 3) continue
+
+    result.push({ id: c.id, name: c.name, current_balance: balance, last_payment_date: lastPay, days_since_payment: daysSince })
+  }
+
+  // 잔액 DESC 정렬, 상위 5개
+  result.sort((a, b) => b.current_balance - a.current_balance)
+  return { success: true, data: result.slice(0, 5) }
+}

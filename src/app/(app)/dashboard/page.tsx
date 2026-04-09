@@ -1,16 +1,20 @@
-import { getDashboardData, getAiInsight } from '@/actions/dashboard'
+import { getDashboardData, getAiInsight, getTodayCollections } from '@/actions/dashboard'
 import { formatKRW } from '@/lib/calc'
 import Link from 'next/link'
 
 export const metadata = { title: '대시보드 — RealMyOS' }
 
 export default async function DashboardPage() {
-  const result = await getDashboardData()
+  const [result, collectionsResult] = await Promise.all([
+    getDashboardData(),
+    getTodayCollections(),
+  ])
   if (!result.success || !result.data) {
     return <main style={s.page}><p style={{ color: '#9ca3af' }}>데이터를 불러올 수 없습니다.</p></main>
   }
-  const d = result.data
-  const aiMsg = await getAiInsight(d.ai_context)
+  const d           = result.data
+  const collections = collectionsResult.data ?? []
+  const aiMsg       = await getAiInsight(d.ai_context)
 
   return (
     <main style={s.page}>
@@ -20,6 +24,35 @@ export default async function DashboardPage() {
         <span style={s.aiIcon}>💡</span>
         <span style={s.aiText}>{aiMsg}</span>
       </div>
+
+      {/* 오늘 수금할 거래처 */}
+      {collections.length > 0 && (
+        <div style={ds.collectBox}>
+          <div style={ds.collectHeader}>
+            <span style={ds.collectTitle}>💸 오늘 수금할 거래처</span>
+            <span style={ds.collectSub}>잔액 있음 · 3일 이상 수금 없음 · 상위 {collections.length}개</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {collections.map((c) => (
+              <div key={c.id} style={ds.collectRow}>
+                <div>
+                  <span style={ds.collectName}>{c.name}</span>
+                  <span style={ds.collectMeta}>
+                    {c.last_payment_date
+                      ? `마지막 수금 ${c.days_since_payment}일 전`
+                      : '수금 이력 없음'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <span style={ds.collectBal}>{formatKRW(c.current_balance)}</span>
+                  <a href={`/payments/new?customer_id=${c.id}`} style={ds.payBtn}>수금하기</a>
+                  <a href={`/customers/${c.id}/ledger`} style={ds.ledBtn}>원장</a>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* KPI */}
       <div style={s.grid4}>
@@ -165,6 +198,19 @@ function Empty({ text }: { text: string }) {
 }
 
 // ── 스타일 ───────────────────────────────────────────────────
+
+const ds: Record<string, React.CSSProperties> = {
+  collectBox:    { background: '#fff', border: '2px solid #FCA5A5', borderRadius: 12, padding: '16px 20px' },
+  collectHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  collectTitle:  { fontSize: 14, fontWeight: 700, color: '#B91C1C' },
+  collectSub:    { fontSize: 11, color: '#9ca3af' },
+  collectRow:    { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #f3f4f6' },
+  collectName:   { fontSize: 14, fontWeight: 600, color: '#111827', marginRight: 8 },
+  collectMeta:   { fontSize: 11, color: '#9ca3af' },
+  collectBal:    { fontSize: 14, fontWeight: 700, color: '#B91C1C', fontVariantNumeric: 'tabular-nums', minWidth: 80, textAlign: 'right' as const },
+  payBtn:        { padding: '6px 12px', background: '#B91C1C', color: '#fff', borderRadius: 6, fontSize: 12, fontWeight: 600, textDecoration: 'none' },
+  ledBtn:        { padding: '6px 10px', background: '#f3f4f6', color: '#374151', borderRadius: 6, fontSize: 12, textDecoration: 'none' },
+}
 
 const s: Record<string, React.CSSProperties> = {
   page:        { maxWidth: 960, margin: '0 auto', padding: '28px 24px 60px', display: 'flex', flexDirection: 'column', gap: 20 },
