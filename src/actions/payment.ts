@@ -1,6 +1,6 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { linkActionResult } from '@/actions/action-log'
 import { createSupabaseServer } from '@/lib/supabase-server'
 import type { ActionResult } from '@/types/order'
@@ -84,6 +84,7 @@ export async function createPayment(
 
   revalidatePath('/customers')
   revalidatePath('/payments/new')
+  revalidateTag('customers-balance')
 
   return {
     success: true,
@@ -127,6 +128,7 @@ export async function cancelPayment(payment_id: string): Promise<ActionResult> {
 
   revalidatePath('/customers')
   revalidatePath('/payments/new')
+  revalidateTag('customers-balance')
   return { success: true }
 }
 

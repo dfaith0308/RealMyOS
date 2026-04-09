@@ -21,12 +21,16 @@ export default async function OrdersPage({
   const status = sp.status ?? ''
   const customerId = sp.customer_id ?? ''
 
+
+  const _t0 = Date.now()
   const [ordersResult, { data: customers }] = await Promise.all([
     getOrderList({ from, to, status: status || undefined, customer_id: customerId || undefined }),
     createSupabaseServer().then((s) =>
       s.from('customers').select('id, name').eq('is_buyer', true).is('deleted_at', null).order('name')
     ),
   ])
+
+  console.log(`[PERF] /orders: ${Date.now() - _t0}ms`)
 
   return (
     <main style={{ maxWidth: 1000, margin: '0 auto', padding: '32px 24px 60px' }}>

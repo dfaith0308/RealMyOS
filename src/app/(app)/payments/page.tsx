@@ -19,12 +19,16 @@ export default async function PaymentsPage({
   const customer_id = searchParams.customer_id ?? ''
   const status      = searchParams.status      ?? 'confirmed'  // 기본: 정상 수금만
 
+
+  const _t0 = Date.now()
   const [paymentsResult, { data: customers }] = await Promise.all([
     getPaymentList({ from, to, customer_id: customer_id || undefined, status: status || undefined }),
     createSupabaseServer().then((s) =>
       s.from('customers').select('id, name').eq('is_buyer', true).is('deleted_at', null).order('name')
     ),
   ])
+
+  console.log(`[PERF] /payments: ${Date.now() - _t0}ms`)
 
   return (
     <main style={{ maxWidth: 1000, margin: '0 auto', padding: '32px 24px 60px' }}>

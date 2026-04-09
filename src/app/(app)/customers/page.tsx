@@ -46,6 +46,8 @@ export default async function CustomersPage({
   searchParams: { filter?: string }
 }) {
   const { filter } = searchParams
+
+  const _t0 = Date.now()
   const [result, cashflowResult] = await Promise.all([
     getCustomersWithScore(),
     getDailyCashflow(),
@@ -80,6 +82,8 @@ export default async function CustomersPage({
     filter === 'new'     ? newList     :
     filter === 'normal'  ? normalList  :
     filter === 'overdue' ? overdueList : all
+
+  console.log(`[PERF] /customers: ${Date.now() - _t0}ms`)
 
   return (
     <main style={s.page}>

@@ -1,4 +1,5 @@
-import { getDashboardData, getAiInsight, getTodayCollections } from '@/actions/dashboard'
+import { getDashboardData, getTodayCollections } from '@/actions/dashboard'
+import { Suspense } from 'react'
 import { formatKRW } from '@/lib/calc'
 import Link from 'next/link'
 
@@ -14,16 +15,19 @@ export default async function DashboardPage() {
   }
   const d           = result.data
   const collections = collectionsResult.data ?? []
-  const aiMsg       = await getAiInsight(d.ai_context)
 
   return (
     <main style={s.page}>
 
-      {/* AI 한마디 */}
-      <div style={s.aiBox}>
-        <span style={s.aiIcon}>💡</span>
-        <span style={s.aiText}>{aiMsg}</span>
-      </div>
+      {/* AI 한마디 — Suspense로 분리 (페이지 블로킹 없음) */}
+      <Suspense fallback={
+        <div style={{ ...s.aiBox, opacity: 0.5 }}>
+          <span style={s.aiIcon}>💡</span>
+          <span style={{ ...s.aiText, color: '#9ca3af' }}>AI 분석 중...</span>
+        </div>
+      }>
+        <AiInsightBox context={d.ai_context} />
+      </Suspense>
 
       {/* 오늘 수금할 거래처 */}
       {collections.length > 0 && (
@@ -198,6 +202,19 @@ function Empty({ text }: { text: string }) {
 }
 
 // ── 스타일 ───────────────────────────────────────────────────
+
+import { getAiInsight } from '@/actions/dashboard'
+
+async function AiInsightBox({ context }: { context: Parameters<typeof getAiInsight>[0] }) {
+  const msg = await getAiInsight(context)
+  return (
+    <div style={{ background: '#F0FDF4', border: '1px solid #86EFAC', borderRadius: 10,
+      padding: '12px 16px', display: 'flex', gap: 10, alignItems: 'center' }}>
+      <span style={{ fontSize: 18, flexShrink: 0 }}>💡</span>
+      <span style={{ fontSize: 14, fontWeight: 500, color: '#15803D', lineHeight: 1.5 }}>{msg}</span>
+    </div>
+  )
+}
 
 const ds: Record<string, React.CSSProperties> = {
   collectBox:    { background: '#fff', border: '2px solid #FCA5A5', borderRadius: 12, padding: '16px 20px' },

@@ -211,7 +211,7 @@ export async function getDailyCashflow(): Promise<ActionResult<DailyCashflow[]>>
   return { success: true, data: result }
 }
 
-export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWithBalance[]>> {
+async function _getCustomersWithBalance(): Promise<ActionResult<CustomerWithBalance[]>> {
   const supabase = await createSupabaseServer()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, error: '로그인 필요' }
