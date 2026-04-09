@@ -1,6 +1,6 @@
 'use server'
 
-import { revalidatePath, revalidateTag } from 'next/cache'
+import { revalidatePath } from 'next/cache'
 import { createSupabaseServer } from '@/lib/supabase-server'
 import { calcLine, calcOrderTotals, formatOrderNumber } from '@/lib/calc'
 import { linkActionResult } from '@/actions/action-log'
@@ -185,7 +185,6 @@ export async function createOrder(
   })
 
   revalidatePath('/orders')
-  revalidateTag('customers-balance')
   return { success: true, data: { order_id: newOrder.id, order_number: newOrder.order_number, total_amount: newOrder.total_amount } }
 }
 
@@ -285,7 +284,6 @@ export async function updateOrder(input: UpdateOrderInput): Promise<ActionResult
   })
 
   revalidatePath('/orders')
-  revalidateTag('customers-balance')
   return { success: true }
 }
 
@@ -321,7 +319,6 @@ export async function cancelOrder(order_id: string, reason?: string): Promise<Ac
   })
 
   revalidatePath('/orders')
-  revalidateTag('customers-balance')
   return { success: true }
 }
 
