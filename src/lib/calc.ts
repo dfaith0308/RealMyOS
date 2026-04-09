@@ -48,8 +48,11 @@ export function formatOrderNumber(date: Date, seq: number): string {
   return `ORD-${y}${m}${d}-${String(seq).padStart(3, '0')}`
 }
 
-export function formatKRW(amount: number): string {
-  return amount.toLocaleString('ko-KR') + '원'
+export function formatKRW(amount: number | string | null | undefined): string {
+  if (amount === null || amount === undefined) return '0원'
+  const n = typeof amount === 'string' ? Number(amount) : amount
+  if (isNaN(n)) return '0원'
+  return n.toLocaleString('ko-KR') + '원'
 }
 
 export function todayStr(): string {

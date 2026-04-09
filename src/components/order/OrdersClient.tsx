@@ -153,8 +153,8 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
                       fontWeight: o.current_balance && o.current_balance !== 0 ? 600 : 400,
                     }}>
                       {o.current_balance === null ? '-'
-                        : o.current_balance < 0 ? `예치 ${formatKRW(Math.abs(o.current_balance))}`
-                        : formatKRW(o.current_balance)}
+                        : (o.current_balance ?? 0) < 0 ? `예치 ${formatKRW(Math.abs(o.current_balance ?? 0))}`
+                        : formatKRW(o.current_balance ?? 0)}
                     </td>
                     <td style={td}>
                       <span style={{ ...s.badge, color: cfg.color, background: cfg.bg }}>{cfg.label}</span>
