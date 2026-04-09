@@ -70,7 +70,7 @@ export default async function DashboardPage() {
             : d.top_customers.map((c, i) => (
               <div key={c.id} style={s.listRow}>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <span style={{ fontSize: 11, color: '#9ca3af', width: 16 }}>#{i + 1}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: i === 0 ? 'var(--color-primary)' : '#111827', minWidth: 36 }}>{i + 1}순위</span>
                   <div>
                     <span style={{ fontSize: 13, fontWeight: 600 }}>{c.name}</span>
                     {c.primary_reason && (
@@ -103,7 +103,7 @@ export default async function DashboardPage() {
             : d.top_customer_sales.map((c, i) => (
               <div key={i} style={s.listRow}>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <span style={{ fontSize: 11, color: '#9ca3af', width: 16 }}>#{i + 1}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#111827', minWidth: 28 }}>{i + 1}위</span>
                   <span style={{ fontSize: 13 }}>{c.name}</span>
                 </div>
                 <span style={{ fontSize: 13, fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
@@ -120,7 +120,7 @@ export default async function DashboardPage() {
             : d.top_product_sales.map((p, i) => (
               <div key={i} style={s.listRow}>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <span style={{ fontSize: 11, color: '#9ca3af', width: 16 }}>#{i + 1}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#111827', minWidth: 28 }}>{i + 1}위</span>
                   <span style={{ fontSize: 13 }}>{p.name}</span>
                 </div>
                 <span style={{ fontSize: 13, fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
