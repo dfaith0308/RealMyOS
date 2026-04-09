@@ -185,7 +185,7 @@ export default function PaymentsClient({ payments, customers, filters }: Props) 
   )
 }
 
-const th: React.CSSProperties = { padding: '8px 12px', textAlign: 'left', fontSize: 11, fontWeight: 500, color: '#6b7280' }
+const th: React.CSSProperties = { padding: '10px 12px', textAlign: 'left' as const }
 const td: React.CSSProperties = { padding: '10px 12px', verticalAlign: 'middle' }
 const s: Record<string, React.CSSProperties> = {
   kpi:            { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 4 },

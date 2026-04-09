@@ -259,6 +259,7 @@ export default function OrderCreateForm({
       setDoPayment(false)
       setPaymentAmount('')
       setIsSubmitting(false)
+      setTimeout(() => router.push('/orders'), 2500)
       setPaymentFailed(null)
       setPaymentError(null)
       setPaymentWarning(null)
@@ -313,7 +314,14 @@ export default function OrderCreateForm({
           </a>
         </div>
       )}
-      {success && <div style={s.okBox}>{success}</div>}
+      {success && (
+        <div style={s.okBox}>
+          <span>{success}</span>
+          <span style={{ fontSize: 11, color: '#15803D', marginTop: 4, display: 'block' }}>
+            잠시 후 주문 목록으로 이동합니다...
+          </span>
+        </div>
+      )}
 
       {/* 상단 입력 */}
       <div style={s.topRow}>

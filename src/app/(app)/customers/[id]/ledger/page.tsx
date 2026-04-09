@@ -60,7 +60,8 @@ export default async function CustomerLedgerPage({
           <h1 style={s.title}>{summary.customer_name}</h1>
         </div>
         <div style={s.headerBtns}>
-          <Link href={`/payments/new`} style={s.subBtn}>수금 등록</Link>
+          <Link href={`/payments/new?customer_id=${id}`} style={s.subBtn}>수금 등록</Link>
+          <Link href={`/payments?customer_id=${id}`} style={s.subBtn}>수금 내역</Link>
           <Link href="/orders/new" style={s.newBtn}>+ 주문 등록</Link>
         </div>
       </div>

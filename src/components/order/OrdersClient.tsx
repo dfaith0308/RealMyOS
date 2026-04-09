@@ -107,6 +107,7 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
               <th style={th}>거래처</th>
               <th style={th}>거래내역</th>
               <th style={{ ...th, textAlign: 'right' }}>금액</th>
+              <th style={{ ...th, textAlign: 'right' }}>잔액</th>
               <th style={th}>상태</th>
               <th style={th}></th>
             </tr>
@@ -141,6 +142,19 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
                     </td>
                     <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>
                       {formatKRW(o.total_amount)}
+                    </td>
+                    <td style={{
+                      ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums',
+                      fontSize: 12,
+                      color: o.current_balance === null ? '#d1d5db'
+                           : o.current_balance > 0 ? '#B91C1C'
+                           : o.current_balance < 0 ? '#1D4ED8'
+                           : '#6b7280',
+                      fontWeight: o.current_balance && o.current_balance !== 0 ? 600 : 400,
+                    }}>
+                      {o.current_balance === null ? '-'
+                        : o.current_balance < 0 ? `예치 ${formatKRW(Math.abs(o.current_balance))}`
+                        : formatKRW(o.current_balance)}
                     </td>
                     <td style={td}>
                       <span style={{ ...s.badge, color: cfg.color, background: cfg.bg }}>{cfg.label}</span>
@@ -221,7 +235,7 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
   )
 }
 
-const th: React.CSSProperties = { padding: '8px 12px', textAlign: 'left', fontSize: 11, fontWeight: 500, color: '#6b7280' }
+const th: React.CSSProperties = { padding: '10px 12px', textAlign: 'left' as const }
 const td: React.CSSProperties = { padding: '10px 12px', verticalAlign: 'middle' }
 const s: Record<string, React.CSSProperties> = {
   newBtn:         { padding: '8px 16px', background: '#111827', color: '#fff', borderRadius: 8, fontSize: 13, fontWeight: 500, textDecoration: 'none' },

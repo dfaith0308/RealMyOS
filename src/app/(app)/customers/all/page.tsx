@@ -114,7 +114,7 @@ export default async function CustomerListPage({
   )
 }
 
-const th: React.CSSProperties = { padding: '8px 12px', textAlign: 'left', fontSize: 11, fontWeight: 500, color: '#6b7280' }
+const th: React.CSSProperties = { padding: '10px 12px', textAlign: 'left' }
 const td: React.CSSProperties = { padding: '10px 12px', verticalAlign: 'middle' }
 const s: Record<string, React.CSSProperties> = {
   subBtn:    { padding: '8px 14px', background: '#fff', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13, color: '#374151', textDecoration: 'none' },
