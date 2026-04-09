@@ -178,6 +178,8 @@ export default function OrderCreateForm({
   const [paymentMethod, setPaymentMethod]   = useState<PaymentMethod>('transfer')
   const [paymentDate, setPaymentDateP]      = useState(todayStr())
   const [paymentError, setPaymentError]     = useState<string | null>(null)
+  const [paymentFailed, setPaymentFailed]     = useState<{ orderId: string; customerId: string; amount: number } | null>(null)
+  const [paymentWarning, setPaymentWarning]   = useState<string | null>(null)
 
   // ── 수금 금액 자동 동기화 ─────────────────────────────────
   useEffect(() => {
@@ -223,7 +225,7 @@ export default function OrderCreateForm({
       // 주문 성공 — 수금 처리 (선택 시)
       let successMsg = `✓ ${res.data.order_number} 등록 완료 — ${formatKRW(res.data.total_amount)}`
       if (doPayment) {
-        const amt = Number(paymentAmount)
+        const amt = Math.round(Number(paymentAmount))
         if (amt > 0) {
           const pr = await createPayment({
             customer_id:    selectedCustomer.id,
@@ -237,9 +239,16 @@ export default function OrderCreateForm({
               ? ` | 수금 완료 (예치금 +${formatKRW(dep)})`
               : ` | 수금 완료`
             setPaymentError(null)
+            setPaymentFailed(null)
+            setPaymentWarning(pr.data.warning ?? null)
           } else {
-            // 주문은 유지 — 수금만 실패 안내
-            setPaymentError(`주문은 등록됐으나 수금 처리 실패: ${pr.error}`)
+            setPaymentFailed({
+              orderId:    res.data!.order_id,
+              customerId: selectedCustomer.id,
+              amount:     amt,
+            })
+            setPaymentError(pr.error ?? '알 수 없는 오류')
+            successMsg = `✓ 주문 완료 / ⚠️ 수금 실패`
           }
         }
       }
@@ -250,6 +259,9 @@ export default function OrderCreateForm({
       setDoPayment(false)
       setPaymentAmount('')
       setIsSubmitting(false)
+      setPaymentFailed(null)
+      setPaymentError(null)
+      setPaymentWarning(null)
     })
   }
 
@@ -277,6 +289,30 @@ export default function OrderCreateForm({
 
       {/* 메시지 */}
       {error && <div style={s.errBox}>{error}</div>}
+
+      {/* 중복 수금 경고 */}
+      {paymentWarning && (
+        <div style={{ background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#B45309', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>⚠️ {paymentWarning}</span>
+          <button type="button" style={{ background: 'none', border: 'none', color: '#B45309', cursor: 'pointer', fontSize: 18, lineHeight: 1 }} onClick={() => setPaymentWarning(null)}>✕</button>
+        </div>
+      )}
+
+      {/* 수금 실패 고정 배너 */}
+      {paymentFailed && (
+        <div style={s.paymentFailBanner}>
+          <div>
+            <p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>⚠️ 수금이 저장되지 않았습니다</p>
+            <p style={{ margin: '4px 0 0 0', fontSize: 12 }}>{paymentError}</p>
+            <p style={{ margin: '4px 0 0 0', fontSize: 12 }}>주문은 정상 등록됐습니다. 아래 버튼으로 지금 수금하세요.</p>
+          </div>
+          <a
+            href={`/payments/new?customer_id=${paymentFailed.customerId}&amount=${paymentFailed.amount}`}
+            style={s.payNowBtn}>
+            지금 수금하기 →
+          </a>
+        </div>
+      )}
       {success && <div style={s.okBox}>{success}</div>}
 
       {/* 상단 입력 */}
@@ -499,11 +535,7 @@ export default function OrderCreateForm({
                 💰 초과 금액은 예치금으로 처리됩니다.
               </div>
             )}
-            {paymentError && (
-              <div style={{ fontSize: 12, color: '#B91C1C', background: '#FEF2F2', borderRadius: 6, padding: '8px 12px' }}>
-                {paymentError}
-              </div>
-            )}
+
           </div>
         )}
       </div>
@@ -640,6 +672,8 @@ const s: Record<string, React.CSSProperties> = {
     marginLeft: 'auto', fontVariantNumeric: 'tabular-nums',
   },
   input: { padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, outline: 'none', width: '100%', boxSizing: 'border-box' as const },
+  paymentFailBanner: { background: '#FEF2F2', border: '2px solid #EF4444', borderRadius: 10, padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, color: '#B91C1C' },
+  payNowBtn: { padding: '10px 16px', background: '#B91C1C', color: '#fff', borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0 },
   footer: { display: 'flex', justifyContent: 'flex-end', paddingTop: 4 },
   btn: {
     padding: '13px 32px', background: '#111827',

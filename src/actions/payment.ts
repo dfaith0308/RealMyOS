@@ -20,6 +20,7 @@ export interface CreatePaymentResult {
   applied_amount: number
   deposit_amount: number
   balance_before: number
+  warning?:       string  // 중복 수금 경고
 }
 
 // ============================================================
@@ -42,6 +43,23 @@ export async function createPayment(
     return { success: false, error: '거래처를 선택해주세요.' }
   if (!input.amount || input.amount <= 0 || !Number.isInteger(input.amount))
     return { success: false, error: '유효한 금액을 입력해주세요. (양의 정수)' }
+
+  // 중복 수금 감지 (2분 내 동일 customer + 동일 amount)
+  let dupWarning: string | undefined
+  const twoMinsAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString()
+  const { data: recentPayment } = await supabase
+    .from('payments')
+    .select('id, created_at')
+    .eq('customer_id', input.customer_id)
+    .eq('tenant_id', me.tenant_id)
+    .eq('amount', input.amount)
+    .eq('status', 'confirmed')
+    .gte('created_at', twoMinsAgo)
+    .limit(1)
+    .single()
+  if (recentPayment) {
+    dupWarning = `최근 동일 금액(${input.amount.toLocaleString()}원)의 수금이 등록되어 있습니다. 중복인지 확인하세요.`
+  }
 
   // RPC: balance 계산 + deposit 분리 + insert 단일 트랜잭션
   const { data: rpcData, error: rpcErr } = await supabase.rpc('create_payment_atomic', {
@@ -74,6 +92,7 @@ export async function createPayment(
       applied_amount: rpcData.applied_amount as number,
       deposit_amount: rpcData.deposit_amount as number,
       balance_before: rpcData.balance_before as number,
+      warning:        dupWarning,
     },
   }
 }
