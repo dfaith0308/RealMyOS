@@ -26,28 +26,17 @@ export async function middleware(request: NextRequest) {
   // 공개 경로 — 인증 불필요
   const isPublic =
     pathname.startsWith('/login') ||
-    pathname.startsWith('/auth')
+    pathname.startsWith('/auth') ||
+    pathname.startsWith('/onboarding')
   if (isPublic) return supabaseResponse
 
-  // getSession() — 쿠키 파싱만 (네트워크 호출 없음)
-  // getUser()는 Server Component에서 1회만 실행 (getAuthCtx)
+  // 세션 존재 여부만 확인 (쿠키 파싱, 네트워크 없음)
   const { data: { session } } = await supabase.auth.getSession()
 
   // 비로그인 → /login
   if (!session) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
-    return NextResponse.redirect(url)
-  }
-
-  // /onboarding 자체는 통과
-  if (pathname.startsWith('/onboarding')) return supabaseResponse
-
-  // tenant_id는 user_metadata에서 읽음 — users 테이블 조회 없음
-  const tenant_id = session.user?.user_metadata?.tenant_id
-  if (!tenant_id) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/onboarding'
     return NextResponse.redirect(url)
   }
 
@@ -58,6 +47,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
+  // tenant 검증은 Server Action(getAuthCtx → getUser)에서 수행
   return supabaseResponse
 }
 
