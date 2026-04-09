@@ -485,7 +485,8 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
   const nowKST   = new Date(Date.now() + 9 * 3600000)
   const todayStr = nowKST.toISOString().slice(0, 10)
 
-  // 병렬 쿼리 — customer_stats 별도 조회 (relation join 불안정)
+  // 병렬 쿼리 — 구간별 타이머 측정
+  const _q0 = Date.now()
   const [{ data: rows, error }, { data: statsRows }, { data: settingsRows }] = await Promise.all([
     supabase.from('customers')
       .select('id, name, phone, payment_terms_days, target_monthly_revenue, opening_balance')
@@ -497,12 +498,14 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
       .select('customer_id, payment_terms, payment_day, order_cycle_days, new_customer_days, overdue_warning_amount, overdue_danger_amount')
       .eq('tenant_id', me.tenant_id),
   ])
+  console.error(`[PERF:DB] 3쿼리 병렬: ${Date.now() - _q0}ms | customers:${rows?.length ?? 0} stats:${statsRows?.length ?? 0}`)
 
   if (error) return { success: false, error: error.message }
 
   const statsMap    = new Map((statsRows    ?? []).map((s: any) => [s.customer_id, s]))
   const settingsMap = new Map((settingsRows ?? []).map((s: any) => [s.customer_id, s]))
 
+  const _m0 = Date.now()
   const today = new Date(todayStr + 'T00:00:00Z')
 
   const result: CustomerWithStats[] = (rows ?? []).map((c: any) => {
@@ -574,5 +577,6 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
     }
   })
 
+  console.error(`[PERF:MAP] JS 병합: ${Date.now() - _m0}ms`)
   return { success: true, data: result }
 }

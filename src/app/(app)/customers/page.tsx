@@ -48,10 +48,12 @@ export default async function CustomersPage({
   const { filter } = searchParams
 
   const _t0 = Date.now()
+  const _s0 = Date.now()
   const [result, cashflowResult] = await Promise.all([
     getCustomersWithScore(),
     getDailyCashflow(),
   ])
+  console.error(`[PERF:PAGE] getCustomersWithScore+getDailyCashflow: ${Date.now() - _s0}ms`)
   const all      = result.data ?? []
   const cashflow = cashflowResult.data ?? []
 
