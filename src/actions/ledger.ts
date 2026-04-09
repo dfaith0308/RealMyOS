@@ -471,9 +471,9 @@ export async function getCustomersWithScore(): Promise<ActionResult<CustomerWith
 // getCustomersWithBalance 대비 쿼리 1회로 축소
 // ============================================================
 
-export interface CustomerWithStats extends CustomerWithBalance {}
+export interface CustomerWithStats extends CustomerWithScore {}
 
-export async function getCustomersWithStats(): Promise<ActionResult<CustomerWithStats[]>> {
+export async function getCustomersWithStats(): Promise<ActionResult<CustomerWithScore[]>> {
   const supabase = await createSupabaseServer()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, error: '로그인 필요' }
@@ -538,6 +538,12 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
       isDanger  ? 'danger'  :
       isWarning ? 'warning' : 'normal'
 
+    const action_score = calcActionScore({
+      overdue_amount, receivable_amount, days_since_order,
+      order_cycle_days, days_since_contact: days_since_contact ?? 0,
+      status,
+    })
+
     return {
       id: c.id, name: c.name, phone: c.phone,
       payment_terms_days: terms,
@@ -551,8 +557,7 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
       payment_day: cfg.payment_day ?? null,
       overdue_warning_amount: cfg.overdue_warning_amount ?? 100000,
       overdue_danger_amount:  cfg.overdue_danger_amount  ?? 500000,
-      status,
-      action_score: isDanger ? 300 : isWarning ? 100 : 0,
+      status, action_score, score: action_score,
     }
   })
 
