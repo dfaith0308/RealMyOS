@@ -31,12 +31,19 @@ export default function SearchableSelectWithAdd({
     : options
 
   useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') { setOpen(false); setShowAdd(false) }
     }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
   }, [])
+
+  function handleWrapBlur(e: React.FocusEvent<HTMLDivElement>) {
+    // relatedTarget이 wrapRef 내부면 유지, 외부면 닫음
+    if (!wrapRef.current?.contains(e.relatedTarget as Node)) {
+      setOpen(false)
+    }
+  }
 
   function handleSelect(opt: SelectOption) { onChange(opt.id, opt.name); setQuery(''); setOpen(false) }
   function handleClear() { onChange('', ''); setQuery('') }
@@ -49,7 +56,7 @@ export default function SearchableSelectWithAdd({
   }
 
   return (
-    <div ref={wrapRef} style={{ position: 'relative' }}>
+    <div ref={wrapRef} style={{ position: 'relative' }} onBlur={handleWrapBlur}>
       {label && <label style={s.label}>{label}</label>}
       <div style={s.inputWrap}>
         <input style={{ ...s.input, flex: 1 }}
@@ -73,6 +80,7 @@ export default function SearchableSelectWithAdd({
           {filtered.map((opt) => (
             <button key={opt.id} type="button"
               style={{ ...s.option, background: opt.id === value ? '#EFF6FF' : '#fff', fontWeight: opt.id === value ? 500 : 400 }}
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => handleSelect(opt)}>{opt.name}</button>
           ))}
         </div>
@@ -82,10 +90,11 @@ export default function SearchableSelectWithAdd({
         <div style={s.addRow}>
           <input style={{ ...s.input, flex: 1 }} value={newName}
             onChange={(e) => setNewName(e.target.value)} placeholder="새 항목 이름" autoFocus />
-          <button type="button" style={s.saveBtn} onClick={handleAdd} disabled={isPending}>
+          <button type="button" style={s.saveBtn} onMouseDown={(e) => e.preventDefault()} onClick={handleAdd} disabled={isPending}>
             {isPending ? '...' : '추가'}
           </button>
           <button type="button" style={s.cancelBtn}
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => { setShowAdd(false); setNewName('') }}>취소</button>
         </div>
       )}

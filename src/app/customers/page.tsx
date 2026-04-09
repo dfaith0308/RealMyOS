@@ -209,9 +209,7 @@ function CustomerCard({ c, rank, isTop }: { c: CustomerWithScore; rank: number; 
         <span style={{ ...s.actionText, fontWeight: isHigh ? 700 : 500, fontSize: isHigh ? 14 : 13 }}>
           {c.action.text}
         </span>
-        <span style={{ ...s.scorePill, background: isTop ? '#FEF3C7' : '#F3F4F6', color: isTop ? '#92400E' : '#9ca3af' }}>
-          #{rank} · {c.action_score}점
-        </span>
+        <ScorePill rank={rank} score={c.action_score} customer={c} />
       </div>
 
       <div style={s.cardBody}>
@@ -319,6 +317,46 @@ const bs: Record<string, React.CSSProperties> = {
   payHot:     { padding: '7px 13px', background: '#B91C1C', color: '#fff', borderRadius: 6, fontSize: 12, fontWeight: 700 },
   payNormal:  { padding: '7px 13px', background: '#111827', color: '#fff', borderRadius: 6, fontSize: 12, fontWeight: 500 },
   order:      { padding: '7px 13px', background: '#f3f4f6', color: '#374151', borderRadius: 6, fontSize: 12, border: '1px solid #e5e7eb' },
+}
+
+// ── 점수 pill 컴포넌트 ──────────────────────────────────────
+
+function getScoreReasons(c: any): string[] {
+  const reasons: string[] = []
+  if (c.overdue_amount > 0)
+    reasons.push(`연체금 ${Math.round(c.overdue_amount / 10000)}만원`)
+  if (c.days_since_contact !== null && c.days_since_contact >= 7)
+    reasons.push(`${c.days_since_contact}일 미연락`)
+  if (c.days_since_order !== null && c.order_cycle_days > 0
+      && c.days_since_order > c.order_cycle_days)
+    reasons.push('주문주기 초과')
+  const receivableOnly = (c.receivable_amount ?? 0) - (c.overdue_amount ?? 0)
+  if (receivableOnly > 100000 && c.overdue_amount === 0)
+    reasons.push(`미수금 ${Math.round(receivableOnly / 10000)}만원`)
+  return reasons.slice(0, 2)
+}
+
+function ScorePill({ rank, score, customer }: { rank: number; score: number; customer: any }) {
+  const isHigh = score >= 300
+  const isMid  = score >= 100 && score < 300
+  const bg     = isHigh ? '#FEE2E2' : isMid ? '#FEF3C7' : '#F3F4F6'
+  const color  = isHigh ? '#B91C1C' : isMid ? '#92400E' : '#9ca3af'
+  const reasons = getScoreReasons(customer)
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flexShrink: 0 }}>
+      <span
+        title="연체금, 미수금, 주문주기 초과, 미연락 기간 등을 기반으로 계산된 수금 우선순위 점수입니다. 높을수록 먼저 연락하세요."
+        style={{ fontSize: 10, padding: '3px 8px', borderRadius: 10, fontWeight: 700, background: bg, color, cursor: 'default', letterSpacing: '0.01em' }}>
+        #{rank} · {score}점
+      </span>
+      {reasons.length > 0 && (
+        <span style={{ fontSize: 9, color: isHigh ? '#B91C1C' : '#B45309', fontWeight: 500 }}>
+          {reasons.join(' · ')}
+        </span>
+      )}
+    </div>
+  )
 }
 
 const s: Record<string, React.CSSProperties> = {
