@@ -6,21 +6,15 @@ import type { ActionResult } from '@/types/order'
 
 export interface Category { id: string; name: string }
 
-async function getTenantId(supabase: any, userId: string) {
-  return ctx.tenant_id ?? null
-}
-
 export async function getCategories(): Promise<ActionResult<Category[]>> {
   const supabase = await createSupabaseServer()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { success: false, error: '로그인 필요' }
-  const tenant_id = await getTenantId(supabase, user.id)
-  if (!tenant_id) return { success: false, error: '테넌트 없음' }
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
 
   const { data, error } = await supabase
-    .from('product_categories')          // ← product_categories
+    .from('product_categories')
     .select('id, name')
-    .eq('tenant_id', tenant_id)
+    .eq('tenant_id', ctx.tenant_id)
     .order('name')
 
   if (error) return { success: false, error: error.message }
@@ -29,17 +23,15 @@ export async function getCategories(): Promise<ActionResult<Category[]>> {
 
 export async function addCategory(name: string): Promise<ActionResult<Category>> {
   const supabase = await createSupabaseServer()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { success: false, error: '로그인 필요' }
-  const tenant_id = await getTenantId(supabase, user.id)
-  if (!tenant_id) return { success: false, error: '테넌트 없음' }
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
 
   const trimmed = name.trim()
   if (!trimmed) return { success: false, error: '카테고리명을 입력해주세요.' }
 
   const { data, error } = await supabase
-    .from('product_categories')          // ← product_categories
-    .insert({ tenant_id, name: trimmed })
+    .from('product_categories')
+    .insert({ tenant_id: ctx.tenant_id, name: trimmed })
     .select('id, name')
     .single()
 
