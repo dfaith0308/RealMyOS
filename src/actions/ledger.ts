@@ -311,7 +311,6 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
 
     // receivable: confirmed 주문합 - 수금 (opening 제외, 0 미만 방지)
     const receivable_amount = Math.max(0, totalOrdersAmt - paid)
-    const deposit_amount    = depositMap.get(c.id) ?? 0
 
     // overdue: due_date 지난 주문 합 - 수금 (0 미만 방지)
     let overdueSum = 0
