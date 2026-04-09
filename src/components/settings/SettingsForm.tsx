@@ -10,10 +10,29 @@ export default function SettingsForm({ initial }: { initial: TenantSettings }) {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
+  const MIN_CONSTRAINTS: Partial<Record<keyof TenantSettings, number>> = {
+    warning_cycle_multiplier: 1,
+    danger_cycle_multiplier:  1,
+    overdue_danger_amount:    0,
+    overdue_warning_amount:   0,
+    vat_rate:                 0,
+    margin_warning_threshold: 0,
+    order_edit_lock_days:     0,
+    new_customer_days:        0,
+    warning_days:             0,
+    danger_days:              0,
+  }
+
   function set(key: keyof TenantSettings, raw: string) {
     const n = parseFloat(raw)
-    if (!isNaN(n)) setValues((prev) => ({ ...prev, [key]: n }))
-    else if (raw === '') setValues((prev) => ({ ...prev, [key]: 0 }))
+    if (isNaN(n) || !isFinite(n)) {
+      if (raw === '') setValues((prev) => ({ ...prev, [key]: 0 }))
+      setSuccess(false)
+      return
+    }
+    const min = MIN_CONSTRAINTS[key]
+    const clamped = min !== undefined ? Math.max(min, n) : n
+    setValues((prev) => ({ ...prev, [key]: clamped }))
     setSuccess(false)
   }
 
@@ -92,6 +111,28 @@ export default function SettingsForm({ initial }: { initial: TenantSettings }) {
           onChange={(v) => set('overdue_warning_amount', v)}
           suffix="원"
           isKRW
+        />
+        <Field
+          label="위험 미수금 기준 금액"
+          hint="미수금이 이 금액 이상이면 '위험' 상태로 판단."
+          value={values.overdue_danger_amount}
+          onChange={(v) => set('overdue_danger_amount', v)}
+          suffix="원"
+          isKRW
+        />
+        <Field
+          label="경고 기준 (주문주기 × 배수)"
+          hint="마지막 주문 경과일이 평균 주문주기 × 이 배수를 넘으면 '주의'. 기본값 1.5"
+          value={values.warning_cycle_multiplier}
+          onChange={(v) => set('warning_cycle_multiplier', v)}
+          suffix="배"
+        />
+        <Field
+          label="위험 기준 (주문주기 × 배수)"
+          hint="마지막 주문 경과일이 평균 주문주기 × 이 배수를 넘으면 '위험'. 기본값 2.0"
+          value={values.danger_cycle_multiplier}
+          onChange={(v) => set('danger_cycle_multiplier', v)}
+          suffix="배"
         />
       </Section>
 

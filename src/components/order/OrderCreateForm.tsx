@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useTransition, useRef, useCallback } from 'react'
 import { createOrder, getCustomersForOrder, getProductsForOrder } from '@/actions/order'
+import { createPayment } from '@/actions/payment'
+import type { PaymentMethod } from '@/actions/payment'
 import { calcLine, calcMarginRate, formatKRW, todayStr } from '@/lib/calc'
 import type {
   CustomerForOrder,
@@ -168,9 +170,26 @@ export default function OrderCreateForm({
     { supply: 0, vat: 0, total: 0 },
   )
 
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // ── 수금 동시 처리 state ─────────────────────────────────
+  const [doPayment, setDoPayment]           = useState(false)
+  const [paymentAmount, setPaymentAmount]   = useState('')
+  const [paymentMethod, setPaymentMethod]   = useState<PaymentMethod>('transfer')
+  const [paymentDate, setPaymentDateP]      = useState(todayStr())
+  const [paymentError, setPaymentError]     = useState<string | null>(null)
+
+  // ── 수금 금액 자동 동기화 ─────────────────────────────────
+  useEffect(() => {
+    if (doPayment && totals.total > 0) {
+      setPaymentAmount(String(totals.total))
+    }
+  }, [totals.total, doPayment])
+
   // ── 저장 ─────────────────────────────────────────────────
 
   function handleSubmit() {
+    if (isSubmitting) return
     if (!selectedCustomer) { setError('거래처를 선택해주세요.'); return }
     if (!lines.length) { setError('상품을 1개 이상 추가해주세요.'); return }
     setError(null)
@@ -187,6 +206,7 @@ export default function OrderCreateForm({
       fulfillment_type: l.product.fulfillment_type,
     }))
 
+    setIsSubmitting(true)
     startTransition(async () => {
       const res = await createOrder({
         customer_id: selectedCustomer.id,
@@ -194,15 +214,42 @@ export default function OrderCreateForm({
         memo: memo || undefined,
         lines: lineInputs,
       })
-      if (res.success && res.data) {
-        setSuccess(
-          `✓ ${res.data.order_number} 등록 완료 — ${formatKRW(res.data.total_amount)}`,
-        )
-        setLines([])
-        setMemo('')
-      } else {
+      if (!res.success || !res.data) {
         setError(res.error ?? '저장 실패')
+        setIsSubmitting(false)
+        return
       }
+
+      // 주문 성공 — 수금 처리 (선택 시)
+      let successMsg = `✓ ${res.data.order_number} 등록 완료 — ${formatKRW(res.data.total_amount)}`
+      if (doPayment) {
+        const amt = Number(paymentAmount)
+        if (amt > 0) {
+          const pr = await createPayment({
+            customer_id:    selectedCustomer.id,
+            amount:         amt,
+            payment_date:   paymentDate,
+            payment_method: paymentMethod,
+          })
+          if (pr.success && pr.data) {
+            const dep = pr.data.deposit_amount
+            successMsg += dep > 0
+              ? ` | 수금 완료 (예치금 +${formatKRW(dep)})`
+              : ` | 수금 완료`
+            setPaymentError(null)
+          } else {
+            // 주문은 유지 — 수금만 실패 안내
+            setPaymentError(`주문은 등록됐으나 수금 처리 실패: ${pr.error}`)
+          }
+        }
+      }
+
+      setSuccess(successMsg)
+      setLines([])
+      setMemo('')
+      setDoPayment(false)
+      setPaymentAmount('')
+      setIsSubmitting(false)
     })
   }
 
@@ -404,12 +451,69 @@ export default function OrderCreateForm({
         />
       </div>
 
+      {/* 수금 동시 처리 */}
+      <div style={{ borderTop: '1px solid #f3f4f6', paddingTop: 16 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14, fontWeight: 500 }}>
+          <input type="checkbox" checked={doPayment}
+            onChange={(e) => {
+              setDoPayment(e.target.checked)
+              if (e.target.checked && totals.total > 0)
+                setPaymentAmount(String(totals.total))
+            }} />
+          수금 동시 처리
+        </label>
+
+        {doPayment && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 4 }}>수금 금액</div>
+                <input style={s.input} type="number" value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)} placeholder="0" min={0} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 4 }}>수금일</div>
+                <input style={s.input} type="date" value={paymentDate}
+                  onChange={(e) => setPaymentDateP(e.target.value)} />
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 4 }}>수금 방식</div>
+              <div style={{ display: 'flex', border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
+                {(['transfer','cash','card','platform'] as PaymentMethod[]).map((m, i) => (
+                  <button key={m} type="button"
+                    style={{
+                      flex: 1, padding: '7px', border: 'none', fontSize: 12, cursor: 'pointer',
+                      borderRight: i < 3 ? '1px solid #e5e7eb' : 'none',
+                      background: paymentMethod === m ? '#111827' : '#fff',
+                      color: paymentMethod === m ? '#fff' : '#374151',
+                    }}
+                    onClick={() => setPaymentMethod(m)}>
+                    {m === 'transfer' ? '무통장' : m === 'cash' ? '현금' : m === 'card' ? '카드' : '플랫폼'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {Number(paymentAmount) > totals.total && totals.total > 0 && (
+              <div style={{ fontSize: 12, color: '#1D4ED8', background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 6, padding: '8px 12px' }}>
+                💰 초과 금액은 예치금으로 처리됩니다.
+              </div>
+            )}
+            {paymentError && (
+              <div style={{ fontSize: 12, color: '#B91C1C', background: '#FEF2F2', borderRadius: 6, padding: '8px 12px' }}>
+                {paymentError}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* 저장 버튼 */}
       <div style={s.footer}>
         <button
-          style={isPending || !lines.length ? s.btnOff : s.btn}
+          style={isPending || isSubmitting || !lines.length ? s.btnOff : s.btn}
           onClick={handleSubmit}
-          disabled={isPending || !lines.length}
+          disabled={isPending || isSubmitting || !lines.length}
         >
           {isPending ? '저장 중...' : `주문 등록${lines.length ? ` (${formatKRW(totals.total)})` : ''}`}
         </button>
@@ -535,6 +639,7 @@ const s: Record<string, React.CSSProperties> = {
     fontSize: 20, fontWeight: 700,
     marginLeft: 'auto', fontVariantNumeric: 'tabular-nums',
   },
+  input: { padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, outline: 'none', width: '100%', boxSizing: 'border-box' as const },
   footer: { display: 'flex', justifyContent: 'flex-end', paddingTop: 4 },
   btn: {
     padding: '13px 32px', background: '#111827',
