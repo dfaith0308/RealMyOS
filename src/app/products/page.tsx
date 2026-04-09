@@ -34,6 +34,7 @@ export default async function ProductsPage({
           <h1 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>상품 목록</h1>
           <p style={{ fontSize: 12, color: '#9ca3af', margin: '4px 0 0 0' }}>{products.length}개</p>
         </div>
+        <Link href="/products/bulk" style={{ padding: "8px 14px", background: "#fff", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 13, color: "#374151", textDecoration: "none" }}>대량등록</Link>
         <Link href="/products/new" style={s.newBtn}>+ 상품 등록</Link>
       </div>
 

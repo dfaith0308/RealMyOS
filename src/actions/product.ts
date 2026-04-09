@@ -407,3 +407,162 @@ export async function getProductUsers(product_id: string): Promise<ActionResult<
     })),
   }
 }
+
+
+
+
+
+// ============================================================
+// 상품 대량등록 — bulk_create_products RPC (완전 트랜잭션)
+// 중간 실패 시 PostgreSQL이 전체 rollback. orphan 데이터 없음.
+// ============================================================
+
+const BULK_MAX_ROWS = 500
+
+export interface BulkProductRow {
+  name:                string
+  cost_price:          number | string
+  selling_price:       number | string
+  siksiki_price?:      number | string
+  subscription_price?: number | string
+  bulk_price?:         number | string
+  bulk_min_quantity?:  number | string
+  tax_type:            string
+  category_name?:      string
+}
+
+export interface BulkProductResult {
+  success_count: number
+  fail_count:    number
+  fail_rows:     Array<{ row: number; name: string; field: string; reason: string }>
+}
+
+// 숫자 파싱: "1,200" → 1200, 공백 제거, NaN → undefined
+function parseNum(v: number | string | undefined): number | undefined {
+  if (v === undefined || v === '') return undefined
+  const n = Number(String(v).replace(/,/g, '').trim())
+  return isNaN(n) ? undefined : n
+}
+
+export async function bulkCreateProducts(
+  rows: BulkProductRow[],
+): Promise<ActionResult<BulkProductResult>> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getTenantAndUser(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+  if (!rows.length) return { success: false, error: '등록할 상품이 없습니다.' }
+  if (rows.length > BULK_MAX_ROWS)
+    return { success: false, error: `최대 ${BULK_MAX_ROWS}건까지 한번에 등록할 수 있습니다.` }
+
+  const today = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10)
+  const fail_rows: BulkProductResult['fail_rows'] = []
+
+  // ── 1. 유효성 검사 ────────────────────────────────────────
+  const validRows: Array<{ rowNum: number; data: BulkProductRow }> = []
+  rows.forEach((r, i) => {
+    const rowNum = i + 1
+    if (!r.name?.trim()) {
+      fail_rows.push({ row: rowNum, name: r.name ?? '', field: 'name', reason: '상품명 필수' }); return
+    }
+    const cost = parseNum(r.cost_price)
+    if (cost === undefined || cost <= 0) {
+      fail_rows.push({ row: rowNum, name: r.name, field: 'cost_price', reason: '매입가 필수 (양의 숫자)' }); return
+    }
+    const price = parseNum(r.selling_price)
+    if (price === undefined || price <= 0) {
+      fail_rows.push({ row: rowNum, name: r.name, field: 'selling_price', reason: '판매가 필수 (양의 숫자)' }); return
+    }
+    const tax = r.tax_type?.trim().toLowerCase()
+    if (!['taxable', 'exempt'].includes(tax)) {
+      fail_rows.push({ row: rowNum, name: r.name, field: 'tax_type', reason: 'taxable 또는 exempt만 가능' }); return
+    }
+    validRows.push({ rowNum, data: { ...r, tax_type: tax } })
+  })
+
+  if (!validRows.length)
+    return { success: true, data: { success_count: 0, fail_count: fail_rows.length, fail_rows } }
+
+  // ── 2. category batch 조회 + ON CONFLICT DO NOTHING 생성 ──
+  const categoryNames = [...new Set(
+    validRows.map((r) => r.data.category_name?.trim()).filter(Boolean) as string[]
+  )]
+  const categoryMap = new Map<string, string>()
+
+  if (categoryNames.length > 0) {
+    const { data: existing } = await supabase
+      .from('product_categories')
+      .select('id, name')
+      .eq('tenant_id', ctx.tenant_id)
+      .in('name', categoryNames)
+    for (const c of existing ?? []) categoryMap.set(c.name, c.id)
+
+    const missing = categoryNames.filter((n) => !categoryMap.has(n))
+    if (missing.length > 0) {
+      const { data: created } = await supabase
+        .from('product_categories')
+        .upsert(
+          missing.map((name) => ({ tenant_id: ctx.tenant_id, name })),
+          { onConflict: 'tenant_id,name', ignoreDuplicates: false }
+        )
+        .select('id, name')
+      for (const c of created ?? []) categoryMap.set(c.name, c.id)
+    }
+  }
+
+  // ── 3. product_code sequence로 N개 채번 ───────────────────
+  const n = validRows.length
+  const { data: seqNums, error: seqErr } = await supabase
+    .rpc('nextval_product_code_n', { n })
+  if (seqErr || !seqNums?.length)
+    return { success: false, error: `코드 채번 실패: ${seqErr?.message}` }
+
+  // ── 4. RPC 페이로드 조립 ──────────────────────────────────
+  const payload = validRows.map((r, i) => {
+    const cost  = parseNum(r.data.cost_price)!
+    const prices: any[] = []
+    const addPrice = (price_type: string, v?: number | string, bulk_min_quantity?: number | string) => {
+      const p = parseNum(v)
+      if (p && p > 0) {
+        const qty = parseNum(bulk_min_quantity)
+        prices.push({ price_type, price: p, bulk_min_quantity: qty ? Math.max(1, Math.floor(qty)) : null })
+      }
+    }
+    addPrice('normal',       r.data.selling_price)
+    addPrice('siksiki',      r.data.siksiki_price)
+    addPrice('subscription', r.data.subscription_price)
+    addPrice('bulk',         r.data.bulk_price, r.data.bulk_min_quantity)
+
+    return {
+      product_code: `P${String(seqNums[i]).padStart(4, '0')}`,
+      name:         r.data.name.trim(),
+      tax_type:     r.data.tax_type,
+      category_id:  r.data.category_name?.trim()
+                      ? (categoryMap.get(r.data.category_name.trim()) ?? '')
+                      : '',
+      cost_price:   cost,
+      prices,
+    }
+  })
+
+  // ── 5. RPC 단일 호출 — 완전 트랜잭션 ─────────────────────
+  const { data: rpcResult, error: rpcErr } = await supabase.rpc('bulk_create_products', {
+    p_tenant_id: ctx.tenant_id,
+    p_user_id:   ctx.user_id,
+    p_user_type: ctx.user_type ?? 'human',
+    p_today:     today,
+    p_products:  JSON.stringify(payload),
+  })
+
+  if (rpcErr || !rpcResult)
+    return { success: false, error: `저장 실패 (전체 rollback됨): ${rpcErr?.message}` }
+
+  revalidatePath('/products')
+  return {
+    success: true,
+    data: {
+      success_count: rpcResult.inserted ?? validRows.length,
+      fail_count:    fail_rows.length,
+      fail_rows,
+    },
+  }
+}
