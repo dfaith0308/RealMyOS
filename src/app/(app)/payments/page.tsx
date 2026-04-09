@@ -28,7 +28,7 @@ export default async function PaymentsPage({
     ),
   ])
 
-  console.log(`[PERF] /payments: ${Date.now() - _t0}ms`)
+  console.error(`[PERF] /payments: ${Date.now() - _t0}ms`)
 
   return (
     <main style={{ maxWidth: 1000, margin: '0 auto', padding: '32px 24px 60px' }}>

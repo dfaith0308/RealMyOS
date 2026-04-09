@@ -30,7 +30,7 @@ export default async function OrdersPage({
     ),
   ])
 
-  console.log(`[PERF] /orders: ${Date.now() - _t0}ms`)
+  console.error(`[PERF] /orders: ${Date.now() - _t0}ms`)
 
   return (
     <main style={{ maxWidth: 1000, margin: '0 auto', padding: '32px 24px 60px' }}>

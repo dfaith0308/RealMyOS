@@ -83,7 +83,7 @@ export default async function CustomersPage({
     filter === 'normal'  ? normalList  :
     filter === 'overdue' ? overdueList : all
 
-  console.log(`[PERF] /customers: ${Date.now() - _t0}ms`)
+  console.error(`[PERF] /customers: ${Date.now() - _t0}ms`)
 
   return (
     <main style={s.page}>
