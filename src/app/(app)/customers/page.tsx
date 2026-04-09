@@ -1,5 +1,6 @@
 import Link from 'next/link'
-import { getCustomersWithStats, getDailyCashflow } from '@/actions/ledger'
+import { Suspense } from 'react'
+import { getCustomersWithStats } from '@/actions/ledger'
 import { formatKRW } from '@/lib/calc'
 import { calcRecontactMessage, calcNoContactMessage } from '@/lib/customer-logic'
 import type { CustomerStatus, CustomerWithScore } from '@/actions/ledger'
@@ -33,10 +34,9 @@ function dday(dateStr: string | null): string | null {
   return `D-${diff}`
 }
 
-// 수금 색상: 연체금 > 0 → 빨강 / 미수금만 → 노랑 / 없음 → 초록
 function receivableColor(overdue: number, receivable: number): string {
-  if (overdue > 0)     return '#B91C1C'
-  if (receivable > 0)  return '#B45309'
+  if (overdue > 0)    return '#B91C1C'
+  if (receivable > 0) return '#B45309'
   return '#15803D'
 }
 
@@ -48,15 +48,11 @@ export default async function CustomersPage({
   const { filter } = searchParams
 
   const _t0 = Date.now()
-
   const _db0 = Date.now()
-  const [result, cashflowResult] = await Promise.all([
-    getCustomersWithStats(),
-    getDailyCashflow(),
-  ])
-  console.error(`[PERF:DB] getCustomersWithStats+getDailyCashflow: ${Date.now() - _db0}ms | customers:${result.data?.length ?? 0}건`)
-  const all      = result.data ?? []
-  const cashflow = cashflowResult.data ?? []
+  const result = await getCustomersWithStats()
+  console.error(`[PERF:DB] getCustomersWithStats: ${Date.now() - _db0}ms | customers:${result.data?.length ?? 0}건`)
+
+  const all = result.data ?? []
 
   const dangerList  = all.filter((c) => c.status === 'danger')
   const warningList = all.filter((c) => c.status === 'warning')
@@ -64,20 +60,16 @@ export default async function CustomersPage({
   const normalList  = all.filter((c) => c.status === 'normal')
   const overdueList = all.filter((c) => c.overdue_amount > 0)
 
-  const totalBalance   = all.reduce((s, c) => s + c.current_balance, 0)
-  const totalOverdue   = all.reduce((s, c) => s + c.overdue_amount, 0)
+  const totalOverdue    = all.reduce((s, c) => s + c.overdue_amount, 0)
   const totalReceivable = all.reduce((s, c) => s + c.receivable_amount, 0)
+  const overdueCount    = overdueList.length
+
   const mustAct = all.filter((c) =>
     c.status === 'danger' ||
     (c.status === 'warning' && ((c.days_since_contact ?? 99) >= 3 || !c.last_contacted_at))
   )
   const top5ids = new Set(all.slice(0, 5).map((c) => c.id))
   const top3    = dangerList.slice(0, 3)
-
-  // 오늘/이번주 수금
-  const todayStr = new Date().toISOString().slice(0, 10)
-  const todayCf  = cashflow.find((d) => d.date === todayStr)
-  const weekCollected = cashflow.reduce((s, d) => s + d.collected, 0)
 
   const displayed =
     filter === 'danger'  ? dangerList  :
@@ -112,27 +104,29 @@ export default async function CustomersPage({
         </div>
       </div>
 
-      {/* 오늘/이번주 수금 요약 */}
-      <div style={s.cashRow}>
-        <div style={s.cashCard}>
-          <span style={s.cashLabel}>오늘 수금</span>
-          <span style={{ ...s.cashVal, color: (todayCf?.collected ?? 0) > 0 ? '#15803D' : '#9ca3af' }}>
-            {formatKRW(todayCf?.collected ?? 0)}
+      {/* 거래처 KPI — all 배열 기반, 추가 DB 호출 없음 */}
+      <div style={s.kpiRow}>
+        <div style={s.kpiCard}>
+          <span style={s.kpiLabel}>총 미수금</span>
+          <span style={{ ...s.kpiVal, color: totalReceivable > 0 ? '#B45309' : '#15803D' }}>
+            {formatKRW(totalReceivable)}
           </span>
         </div>
-        <div style={s.cashCard}>
-          <span style={s.cashLabel}>이번주 수금</span>
-          <span style={{ ...s.cashVal, color: weekCollected > 0 ? '#15803D' : '#9ca3af' }}>
-            {formatKRW(weekCollected)}
+        <div style={s.kpiCard}>
+          <span style={s.kpiLabel}>총 연체금</span>
+          <span style={{ ...s.kpiVal, color: totalOverdue > 0 ? '#B91C1C' : '#15803D' }}>
+            {formatKRW(totalOverdue)}
           </span>
         </div>
-        <div style={s.cashCard}>
-          <span style={s.cashLabel}>오늘 매출</span>
-          <span style={s.cashVal}>{formatKRW(todayCf?.revenue ?? 0)}</span>
+        <div style={s.kpiCard}>
+          <span style={s.kpiLabel}>미수 거래처</span>
+          <span style={{ ...s.kpiVal, color: overdueCount > 0 ? '#B91C1C' : '#15803D' }}>
+            {overdueCount}곳
+          </span>
         </div>
-        <div style={s.cashCard}>
-          <span style={s.cashLabel}>이번주 매출</span>
-          <span style={s.cashVal}>{formatKRW(cashflow.reduce((s, d) => s + d.revenue, 0))}</span>
+        <div style={s.kpiCard}>
+          <span style={s.kpiLabel}>전체 거래처</span>
+          <span style={s.kpiVal}>{all.length}곳</span>
         </div>
       </div>
 
@@ -201,7 +195,6 @@ function CustomerCard({ c, rank, isTop }: { c: CustomerWithScore; rank: number; 
   const recontact    = calcRecontactMessage(c.overdue_amount, c.days_since_contact, c.status)
   const noContactMsg = !c.last_contacted_at ? calcNoContactMessage(c.status, c.overdue_amount) : null
   const nextDday     = dday(c.next_action_date)
-  const rcColor      = receivableColor(c.overdue_amount, c.receivable_amount)
 
   return (
     <div style={{ ...s.card, borderLeft: `4px solid ${cfg.color}`, boxShadow: isTop ? '0 2px 8px rgba(0,0,0,0.08)' : undefined }}>
@@ -232,17 +225,10 @@ function CustomerCard({ c, rank, isTop }: { c: CustomerWithScore; rank: number; 
           </div>
 
           <div style={s.metaRow}>
-            {/* 연체금/미수금/예치금 — 색상으로 구분 */}
-            <MetaItem label="연체금"
-              value={formatKRW(c.overdue_amount)}
-              highlight={c.overdue_amount > 0} />
-            <MetaItem label="미수금"
-              value={formatKRW(c.receivable_amount)}
-              style={{ color: c.receivable_amount > c.overdue_amount ? '#B45309' : '#6b7280' }} />
+            <MetaItem label="연체금"    value={formatKRW(c.overdue_amount)}     highlight={c.overdue_amount > 0} />
+            <MetaItem label="미수금"    value={formatKRW(c.receivable_amount)}  style={{ color: c.receivable_amount > c.overdue_amount ? '#B45309' : '#6b7280' }} />
             {(c as any).deposit_amount > 0 && (
-              <MetaItem label="예치금"
-                value={formatKRW((c as any).deposit_amount)}
-                style={{ color: '#1D4ED8' }} />
+              <MetaItem label="예치금"  value={formatKRW((c as any).deposit_amount)} style={{ color: '#1D4ED8' }} />
             )}
             <MetaItem label="이번달"    value={formatKRW(c.monthly_revenue)} />
             <MetaItem label="평균월매출" value={formatKRW(c.avg_monthly_revenue)} />
@@ -326,8 +312,6 @@ const bs: Record<string, React.CSSProperties> = {
   order:      { padding: '7px 13px', background: '#f3f4f6', color: '#374151', borderRadius: 6, fontSize: 12, border: '1px solid #e5e7eb' },
 }
 
-// ── 점수 pill 컴포넌트 ──────────────────────────────────────
-
 function getScoreReasons(c: any): string[] {
   const reasons: string[] = []
   if (c.overdue_amount > 0)
@@ -353,8 +337,8 @@ function ScorePill({ rank, score, customer }: { rank: number; score: number; cus
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flexShrink: 0 }}>
       <span
-        title="연체금, 미수금, 주문주기 초과, 미연락 기간 등을 기반으로 계산된 수금 우선순위 점수입니다. 높을수록 먼저 연락하세요."
-        style={{ fontSize: 10, padding: '3px 8px', borderRadius: 10, fontWeight: 700, background: bg, color, cursor: 'default', letterSpacing: '0.01em' }}>
+        title="연체금, 미수금, 주문주기 초과, 미연락 기간 등을 기반으로 계산된 수금 우선순위 점수입니다."
+        style={{ fontSize: 10, padding: '3px 8px', borderRadius: 10, fontWeight: 700, background: bg, color, cursor: 'default' }}>
         #{rank} · {score}점
       </span>
       {reasons.length > 0 && (
@@ -376,10 +360,10 @@ const s: Record<string, React.CSSProperties> = {
   headerBtns:      { display: 'flex', gap: 8, flexShrink: 0 },
   subBtn:          { padding: '8px 14px', background: '#fff', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13, color: '#374151', textDecoration: 'none' },
   newBtn:          { padding: '8px 16px', background: '#111827', color: '#fff', borderRadius: 8, fontSize: 13, fontWeight: 500, textDecoration: 'none' },
-  cashRow:         { display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' },
-  cashCard:        { flex: 1, minWidth: 120, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 4 },
-  cashLabel:       { fontSize: 10, color: '#9ca3af', fontWeight: 500 },
-  cashVal:         { fontSize: 15, fontWeight: 600, fontVariantNumeric: 'tabular-nums' },
+  kpiRow:          { display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' },
+  kpiCard:         { flex: 1, minWidth: 120, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 4 },
+  kpiLabel:        { fontSize: 10, color: '#9ca3af', fontWeight: 500 },
+  kpiVal:          { fontSize: 15, fontWeight: 600, fontVariantNumeric: 'tabular-nums' },
   alertBox:        { background: '#FFF1F2', border: '2px solid #FCA5A5', borderRadius: 10, padding: '16px 20px', marginBottom: 16 },
   alertTitle:      { fontSize: 13, fontWeight: 700, color: '#B91C1C', margin: '0 0 12px 0' },
   alertList:       { display: 'flex', flexDirection: 'column', gap: 10 },
@@ -399,7 +383,6 @@ const s: Record<string, React.CSSProperties> = {
   actionBanner:    { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px' },
   actionIcon:      { fontSize: 13, flexShrink: 0 },
   actionText:      { flex: 1, lineHeight: 1.4 },
-  scorePill:       { fontSize: 10, padding: '2px 8px', borderRadius: 10, fontWeight: 600, flexShrink: 0 },
   cardBody:        { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '12px 16px', gap: 12, flexWrap: 'wrap' },
   cardInfo:        { display: 'flex', flexDirection: 'column', gap: 8, flex: 1 },
   nameRow:         { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
