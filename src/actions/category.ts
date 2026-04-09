@@ -1,14 +1,13 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createSupabaseServer } from '@/lib/supabase-server'
+import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import type { ActionResult } from '@/types/order'
 
 export interface Category { id: string; name: string }
 
 async function getTenantId(supabase: any, userId: string) {
-  const { data } = await supabase.from('users').select('tenant_id').eq('id', userId).single()
-  return data?.tenant_id ?? null
+  return ctx.tenant_id ?? null
 }
 
 export async function getCategories(): Promise<ActionResult<Category[]>> {

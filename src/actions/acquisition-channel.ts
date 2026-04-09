@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createSupabaseServer } from '@/lib/supabase-server'
+import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import type { ActionResult } from '@/types/order'
 
 export interface AcquisitionChannel {
@@ -28,12 +28,8 @@ export async function getAcquisitionChannels(): Promise<ActionResult<Acquisition
 
 export async function addAcquisitionChannel(name: string): Promise<ActionResult<AcquisitionChannel>> {
   const supabase = await createSupabaseServer()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { success: false, error: '로그인 필요' }
-
-  const { data: me } = await supabase
-    .from('users').select('tenant_id').eq('id', user.id).single()
-  if (!me?.tenant_id) return { success: false, error: '테넌트 없음' }
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
 
   const trimmed = name.trim()
   if (!trimmed) return { success: false, error: '채널명을 입력해주세요.' }
@@ -46,7 +42,7 @@ export async function addAcquisitionChannel(name: string): Promise<ActionResult<
 
   const { data, error } = await supabase
     .from('acquisition_channels')
-    .insert({ tenant_id: me.tenant_id, name: trimmed, code, created_by: user.id })
+    .insert({ tenant_id: ctx.tenant_id, name: trimmed, code, created_by: user.id })
     .select('id, name, code, is_active')
     .single()
 

@@ -1,6 +1,6 @@
 'use server'
 
-import { createSupabaseServer } from '@/lib/supabase-server'
+import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import { VALID_TERMS_TYPES, VALID_CUSTOMER_TYPES } from '@/lib/customer-csv'
 import type { ActionResult } from '@/types/order'
 
@@ -56,14 +56,10 @@ export async function bulkUpsertCustomers(
   rows: BulkCustomerRow[],
 ): Promise<ActionResult<BulkResult>> {
   const supabase = await createSupabaseServer()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { success: false, error: '로그인 필요' }
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
 
-  const { data: me } = await supabase
-    .from('users').select('tenant_id').eq('id', user.id).single()
-  if (!me?.tenant_id) return { success: false, error: '테넌트 없음' }
-
-  const tenant_id = me.tenant_id
+  const tenant_id = ctx.tenant_id
   const today = new Date().toISOString().slice(0, 10)
 
   // 1. acquisition_channel 이름 → id 맵 (N+1 방지: 한 번에 조회)

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { linkActionResult } from '@/actions/action-log'
-import { createSupabaseServer } from '@/lib/supabase-server'
+import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import type { ActionResult } from '@/types/order'
 
 export type PaymentMethod = 'transfer' | 'cash' | 'card' | 'platform'
@@ -32,12 +32,8 @@ export async function createPayment(
   input: CreatePaymentInput,
 ): Promise<ActionResult<CreatePaymentResult>> {
   const supabase = await createSupabaseServer()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) return { success: false, error: '로그인이 필요합니다.' }
-
-  const { data: me } = await supabase
-    .from('users').select('tenant_id').eq('id', user.id).single()
-  if (!me?.tenant_id) return { success: false, error: '테넌트 정보를 불러올 수 없습니다.' }
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인이 필요합니다.' }
 
   if (!input.customer_id)
     return { success: false, error: '거래처를 선택해주세요.' }
@@ -51,7 +47,7 @@ export async function createPayment(
     .from('payments')
     .select('id, created_at')
     .eq('customer_id', input.customer_id)
-    .eq('tenant_id', me.tenant_id)
+    .eq('tenant_id', ctx.tenant_id)
     .eq('amount', input.amount)
     .eq('status', 'confirmed')
     .gte('created_at', twoMinsAgo)
@@ -63,20 +59,20 @@ export async function createPayment(
 
   // RPC: balance 계산 + deposit 분리 + insert 단일 트랜잭션
   const { data: rpcData, error: rpcErr } = await supabase.rpc('create_payment_atomic', {
-    p_tenant_id:      me.tenant_id,
+    p_tenant_id:      ctx.tenant_id,
     p_customer_id:    input.customer_id,
     p_amount:         input.amount,
     p_payment_date:   input.payment_date,
     p_payment_method: input.payment_method,
     p_memo:           input.memo ?? null,
-    p_created_by:     user.id,
+    p_created_by:     ctx.user_id,
   })
   if (rpcErr || !rpcData)
     return { success: false, error: `수금 저장 실패: ${rpcErr?.message}` }
 
   await linkActionResult({
     customer_id:        input.customer_id,
-    tenant_id:          me.tenant_id,
+    tenant_id:          ctx.tenant_id,
     result_type:        'payment_completed',
     result_amount:      input.amount,
     related_payment_id: rpcData.id as string,
@@ -104,16 +100,13 @@ export async function createPayment(
 
 export async function cancelPayment(payment_id: string): Promise<ActionResult> {
   const supabase = await createSupabaseServer()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { success: false, error: '로그인 필요' }
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
 
-  const { data: me } = await supabase
-    .from('users').select('tenant_id').eq('id', user.id).single()
-  if (!me?.tenant_id) return { success: false, error: '테넌트 없음' }
 
   const { data: payment } = await supabase
     .from('payments').select('id, status, tenant_id, customer_id, amount')
-    .eq('id', payment_id).eq('tenant_id', me.tenant_id).single()
+    .eq('id', payment_id).eq('tenant_id', ctx.tenant_id).single()
   if (!payment)                       return { success: false, error: '수금 내역을 찾을 수 없습니다.' }
   if (payment.status === 'cancelled') return { success: false, error: '이미 취소된 수금입니다.' }
 
@@ -121,13 +114,13 @@ export async function cancelPayment(payment_id: string): Promise<ActionResult> {
     .from('payments')
     .update({ status: 'cancelled' })
     .eq('id', payment_id)
-    .eq('tenant_id', me.tenant_id)
+    .eq('tenant_id', ctx.tenant_id)
 
   if (error) return { success: false, error: error.message }
 
   // customer_stats 업데이트
   await supabase.rpc('update_customer_stats', {
-    p_tenant_id:         me.tenant_id,
+    p_tenant_id:         ctx.tenant_id,
     p_customer_id:       input.customer_id,
     p_balance_delta:     -(input.amount),
     p_sales_delta:       0,
@@ -147,26 +140,23 @@ export async function getCustomerBalance(
   customer_id: string,
 ): Promise<ActionResult<{ balance: number; deposit: number; customer_name: string }>> {
   const supabase = await createSupabaseServer()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { success: false, error: '로그인 필요' }
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
 
-  const { data: me } = await supabase
-    .from('users').select('tenant_id').eq('id', user.id).single()
-  if (!me?.tenant_id) return { success: false, error: '테넌트 없음' }
 
   const { data: customer } = await supabase
     .from('customers').select('id, name, opening_balance')
-    .eq('id', customer_id).eq('tenant_id', me.tenant_id).is('deleted_at', null).single()
+    .eq('id', customer_id).eq('tenant_id', ctx.tenant_id).is('deleted_at', null).single()
   if (!customer) return { success: false, error: '거래처 없음' }
 
   const [{ data: orderSum }, { data: paymentSum }] = await Promise.all([
     supabase.from('orders')
       .select('total_amount')
-      .eq('customer_id', customer_id).eq('tenant_id', me.tenant_id)
+      .eq('customer_id', customer_id).eq('tenant_id', ctx.tenant_id)
       .eq('status', 'confirmed').is('deleted_at', null),
     supabase.from('payments')
       .select('amount, deposit_amount')
-      .eq('customer_id', customer_id).eq('tenant_id', me.tenant_id)
+      .eq('customer_id', customer_id).eq('tenant_id', ctx.tenant_id)
       .eq('status', 'confirmed'),
   ])
 
@@ -202,17 +192,14 @@ export async function getPaymentList(filters?: {
   status?:      string
 }): Promise<ActionResult<PaymentListItem[]>> {
   const supabase = await createSupabaseServer()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { success: false, error: '로그인 필요' }
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
 
-  const { data: me } = await supabase
-    .from('users').select('tenant_id').eq('id', user.id).single()
-  if (!me?.tenant_id) return { success: false, error: '테넌트 없음' }
 
   let query = supabase
     .from('payments')
     .select('id, payment_date, customer_id, amount, deposit_amount, payment_method, memo, status, created_at, customers(id, name)')
-    .eq('tenant_id', me.tenant_id)
+    .eq('tenant_id', ctx.tenant_id)
     .order('payment_date', { ascending: false })
     .order('created_at',   { ascending: false })
     .limit(500)

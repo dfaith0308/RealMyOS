@@ -1,6 +1,6 @@
 'use server'
 
-import { createSupabaseServer } from '@/lib/supabase-server'
+import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import { getSettings } from '@/actions/settings'
 import { DEFAULT_SETTINGS } from '@/constants/settings'
 import { calcActionScore, calcAction, calcOrderCycle, calcCustomerStatus, calcNextActionDate } from '@/lib/customer-logic'
@@ -40,8 +40,8 @@ export async function getCustomerLedger(
   customer_id: string,
 ): Promise<ActionResult<{ rows: LedgerRow[]; summary: LedgerSummary }>> {
   const supabase = await createSupabaseServer()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { success: false, error: '로그인 필요' }
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
 
   const { data: customer } = await supabase
     .from('customers')
@@ -176,19 +176,21 @@ export interface DailyCashflow {
 
 export async function getDailyCashflow(): Promise<ActionResult<DailyCashflow[]>> {
   const supabase = await createSupabaseServer()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { success: false, error: '로그인 필요' }
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
 
   const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
   const [{ data: orders }, { data: payments }] = await Promise.all([
     supabase.from('orders')
       .select('order_date, total_amount')
+      .eq('tenant_id', ctx.tenant_id)
       .eq('status', 'confirmed')
       .is('deleted_at', null)
       .gte('order_date', since7d),
     supabase.from('payments')
       .select('payment_date, amount')
+      .eq('tenant_id', ctx.tenant_id)
       .eq('status', 'confirmed')
       .gte('payment_date', since7d),
   ])
@@ -213,8 +215,8 @@ export async function getDailyCashflow(): Promise<ActionResult<DailyCashflow[]>>
 
 export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWithBalance[]>> {
   const supabase = await createSupabaseServer()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { success: false, error: '로그인 필요' }
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
 
   const settingsResult = await getSettings()
   const cfg = settingsResult.success && settingsResult.data ? settingsResult.data : DEFAULT_SETTINGS
@@ -474,29 +476,27 @@ export async function getCustomersWithScore(): Promise<ActionResult<CustomerWith
 export interface CustomerWithStats extends CustomerWithScore {}
 
 export async function getCustomersWithStats(): Promise<ActionResult<CustomerWithScore[]>> {
+  const _fn0 = Date.now()
   const supabase = await createSupabaseServer()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { success: false, error: '로그인 필요' }
 
-  const { data: me } = await supabase
-    .from('users').select('tenant_id').eq('id', user.id).single()
-  if (!me?.tenant_id) return { success: false, error: '테넌트 없음' }
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+  console.error(`[PERF:A] auth 완료: ${Date.now() - _fn0}ms`)
 
   const nowKST   = new Date(Date.now() + 9 * 3600000)
   const todayStr = nowKST.toISOString().slice(0, 10)
 
-  // 병렬 쿼리 — 구간별 타이머 측정
   const _q0 = Date.now()
   const [{ data: rows, error }, { data: statsRows }, { data: settingsRows }] = await Promise.all([
     supabase.from('customers')
       .select('id, name, phone, payment_terms_days, target_monthly_revenue, opening_balance')
-      .eq('tenant_id', me.tenant_id).is('deleted_at', null).order('name'),
+      .eq('tenant_id', ctx.tenant_id).is('deleted_at', null).order('name'),
     supabase.from('customer_stats')
       .select('customer_id, current_balance, total_sales, last_payment_date')
-      .eq('tenant_id', me.tenant_id),
+      .eq('tenant_id', ctx.tenant_id),
     supabase.from('customer_settings')
       .select('customer_id, payment_terms, payment_day, order_cycle_days, new_customer_days, overdue_warning_amount, overdue_danger_amount')
-      .eq('tenant_id', me.tenant_id),
+      .eq('tenant_id', ctx.tenant_id),
   ])
   console.error(`[PERF:DB] 3쿼리 병렬: ${Date.now() - _q0}ms | customers:${rows?.length ?? 0} stats:${statsRows?.length ?? 0}`)
 
@@ -578,5 +578,6 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
   })
 
   console.error(`[PERF:MAP] JS 병합: ${Date.now() - _m0}ms`)
+  console.error(`[PERF:STATS] getCustomersWithStats 총: ${Date.now() - _fn0}ms | rows:${result.length}`)
   return { success: true, data: result }
 }

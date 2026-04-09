@@ -1,24 +1,20 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createSupabaseServer } from '@/lib/supabase-server'
+import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import { DEFAULT_SETTINGS, type TenantSettings } from '@/constants/settings'
 import type { ActionResult } from '@/types/order'
 
 export async function getSettings(): Promise<ActionResult<TenantSettings>> {
   const supabase = await createSupabaseServer()
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { success: false, error: '로그인 필요' }
-
-  const { data: me } = await supabase
-    .from('users').select('tenant_id').eq('id', user.id).single()
-  if (!me?.tenant_id) return { success: false, error: '테넌트 없음' }
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
 
   const { data: rows } = await supabase
     .from('settings')
     .select('key, value')
-    .eq('tenant_id', me.tenant_id)
+    .eq('tenant_id', ctx.tenant_id)
 
   const existing = new Map((rows ?? []).map((r: { key: string; value: string }) => [r.key, r.value]))
 
@@ -28,7 +24,7 @@ export async function getSettings(): Promise<ActionResult<TenantSettings>> {
   if (missing.length > 0) {
     await supabase.from('settings').upsert(
       missing.map((k) => ({
-        tenant_id:  me.tenant_id,
+        tenant_id:  ctx.tenant_id,
         key:        k,
         value:      String(DEFAULT_SETTINGS[k]),
         updated_at: new Date().toISOString(),
@@ -59,12 +55,8 @@ export async function getSettings(): Promise<ActionResult<TenantSettings>> {
 export async function saveSettings(input: Partial<TenantSettings>): Promise<ActionResult> {
   const supabase = await createSupabaseServer()
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { success: false, error: '로그인 필요' }
-
-  const { data: me } = await supabase
-    .from('users').select('tenant_id').eq('id', user.id).single()
-  if (!me?.tenant_id) return { success: false, error: '테넌트 없음' }
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
 
   if (input.vat_rate !== undefined && (input.vat_rate < 0 || input.vat_rate > 100))
     return { success: false, error: '부가세율은 0~100 사이여야 합니다.' }
@@ -89,7 +81,7 @@ export async function saveSettings(input: Partial<TenantSettings>): Promise<Acti
   ) return { success: false, error: '연체 경고 금액은 연체 위험 금액보다 작아야 합니다.' }
 
   const rows = Object.entries(input).map(([key, value]) => ({
-    tenant_id:  me.tenant_id,
+    tenant_id:  ctx.tenant_id,
     key,
     value:      String(value),
     updated_at: new Date().toISOString(),

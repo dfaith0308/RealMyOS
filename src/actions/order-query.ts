@@ -1,11 +1,13 @@
 'use server'
 
+import { getCustomersWithBalance } from '@/actions/ledger'
+
 // ============================================================
 // RealMyOS - 주문 조회용 Server Actions
 // src/actions/order-query.ts
 // ============================================================
 
-import { createSupabaseServer } from '@/lib/supabase-server'
+import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import type { ActionResult } from '@/types/order'
 
 export interface OrderListItem {
@@ -17,6 +19,8 @@ export interface OrderListItem {
   total_amount: number
   status: string
   order_lines: Array<{ product_name: string; quantity: number; unit_price: number; line_total: number }>
+  current_balance: number | null   // 실시간 잔액 (ledger 기준)
+  deposit_amount: number | null    // 예치금
 }
 
 export interface LastOrderData {
@@ -63,18 +67,29 @@ export async function getOrderList(filters?: {
 
   if (error) return { success: false, error: error.message }
 
+  // customer_id 목록 추출 → batch balance 조회 (N+1 방지)
+  const balanceResult = await getCustomersWithBalance()
+  const balanceMap = new Map(
+    (balanceResult.data ?? []).map((c) => [c.id, c])
+  )
+
   return {
     success: true,
-    data: (data ?? []).map((o: any) => ({
-      id:            o.id,
-      order_number:  o.order_number,
-      order_date:    o.order_date,
-      customer_id:   o.customer_id,
-      customer_name: o.customers?.name ?? '-',
-      total_amount:  o.total_amount,
-      status:        o.status,
-      order_lines:   o.order_lines ?? [],
-    })),
+    data: (data ?? []).map((o: any) => {
+      const bal = balanceMap.get(o.customer_id)
+      return {
+        id:              o.id,
+        order_number:    o.order_number,
+        order_date:      o.order_date,
+        customer_id:     o.customer_id,
+        customer_name:   o.customers?.name ?? '-',
+        total_amount:    o.total_amount,
+        status:          o.status,
+        order_lines:     o.order_lines ?? [],
+        current_balance: bal?.current_balance ?? null,
+        deposit_amount:  bal?.deposit_amount ?? null,
+      }
+    }),
   }
 }
 

@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createSupabaseServer } from '@/lib/supabase-server'
+import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import type { ActionResult } from '@/types/order'
 import type { PaymentTermsType } from '@/lib/payment-terms'
 
@@ -28,9 +28,8 @@ export interface CustomerInput {
 
 // ── 공통: tenant 조회 ─────────────────────────────────────────
 
-async function getTenantId(supabase: any, userId: string): Promise<string | null> {
+async function getTenantId(supabase: any, ctx.user_id: string): Promise<string | null> {
   const { data } = await supabase
-    .from('users').select('tenant_id').eq('id', userId).single()
   return data?.tenant_id ?? null
 }
 
@@ -40,8 +39,8 @@ export async function createCustomer(
   input: CustomerInput,
 ): Promise<ActionResult<{ id: string; name: string }>> {
   const supabase = await createSupabaseServer()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { success: false, error: '로그인 필요' }
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
 
   const tenant_id = await getTenantId(supabase, user.id)
   if (!tenant_id) return { success: false, error: '테넌트 정보를 불러올 수 없습니다.' }
@@ -105,8 +104,8 @@ export async function updateCustomer(
   openingBalanceReason?: string,
 ): Promise<ActionResult> {
   const supabase = await createSupabaseServer()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { success: false, error: '로그인 필요' }
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
 
   const tenant_id = await getTenantId(supabase, user.id)
   if (!tenant_id) return { success: false, error: '테넌트 없음' }
@@ -182,8 +181,8 @@ export async function checkCustomerDuplicate(input: {
   phone?: string
 }): Promise<ActionResult<DuplicateCheckResult>> {
   const supabase = await createSupabaseServer()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { success: false, error: '로그인 필요' }
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
 
   const tenant_id = await getTenantId(supabase, user.id)
   if (!tenant_id) return { success: false, error: '테넌트 없음' }
@@ -252,8 +251,8 @@ export async function deleteCustomer(
   customer_id: string,
 ): Promise<ActionResult> {
   const supabase = await createSupabaseServer()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { success: false, error: '로그인 필요' }
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
 
   const tenant_id = await getTenantId(supabase, user.id)
   if (!tenant_id) return { success: false, error: '테넌트 없음' }

@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createSupabaseServer } from '@/lib/supabase-server'
+import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import type { ActionResult } from '@/types/order'
 
 // ============================================================
@@ -9,12 +9,7 @@ import type { ActionResult } from '@/types/order'
 // ============================================================
 
 async function getCtx(supabase: any) {
-  const { data: { user }, error } = await supabase.auth.getUser()
-  if (error || !user) return null
-  const { data: me } = await supabase
-    .from('users').select('tenant_id').eq('id', user.id).single()
-  if (!me?.tenant_id) return null
-  return { user_id: user.id, tenant_id: me.tenant_id }
+  return getAuthCtx(supabase)
 }
 
 // KST 기준 오늘 날짜 (UTC+9 고정)

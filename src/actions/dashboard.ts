@@ -1,6 +1,6 @@
 'use server'
 
-import { createSupabaseServer } from '@/lib/supabase-server'
+import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import { getCustomersWithScore } from '@/actions/ledger'
 import { getDailyFundPlan } from '@/actions/fund'
 import type { ActionResult } from '@/types/order'
@@ -58,16 +58,13 @@ export interface DashboardData {
 
 export async function getDashboardData(): Promise<ActionResult<DashboardData>> {
   const supabase = await createSupabaseServer()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { success: false, error: '로그인 필요' }
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
 
-  const { data: me } = await supabase
-    .from('users').select('tenant_id').eq('id', user.id).single()
-  if (!me?.tenant_id) return { success: false, error: '테넌트 없음' }
 
   const today      = todayKST()
   const monthStart = monthStartKST()
-  const tid        = me.tenant_id
+  const tid        = ctx.tenant_id
 
   // 모든 쿼리 병렬 실행
   const [
@@ -237,15 +234,12 @@ export interface CollectionTarget {
 
 export async function getTodayCollections(): Promise<ActionResult<CollectionTarget[]>> {
   const supabase = await createSupabaseServer()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { success: false, error: '로그인 필요' }
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
 
-  const { data: me } = await supabase
-    .from('users').select('tenant_id').eq('id', user.id).single()
-  if (!me?.tenant_id) return { success: false, error: '테넌트 없음' }
 
   const todayStr = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10)
-  const tid      = me.tenant_id
+  const tid      = ctx.tenant_id
 
   // customers + orders + payments 단일 배치 (Promise.all)
   const [{ data: customers }, { data: orders }, { data: payments }] = await Promise.all([

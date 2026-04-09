@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createSupabaseServer } from '@/lib/supabase-server'
+import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import { calcLine, calcOrderTotals, formatOrderNumber } from '@/lib/calc'
 import { linkActionResult } from '@/actions/action-log'
 import type {
@@ -17,12 +17,7 @@ import type {
 // ============================================================
 
 async function getCtx(supabase: any) {
-  const { data: { user }, error } = await supabase.auth.getUser()
-  if (error || !user) return null
-  const { data: me } = await supabase
-    .from('users').select('tenant_id, user_type').eq('id', user.id).single()
-  if (!me?.tenant_id) return null
-  return { user_id: user.id, tenant_id: me.tenant_id, user_type: me.user_type ?? 'human' }
+  return getAuthCtx(supabase)
 }
 
 async function logOrder(supabase: any, opts: {
@@ -354,10 +349,8 @@ export async function getProductsForOrder(
   customerId?: string,
 ): Promise<ActionResult<ProductForOrder[]>> {
   const supabase = await createSupabaseServer()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { success: false, error: '로그인 필요' }
-  const { data: me } = await supabase.from('users').select('tenant_id').eq('id', user.id).single()
-  if (!me?.tenant_id) return { success: false, error: '테넌트 없음' }
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
 
   const { data: products, error } = await supabase
     .from('products')
@@ -367,7 +360,7 @@ export async function getProductsForOrder(
       product_prices ( price_type, price ),
       customer_product_prices ( customer_id, last_price )
     `)
-    .eq('tenant_id', me.tenant_id).is('deleted_at', null).order('name')
+    .eq('tenant_id', ctx.tenant_id).is('deleted_at', null).order('name')
   if (error) return { success: false, error: error.message }
 
   const today = new Date().toISOString().slice(0, 10)

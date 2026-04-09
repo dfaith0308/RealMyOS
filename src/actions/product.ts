@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createSupabaseServer } from '@/lib/supabase-server'
+import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import type { ActionResult } from '@/types/order'
 
 // ── 공통 ─────────────────────────────────────────────────────
@@ -10,8 +10,8 @@ async function getTenantAndUser(supabase: any) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
   const { data: me } = await supabase.from('users').select('tenant_id, user_type').eq('id', user.id).single()
-  if (!me?.tenant_id) return null
-  return { user_id: user.id, tenant_id: me.tenant_id, user_type: me.user_type ?? 'human' }
+  if (!ctx.tenant_id) return null
+  return { user_id: user.id, tenant_id: ctx.tenant_id, user_type: me.user_type ?? 'human' }
 }
 
 async function logProduct(supabase: any, opts: {

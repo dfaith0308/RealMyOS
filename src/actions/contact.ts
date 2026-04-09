@@ -6,7 +6,7 @@
 // ============================================================
 
 import { revalidatePath } from 'next/cache'
-import { createSupabaseServer } from '@/lib/supabase-server'
+import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import { updateActionConversion } from '@/actions/action-log'
 import type { ConversionStatus } from '@/actions/action-log'
 import type { ActionResult } from '@/types/order'
@@ -31,25 +31,21 @@ export async function createContactLog(
 ): Promise<ActionResult<{ id: string }>> {
   const supabase = await createSupabaseServer()
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { success: false, error: '로그인 필요' }
-
-  const { data: me } = await supabase
-    .from('users').select('tenant_id').eq('id', user.id).single()
-  if (!me?.tenant_id) return { success: false, error: '테넌트 없음' }
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
 
   const { data: customer } = await supabase
     .from('customers').select('id')
     .is('deleted_at', null)
     .eq('id', input.customer_id)
-    .eq('tenant_id', me.tenant_id)
+    .eq('tenant_id', ctx.tenant_id)
     .single()
   if (!customer) return { success: false, error: '유효하지 않은 거래처' }
 
   const { data, error } = await supabase
     .from('contact_logs')
     .insert({
-      tenant_id:      me.tenant_id,
+      tenant_id:      ctx.tenant_id,
       customer_id:    input.customer_id,
       contact_method: input.contact_method,
       memo:           input.memo ?? null,

@@ -5,7 +5,7 @@
 // src/actions/action-log.ts
 // ============================================================
 
-import { createSupabaseServer } from '@/lib/supabase-server'
+import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import type { CustomerStatus } from '@/actions/ledger'
 
 export type ActionType = 'call' | 'collect' | 'order'
@@ -32,17 +32,13 @@ export async function logAction(
 ): Promise<string | null> {
   try {
     const supabase = await createSupabaseServer()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return null
-
-    const { data: me } = await supabase
-      .from('users').select('tenant_id').eq('id', user.id).single()
-    if (!me?.tenant_id) return null
+    const ctx = await getAuthCtx(supabase)
+    if (!ctx) return null
 
     const { data, error } = await supabase
       .from('action_logs')
       .insert({
-        tenant_id:         me.tenant_id,
+        tenant_id:         ctx.tenant_id,
         customer_id:       input.customer_id,
         action_type:       input.action_type,
         triggered_message: input.triggered_message ?? null,

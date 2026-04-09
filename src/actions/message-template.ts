@@ -6,7 +6,7 @@
 // ============================================================
 
 import { revalidatePath } from 'next/cache'
-import { createSupabaseServer } from '@/lib/supabase-server'
+import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import type { ActionResult } from '@/types/order'
 
 export type MessageType = 'call_script' | 'sms' | 'kakao'
@@ -50,12 +50,8 @@ export async function createMessageTemplate(input: {
   message_type: MessageType
 }): Promise<ActionResult<{ id: string }>> {
   const supabase = await createSupabaseServer()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { success: false, error: '로그인 필요' }
-
-  const { data: me } = await supabase
-    .from('users').select('tenant_id').eq('id', user.id).single()
-  if (!me?.tenant_id) return { success: false, error: '테넌트 없음' }
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
 
   if (!input.name.trim()) return { success: false, error: '템플릿 이름을 입력해주세요.' }
   if (!input.content.trim()) return { success: false, error: '내용을 입력해주세요.' }
@@ -63,7 +59,7 @@ export async function createMessageTemplate(input: {
   const { data, error } = await supabase
     .from('message_templates')
     .insert({
-      tenant_id:    me.tenant_id,
+      tenant_id:    ctx.tenant_id,
       name:         input.name.trim(),
       content:      input.content.trim(),
       message_type: input.message_type,

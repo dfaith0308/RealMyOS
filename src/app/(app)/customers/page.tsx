@@ -48,9 +48,7 @@ export default async function CustomersPage({
   const { filter } = searchParams
 
   const _t0 = Date.now()
-  const _db0 = Date.now()
   const result = await getCustomersWithStats()
-  console.error(`[PERF:DB] getCustomersWithStats: ${Date.now() - _db0}ms | customers:${result.data?.length ?? 0}건`)
 
   const all = result.data ?? []
 
@@ -78,7 +76,7 @@ export default async function CustomersPage({
     filter === 'normal'  ? normalList  :
     filter === 'overdue' ? overdueList : all
 
-  console.error(`[PERF] /customers: ${Date.now() - _t0}ms (stats: ${result.data?.length ?? 0}건)`)
+  console.error(`[PERF] /customers: ${Date.now() - _t0}ms | rows:${result.data?.length ?? 0}`)
 
   return (
     <main style={s.page}>
