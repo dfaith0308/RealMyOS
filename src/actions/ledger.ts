@@ -485,28 +485,29 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
   const nowKST   = new Date(Date.now() + 9 * 3600000)
   const todayStr = nowKST.toISOString().slice(0, 10)
 
-  // 단일 쿼리 — customer_stats join
-  const { data: rows, error } = await supabase
-    .from('customers')
-    .select(`
-      id, name, phone, payment_terms_days, target_monthly_revenue,
-      opening_balance,
-      customer_stats ( current_balance, total_sales, last_payment_date ),
-      customer_settings ( payment_terms, payment_day,
-        order_cycle_days, new_customer_days,
-        overdue_warning_amount, overdue_danger_amount )
-    `)
-    .eq('tenant_id', me.tenant_id)
-    .is('deleted_at', null)
-    .order('name')
+  // 병렬 쿼리 — customer_stats 별도 조회 (relation join 불안정)
+  const [{ data: rows, error }, { data: statsRows }, { data: settingsRows }] = await Promise.all([
+    supabase.from('customers')
+      .select('id, name, phone, payment_terms_days, target_monthly_revenue, opening_balance')
+      .eq('tenant_id', me.tenant_id).is('deleted_at', null).order('name'),
+    supabase.from('customer_stats')
+      .select('customer_id, current_balance, total_sales, last_payment_date')
+      .eq('tenant_id', me.tenant_id),
+    supabase.from('customer_settings')
+      .select('customer_id, payment_terms, payment_day, order_cycle_days, new_customer_days, overdue_warning_amount, overdue_danger_amount')
+      .eq('tenant_id', me.tenant_id),
+  ])
 
   if (error) return { success: false, error: error.message }
+
+  const statsMap    = new Map((statsRows    ?? []).map((s: any) => [s.customer_id, s]))
+  const settingsMap = new Map((settingsRows ?? []).map((s: any) => [s.customer_id, s]))
 
   const today = new Date(todayStr + 'T00:00:00Z')
 
   const result: CustomerWithStats[] = (rows ?? []).map((c: any) => {
-    const stats   = c.customer_stats    as any ?? {}
-    const cfg     = c.customer_settings as any ?? {}
+    const stats   = statsMap.get(c.id)    ?? {}
+    const cfg     = settingsMap.get(c.id) ?? {}
     const terms   = cfg.payment_terms_days ?? c.payment_terms_days ?? 0
     const opening = c.opening_balance ?? 0
 
