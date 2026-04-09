@@ -157,7 +157,7 @@ export default async function CustomersPage({
                     label="수금" btnStyle={bs.collectRed}
                     triggeredMessage={c.action.text} messageKey={c.action.key}
                     customerStatus={c.status} scoreAtTime={c.action_score} amountAtTime={c.overdue_amount} />
-                  <Link href={`/customers/${c.id}/ledger`} style={s.ledgerBtnSm}>원장</Link>
+                  <Link href={`/customers/${c.id}/ledger`} prefetch={false} style={s.ledgerBtnSm}>원장</Link>
                 </div>
               </div>
             ))}
@@ -292,7 +292,7 @@ function CustomerCard({ c, rank, isTop }: { c: CustomerWithScore; rank: number; 
             label="주문" btnStyle={bs.order}
             triggeredMessage={c.action.text} messageKey={c.action.key}
             customerStatus={c.status} scoreAtTime={c.action_score} amountAtTime={c.overdue_amount} />
-          <Link href={`/customers/${c.id}/ledger`} style={s.ledgerBtn}>원장 →</Link>
+          <Link href={`/customers/${c.id}/ledger`} prefetch={false} style={s.ledgerBtn}>원장 →</Link>
         </div>
       </div>
     </div>
