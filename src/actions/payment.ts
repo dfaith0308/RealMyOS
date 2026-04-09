@@ -168,3 +168,68 @@ export async function getCustomerBalance(
 
   return { success: true, data: { balance, deposit: totalDeposit, customer_name: customer.name } }
 }
+
+// ============================================================
+// 수금 목록 조회
+// ============================================================
+
+export interface PaymentListItem {
+  id:             string
+  payment_date:   string
+  customer_id:    string
+  customer_name:  string
+  amount:         number
+  deposit_amount: number
+  payment_method: string
+  memo:           string | null
+  status:         string
+  created_at:     string
+}
+
+export async function getPaymentList(filters?: {
+  from?:        string
+  to?:          string
+  customer_id?: string
+  status?:      string
+}): Promise<ActionResult<PaymentListItem[]>> {
+  const supabase = await createSupabaseServer()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: '로그인 필요' }
+
+  const { data: me } = await supabase
+    .from('users').select('tenant_id').eq('id', user.id).single()
+  if (!me?.tenant_id) return { success: false, error: '테넌트 없음' }
+
+  let query = supabase
+    .from('payments')
+    .select('id, payment_date, customer_id, amount, deposit_amount, payment_method, memo, status, created_at, customers(id, name)')
+    .eq('tenant_id', me.tenant_id)
+    .order('payment_date', { ascending: false })
+    .order('created_at',   { ascending: false })
+    .limit(500)
+
+  if (filters?.from)        query = query.gte('payment_date', filters.from)
+  if (filters?.to)          query = query.lte('payment_date', filters.to)
+  if (filters?.customer_id) query = query.eq('customer_id', filters.customer_id)
+  if (filters?.status)      query = query.eq('status', filters.status)
+  else                      query = query.in('status', ['confirmed', 'cancelled'])
+
+  const { data, error } = await query
+  if (error) return { success: false, error: error.message }
+
+  return {
+    success: true,
+    data: (data ?? []).map((p: any) => ({
+      id:             p.id,
+      payment_date:   p.payment_date,
+      customer_id:    p.customer_id,
+      customer_name:  (p.customers as any)?.name ?? '-',
+      amount:         p.amount,
+      deposit_amount: p.deposit_amount ?? 0,
+      payment_method: p.payment_method,
+      memo:           p.memo,
+      status:         p.status,
+      created_at:     p.created_at,
+    })),
+  }
+}

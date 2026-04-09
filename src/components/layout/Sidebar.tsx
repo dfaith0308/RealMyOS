@@ -57,7 +57,7 @@ const MENU: MenuGroup[] = [
     href:  '/payments/new',
     items: [
       { label: '수금 등록', href: '/payments/new' },
-      { label: '수금 목록', soon: true },
+      { label: '수금 목록', href: '/payments' },
     ],
   },
   {
