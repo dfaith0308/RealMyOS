@@ -297,7 +297,7 @@ export async function cancelOrder(order_id: string, reason?: string): Promise<Ac
   if (!ctx) return { success: false, error: '로그인 필요' }
 
   const { data: order } = await supabase
-    .from('orders').select('id, status, order_number')
+    .from('orders').select('id, status, order_number, total_amount, customer_id')
     .eq('id', order_id).eq('tenant_id', ctx.tenant_id).is('deleted_at', null).single()
   if (!order)                       return { success: false, error: '주문을 찾을 수 없습니다.' }
   if (order.status === 'cancelled') return { success: false, error: '이미 취소된 주문입니다.' }
@@ -316,6 +316,15 @@ export async function cancelOrder(order_id: string, reason?: string): Promise<Ac
     action:      'cancel',
     before_data: { status: order.status },
     after_data:  { status: 'cancelled', reason: reason ?? null },
+  })
+
+  // customer_stats 복구
+  await supabase.rpc('update_customer_stats', {
+    p_tenant_id:         ctx.tenant_id,
+    p_customer_id:       order.customer_id,
+    p_balance_delta:     -(order.total_amount),
+    p_sales_delta:       -(order.total_amount),
+    p_last_payment_date: null,
   })
 
   revalidatePath('/orders')

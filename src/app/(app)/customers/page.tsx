@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { getCustomersWithScore, getDailyCashflow } from '@/actions/ledger'
+import { getCustomersWithScore, getDailyCashflow, getCustomersWithStats } from '@/actions/ledger'
 import { formatKRW } from '@/lib/calc'
 import { calcRecontactMessage, calcNoContactMessage } from '@/lib/customer-logic'
 import type { CustomerStatus, CustomerWithScore } from '@/actions/ledger'
@@ -48,9 +48,10 @@ export default async function CustomersPage({
   const { filter } = searchParams
 
   const _t0 = Date.now()
-  const [result, cashflowResult] = await Promise.all([
+  const [result, cashflowResult, statsResult] = await Promise.all([
     getCustomersWithScore(),
     getDailyCashflow(),
+    getCustomersWithStats(),
   ])
   const all      = result.data ?? []
   const cashflow = cashflowResult.data ?? []
@@ -83,7 +84,15 @@ export default async function CustomersPage({
     filter === 'normal'  ? normalList  :
     filter === 'overdue' ? overdueList : all
 
-  console.error(`[PERF] /customers: ${Date.now() - _t0}ms`)
+  // [검증] stats vs 기존 balance 불일치 로그
+  const statsMap = new Map((statsResult.data ?? []).map((s) => [s.id, s.current_balance]))
+  for (const c of all) {
+    const statsVal = statsMap.get(c.id)
+    if (statsVal !== undefined && statsVal !== c.current_balance) {
+      console.error(`[MISMATCH] customer_id=${c.id} name=${c.name} old=${c.current_balance} stats=${statsVal}`)
+    }
+  }
+  console.error(`[PERF] /customers: ${Date.now() - _t0}ms (stats: ${statsResult.data?.length ?? 0}건)`)
 
   return (
     <main style={s.page}>

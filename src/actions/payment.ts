@@ -112,7 +112,7 @@ export async function cancelPayment(payment_id: string): Promise<ActionResult> {
   if (!me?.tenant_id) return { success: false, error: '테넌트 없음' }
 
   const { data: payment } = await supabase
-    .from('payments').select('id, status')
+    .from('payments').select('id, status, tenant_id, customer_id, amount')
     .eq('id', payment_id).eq('tenant_id', me.tenant_id).single()
   if (!payment)                       return { success: false, error: '수금 내역을 찾을 수 없습니다.' }
   if (payment.status === 'cancelled') return { success: false, error: '이미 취소된 수금입니다.' }
@@ -124,6 +124,15 @@ export async function cancelPayment(payment_id: string): Promise<ActionResult> {
     .eq('tenant_id', me.tenant_id)
 
   if (error) return { success: false, error: error.message }
+
+  // customer_stats 업데이트
+  await supabase.rpc('update_customer_stats', {
+    p_tenant_id:         me.tenant_id,
+    p_customer_id:       input.customer_id,
+    p_balance_delta:     -(input.amount),
+    p_sales_delta:       0,
+    p_last_payment_date: input.payment_date,
+  })
 
   revalidatePath('/customers')
   revalidatePath('/payments/new')

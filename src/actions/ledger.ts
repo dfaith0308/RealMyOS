@@ -465,3 +465,96 @@ export async function getCustomersWithScore(): Promise<ActionResult<CustomerWith
   result.sort((a, b) => b.action_score - a.action_score)
   return { success: true, data: result }
 }
+
+// ============================================================
+// customer_stats 기반 빠른 조회 (병렬 운영)
+// getCustomersWithBalance 대비 쿼리 1회로 축소
+// ============================================================
+
+export interface CustomerWithStats extends CustomerWithBalance {}
+
+export async function getCustomersWithStats(): Promise<ActionResult<CustomerWithStats[]>> {
+  const supabase = await createSupabaseServer()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: '로그인 필요' }
+
+  const { data: me } = await supabase
+    .from('users').select('tenant_id').eq('id', user.id).single()
+  if (!me?.tenant_id) return { success: false, error: '테넌트 없음' }
+
+  const nowKST   = new Date(Date.now() + 9 * 3600000)
+  const todayStr = nowKST.toISOString().slice(0, 10)
+
+  // 단일 쿼리 — customer_stats join
+  const { data: rows, error } = await supabase
+    .from('customers')
+    .select(`
+      id, name, phone, payment_terms_days, target_monthly_revenue,
+      opening_balance,
+      customer_stats ( current_balance, total_sales, last_payment_date ),
+      customer_settings ( payment_terms, payment_day,
+        order_cycle_days, new_customer_days,
+        overdue_warning_amount, overdue_danger_amount )
+    `)
+    .eq('tenant_id', me.tenant_id)
+    .is('deleted_at', null)
+    .order('name')
+
+  if (error) return { success: false, error: error.message }
+
+  const today = new Date(todayStr + 'T00:00:00Z')
+
+  const result: CustomerWithStats[] = (rows ?? []).map((c: any) => {
+    const stats   = c.customer_stats    as any ?? {}
+    const cfg     = c.customer_settings as any ?? {}
+    const terms   = cfg.payment_terms_days ?? c.payment_terms_days ?? 0
+    const opening = c.opening_balance ?? 0
+
+    const current_balance    = stats.current_balance ?? opening
+    const total_sales        = stats.total_sales     ?? 0
+    const last_payment_date  = stats.last_payment_date ?? null
+
+    // receivable = current_balance - opening (min 0)
+    const receivable_amount  = Math.max(0, current_balance - opening)
+    const deposit_amount     = Math.max(0, opening - current_balance)
+
+    // overdue: terms > 0일 때만 계산 (stats엔 주문별 due_date가 없으므로 단순 추정)
+    // 정확한 overdue는 getCustomersWithBalance에서 유지
+    const overdue_amount     = 0  // stats 전환 후 별도 처리 예정
+
+    const days_since_order   = last_payment_date
+      ? Math.floor((today.getTime() - new Date(last_payment_date + 'T00:00:00Z').getTime()) / 86400000)
+      : null
+    const days_since_contact = null
+    const last_contacted_at  = null
+    const order_cycle_days   = cfg.order_cycle_days ?? 14
+
+    // status 판단
+    const isNew = days_since_order !== null && days_since_order <= (cfg.new_customer_days ?? 30)
+    const isDanger  = current_balance > (cfg.overdue_danger_amount  ?? 500000)
+    const isWarning = current_balance > (cfg.overdue_warning_amount ?? 100000)
+    const status: CustomerStatus =
+      isNew     ? 'new'     :
+      isDanger  ? 'danger'  :
+      isWarning ? 'warning' : 'normal'
+
+    return {
+      id: c.id, name: c.name, phone: c.phone,
+      payment_terms_days: terms,
+      current_balance, receivable_amount, deposit_amount, overdue_amount,
+      last_order_date: last_payment_date, last_order_amount: null,
+      days_since_order, order_cycle_days,
+      avg_monthly_revenue: Math.round(total_sales / 3),
+      revenue_gap: (cfg.target_monthly_revenue ?? 0) - Math.round(total_sales / 3),
+      last_contacted_at, days_since_contact,
+      payments_7d: 0, payment_terms: cfg.payment_terms ?? 'monthly_end',
+      payment_day: cfg.payment_day ?? null,
+      overdue_warning_amount: cfg.overdue_warning_amount ?? 100000,
+      overdue_danger_amount:  cfg.overdue_danger_amount  ?? 500000,
+      status,
+      action_score: isDanger ? 300 : isWarning ? 100 : 0,
+    }
+  })
+
+  return { success: true, data: result }
+}
