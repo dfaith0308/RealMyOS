@@ -42,6 +42,7 @@ export interface CreateProductInput {
   siksiki_price?: number
   subscription_price?: number
   bulk_price?: number
+  bulk_min_quantity?: number
 }
 
 export async function createProduct(
@@ -126,12 +127,12 @@ export async function createProduct(
     { price_type: 'normal',       price: input.selling_price },
     { price_type: 'siksiki',      price: input.siksiki_price },
     { price_type: 'subscription', price: input.subscription_price },
-    { price_type: 'bulk',         price: input.bulk_price },
+    { price_type: 'bulk', price: input.bulk_price, bulk_min_quantity: input.bulk_min_quantity ?? null },
   ].filter((p) => p.price && p.price > 0)
 
   if (prices.length > 0) {
     await supabase.from('product_prices').insert(
-      prices.map((p) => ({ product_id: product.id, ...p }))
+      prices.map((p: any) => ({ product_id: product.id, price_type: p.price_type, price: p.price, bulk_min_quantity: p.bulk_min_quantity ?? null }))
     )
   }
 
@@ -213,6 +214,7 @@ export interface UpdateProductInput {
   siksiki_price?: number
   subscription_price?: number
   bulk_price?: number
+  bulk_min_quantity?: number
 }
 
 export async function updateProduct(input: UpdateProductInput): Promise<ActionResult> {

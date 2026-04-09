@@ -35,8 +35,10 @@ export function calcOrderTotals(lines: LineCalculation[]): OrderTotals {
 }
 
 export function calcMarginRate(unit_price: number, cost_price: number): number {
-  if (unit_price === 0) return 0
-  return ((unit_price - cost_price) / unit_price) * 100
+  if (!unit_price || unit_price <= 0 || !cost_price || cost_price <= 0) return 0
+  const rate = ((unit_price - cost_price) / unit_price) * 100
+  if (!isFinite(rate) || isNaN(rate)) return 0
+  return rate
 }
 
 export function formatOrderNumber(date: Date, seq: number): string {
