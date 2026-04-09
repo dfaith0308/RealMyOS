@@ -89,55 +89,63 @@ export function calcActionType(
 // ============================================================
 
 export function calcActionScore(p: {
-  overdue_amount: number
-  receivable_amount?: number
-  days_since_order: number | null
-  order_cycle_days: number | null
-  days_since_contact: number | null
-  is_new: boolean
+  overdue_amount?: number | null
+  receivable_amount?: number | null
+  days_since_order?: number | null
+  order_cycle_days?: number | null
+  days_since_contact?: number | null
+  is_new?: boolean | null
   call_connect_rate?: number | null
   connect_to_payment_rate?: number | null
-  call_attempts_7d?: number
-  payments_7d?: number
-  revenue_gap?: number
+  call_attempts_7d?: number | null
+  payments_7d?: number | null
+  revenue_gap?: number | null
 }): number {
+  // 모든 입력값 null-safe 정규화
+  const overdue_amount   = p.overdue_amount   ?? 0
+  const receivable_amount = p.receivable_amount ?? 0
+  const days_since_order  = p.days_since_order  ?? null
+  const order_cycle_days  = p.order_cycle_days  ?? null
+  const days_since_contact = p.days_since_contact ?? 0
+  const is_new            = Boolean(p.is_new)
+  const revenue_gap       = p.revenue_gap ?? 0
   let score = 0
 
   // 1. 연체금 (overdue 기준 강화 — /500)
-  if (p.overdue_amount > 0)
-    score += p.overdue_amount / 500
+  if (overdue_amount > 0)
+    score += overdue_amount / 500
 
   // 2. 미수금 (overdue 없는 일반 미수금 — /2000)
-  const receivable = p.receivable_amount ?? 0
-  if (receivable > p.overdue_amount)
+  const receivable = receivable_amount
+  if (receivable > overdue_amount)
     score += (receivable - p.overdue_amount) / 2000
 
   // 3. 주문주기 초과 (0 나눗셈 방지)
   if (
-    p.days_since_order !== null &&
-    p.order_cycle_days !== null &&
-    p.order_cycle_days > 0
+    days_since_order !== null &&
+    order_cycle_days !== null &&
+    order_cycle_days > 0
   ) {
-    const ratio = p.days_since_order / p.order_cycle_days
+    const ratio = days_since_order / order_cycle_days
     if (ratio > 1) score += ratio * 50
     if (ratio > 2) score += 100
-  } else if (p.days_since_order !== null && !p.order_cycle_days) {
-    score += Math.min(p.days_since_order, 60)
+  } else if (days_since_order !== null && !order_cycle_days) {
+    score += Math.min(days_since_order, 60)
   }
 
   // 4. 연락 없음
-  score += (p.days_since_contact ?? 60) * 2
+  score += (days_since_contact ?? 0) * 2
 
   // 5. 신규 보정
-  if (p.is_new) score *= 0.5
+  if (is_new) score *= 0.5
 
   // 6. 전환율 보정
   if ((p.connect_to_payment_rate ?? 0) >= 0.3) score *= 1.2
   if ((p.call_attempts_7d ?? 0) >= 5 && (p.payments_7d ?? 0) === 0) score *= 0.8
 
   // 7. 매출 부족
-  if ((p.revenue_gap ?? 0) < 0)
-    score += Math.abs(p.revenue_gap!) / 10000
+  if (revenue_gap < 0)
+    score += Math.abs(revenue_gap) / 10000
 
   return Math.round(score)
 }

@@ -506,43 +506,44 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
   const today = new Date(todayStr + 'T00:00:00Z')
 
   const result: CustomerWithStats[] = (rows ?? []).map((c: any) => {
-    const stats   = statsMap.get(c.id)    ?? {}
-    const cfg     = settingsMap.get(c.id) ?? {}
-    const terms   = cfg.payment_terms_days ?? c.payment_terms_days ?? 0
-    const opening = c.opening_balance ?? 0
+    // null-safe stats / settings (stats 없는 거래처, settings 없는 거래처 모두 정상 처리)
+    const stats = statsMap.get(c.id)    ?? {}
+    const cfg   = settingsMap.get(c.id) ?? {}
 
-    const current_balance    = stats.current_balance ?? opening
-    const total_sales        = stats.total_sales     ?? 0
-    const last_payment_date  = stats.last_payment_date ?? null
+    const opening           = c.opening_balance          ?? 0
+    const current_balance   = (stats as any).current_balance != null
+                                ? Number((stats as any).current_balance)
+                                : opening
+    const total_sales       = Number((stats as any).total_sales ?? 0)
+    const last_payment_date = (stats as any).last_payment_date ?? null
 
-    // receivable = current_balance - opening (min 0)
-    const receivable_amount  = Math.max(0, current_balance - opening)
-    const deposit_amount     = Math.max(0, opening - current_balance)
+    const receivable_amount = Math.max(0, current_balance - opening)
+    const deposit_amount    = Math.max(0, opening - current_balance)
+    const overdue_amount    = 0   // stats에 due_date 없음 → getCustomersWithBalance에서 정확히 계산
 
-    // overdue: terms > 0일 때만 계산 (stats엔 주문별 due_date가 없으므로 단순 추정)
-    // 정확한 overdue는 getCustomersWithBalance에서 유지
-    const overdue_amount     = 0  // stats 전환 후 별도 처리 예정
-
-    const days_since_order   = last_payment_date
+    const days_since_order  = last_payment_date
       ? Math.floor((today.getTime() - new Date(last_payment_date + 'T00:00:00Z').getTime()) / 86400000)
       : null
-    const days_since_contact = null
-    const last_contacted_at  = null
-    const order_cycle_days   = cfg.order_cycle_days ?? 14
+    const days_since_contact: number | null = null
+    const last_contacted_at: string | null  = null
+    const order_cycle_days  = Number((cfg as any).order_cycle_days ?? 14)
+    const new_customer_days = Number((cfg as any).new_customer_days ?? 30)
 
-    // status 판단
-    const isNew = days_since_order !== null && days_since_order <= (cfg.new_customer_days ?? 30)
-    const isDanger  = current_balance > (cfg.overdue_danger_amount  ?? 500000)
-    const isWarning = current_balance > (cfg.overdue_warning_amount ?? 100000)
+    // status — 모든 케이스 안전 처리
+    const isNew     = days_since_order !== null && days_since_order <= new_customer_days
+    const isDanger  = current_balance  > Number((cfg as any).overdue_danger_amount  ?? 500000)
+    const isWarning = current_balance  > Number((cfg as any).overdue_warning_amount ?? 100000)
     const status: CustomerStatus =
-      isNew     ? 'new'     :
-      isDanger  ? 'danger'  :
-      isWarning ? 'warning' : 'normal'
+      isNew ? 'new' : isDanger ? 'danger' : isWarning ? 'warning' : 'normal'
 
+    // action_score — 모든 입력 null-safe (calcActionScore 내부도 방어됨)
     const action_score = calcActionScore({
-      overdue_amount, receivable_amount, days_since_order,
-      order_cycle_days, days_since_contact: days_since_contact ?? 0,
-      status,
+      overdue_amount,
+      receivable_amount,
+      days_since_order,
+      order_cycle_days,
+      days_since_contact,
+      is_new: isNew,
     })
 
     return {
