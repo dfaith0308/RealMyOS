@@ -53,7 +53,7 @@ export async function getCustomerLedger(
 
   const { data: orders } = await supabase
     .from('orders')
-    .select('id, order_number, order_date, created_at, total_amount, total_supply_price, total_vat_amount, memo, order_lines(product_name, quantity)')
+    .select('id, order_number, order_date, created_at, total_amount, total_supply_price, total_vat_amount, point_used, memo, order_lines(product_name, quantity)')
     .eq('customer_id', customer_id)
     .eq('status', 'confirmed')
     .is('deleted_at', null)
@@ -108,7 +108,10 @@ export async function getCustomerLedger(
   })
 
   const totalOrders   = (orders ?? []).reduce((s, o) => s + o.total_amount, 0)
+  const totalPoints   = (orders ?? []).reduce((s, o) => s + ((o as any).point_used ?? 0), 0)
   const totalPayments = (payments ?? []).reduce((s, p) => s + p.amount, 0)
+  // current_balance: opening + 주문합 - (수금 + 적립금)
+  const current_balance = (customer.opening_balance ?? 0) + totalOrders - totalPayments - totalPoints
 
   return {
     success: true,
@@ -118,7 +121,7 @@ export async function getCustomerLedger(
         customer_id: customer.id, customer_name: customer.name,
         opening_balance: customer.opening_balance ?? 0,
         total_orders: totalOrders, total_payments: totalPayments,
-        current_balance: (customer.opening_balance ?? 0) + totalOrders - totalPayments,
+        current_balance,
       },
     },
   }
@@ -487,23 +490,41 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
   const nowKST   = new Date(Date.now() + 9 * 3600000)
   const todayStr = nowKST.toISOString().slice(0, 10)
 
-  // 2쿼리 병렬 — customer_settings 테이블 없으므로 제거
+  // 4쿼리 병렬 — receivable 정확성을 위해 orders + payments 직접 조회
   const _q0 = Date.now()
-  const [{ data: rows, error }, { data: statsRows }] = await Promise.all([
+  const [{ data: rows, error }, { data: statsRows }, { data: orderRows }, { data: paymentRows }] = await Promise.all([
     supabase.from('customers')
       .select('id, name, phone, payment_terms_days, target_monthly_revenue, opening_balance')
       .eq('tenant_id', ctx.tenant_id).is('deleted_at', null).order('name'),
     supabase.from('customer_stats')
       .select('customer_id, current_balance, total_sales, last_payment_date')
       .eq('tenant_id', ctx.tenant_id),
+    supabase.from('orders')
+      .select('customer_id, total_amount, point_used')
+      .eq('tenant_id', ctx.tenant_id).eq('status', 'confirmed').is('deleted_at', null),
+    supabase.from('payments')
+      .select('customer_id, amount')
+      .eq('tenant_id', ctx.tenant_id).eq('status', 'confirmed'),
   ])
   const settingsRows: any[] = []   // customer_settings 테이블 없음
-  console.error(`[PERF:DB] 2쿼리 병렬: ${Date.now() - _q0}ms | customers:${rows?.length ?? 0} stats:${statsRows?.length ?? 0}`)
+  console.error(`[PERF:DB] 4쿼리 병렬: ${Date.now() - _q0}ms | customers:${rows?.length ?? 0} stats:${statsRows?.length ?? 0}`)
 
   if (error) return { success: false, error: error.message }
 
   const statsMap    = new Map((statsRows    ?? []).map((s: any) => [s.customer_id, s]))
   const settingsMap = new Map((settingsRows ?? []).map((s: any) => [s.customer_id, s]))
+
+  // receivable 정확 계산용 맵 — point_used 포함
+  const orderTotalMap = new Map<string, number>()
+  const orderPointMap = new Map<string, number>()
+  for (const o of orderRows ?? []) {
+    orderTotalMap.set(o.customer_id, (orderTotalMap.get(o.customer_id) ?? 0) + (o.total_amount ?? 0))
+    orderPointMap.set(o.customer_id, (orderPointMap.get(o.customer_id) ?? 0) + (o.point_used ?? 0))
+  }
+  const paidMap = new Map<string, number>()
+  for (const p of paymentRows ?? []) {
+    paidMap.set(p.customer_id, (paidMap.get(p.customer_id) ?? 0) + (p.amount ?? 0))
+  }
 
   const _m0 = Date.now()
   const today = new Date(todayStr + 'T00:00:00Z')
@@ -520,9 +541,13 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
     const total_sales       = Number((stats as any).total_sales ?? 0)
     const last_payment_date = (stats as any).last_payment_date ?? null
 
-    const receivable_amount = Math.max(0, current_balance - opening)
-    const deposit_amount    = Math.max(0, opening - current_balance)
-    const overdue_amount    = 0   // stats에 due_date 없음 → getCustomersWithBalance에서 정확히 계산
+    // receivable: orders - (payments + point_used) — getCustomersWithBalance와 동일 계산
+    const orderTotal    = orderTotalMap.get(c.id) ?? 0
+    const orderPoint    = orderPointMap.get(c.id) ?? 0
+    const paid          = paidMap.get(c.id)        ?? 0
+    const receivable_amount = Math.max(0, orderTotal - paid - orderPoint)
+    const deposit_amount    = Math.max(0, paid + orderPoint - orderTotal)
+    const overdue_amount    = 0   // stats에 due_date 없음
 
     const days_since_order  = last_payment_date
       ? Math.floor((today.getTime() - new Date(last_payment_date + 'T00:00:00Z').getTime()) / 86400000)
