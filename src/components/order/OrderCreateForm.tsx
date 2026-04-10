@@ -213,7 +213,7 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
           return [{
             uid: crypto.randomUUID(), product: snap, quantity: rl.quantity,
             unit_price_input: String(rl.unit_price),
-            total_input: String(Math.abs(rl.quantity) * rl.unit_price),
+            total_input: '',  // resolveLine이 unit_price_input 기준 재계산
             mode: 'unit' as const,
           }]
         })
@@ -275,7 +275,7 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
       // 구 데이터 — pricing_mode 없으면 unit으로 간주
       mode             = 'unit'
       unit_price_input = String(p.last_unit_price)
-      total_input      = String(p.last_unit_price)
+      total_input      = ''  // resolveLine이 재계산
       quantity         = 1
     }
     // 구매 이력 없음 → 빈 값
@@ -334,15 +334,30 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
     const zeroQty = lines.find((l) => l.quantity === 0)
     if (zeroQty) { setError(`[${zeroQty.product.name}] 수량을 입력해주세요.`); return }
 
-    // 입력값 방어 검증
+    // 입력값 강제 검증 — 1원 오차도 허용하지 않음
     for (const l of lines) {
       const r = resolveLine(l)
-      if (r.line_total === 0) {
+
+      // line_total 유효성
+      if (!r.line_total || r.line_total === 0) {
         setError(`[${l.product.name}] 금액을 입력해주세요.`)
         return
       }
       if (r.line_total < 0 && l.quantity > 0) {
-        setError(`[${l.product.name}] 금액이 음수입니다.`)
+        setError(`[${l.product.name}] 금액이 음수입니다. 수량이 음수인 경우 반품으로 처리해주세요.`)
+        return
+      }
+
+      // 세금 검증: supply + vat === line_total 강제
+      if (r.supply_price + r.vat_amount !== r.line_total) {
+        console.error('[TAX MISMATCH]', {
+          product: l.product.name,
+          line_total: r.line_total,
+          supply: r.supply_price,
+          vat: r.vat_amount,
+          diff: r.line_total - r.supply_price - r.vat_amount,
+        })
+        setError(`[${l.product.name}] 세금 계산 오류가 발생했습니다. 새로고침 후 다시 시도해주세요.`)
         return
       }
     }
