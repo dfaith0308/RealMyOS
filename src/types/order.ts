@@ -11,6 +11,8 @@ export interface OrderLineInput {
   product_name: string
   cost_price: number
   tax_type: TaxType
+  // mode=total일 때: 사용자 입력 총액을 line_total로 직접 사용 (unit_price*qty 계산 대체)
+  total_amount_override?: number
 }
 
 export interface CreateOrderInput {

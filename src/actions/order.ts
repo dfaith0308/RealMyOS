@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
-import { calcLine, calcOrderTotals, formatOrderNumber } from '@/lib/calc'
+import { calcOrderTotals, formatOrderNumber } from '@/lib/calc'
 import { linkActionResult } from '@/actions/action-log'
 import type {
   CreateOrderInput,
@@ -102,21 +102,41 @@ export async function createOrder(
   const orderDate  = input.order_date || new Date().toISOString().slice(0, 10)
 
   const lineRows = input.lines.map((line) => {
-    const product   = productMap.get(line.product_id)!
+    const product    = productMap.get(line.product_id)!
     const cost_price = getCurrentCostPrice(product.product_costs ?? [], orderDate)
     const tax_type   = product.tax_type as 'taxable' | 'exempt'
-    const calc       = calcLine(line.unit_price, line.quantity, tax_type)
+
+    // line_total = 진실값
+    // mode=total: line_total_override 사용 (사용자 입력 총액 100% 보존)
+    // mode=unit:  unit_price × quantity
+    const line_total = typeof line.line_total_override === 'number'
+      ? line.line_total_override
+      : line.unit_price * line.quantity
+
+    const abs  = Math.abs(line_total)
+    const sign = line_total < 0 ? -1 : 1
+
+    let supply_price: number
+    let vat_amount: number
+    if (tax_type === 'taxable') {
+      supply_price = sign * Math.round(abs / 1.1)
+      vat_amount   = line_total - supply_price
+    } else {
+      supply_price = line_total
+      vat_amount   = 0
+    }
+
     return {
       product_id:       line.product_id,
       product_code:     product.product_code,
       product_name:     product.name,
-      unit_price:       line.unit_price,
+      unit_price:       line.unit_price,   // 참고값 (표시용)
       cost_price,
       fulfillment_type: line.fulfillment_type ?? defaultFulfillment(product.procurement_type),
       quantity:         line.quantity,
-      supply_price:     calc.supply_price,
-      vat_amount:       calc.vat_amount,
-      line_total:       calc.line_total,
+      supply_price,
+      vat_amount,
+      line_total,                          // 진실값
       tax_type,
     }
   })
@@ -226,21 +246,34 @@ export async function updateOrder(input: UpdateOrderInput): Promise<ActionResult
     .from('order_lines').select('*').eq('order_id', input.order_id)
   const beforeData = { order, lines: beforeLines ?? [] }
 
-  // 라인 계산
+  // 라인 계산 — line_total이 진실값
   const lineRows = input.lines.map((l) => {
-    const calc = calcLine(l.unit_price, l.quantity, l.tax_type)
+    const line_total = typeof (l as any).line_total_override === 'number'
+      ? (l as any).line_total_override
+      : l.unit_price * l.quantity
+    const abs  = Math.abs(line_total)
+    const sign = line_total < 0 ? -1 : 1
+    let supply_price: number
+    let vat_amount: number
+    if (l.tax_type === 'taxable') {
+      supply_price = sign * Math.round(abs / 1.1)
+      vat_amount   = line_total - supply_price
+    } else {
+      supply_price = line_total
+      vat_amount   = 0
+    }
     return {
       product_id:       l.product_id,
       product_code:     l.product_code,
       product_name:     l.product_name,
-      unit_price:       l.unit_price,
+      unit_price:       l.unit_price,   // 참고값
       cost_price:       l.cost_price,
       tax_type:         l.tax_type,
       fulfillment_type: l.fulfillment_type,
       quantity:         l.quantity,
-      supply_price:     calc.supply_price,
-      vat_amount:       calc.vat_amount,
-      line_total:       calc.line_total,
+      supply_price,
+      vat_amount,
+      line_total,                       // 진실값
     }
   })
 
@@ -332,10 +365,11 @@ export async function cancelOrder(order_id: string, reason?: string): Promise<Ac
 
 export async function getCustomersForOrder(): Promise<ActionResult<CustomerForOrder[]>> {
   const supabase = await createSupabaseServer()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { success: false, error: '로그인 필요' }
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
   const { data, error } = await supabase
     .from('customers').select('id, name, payment_terms_days')
+    .eq('tenant_id', ctx.tenant_id)
     .eq('is_buyer', true).is('deleted_at', null).order('name')
   if (error) return { success: false, error: error.message }
   return { success: true, data: data ?? [] }
