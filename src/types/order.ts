@@ -17,11 +17,13 @@ export interface OrderLineInput {
 }
 
 export interface CreateOrderInput {
-  customer_id: string
-  order_date: string
-  lines: OrderLineInput[]
-  memo?: string
-  status?: OrderStatus
+  customer_id:     string
+  order_date:      string
+  lines:           OrderLineInput[]
+  memo?:           string
+  status?:         OrderStatus
+  discount_amount?: number   // 기간할인 (orders 레벨, 상품 무관)
+  point_used?:      number   // 적립금 사용 (orders 레벨, 상품 무관)
 }
 
 export interface LineCalculation {
@@ -43,9 +45,12 @@ export interface ActionResult<T = void> {
 }
 
 export interface CreatedOrder {
-  order_id: string
-  order_number: string
-  total_amount: number
+  order_id:        string
+  order_number:    string
+  total_amount:    number   // 상품 합계 (할인 전)
+  discount_amount: number
+  point_used:      number
+  final_amount:    number   // 실제 결제금액 = total - discount - point
 }
 
 export interface CustomerForOrder {

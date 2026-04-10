@@ -144,6 +144,29 @@ export async function createOrder(
   const totals      = calcOrderTotals(lineRows)
   const orderNumber = await issueOrderNumber(supabase, ctx.tenant_id, orderDate)
 
+  // 할인/적립금 — orders 레벨 처리 (상품 단가/라인 무관)
+  const discount_raw = Number(input.discount_amount ?? 0)
+  const point_raw    = Number(input.point_used      ?? 0)
+
+  if (isNaN(discount_raw) || isNaN(point_raw)) {
+    return { success: false, error: '할인/적립금 값이 올바르지 않습니다.' }
+  }
+
+  const discount_amount = Math.max(0, Math.round(discount_raw))
+  const point_used      = Math.max(0, Math.round(point_raw))
+
+  if (discount_amount > totals.total_amount) {
+    return { success: false, error: `기간할인(${discount_amount})이 주문금액(${totals.total_amount})을 초과합니다.` }
+  }
+  if (point_used > totals.total_amount - discount_amount) {
+    return { success: false, error: `적립금(${point_used})이 할인 후 잔액(${totals.total_amount - discount_amount})을 초과합니다.` }
+  }
+
+  const final_amount = totals.total_amount - discount_amount - point_used
+  // DB constraint: final_amount = total_amount - discount_amount - point_used 강제됨
+
+  console.error('[ORDER-AMOUNT]', { total: totals.total_amount, discount: discount_amount, point: point_used, final: final_amount })
+
   const { data: newOrder, error: orderErr } = await supabase
     .from('orders')
     .insert({
@@ -154,11 +177,14 @@ export async function createOrder(
       status:             input.status ?? 'confirmed',
       total_supply_price: totals.total_supply_price,
       total_vat_amount:   totals.total_vat_amount,
-      total_amount:       totals.total_amount,
+      total_amount:       totals.total_amount,   // 상품 합계 (할인 전, 매출 기준)
+      discount_amount,
+      point_used,
+      final_amount,                              // 실제 결제금액
       memo:               input.memo ?? null,
       created_by:         ctx.user_id,
     })
-    .select('id, order_number, total_amount')
+    .select('id, order_number, total_amount, discount_amount, point_used, final_amount')
     .single()
   if (orderErr || !newOrder) return { success: false, error: `주문 생성 실패: ${orderErr?.message}` }
 
@@ -235,7 +261,7 @@ export async function createOrder(
   })
 
   revalidatePath('/orders')
-  return { success: true, data: { order_id: newOrder.id, order_number: newOrder.order_number, total_amount: newOrder.total_amount } }
+  return { success: true, data: { order_id: newOrder.id, order_number: newOrder.order_number, total_amount: newOrder.total_amount, discount_amount: newOrder.discount_amount ?? 0, point_used: newOrder.point_used ?? 0, final_amount: newOrder.final_amount ?? newOrder.total_amount } }
 }
 
 // ============================================================

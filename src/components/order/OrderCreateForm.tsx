@@ -175,6 +175,8 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
 
   const productRef = useRef<HTMLInputElement>(null)
 
+  const [discountAmount, setDiscountAmount] = useState('')   // 기간할인
+  const [pointUsed,      setPointUsed]      = useState('')   // 적립금 사용
   const [doPayment,      setDoPayment]      = useState(false)
   const [paymentAmount,  setPaymentAmount]  = useState('')
   const [paymentMethod,  setPaymentMethod]  = useState<PaymentMethod>('transfer')
@@ -226,8 +228,15 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
 
   const totals = useMemo(() => calcTotals(lines), [lines])
 
+  // orders 레벨 할인/적립금 — 실시간 클램핑으로 음수 불가
+  const discountRaw = Math.max(0, parseInt(discountAmount, 10) || 0)
+  const discountNum = Math.min(discountRaw, totals.total)                    // total 초과 차단
+  const pointRaw    = Math.max(0, parseInt(pointUsed, 10)      || 0)
+  const pointNum    = Math.min(pointRaw, totals.total - discountNum)         // 잔액 초과 차단
+  const finalAmount = totals.total - discountNum - pointNum                  // 항상 >= 0
+
   useEffect(() => {
-    if (doPayment && totals.total > 0) setPaymentAmount(String(totals.total))
+    if (doPayment && finalAmount > 0) setPaymentAmount(String(finalAmount))
   }, [totals.total, doPayment])
 
   // ── 필터 ─────────────────────────────────────────────────
@@ -375,22 +384,34 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
       return
     }
 
+    // 할인/적립금 검증 (클램핑 후에도 한 번 더 확인)
+    if (isNaN(discountNum) || isNaN(pointNum)) { setError('할인/적립금 값이 올바르지 않습니다.'); return }
+    if (discountNum > totals.total) { setError(`기간할인이 주문금액을 초과합니다.`); return }
+    if (pointNum > totals.total - discountNum) { setError(`적립금이 할인 후 잔액을 초과합니다.`); return }
+    if (finalAmount < 0) { setError('결제금액이 0 미만입니다.'); return }
+    if (finalAmount !== totals.total - discountNum - pointNum) {
+      setError('[FINAL_MISMATCH] 금액 계산 오류. 새로고침 후 다시 시도해주세요.')
+      return
+    }
+
     setError(null); setSuccess(null); setIsSubmitting(true)
 
     const lineInputs = lines.map(toOrderLineInput)
 
     startTransition(async () => {
       const res = await createOrder({
-        customer_id: selectedCustomer.id,
-        order_date:  orderDate,
-        memo:        memo || undefined,
-        lines:       lineInputs,
+        customer_id:     selectedCustomer.id,
+        order_date:      orderDate,
+        memo:            memo || undefined,
+        lines:           lineInputs,
+        discount_amount: discountNum,
+        point_used:      pointNum,
       })
       if (!res.success || !res.data) {
         setError(res.error ?? '저장 실패'); setIsSubmitting(false); return
       }
 
-      let successMsg = `✓ ${res.data.order_number} 등록 완료 — ${formatKRW(res.data.total_amount)}`
+      let successMsg = `✓ ${res.data.order_number} 등록 완료 — ${formatKRW(res.data.final_amount ?? res.data.total_amount)}`
 
       if (doPayment) {
         const amt = Math.round(Number(paymentAmount))
@@ -604,18 +625,74 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
         </div>
       )}
 
-      {/* 하단 합계 — calcTotals(resolveLine 기반) */}
+      {/* 하단 합계 */}
       {lines.length > 0 && (
-        <div style={s.totalsBar}>
-          <span style={s.totalLabel}>공급가</span>
-          <span style={s.totalVal}>{formatKRW(totals.supply)}</span>
-          <span style={s.sep}>|</span>
-          <span style={s.totalLabel}>부가세</span>
-          <span style={s.totalVal}>{formatKRW(totals.vat)}</span>
-          <span style={s.sep}>|</span>
-          <span style={s.totalLabel}>합계</span>
-          <span style={s.totalBig}>{formatKRW(totals.total)}</span>
-        </div>
+        <>
+          <div style={s.totalsBar}>
+            <span style={s.totalLabel}>공급가</span>
+            <span style={s.totalVal}>{formatKRW(totals.supply)}</span>
+            <span style={s.sep}>|</span>
+            <span style={s.totalLabel}>부가세</span>
+            <span style={s.totalVal}>{formatKRW(totals.vat)}</span>
+            <span style={s.sep}>|</span>
+            <span style={s.totalLabel}>상품합계</span>
+            <span style={s.totalBig}>{formatKRW(totals.total)}</span>
+          </div>
+
+          {/* 할인/적립금 입력 */}
+          <div style={s.discountRow}>
+            <div style={s.discountField}>
+              <label style={s.discountLabel}>기간할인</label>
+              <input
+                type="number" min={0} style={s.discountInput}
+                placeholder="0"
+                value={discountAmount}
+                onChange={(e) => {
+                  const v = e.target.value.replace(/[^0-9]/g, '')
+                  const n = parseInt(v, 10) || 0
+                  if (n > totals.total) {
+                    setDiscountAmount(String(totals.total))
+                  } else {
+                    setDiscountAmount(v)
+                  }
+                }}
+              />
+            </div>
+            <div style={s.discountField}>
+              <label style={s.discountLabel}>적립금 사용</label>
+              <input
+                type="number" min={0} style={s.discountInput}
+                placeholder="0"
+                value={pointUsed}
+                onChange={(e) => {
+                  const v  = e.target.value.replace(/[^0-9]/g, '')
+                  const n  = parseInt(v, 10) || 0
+                  const maxPoint = Math.max(0, totals.total - discountNum)
+                  if (n > maxPoint) {
+                    setPointUsed(String(maxPoint))
+                  } else {
+                    setPointUsed(v)
+                  }
+                }}
+              />
+            </div>
+            <div style={{ flex: 2, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+              <span style={s.totalLabel}>결제금액</span>
+              <span style={{
+                ...s.totalBig,
+                color: finalAmount < 0 ? '#DC2626' : '#111827',
+                marginLeft: 0,
+              }}>
+                {formatKRW(finalAmount)}
+              </span>
+              {(discountNum > 0 || pointNum > 0) && (
+                <span style={{ fontSize: 11, color: '#6b7280' }}>
+                  ({formatKRW(totals.total)} - {formatKRW(discountNum + pointNum)})
+                </span>
+              )}
+            </div>
+          </div>
+        </>
       )}
 
       {/* 메모 */}
@@ -679,7 +756,7 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
           style={isPending || isSubmitting || !lines.length ? s.btnOff : s.btn}
           onClick={handleSubmit}
           disabled={isPending || isSubmitting || !lines.length}>
-          {isPending ? '저장 중...' : `주문 등록${lines.length ? ` (${formatKRW(totals.total)})` : ''}`}
+          {isPending ? '저장 중...' : `주문 등록${lines.length ? ` (${formatKRW(finalAmount)})` : ''}`}
         </button>
       </div>
     </div>
@@ -737,6 +814,10 @@ const s: Record<string, React.CSSProperties> = {
   paymentFailBanner:{ background: '#FEF2F2', border: '2px solid #EF4444', borderRadius: 10, padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, color: '#B91C1C', marginBottom: 12 },
   payNowBtn:        { padding: '10px 16px', background: '#B91C1C', color: '#fff', borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0 },
   footer:           { display: 'flex', justifyContent: 'flex-end', paddingTop: 4 },
+  discountRow:      { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', background: '#f9fafb', borderRadius: 8, marginBottom: 16, flexWrap: 'wrap' },
+  discountField:    { display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 160 },
+  discountLabel:    { fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap', fontWeight: 500 },
+  discountInput:    { width: 120, padding: '6px 10px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 13, textAlign: 'right', outline: 'none' },
   btn:              { padding: '13px 32px', background: '#111827', color: '#fff', border: 'none', borderRadius: 8, fontSize: 15, fontWeight: 500, cursor: 'pointer' },
   btnOff:           { padding: '13px 32px', background: '#e5e7eb', color: '#9ca3af', border: 'none', borderRadius: 8, fontSize: 15, fontWeight: 500, cursor: 'not-allowed' },
 }
