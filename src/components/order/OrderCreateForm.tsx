@@ -238,7 +238,10 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
   const finalAmount = totals.total - discountNum - pointNum                  // 항상 >= 0
 
   useEffect(() => {
-    if (doPayment && finalAmount > 0) setPaymentAmount(String(finalAmount))
+    // 수금 체크 상태에서 금액 변경 시 자동 동기화 (현재 주문 기준만)
+    if (doPayment) {
+      setPaymentAmount(finalAmount > 0 ? String(finalAmount) : '')
+    }
   }, [totals.total, doPayment])
 
   // ── 필터 ─────────────────────────────────────────────────
@@ -255,9 +258,22 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
 
   // ── 거래처 선택 ──────────────────────────────────────────
 
+  // ── 금액 상태 전체 초기화 — carry-over 절대 금지 ──────────
+  const resetFinancialState = useCallback(() => {
+    setDiscountAmount('')
+    setPointUsed('')
+    setDoPayment(false)
+    setPaymentAmount('')
+    setPaymentDateP(todayStr())
+    setPaymentError(null)
+    setPaymentFailed(null)
+    setPaymentWarning(null)
+  }, [])
+
   const selectCustomer = useCallback((c: CustomerForOrder) => {
     setSelectedCustomer(c); setCustomerQuery(c.name)
     setShowCustomerDd(false); setLines([]); setError(null)
+    resetFinancialState()  // 거래처 변경 시 금액 초기화
     setTimeout(() => productRef.current?.focus(), 80)
   }, [])
 
@@ -402,6 +418,15 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
       return
     }
 
+    // 수금 금액 초과 차단
+    if (doPayment) {
+      const collectAmt = Math.round(Number(paymentAmount) || 0)
+      if (collectAmt > finalAmount) {
+        setError(`수금 금액(${collectAmt.toLocaleString()})이 결제금액(${finalAmount.toLocaleString()})을 초과합니다.`)
+        return
+      }
+    }
+
     setError(null); setSuccess(null); setIsSubmitting(true)
 
     const lineInputs = lines.map(toOrderLineInput)
@@ -442,9 +467,9 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
       }
 
       setSuccess(successMsg)
-      setLines([]); setMemo(''); setDoPayment(false); setPaymentAmount('')
+      setLines([]); setMemo('')
+      resetFinancialState()  // 주문 완료 후 전체 금액 초기화
       setIsSubmitting(false)
-      setPaymentFailed(null); setPaymentError(null); setPaymentWarning(null)
     })
   }
 
@@ -779,8 +804,14 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14, fontWeight: 500 }}>
           <input type="checkbox" checked={doPayment}
             onChange={(e) => {
-              setDoPayment(e.target.checked)
-              if (e.target.checked && totals.total > 0) setPaymentAmount(String(totals.total))
+              const checked = e.target.checked
+              setDoPayment(checked)
+              if (checked) {
+                // 현재 주문 finalAmount 기준으로만 자동 입력
+                setPaymentAmount(finalAmount > 0 ? String(finalAmount) : '')
+              } else {
+                setPaymentAmount('')  // 체크 해제 시 반드시 초기화
+              }
             }} />
           수금 동시 처리
         </label>
