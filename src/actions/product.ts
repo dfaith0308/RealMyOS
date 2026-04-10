@@ -6,14 +6,6 @@ import type { ActionResult } from '@/types/order'
 
 // ── 공통 ─────────────────────────────────────────────────────
 
-async function getTenantAndUser(supabase: any) {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
-  const { data: me } = await supabase.from('users').select('tenant_id, user_type').eq('id', user.id).single()
-  if (!ctx.tenant_id) return null
-  return { user_id: user.id, tenant_id: ctx.tenant_id, user_type: me.user_type ?? 'human' }
-}
-
 async function logProduct(supabase: any, opts: {
   product_id: string; user_id: string; user_type: string
   action: string; before_data?: object; after_data?: object
@@ -49,7 +41,7 @@ export async function createProduct(
   input: CreateProductInput,
 ): Promise<ActionResult<{ id: string; product_code: string }>> {
   const supabase = await createSupabaseServer()
-  const ctx = await getTenantAndUser(supabase)
+  const ctx = await getAuthCtx(supabase)
   if (!ctx) return { success: false, error: '로그인 필요' }
 
   if (!input.name.trim()) return { success: false, error: '상품명을 입력해주세요.' }
@@ -160,7 +152,7 @@ export async function updateCostPrice(input: {
   start_date: string  // YYYY-MM-DD
 }): Promise<ActionResult> {
   const supabase = await createSupabaseServer()
-  const ctx = await getTenantAndUser(supabase)
+  const ctx = await getAuthCtx(supabase)
   if (!ctx) return { success: false, error: '로그인 필요' }
 
   // 현재 적용 중인 cost 조회
@@ -219,7 +211,7 @@ export interface UpdateProductInput {
 
 export async function updateProduct(input: UpdateProductInput): Promise<ActionResult> {
   const supabase = await createSupabaseServer()
-  const ctx = await getTenantAndUser(supabase)
+  const ctx = await getAuthCtx(supabase)
   if (!ctx) return { success: false, error: '로그인 필요' }
 
   const { data: before } = await supabase
@@ -448,7 +440,7 @@ export async function bulkCreateProducts(
   rows: BulkProductRow[],
 ): Promise<ActionResult<BulkProductResult>> {
   const supabase = await createSupabaseServer()
-  const ctx = await getTenantAndUser(supabase)
+  const ctx = await getAuthCtx(supabase)
   if (!ctx) return { success: false, error: '로그인 필요' }
   if (!rows.length) return { success: false, error: '등록할 상품이 없습니다.' }
   if (rows.length > BULK_MAX_ROWS)
