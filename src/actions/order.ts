@@ -185,23 +185,34 @@ export async function createOrder(
     }
     console.error('[SAVE-PRICE]', { product_id: r.product_id, pricing_mode, unit_price: r.unit_price, line_total: r.line_total, qty: r.quantity })
 
-    // 1. 기존 row UPDATE 시도
-    const { count } = await supabase
+    // 1. 기존 row 존재 여부 확인
+    const { data: existing } = await supabase
       .from('customer_product_prices')
-      .update({
-        last_price:        cacheRow.last_price,
-        last_line_total:   cacheRow.last_line_total,
-        last_qty:          cacheRow.last_qty,
-        last_pricing_mode: cacheRow.last_pricing_mode,
-        updated_at:        cacheRow.updated_at,
-      })
+      .select('customer_id')
       .eq('customer_id', input.customer_id)
       .eq('product_id', r.product_id)
-      .select('customer_id', { count: 'exact', head: true })
+      .maybeSingle()
 
-    // 2. row 없으면 INSERT
-    if ((count ?? 0) === 0) {
-      await supabase.from('customer_product_prices').insert(cacheRow)
+    if (existing) {
+      // 2a. 존재하면 명시적 UPDATE — 컬럼 하나하나 지정
+      const { error: updateErr } = await supabase
+        .from('customer_product_prices')
+        .update({
+          last_price:        cacheRow.last_price,
+          last_line_total:   cacheRow.last_line_total,
+          last_qty:          cacheRow.last_qty,
+          last_pricing_mode: cacheRow.last_pricing_mode,
+          updated_at:        cacheRow.updated_at,
+        })
+        .eq('customer_id', input.customer_id)
+        .eq('product_id', r.product_id)
+      if (updateErr) console.error('[SAVE-PRICE-ERR] UPDATE 실패:', updateErr.message)
+    } else {
+      // 2b. 없으면 INSERT
+      const { error: insertErr } = await supabase
+        .from('customer_product_prices')
+        .insert(cacheRow)
+      if (insertErr) console.error('[SAVE-PRICE-ERR] INSERT 실패:', insertErr.message)
     }
   }
 

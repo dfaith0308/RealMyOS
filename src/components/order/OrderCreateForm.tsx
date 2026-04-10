@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useTransition, useRef, useCallback } from 'react'
+import { useState, useEffect, useTransition, useRef, useCallback, useMemo } from 'react'
 import { createOrder, getCustomersForOrder, getProductsForOrder } from '@/actions/order'
 import { createPayment } from '@/actions/payment'
 import type { PaymentMethod } from '@/actions/payment'
@@ -72,6 +72,13 @@ function resolveLine(line: LineItem): ResolvedLine {
   const margin_rate = abs > 0
     ? ((abs - cost_total) / abs) * 100
     : 0
+
+  // 세금 계산 검증 — supply + vat === line_total 보장
+  if (supply_price + vat_amount !== line_total) {
+    console.error('[TAX-MISMATCH]', { line_total, supply_price, vat_amount, diff: line_total - supply_price - vat_amount })
+    // 부가세 보정: line_total이 진실값이므로 vat를 맞춤
+    vat_amount = line_total - supply_price
+  }
 
   return { quantity: qty, unit_price, line_total, supply_price, vat_amount, margin_rate }
 }
@@ -217,7 +224,7 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
 
   // ── 합계 (렌더마다 재계산 — resolveLine 기반) ─────────────
 
-  const totals = calcTotals(lines)
+  const totals = useMemo(() => calcTotals(lines), [lines])
 
   useEffect(() => {
     if (doPayment && totals.total > 0) setPaymentAmount(String(totals.total))
@@ -261,9 +268,7 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
       } else if (p.last_pricing_mode === 'unit') {
         mode             = 'unit'
         unit_price_input = String(p.last_unit_price)
-        total_input      = p.last_qty
-          ? String(p.last_unit_price * (p.last_qty ?? 1))
-          : String(p.last_unit_price)
+        total_input      = ''  // resolveLine이 unit_price_input 기준으로 재계산
         quantity         = p.last_qty ?? 1
       }
     } else if (p.has_purchase_history && p.last_unit_price > 0) {
@@ -328,6 +333,19 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
     if (!lines.length)      { setError('상품을 1개 이상 추가해주세요.'); return }
     const zeroQty = lines.find((l) => l.quantity === 0)
     if (zeroQty) { setError(`[${zeroQty.product.name}] 수량을 입력해주세요.`); return }
+
+    // 입력값 방어 검증
+    for (const l of lines) {
+      const r = resolveLine(l)
+      if (r.line_total === 0) {
+        setError(`[${l.product.name}] 금액을 입력해주세요.`)
+        return
+      }
+      if (r.line_total < 0 && l.quantity > 0) {
+        setError(`[${l.product.name}] 금액이 음수입니다.`)
+        return
+      }
+    }
 
     // 디버깅 로그 + 총액 불일치 강제 검증
     const resolvedLines = lines.map((l) => ({ product: l.product.name, mode: l.mode, qty: l.quantity, resolved: resolveLine(l) }))
