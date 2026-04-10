@@ -162,12 +162,14 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerForOrder | null>(null)
   const [customerQuery,    setCustomerQuery]    = useState('')
   const [showCustomerDd,   setShowCustomerDd]   = useState(false)
+  const [customerHiIdx,    setCustomerHiIdx]    = useState(0)
 
   const [productQuery,  setProductQuery]  = useState('')
   const [showProductDd, setShowProductDd] = useState(false)
 
   const [lines,        setLines]        = useState<LineItem[]>([])
   const [orderDate,    setOrderDate]    = useState(todayStr())
+  const [dateError,     setDateError]     = useState('')
   const [memo,         setMemo]         = useState('')
   const [error,        setError]        = useState<string | null>(null)
   const [success,      setSuccess]      = useState<string | null>(null)
@@ -340,6 +342,12 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
     if (isSubmitting) return
     if (!selectedCustomer) { setError('거래처를 선택해주세요.'); return }
     if (!lines.length)      { setError('상품을 1개 이상 추가해주세요.'); return }
+    // 날짜 검증
+    if (!validateDate(orderDate)) {
+      setDateError('날짜를 올바르게 입력해주세요.')
+      return
+    }
+
     const zeroQty = lines.find((l) => l.quantity === 0)
     if (zeroQty) { setError(`[${zeroQty.product.name}] 수량을 입력해주세요.`); return }
 
@@ -440,6 +448,57 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
     })
   }
 
+  // 날짜 직접입력 파싱 — "20260306" → "2026-03-06"
+  function parseDateInput(raw: string): string {
+    const digits = raw.replace(/[^0-9]/g, '')
+    if (digits.length === 8) {
+      return `${digits.slice(0,4)}-${digits.slice(4,6)}-${digits.slice(6,8)}`
+    }
+    return raw
+  }
+
+  function handleDateChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const raw = e.target.value
+    const parsed = parseDateInput(raw)
+    setOrderDate(parsed)
+    // 입력 변경 시 에러 초기화
+    if (dateError) setDateError('')
+  }
+
+  function validateDate(value: string): boolean {
+    if (!value) return false
+    const d = new Date(value)
+    return !isNaN(d.getTime())
+  }
+
+  function handleDateBlur() {
+    if (!orderDate) return
+    if (!validateDate(orderDate)) {
+      setDateError('잘못된 날짜 형식입니다. YYYY-MM-DD 또는 YYYYMMDD로 입력해주세요.')
+    } else {
+      setDateError('')
+    }
+    // 값 절대 변경하지 않음
+  }
+
+  function handleCustomerKeyDown(e: React.KeyboardEvent) {
+    const list = filteredCustomers.slice(0, 8)
+    if (!list.length) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setCustomerHiIdx((p) => Math.min(p + 1, list.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setCustomerHiIdx((p) => Math.max(p - 1, 0))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      const selected = list[customerHiIdx]
+      if (selected) selectCustomer(selected)
+    } else if (e.key === 'Escape') {
+      setShowCustomerDd(false)
+    }
+  }
+
   function handleProductKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Enter' && filteredProducts.length > 0) { e.preventDefault(); addProduct(filteredProducts[0]) }
     if (e.key === 'Escape') setShowProductDd(false)
@@ -487,16 +546,20 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
         <div style={{ ...s.field, flex: 2 }}>
           <label style={s.label}>거래처 *</label>
           <div style={s.rel}>
-            <input style={s.input} placeholder="거래처명 검색..."
+            <input style={s.input} placeholder="거래처명 검색... (↑↓ 이동, Enter 선택)"
               value={customerQuery}
-              onChange={(e) => { setCustomerQuery(e.target.value); setShowCustomerDd(true) }}
+              onChange={(e) => { setCustomerQuery(e.target.value); setShowCustomerDd(true); setCustomerHiIdx(0) }}
               onFocus={() => setShowCustomerDd(true)}
               onBlur={() => setTimeout(() => setShowCustomerDd(false), 150)}
+              onKeyDown={handleCustomerKeyDown}
               autoComplete="off" />
             {showCustomerDd && filteredCustomers.length > 0 && (
               <ul style={s.dd}>
-                {filteredCustomers.slice(0, 8).map((c) => (
-                  <li key={c.id} style={s.ddItem} onMouseDown={() => selectCustomer(c)}>
+                {filteredCustomers.slice(0, 8).map((c, idx) => (
+                  <li key={c.id}
+                    style={{ ...s.ddItem, background: idx === customerHiIdx ? '#EFF6FF' : undefined }}
+                    onMouseDown={() => selectCustomer(c)}
+                    onMouseEnter={() => setCustomerHiIdx(idx)}>
                     <span>{c.name}</span>
                     {c.payment_terms_days > 0 && <span style={s.pill}>{c.payment_terms_days}일 외상</span>}
                   </li>
@@ -507,7 +570,16 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
         </div>
         <div style={{ ...s.field, flex: 1, maxWidth: 168 }}>
           <label style={s.label}>주문일</label>
-          <input type="date" style={s.input} value={orderDate} onChange={(e) => setOrderDate(e.target.value)} />
+          <input type="text"
+            style={{ ...s.input, borderColor: dateError ? '#EF4444' : undefined }}
+            value={orderDate}
+            onChange={handleDateChange}
+            onBlur={handleDateBlur}
+            placeholder="YYYY-MM-DD 또는 YYYYMMDD"
+            maxLength={10} />
+          {dateError && (
+            <div style={{ fontSize: 11, color: '#EF4444', marginTop: 3 }}>{dateError}</div>
+          )}
         </div>
       </div>
 
