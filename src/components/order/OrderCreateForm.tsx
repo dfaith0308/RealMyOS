@@ -118,10 +118,9 @@ function calcLineTotals(line: LineItem) {
 
 function sortByPurchaseHistory(products: ProductForOrder[]): ProductForOrder[] {
   return [...products].sort((a, b) => {
-    const aHas = a.last_unit_price > 0
-    const bHas = b.last_unit_price > 0
-    if (aHas && !bHas) return -1
-    if (!aHas && bHas) return 1
+    // has_purchase_history: 이 거래처가 실제 구매한 적 있는 상품만 상단
+    if (a.has_purchase_history && !b.has_purchase_history) return -1
+    if (!a.has_purchase_history && b.has_purchase_history) return 1
     return a.name.localeCompare(b.name)
   })
 }
@@ -260,7 +259,9 @@ export default function OrderCreateForm({
   // 최근 단가는 "기본값"만 제공 — mode=unit으로 시작
 
   const addProduct = useCallback((p: ProductForOrder) => {
-    const unitPrice = p.last_unit_price  // customer_product_prices 캐시
+    // 이 거래처의 실제 구매 이력이 있을 때만 단가 자동 입력
+    // has_purchase_history=false이면 last_unit_price는 정상가 → 자동입력 안 함
+    const unitPrice = p.has_purchase_history ? p.last_unit_price : 0
     const hasPrice  = unitPrice > 0
     setLines((prev) => [...prev, {
       uid:              crypto.randomUUID(),
@@ -268,7 +269,7 @@ export default function OrderCreateForm({
       quantity:         1,
       unit_price_input: hasPrice ? String(unitPrice) : '',
       total_input:      hasPrice ? String(unitPrice) : '',
-      mode:             'unit',  // 항상 unit 모드로 시작 — 사용자가 총액 입력하면 전환
+      mode:             'unit',
     }])
     setProductQuery(''); setShowProductDd(false)
     productRef.current?.focus()
@@ -489,7 +490,7 @@ export default function OrderCreateForm({
             {showProductDd && filteredProducts.length > 0 && (
               <ul style={s.dd}>
                 {filteredProducts.slice(0, 10).map((p) => {
-                  const hasPrev = p.last_unit_price > 0
+                  const hasPrev = p.has_purchase_history
                   return (
                     <li key={p.id} style={{
                       ...s.ddItem,

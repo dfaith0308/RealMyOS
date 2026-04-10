@@ -401,18 +401,28 @@ export async function getProductsForOrder(
   return {
     success: true,
     data: (products ?? []).map((p) => {
-      const costPrice    = getCurrentCostPrice(p.product_costs ?? [], today)
-      const normalPrice  = (p.product_prices ?? []).find((pp: any) => pp.price_type === 'normal')?.price ?? 0
-      const customerPrice = customerId
-        ? (p.customer_product_prices ?? []).find((cp: any) => cp.customer_id === customerId)?.last_price
+      const costPrice   = getCurrentCostPrice(p.product_costs ?? [], today)
+      const normalPrice = (p.product_prices ?? []).find((pp: any) => pp.price_type === 'normal')?.price ?? 0
+
+      // 이 거래처의 구매 이력 — customer_id 정확히 일치하는 row만 사용
+      // customer_product_prices는 모든 거래처 이력이 배열로 오므로 반드시 find 필터링 필요
+      const customerRecord = customerId
+        ? (p.customer_product_prices ?? []).find(
+            (cp: any) => cp.customer_id === customerId && cp.last_price != null
+          )
         : undefined
+
+      const has_purchase_history = !!customerRecord  // 이 거래처가 실제 구매한 적 있는지
+      const last_unit_price = customerRecord?.last_price ?? normalPrice
+
       return {
         id: p.id, product_code: p.product_code, name: p.name,
-        tax_type: p.tax_type as 'taxable' | 'exempt',
-        procurement_type: p.procurement_type,
-        fulfillment_type: defaultFulfillment(p.procurement_type),
+        tax_type:          p.tax_type as 'taxable' | 'exempt',
+        procurement_type:  p.procurement_type,
+        fulfillment_type:  defaultFulfillment(p.procurement_type),
         current_cost_price: costPrice,
-        last_unit_price: customerPrice ?? normalPrice,
+        last_unit_price,
+        has_purchase_history,  // "최근구매" 뱃지 기준
       }
     }),
   }

@@ -11,8 +11,9 @@ export interface OrderLineInput {
   product_name: string
   cost_price: number
   tax_type: TaxType
-  // mode=total일 때: 사용자 입력 총액을 line_total로 직접 사용 (unit_price*qty 계산 대체)
-  total_amount_override?: number
+  // line_total 진실값 — mode=total일 때 사용자 입력 총액 그대로 사용
+  // unit_price는 참고값이므로 unit_price×qty ≠ line_total 허용
+  line_total_override?: number
 }
 
 export interface CreateOrderInput {
@@ -61,5 +62,6 @@ export interface ProductForOrder {
   procurement_type: string
   fulfillment_type: FulfillmentType
   current_cost_price: number
-  last_unit_price: number
+  last_unit_price: number          // 이 거래처의 최근 단가 (없으면 정상가)
+  has_purchase_history: boolean    // 이 거래처가 실제 구매한 적 있는지 여부
 }
