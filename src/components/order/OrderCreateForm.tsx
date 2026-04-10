@@ -4,7 +4,7 @@ import { useState, useEffect, useTransition, useRef, useCallback } from 'react'
 import { createOrder, getCustomersForOrder, getProductsForOrder } from '@/actions/order'
 import { createPayment } from '@/actions/payment'
 import type { PaymentMethod } from '@/actions/payment'
-import { calcLine, calcMarginRate, formatKRW, todayStr } from '@/lib/calc'
+import { calcMarginRate, formatKRW, todayStr } from '@/lib/calc'
 import type { CustomerForOrder, ProductForOrder, OrderLineInput } from '@/types/order'
 
 // ============================================================
@@ -15,101 +15,110 @@ interface LineItem {
   uid:              string
   product:          ProductForOrder
   quantity:         number
-  unit_price_input: string      // 사용자가 직접 입력한 단가 (소수 허용, 표시용)
-  total_input:      string      // 사용자가 직접 입력한 총액 (정수 문자열)
-  mode:             'unit' | 'total'  // 마지막으로 수정한 필드가 source of truth
+  unit_price_input: string   // 단가 입력값 (소수 가능, 표시용)
+  total_input:      string   // 총액 입력값 (정수 문자열)
+  mode:             'unit' | 'total'
 }
 
 // ============================================================
-// 계산 로직 — 단방향, 무한루프 없음
+// ResolveLine — 유일한 진실값 계산 함수
+// UI 표시 / 하단 합계 / 저장 payload 전부 이것만 사용
+// unit_price × qty는 이 함수 외부에서 절대 쓰지 않음
 // ============================================================
 
-/**
- * [mode=unit] 단가 → 총액
- * 저장값: unit_price=round(input), total=qty*unit_price
- */
-function unitToTotal(qty: number, unitInput: string): { unit: number; total: number } {
-  const unit = Math.round(parseFloat(unitInput) || 0)
-  const total = qty * unit
-  return { unit, total }
+interface ResolvedLine {
+  quantity:     number
+  unit_price:   number    // 참고값 (표시용)
+  line_total:   number    // 진실값
+  supply_price: number    // line_total 기준 계산
+  vat_amount:   number    // line_total 기준 계산
+  margin_rate:  number    // line_total 기준 계산
 }
 
-/**
- * [mode=total] 총액 → 단가 보정
- *
- * 주문 라인이 1개이므로 단가는 단순히 total/qty (정수 반올림).
- * 단, total은 입력값 그대로 100% 보존.
- * 저장값: total=입력값, unit_price=floor(total/qty) (표시용 소수는 별도)
- *
- * 왜 floor인가: ceil이면 qty*unit > total이 될 수 있음
- * 실제 DB 저장 시: total_amount는 입력값 그대로, unit_price는 floor
- */
-function totalToUnit(qty: number, totalInput: string): {
-  unit: number        // DB 저장용 정수 단가 (floor)
-  unitDisplay: string // UI 표시용 (소수 포함 가능)
-  total: number       // DB 저장용 총액 (입력값 100% 보존)
-} {
-  const total = parseInt(totalInput.replace(/[^0-9]/g, ''), 10) || 0
-  if (qty === 0) return { unit: 0, unitDisplay: '', total }
-  const exact    = total / qty
-  const unit     = Math.floor(exact)  // DB 저장: floor (total 보존 우선)
-  const unitDisplay = Number.isInteger(exact)
-    ? String(exact)
-    : exact.toFixed(2)
-  return { unit, unitDisplay, total }
-}
+function resolveLine(line: LineItem): ResolvedLine {
+  const qty = line.quantity
 
-// ── 저장용 값 추출 ────────────────────────────────────────────
-
-function resolveForSave(line: LineItem): {
-  unit_price: number
-  total_amount: number
-  line_total_override?: number  // mode=total일 때만 세팅 — order.ts에서 line_total로 직접 사용
-} {
-  const qty = Math.abs(line.quantity)
+  // ── line_total 결정 ──
+  // mode=total: 사용자 입력 총액 그대로
+  // mode=unit:  unit_price × qty (정수 × 정수, 오차 없음)
+  let line_total: number
+  let unit_price: number
 
   if (line.mode === 'total') {
-    // 총액 기준: 입력값 100% 보존, unit_price는 floor (표시/참고용)
-    const total = parseInt(line.total_input.replace(/[^0-9]/g, ''), 10) || 0
-    const signedTotal = line.quantity < 0 ? -total : total
-    const unit  = qty === 0 ? 0 : Math.floor(total / qty)
-    return {
-      unit_price:             unit,
-      total_amount:           signedTotal,
-      line_total_override:  signedTotal,  // line_total을 이 값으로 직접 저장
-    }
+    const raw = parseInt(line.total_input.replace(/[^0-9]/g, ''), 10) || 0
+    line_total = qty < 0 ? -raw : raw
+    unit_price = qty === 0 ? 0 : Math.floor(Math.abs(line_total) / Math.abs(qty))
+  } else {
+    unit_price = Math.round(parseFloat(line.unit_price_input) || 0)
+    line_total = unit_price * qty
   }
 
-  // 단가 기준: unit_price * qty = total (정확히 일치)
-  const unit  = Math.round(parseFloat(line.unit_price_input) || 0)
-  const total = unit * line.quantity  // 부호 포함
-  return { unit_price: unit, total_amount: total }
+  // ── 공급가 / 부가세 — line_total 기준 ──
+  const abs  = Math.abs(line_total)
+  const sign = line_total < 0 ? -1 : 1
+  let supply_price: number
+  let vat_amount: number
+
+  if (line.product.tax_type === 'taxable') {
+    supply_price = sign * Math.round(abs / 1.1)
+    vat_amount   = line_total - supply_price
+  } else {
+    supply_price = line_total
+    vat_amount   = 0
+  }
+
+  // ── 마진율 — line_total 기준 ──
+  const cost_total = line.product.current_cost_price * Math.abs(qty)
+  const margin_rate = abs > 0
+    ? ((abs - cost_total) / abs) * 100
+    : 0
+
+  return { quantity: qty, unit_price, line_total, supply_price, vat_amount, margin_rate }
 }
 
-// ── 표시용 값 ─────────────────────────────────────────────────
+// ── 하단 합계 — resolveLine 기반 ─────────────────────────────
+function calcTotals(lines: LineItem[]) {
+  return lines.reduce(
+    (acc, l) => {
+      const r = resolveLine(l)
+      return { supply: acc.supply + r.supply_price, vat: acc.vat + r.vat_amount, total: acc.total + r.line_total }
+    },
+    { supply: 0, vat: 0, total: 0 },
+  )
+}
 
-function getDisplayUnit(line: LineItem): string {
+// ── 저장 payload — resolveLine 기반 ──────────────────────────
+function toOrderLineInput(l: LineItem): OrderLineInput {
+  const r = resolveLine(l)
+  return {
+    product_id:          l.product.id,
+    product_code:        l.product.product_code,
+    product_name:        l.product.name,
+    quantity:            r.quantity,
+    unit_price:          r.unit_price,
+    cost_price:          l.product.current_cost_price,
+    tax_type:            l.product.tax_type,
+    fulfillment_type:    l.product.fulfillment_type,
+    line_total_override: l.mode === 'total' ? r.line_total : undefined,
+  }
+}
+
+// ── UI 표시용 단가 / 총액 ──────────────────────────────────────
+
+function displayUnit(line: LineItem): string {
   if (line.mode === 'unit') return line.unit_price_input
-  // mode=total: 총액에서 역산해서 표시
   const qty = Math.abs(line.quantity)
-  if (qty === 0) return ''
-  const { unitDisplay } = totalToUnit(qty, line.total_input)
-  return unitDisplay
+  if (qty === 0 || !line.total_input) return ''
+  const total = parseInt(line.total_input, 10) || 0
+  if (total === 0) return ''
+  const unit = total / qty
+  return Number.isInteger(unit) ? String(unit) : unit.toFixed(2)
 }
 
-function getDisplayTotal(line: LineItem): string {
+function displayTotal(line: LineItem): string {
   if (line.mode === 'total') return line.total_input
-  // mode=unit: 단가에서 계산해서 표시
-  const qty = Math.abs(line.quantity)
-  const { total } = unitToTotal(qty, line.unit_price_input)
-  return total > 0 ? String(total) : ''
-}
-
-// ── 합계 계산 (표시용) ────────────────────────────────────────
-
-function calcLineTotals(line: LineItem) {
-  const { unit_price, total_amount } = resolveForSave(line)
-  return calcLine(unit_price, line.quantity, line.product.tax_type)
+  const r = resolveLine(line)
+  return r.line_total !== 0 ? String(Math.abs(r.line_total)) : ''
 }
 
 // ============================================================
@@ -118,7 +127,6 @@ function calcLineTotals(line: LineItem) {
 
 function sortByPurchaseHistory(products: ProductForOrder[]): ProductForOrder[] {
   return [...products].sort((a, b) => {
-    // has_purchase_history: 이 거래처가 실제 구매한 적 있는 상품만 상단
     if (a.has_purchase_history && !b.has_purchase_history) return -1
     if (!a.has_purchase_history && b.has_purchase_history) return 1
     return a.name.localeCompare(b.name)
@@ -132,19 +140,12 @@ function sortByPurchaseHistory(products: ProductForOrder[]): ProductForOrder[] {
 interface OrderCreateFormProps {
   initialCustomerId?: string
   reorderLines?: Array<{
-    product_id:   string
-    product_name: string
-    product_code: string
-    quantity:     number
-    unit_price:   number
-    tax_type?:    string
+    product_id: string; product_name: string; product_code: string
+    quantity: number; unit_price: number; tax_type?: string
   }>
 }
 
-export default function OrderCreateForm({
-  initialCustomerId,
-  reorderLines,
-}: OrderCreateFormProps = {}) {
+export default function OrderCreateForm({ initialCustomerId, reorderLines }: OrderCreateFormProps = {}) {
   const [isPending, startTransition] = useTransition()
 
   const [customers,       setCustomers]       = useState<CustomerForOrder[]>([])
@@ -158,16 +159,15 @@ export default function OrderCreateForm({
   const [productQuery,  setProductQuery]  = useState('')
   const [showProductDd, setShowProductDd] = useState(false)
 
-  const [lines,     setLines]     = useState<LineItem[]>([])
-  const [orderDate, setOrderDate] = useState(todayStr())
-  const [memo,      setMemo]      = useState('')
-  const [error,     setError]     = useState<string | null>(null)
-  const [success,   setSuccess]   = useState<string | null>(null)
+  const [lines,        setLines]        = useState<LineItem[]>([])
+  const [orderDate,    setOrderDate]    = useState(todayStr())
+  const [memo,         setMemo]         = useState('')
+  const [error,        setError]        = useState<string | null>(null)
+  const [success,      setSuccess]      = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const productRef = useRef<HTMLInputElement>(null)
 
-  // 수금 상태
   const [doPayment,      setDoPayment]      = useState(false)
   const [paymentAmount,  setPaymentAmount]  = useState('')
   const [paymentMethod,  setPaymentMethod]  = useState<PaymentMethod>('transfer')
@@ -195,25 +195,19 @@ export default function OrderCreateForm({
     setLoadingProducts(true)
     getProductsForOrder(selectedCustomer.id).then((r) => {
       if (!r.success) { setLoadingProducts(false); return }
-      const sorted = sortByPurchaseHistory(r.data ?? [])
-      setProducts(sorted)
+      setProducts(sortByPurchaseHistory(r.data ?? []))
       setLoadingProducts(false)
-
-      // 재주문 라인 복제
       if (reorderLines?.length) {
+        const sorted = sortByPurchaseHistory(r.data ?? [])
         const mapped = reorderLines.flatMap((rl) => {
           const prod = sorted.find((p) => p.id === rl.product_id)
           if (!prod) return []
-          const snap = rl.tax_type
-            ? { ...prod, tax_type: rl.tax_type as 'taxable' | 'exempt' }
-            : prod
+          const snap = rl.tax_type ? { ...prod, tax_type: rl.tax_type as 'taxable' | 'exempt' } : prod
           return [{
-            uid:              crypto.randomUUID(),
-            product:          snap,
-            quantity:         rl.quantity,
+            uid: crypto.randomUUID(), product: snap, quantity: rl.quantity,
             unit_price_input: String(rl.unit_price),
-            total_input:      String(Math.abs(rl.quantity) * rl.unit_price),
-            mode:             'unit' as const,
+            total_input: String(Math.abs(rl.quantity) * rl.unit_price),
+            mode: 'unit' as const,
           }]
         })
         if (mapped.length) setLines(mapped)
@@ -221,15 +215,9 @@ export default function OrderCreateForm({
     })
   }, [selectedCustomer, reorderLines])
 
-  // ── 합계 ─────────────────────────────────────────────────
+  // ── 합계 (렌더마다 재계산 — resolveLine 기반) ─────────────
 
-  const totals = lines.reduce(
-    (acc, l) => {
-      const c = calcLineTotals(l)
-      return { supply: acc.supply + c.supply_price, vat: acc.vat + c.vat_amount, total: acc.total + c.line_total }
-    },
-    { supply: 0, vat: 0, total: 0 },
-  )
+  const totals = calcTotals(lines)
 
   useEffect(() => {
     if (doPayment && totals.total > 0) setPaymentAmount(String(totals.total))
@@ -244,7 +232,7 @@ export default function OrderCreateForm({
     (p) =>
       !lines.find((l) => l.product.id === p.id) &&
       (p.name.toLowerCase().includes(productQuery.toLowerCase()) ||
-        p.product_code.toLowerCase().includes(productQuery.toLowerCase())),
+       p.product_code.toLowerCase().includes(productQuery.toLowerCase())),
   )
 
   // ── 거래처 선택 ──────────────────────────────────────────
@@ -256,70 +244,50 @@ export default function OrderCreateForm({
   }, [])
 
   // ── 상품 추가 ─────────────────────────────────────────────
-  // 최근 단가는 "기본값"만 제공 — mode=unit으로 시작
 
   const addProduct = useCallback((p: ProductForOrder) => {
-    // 이 거래처의 실제 구매 이력이 있을 때만 단가 자동 입력
-    // has_purchase_history=false이면 last_unit_price는 정상가 → 자동입력 안 함
     const unitPrice = p.has_purchase_history ? p.last_unit_price : 0
     const hasPrice  = unitPrice > 0
     setLines((prev) => [...prev, {
-      uid:              crypto.randomUUID(),
-      product:          p,
-      quantity:         1,
+      uid: crypto.randomUUID(), product: p, quantity: 1,
       unit_price_input: hasPrice ? String(unitPrice) : '',
       total_input:      hasPrice ? String(unitPrice) : '',
-      mode:             'unit',
+      mode: 'unit',
     }])
     setProductQuery(''); setShowProductDd(false)
     productRef.current?.focus()
   }, [])
 
-  // ── 라인 수정 — 각 핸들러는 해당 방향만 계산, 반대 방향 갱신 없음 ──
+  // ── 라인 수정 — 단방향, 무한루프 없음 ────────────────────
 
   const updateQuantity = useCallback((uid: string, rawVal: string) => {
     const qty = parseInt(rawVal, 10)
     if (isNaN(qty)) return
     setLines((prev) => prev.map((l) => {
       if (l.uid !== uid) return l
-      // mode 유지, 현재 mode 기준으로 반대쪽 표시값만 재계산
       if (l.mode === 'unit') {
-        const absQty = Math.abs(qty)
-        const { total } = unitToTotal(absQty, l.unit_price_input)
+        const unit  = parseFloat(l.unit_price_input) || 0
+        const total = Math.round(Math.abs(qty) * unit)
         return { ...l, quantity: qty, total_input: total > 0 ? String(total) : '' }
-      } else {
-        // mode=total: total은 고정, unit 표시만 변경 (getDisplayUnit에서 계산)
-        return { ...l, quantity: qty }
       }
+      return { ...l, quantity: qty }  // mode=total: total 고정, unit 표시는 displayUnit에서 파생
     }))
   }, [])
 
   const updateUnitPrice = useCallback((uid: string, value: string) => {
-    // 단가 수정 → mode=unit 전환, total 재계산
     setLines((prev) => prev.map((l) => {
       if (l.uid !== uid) return l
-      const qty = Math.abs(l.quantity)
-      const { total } = unitToTotal(qty, value)
-      return {
-        ...l,
-        mode:             'unit',
-        unit_price_input: value,
-        total_input:      total > 0 ? String(total) : '',
-      }
+      const unit  = parseFloat(value) || 0
+      const total = Math.round(Math.abs(l.quantity) * unit)
+      return { ...l, mode: 'unit', unit_price_input: value, total_input: total > 0 ? String(total) : '' }
     }))
   }, [])
 
   const updateTotalAmount = useCallback((uid: string, value: string) => {
-    // 총액 수정 → mode=total 전환, unit 표시만 갱신 (단가 필드는 getDisplayUnit에서 표시)
     const numeric = value.replace(/[^0-9]/g, '')
     setLines((prev) => prev.map((l) => {
       if (l.uid !== uid) return l
-      return {
-        ...l,
-        mode:             'total',
-        total_input:      numeric,
-        unit_price_input: '',   // 총액 기준일 때 단가 입력값 초기화 (표시는 getDisplayUnit)
-      }
+      return { ...l, mode: 'total', total_input: numeric, unit_price_input: '' }
     }))
   }, [])
 
@@ -335,23 +303,15 @@ export default function OrderCreateForm({
     if (!lines.length)      { setError('상품을 1개 이상 추가해주세요.'); return }
     const zeroQty = lines.find((l) => l.quantity === 0)
     if (zeroQty) { setError(`[${zeroQty.product.name}] 수량을 입력해주세요.`); return }
+
+    // 디버깅 로그
+    const resolved = lines.map((l) => ({ product: l.product.name, mode: l.mode, qty: l.quantity, resolved: resolveLine(l) }))
+    console.log('[ORDER-LINE-DEBUG]', resolved)
+    console.log('[ORDER-SUMMARY-DEBUG]', { supply: totals.supply, vat: totals.vat, total: totals.total })
+
     setError(null); setSuccess(null); setIsSubmitting(true)
 
-    // 저장 직전: unit_price 정수, total_amount 입력값 100% 보존
-    const lineInputs: OrderLineInput[] = lines.map((l) => {
-      const saved = resolveForSave(l)
-      return {
-        product_id:            l.product.id,
-        product_code:          l.product.product_code,
-        product_name:          l.product.name,
-        quantity:              l.quantity,
-        unit_price:            saved.unit_price,
-        cost_price:            l.product.current_cost_price,
-        tax_type:              l.product.tax_type,
-        fulfillment_type:      l.product.fulfillment_type,
-        line_total_override: saved.line_total_override,  // mode=total일 때만 존재
-      }
-    })
+    const lineInputs = lines.map(toOrderLineInput)
 
     startTransition(async () => {
       const res = await createOrder({
@@ -394,9 +354,7 @@ export default function OrderCreateForm({
   }
 
   function handleProductKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'Enter' && filteredProducts.length > 0) {
-      e.preventDefault(); addProduct(filteredProducts[0])
-    }
+    if (e.key === 'Enter' && filteredProducts.length > 0) { e.preventDefault(); addProduct(filteredProducts[0]) }
     if (e.key === 'Escape') setShowProductDd(false)
   }
 
@@ -433,9 +391,7 @@ export default function OrderCreateForm({
       {success && (
         <div style={s.okBox}>
           <span>{success}</span>
-          <span style={{ fontSize: 11, color: '#15803D', marginTop: 4, display: 'block' }}>
-            잠시 후 주문 목록으로 이동합니다...
-          </span>
+          <span style={{ fontSize: 11, color: '#15803D', marginTop: 4, display: 'block' }}>잠시 후 주문 목록으로 이동합니다...</span>
         </div>
       )}
 
@@ -455,9 +411,7 @@ export default function OrderCreateForm({
                 {filteredCustomers.slice(0, 8).map((c) => (
                   <li key={c.id} style={s.ddItem} onMouseDown={() => selectCustomer(c)}>
                     <span>{c.name}</span>
-                    {c.payment_terms_days > 0 && (
-                      <span style={s.pill}>{c.payment_terms_days}일 외상</span>
-                    )}
+                    {c.payment_terms_days > 0 && <span style={s.pill}>{c.payment_terms_days}일 외상</span>}
                   </li>
                 ))}
               </ul>
@@ -466,8 +420,7 @@ export default function OrderCreateForm({
         </div>
         <div style={{ ...s.field, flex: 1, maxWidth: 168 }}>
           <label style={s.label}>주문일</label>
-          <input type="date" style={s.input} value={orderDate}
-            onChange={(e) => setOrderDate(e.target.value)} />
+          <input type="date" style={s.input} value={orderDate} onChange={(e) => setOrderDate(e.target.value)} />
         </div>
       </div>
 
@@ -502,7 +455,7 @@ export default function OrderCreateForm({
                         {p.name}
                         {hasPrev && <span style={s.prevBadge}>최근구매</span>}
                       </span>
-                      <span style={s.pPrice}>{formatKRW(p.last_unit_price)}</span>
+                      <span style={s.pPrice}>{hasPrev ? formatKRW(p.last_unit_price) : ''}</span>
                       {p.tax_type === 'exempt' && <span style={s.pillGray}>면세</span>}
                     </li>
                   )
@@ -513,7 +466,7 @@ export default function OrderCreateForm({
         </div>
       )}
 
-      {/* 주문 라인 */}
+      {/* 주문 라인 — resolveLine 기반 */}
       {lines.length > 0 && (
         <div style={s.tableWrap}>
           <table style={s.table}>
@@ -526,13 +479,8 @@ export default function OrderCreateForm({
             </thead>
             <tbody>
               {lines.map((line) => {
-                const saved  = resolveForSave(line)
-                const calc   = calcLine(saved.unit_price, line.quantity, line.product.tax_type)
-                const margin = calcMarginRate(saved.unit_price, line.product.current_cost_price)
+                const r        = resolveLine(line)  // 유일한 계산 진실값
                 const isRefund = line.quantity < 0
-                const unitDisplay  = getDisplayUnit(line)
-                const totalDisplay = getDisplayTotal(line)
-
                 return (
                   <tr key={line.uid} style={isRefund ? s.refundRow : s.tr}>
                     <td style={s.td}>
@@ -547,22 +495,20 @@ export default function OrderCreateForm({
                         step={1}
                         onChange={(e) => updateQuantity(line.uid, e.target.value)} />
                     </td>
-                    {/* 단가 — 활성(mode=unit)이면 보라 테두리 */}
+                    {/* 단가 */}
                     <td style={s.td}>
                       <input type="text" inputMode="decimal"
                         style={{ ...s.priceInput, borderColor: line.mode === 'unit' ? '#6366f1' : '#e5e7eb' }}
-                        value={unitDisplay}
+                        value={displayUnit(line)}
                         onChange={(e) => updateUnitPrice(line.uid, e.target.value)}
                         placeholder="단가" />
-                      {line.mode === 'unit' && (
-                        <div style={s.modeBadge}>기준</div>
-                      )}
+                      {line.mode === 'unit' && <div style={s.modeBadge}>기준</div>}
                     </td>
-                    {/* 총액 — 활성(mode=total)이면 보라 테두리 */}
+                    {/* 총액 */}
                     <td style={s.td}>
                       <input type="text" inputMode="numeric"
                         style={{ ...s.priceInput, borderColor: line.mode === 'total' ? '#6366f1' : '#e5e7eb' }}
-                        value={totalDisplay}
+                        value={displayTotal(line)}
                         onChange={(e) => updateTotalAmount(line.uid, e.target.value)}
                         placeholder="총액" />
                       {line.mode === 'total' && (
@@ -572,14 +518,13 @@ export default function OrderCreateForm({
                         </div>
                       )}
                     </td>
-                    <td style={{ ...s.td, ...s.num }}>{calc.supply_price.toLocaleString()}</td>
-                    <td style={{ ...s.td, ...s.num }}>{calc.vat_amount.toLocaleString()}</td>
-                    <td style={{ ...s.td, ...s.num, fontWeight: 500 }}>
-                      {calc.line_total.toLocaleString()}
-                    </td>
+                    {/* 공급가 / 부가세 / 합계 — 전부 r 기반 */}
+                    <td style={{ ...s.td, ...s.num }}>{r.supply_price.toLocaleString()}</td>
+                    <td style={{ ...s.td, ...s.num }}>{r.vat_amount.toLocaleString()}</td>
+                    <td style={{ ...s.td, ...s.num, fontWeight: 500 }}>{r.line_total.toLocaleString()}</td>
                     <td style={{ ...s.td, ...s.num }}>
-                      <span style={margin < 5 ? s.marginBad : s.marginOk}>
-                        {margin.toFixed(1)}%
+                      <span style={r.margin_rate < 5 ? s.marginBad : s.marginOk}>
+                        {r.margin_rate.toFixed(1)}%
                       </span>
                     </td>
                     <td style={s.td}>
@@ -593,7 +538,7 @@ export default function OrderCreateForm({
         </div>
       )}
 
-      {/* 합계 바 */}
+      {/* 하단 합계 — calcTotals(resolveLine 기반) */}
       {lines.length > 0 && (
         <div style={s.totalsBar}>
           <span style={s.totalLabel}>공급가</span>
