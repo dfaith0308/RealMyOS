@@ -170,6 +170,7 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
   const [lines,        setLines]        = useState<LineItem[]>([])
   const [orderDate,    setOrderDate]    = useState(todayStr())
   const [dateError,     setDateError]     = useState('')
+  const [paymentDateError, setPaymentDateError] = useState('')
   const [memo,         setMemo]         = useState('')
   const [error,        setError]        = useState<string | null>(null)
   const [success,      setSuccess]      = useState<string | null>(null)
@@ -473,27 +474,38 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
     })
   }
 
-  // 날짜 직접입력 파싱 — "20260306" → "2026-03-06"
-  function parseDateInput(raw: string): string {
-    const digits = raw.replace(/[^0-9]/g, '')
-    if (digits.length === 8) {
-      return `${digits.slice(0,4)}-${digits.slice(4,6)}-${digits.slice(6,8)}`
-    }
-    return raw
+  function handleDateChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const parsed = parseDateValue(e.target.value)
+    setOrderDate(parsed)
+    if (dateError) setDateError('')
   }
 
-  function handleDateChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const raw = e.target.value
-    const parsed = parseDateInput(raw)
-    setOrderDate(parsed)
-    // 입력 변경 시 에러 초기화
-    if (dateError) setDateError('')
+  function parseDateValue(raw: string): string {
+    const digits = raw.replace(/[^0-9]/g, '')
+    if (digits.length === 8)
+      return `${digits.slice(0,4)}-${digits.slice(4,6)}-${digits.slice(6,8)}`
+    return raw
   }
 
   function validateDate(value: string): boolean {
     if (!value) return false
     const d = new Date(value)
     return !isNaN(d.getTime())
+  }
+
+  function handlePaymentDateChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const parsed = parseDateValue(e.target.value)
+    setPaymentDateP(parsed)
+    if (paymentDateError) setPaymentDateError('')
+  }
+
+  function handlePaymentDateBlur() {
+    if (!paymentDate) return
+    if (!validateDate(paymentDate)) {
+      setPaymentDateError('잘못된 날짜입니다.')
+    } else {
+      setPaymentDateError('')
+    }
   }
 
   function handleDateBlur() {
@@ -595,13 +607,20 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
         </div>
         <div style={{ ...s.field, flex: 1, maxWidth: 168 }}>
           <label style={s.label}>주문일</label>
-          <input type="text"
-            style={{ ...s.input, borderColor: dateError ? '#EF4444' : undefined }}
-            value={orderDate}
-            onChange={handleDateChange}
-            onBlur={handleDateBlur}
-            placeholder="YYYY-MM-DD 또는 YYYYMMDD"
-            maxLength={10} />
+          <div style={{ position: 'relative' }}>
+            <input type="text"
+              style={{ ...s.input, borderColor: dateError ? '#EF4444' : undefined, paddingRight: 32 }}
+              value={orderDate}
+              onChange={handleDateChange}
+              onBlur={handleDateBlur}
+              placeholder="YYYY-MM-DD 또는 YYYYMMDD"
+              maxLength={10} />
+            <input type="date"
+              style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', width: 22, height: 22, opacity: 0, cursor: 'pointer' }}
+              value={validateDate(orderDate) ? orderDate : ''}
+              onChange={(e) => { if (e.target.value) { setOrderDate(e.target.value); setDateError('') } }} />
+            <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 14, pointerEvents: 'none', color: '#9ca3af' }}>📅</span>
+          </div>
           {dateError && (
             <div style={{ fontSize: 11, color: '#EF4444', marginTop: 3 }}>{dateError}</div>
           )}
@@ -825,8 +844,23 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 4 }}>수금일</div>
-                <input style={s.input} type="date" value={paymentDate}
-                  onChange={(e) => setPaymentDateP(e.target.value)} />
+                <div style={{ position: 'relative' }}>
+                  <input type="text"
+                    style={{ ...s.input, paddingRight: 32, borderColor: paymentDateError ? '#EF4444' : undefined }}
+                    value={paymentDate}
+                    onChange={handlePaymentDateChange}
+                    onBlur={handlePaymentDateBlur}
+                    placeholder="YYYY-MM-DD 또는 YYYYMMDD"
+                    maxLength={10} />
+                  <input type="date"
+                    style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', width: 22, height: 22, opacity: 0, cursor: 'pointer' }}
+                    value={validateDate(paymentDate) ? paymentDate : ''}
+                    onChange={(e) => { if (e.target.value) { setPaymentDateP(e.target.value); setPaymentDateError('') } }} />
+                  <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 14, pointerEvents: 'none', color: '#9ca3af' }}>📅</span>
+                </div>
+                {paymentDateError && (
+                  <div style={{ fontSize: 11, color: '#EF4444', marginTop: 3 }}>{paymentDateError}</div>
+                )}
               </div>
             </div>
             <div>
