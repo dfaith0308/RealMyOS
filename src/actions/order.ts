@@ -170,23 +170,40 @@ export async function createOrder(
     return { success: false, error: `라인 저장 실패: ${linesErr.message}` }
   }
 
-  // 거래처별 마지막 거래 캐시 — pricing mode 포함 저장
-  await supabase.from('customer_product_prices').upsert(
-    lineRows.map((r, i) => {
-      const origLine = input.lines[i]
-      const pricing_mode = origLine.line_total_override !== undefined ? 'total' : 'unit'
-      return {
-        customer_id:       input.customer_id,
-        product_id:        r.product_id,
-        last_price:        r.unit_price,
-        last_line_total:   r.line_total,
-        last_qty:          r.quantity,
-        last_pricing_mode: pricing_mode,
-        updated_at:        new Date().toISOString(),
-      }
-    }),
-    { onConflict: 'customer_id,product_id' }
-  )
+  // 거래처별 마지막 거래 캐시 — upsert 대신 명시적 update+insert로 컬럼 누락 방지
+  for (const [i, r] of lineRows.entries()) {
+    const origLine     = input.lines[i]
+    const pricing_mode = origLine.line_total_override !== undefined ? 'total' : 'unit'
+    const cacheRow = {
+      customer_id:       input.customer_id,
+      product_id:        r.product_id,
+      last_price:        r.unit_price,
+      last_line_total:   r.line_total,
+      last_qty:          r.quantity,
+      last_pricing_mode: pricing_mode,
+      updated_at:        new Date().toISOString(),
+    }
+    console.error('[SAVE-PRICE]', { product_id: r.product_id, pricing_mode, unit_price: r.unit_price, line_total: r.line_total, qty: r.quantity })
+
+    // 1. 기존 row UPDATE 시도
+    const { count } = await supabase
+      .from('customer_product_prices')
+      .update({
+        last_price:        cacheRow.last_price,
+        last_line_total:   cacheRow.last_line_total,
+        last_qty:          cacheRow.last_qty,
+        last_pricing_mode: cacheRow.last_pricing_mode,
+        updated_at:        cacheRow.updated_at,
+      })
+      .eq('customer_id', input.customer_id)
+      .eq('product_id', r.product_id)
+      .select('customer_id', { count: 'exact', head: true })
+
+    // 2. row 없으면 INSERT
+    if ((count ?? 0) === 0) {
+      await supabase.from('customer_product_prices').insert(cacheRow)
+    }
+  }
 
   // order_logs: create
   await logOrder(supabase, {
@@ -425,7 +442,7 @@ export async function getProductsForOrder(
       const last_line_total   = customerRecord?.last_line_total ?? null
       const last_qty          = customerRecord?.last_qty         ?? null
 
-      return {
+      const productData = {
         id: p.id, product_code: p.product_code, name: p.name,
         tax_type:          p.tax_type as 'taxable' | 'exempt',
         procurement_type:  p.procurement_type,
@@ -433,10 +450,14 @@ export async function getProductsForOrder(
         current_cost_price: costPrice,
         last_unit_price,
         has_purchase_history,
-        last_pricing_mode,   // 과거 입력 방식 복원용
-        last_line_total,     // mode=total이었을 때 진실값
-        last_qty,            // 과거 수량 참고
+        last_pricing_mode,
+        last_line_total,
+        last_qty,
       }
+      if (has_purchase_history) {
+        console.error('[LOAD-PRICE]', { name: p.name, last_pricing_mode, last_unit_price, last_line_total, last_qty })
+      }
+      return productData
     }),
   }
 }
