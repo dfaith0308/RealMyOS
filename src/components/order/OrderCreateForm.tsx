@@ -246,13 +246,38 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
   // ── 상품 추가 ─────────────────────────────────────────────
 
   const addProduct = useCallback((p: ProductForOrder) => {
-    const unitPrice = p.has_purchase_history ? p.last_unit_price : 0
-    const hasPrice  = unitPrice > 0
+    let mode: 'unit' | 'total' = 'unit'
+    let unit_price_input = ''
+    let total_input      = ''
+    let quantity         = 1
+
+    if (p.has_purchase_history && p.last_pricing_mode) {
+      // 과거 거래 방식 그대로 복원
+      if (p.last_pricing_mode === 'total' && p.last_line_total != null) {
+        mode             = 'total'
+        total_input      = String(Math.abs(p.last_line_total))
+        unit_price_input = ''
+        quantity         = p.last_qty ?? 1
+      } else if (p.last_pricing_mode === 'unit') {
+        mode             = 'unit'
+        unit_price_input = String(p.last_unit_price)
+        total_input      = p.last_qty
+          ? String(p.last_unit_price * (p.last_qty ?? 1))
+          : String(p.last_unit_price)
+        quantity         = p.last_qty ?? 1
+      }
+    } else if (p.has_purchase_history && p.last_unit_price > 0) {
+      // 구 데이터 — pricing_mode 없으면 unit으로 간주
+      mode             = 'unit'
+      unit_price_input = String(p.last_unit_price)
+      total_input      = String(p.last_unit_price)
+      quantity         = 1
+    }
+    // 구매 이력 없음 → 빈 값
+
     setLines((prev) => [...prev, {
-      uid: crypto.randomUUID(), product: p, quantity: 1,
-      unit_price_input: hasPrice ? String(unitPrice) : '',
-      total_input:      hasPrice ? String(unitPrice) : '',
-      mode: 'unit',
+      uid: crypto.randomUUID(), product: p,
+      quantity, unit_price_input, total_input, mode,
     }])
     setProductQuery(''); setShowProductDd(false)
     productRef.current?.focus()

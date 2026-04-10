@@ -62,6 +62,10 @@ export interface ProductForOrder {
   procurement_type: string
   fulfillment_type: FulfillmentType
   current_cost_price: number
-  last_unit_price: number          // 이 거래처의 최근 단가 (없으면 정상가)
-  has_purchase_history: boolean    // 이 거래처가 실제 구매한 적 있는지 여부
+  last_unit_price: number           // 이 거래처의 최근 단가 (없으면 정상가)
+  has_purchase_history: boolean     // 이 거래처가 실제 구매한 적 있는지 여부
+  // 과거 거래 복원용 — 입력했던 방식 그대로 재현
+  last_pricing_mode: 'unit' | 'total' | null
+  last_line_total:   number | null  // mode=total일 때 진실값
+  last_qty:          number | null  // 과거 수량 (참고용)
 }

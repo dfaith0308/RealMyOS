@@ -170,14 +170,21 @@ export async function createOrder(
     return { success: false, error: `라인 저장 실패: ${linesErr.message}` }
   }
 
-  // 거래처별 마지막 판매가 캐시
+  // 거래처별 마지막 거래 캐시 — pricing mode 포함 저장
   await supabase.from('customer_product_prices').upsert(
-    lineRows.map((r) => ({
-      customer_id: input.customer_id,
-      product_id:  r.product_id,
-      last_price:  r.unit_price,
-      updated_at:  new Date().toISOString(),
-    })),
+    lineRows.map((r, i) => {
+      const origLine = input.lines[i]
+      const pricing_mode = origLine.line_total_override !== undefined ? 'total' : 'unit'
+      return {
+        customer_id:       input.customer_id,
+        product_id:        r.product_id,
+        last_price:        r.unit_price,
+        last_line_total:   r.line_total,
+        last_qty:          r.quantity,
+        last_pricing_mode: pricing_mode,
+        updated_at:        new Date().toISOString(),
+      }
+    }),
     { onConflict: 'customer_id,product_id' }
   )
 
@@ -392,7 +399,7 @@ export async function getProductsForOrder(
       id, product_code, name, tax_type, procurement_type,
       product_costs ( cost_price, start_date, end_date ),
       product_prices ( price_type, price ),
-      customer_product_prices ( customer_id, last_price )
+      customer_product_prices ( customer_id, last_price, last_line_total, last_qty, last_pricing_mode )
     `)
     .eq('tenant_id', ctx.tenant_id).is('deleted_at', null).order('name')
   if (error) return { success: false, error: error.message }
@@ -412,8 +419,11 @@ export async function getProductsForOrder(
           )
         : undefined
 
-      const has_purchase_history = !!customerRecord  // 이 거래처가 실제 구매한 적 있는지
-      const last_unit_price = customerRecord?.last_price ?? normalPrice
+      const has_purchase_history = !!customerRecord
+      const last_unit_price  = customerRecord?.last_price      ?? normalPrice
+      const last_pricing_mode = (customerRecord?.last_pricing_mode as 'unit' | 'total' | null) ?? null
+      const last_line_total   = customerRecord?.last_line_total ?? null
+      const last_qty          = customerRecord?.last_qty         ?? null
 
       return {
         id: p.id, product_code: p.product_code, name: p.name,
@@ -422,7 +432,10 @@ export async function getProductsForOrder(
         fulfillment_type:  defaultFulfillment(p.procurement_type),
         current_cost_price: costPrice,
         last_unit_price,
-        has_purchase_history,  // "최근구매" 뱃지 기준
+        has_purchase_history,
+        last_pricing_mode,   // 과거 입력 방식 복원용
+        last_line_total,     // mode=total이었을 때 진실값
+        last_qty,            // 과거 수량 참고
       }
     }),
   }
