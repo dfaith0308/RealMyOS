@@ -53,6 +53,7 @@ export interface SalesSchedule {
   script_id:      string | null
   status:         'pending' | 'done' | 'snoozed' | 'cancelled'
   snooze_count:   number
+  original_date:  string | null
   memo:           string | null
 }
 
@@ -407,7 +408,7 @@ export async function getSalesSchedules(dateFrom?: string, dateTo?: string): Pro
   const todayStr = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10)
 
   let q = supabase.from('sales_schedules')
-    .select('id, customer_id, scheduled_date, action_type, script_id, status, snooze_count, memo, customers(name)')
+    .select('id, customer_id, scheduled_date, action_type, script_id, status, snooze_count, original_date, memo, customers(name)')
     .eq('tenant_id', ctx.tenant_id)
     .neq('status', 'cancelled')
     .order('scheduled_date', { ascending: true })
@@ -425,7 +426,7 @@ export async function getSalesSchedules(dateFrom?: string, dateTo?: string): Pro
       customer_name: r.customers?.name ?? '',
       scheduled_date: r.scheduled_date, action_type: r.action_type,
       script_id: r.script_id, status: r.status,
-      snooze_count: r.snooze_count, memo: r.memo,
+      snooze_count: r.snooze_count, original_date: r.original_date ?? null, memo: r.memo,
     })),
   }
 }
@@ -466,35 +467,58 @@ export async function createSalesSchedule(input: {
 
 export async function updateScheduleStatus(
   id: string,
-  status: 'done' | 'snoozed' | 'cancelled',
-  snoozeDate?: string,
+  status: 'done' | 'cancelled',
 ): Promise<ActionResult> {
   const supabase = await createSupabaseServer()
   const ctx = await getAuthCtx(supabase)
   if (!ctx) return { success: false, error: '로그인 필요' }
 
-  const update: Record<string, any> = { status }
-
-  if (status === 'snoozed' && snoozeDate) {
-    update.scheduled_date = snoozeDate
-    update.status         = 'pending'
-    update.snooze_count   = supabase.rpc  // increment via raw
-    // snooze_count는 DB에서 +1 처리
-    const { error } = await supabase
-      .from('sales_schedules')
-      .update({ scheduled_date: snoozeDate, status: 'pending' })
-      .eq('id', id).eq('tenant_id', ctx.tenant_id)
-    await supabase.rpc('increment_snooze_count', { p_id: id }).catch(() => {})
-    if (error) return { success: false, error: error.message }
-    revalidatePath('/sales/schedule')
-    return { success: true }
-  }
-
   const { error } = await supabase
-    .from('sales_schedules').update(update)
+    .from('sales_schedules')
+    .update({ status })
     .eq('id', id).eq('tenant_id', ctx.tenant_id)
 
   if (error) return { success: false, error: error.message }
   revalidatePath('/sales/schedule')
   return { success: true }
+}
+
+// ============================================================
+// Snooze — 내일로 미루기
+// ============================================================
+
+export async function snoozeSchedule(id: string): Promise<ActionResult<{ new_date: string }>> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  // 현재 스케줄 조회
+  const { data: schedule } = await supabase
+    .from('sales_schedules')
+    .select('id, status, scheduled_date, original_date, snooze_count')
+    .eq('id', id).eq('tenant_id', ctx.tenant_id).single()
+
+  if (!schedule) return { success: false, error: '스케줄을 찾을 수 없습니다.' }
+  if (schedule.status === 'done') return { success: false, error: '완료된 스케줄은 미룰 수 없습니다.' }
+  if (schedule.status === 'cancelled') return { success: false, error: '취소된 스케줄은 미룰 수 없습니다.' }
+
+  // 날짜 +1일
+  const current = new Date(schedule.scheduled_date + 'T00:00:00Z')
+  current.setUTCDate(current.getUTCDate() + 1)
+  const new_date = current.toISOString().slice(0, 10)
+
+  const { error } = await supabase
+    .from('sales_schedules')
+    .update({
+      scheduled_date: new_date,
+      snooze_count:   (schedule.snooze_count ?? 0) + 1,
+      original_date:  schedule.original_date ?? schedule.scheduled_date,  // 최초만 저장
+      status:         'pending',
+    })
+    .eq('id', id).eq('tenant_id', ctx.tenant_id)
+
+  if (error) return { success: false, error: error.message }
+
+  revalidatePath('/sales/schedule')
+  return { success: true, data: { new_date } }
 }
