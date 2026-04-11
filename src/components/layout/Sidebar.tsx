@@ -152,8 +152,11 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                   href={group.href ?? '#'}
                   style={{ ...s.groupLink, color: 'inherit', fontWeight: 'inherit' }}
                   onClick={(e) => {
-                    if (hasItems) e.preventDefault()
-                    else onNavigate?.()
+                    if (hasItems && group.href !== '/sales/schedule') {
+                      e.preventDefault()
+                    } else {
+                      onNavigate?.()
+                    }
                   }}>
                   <span style={s.groupIcon}>{group.icon}</span>
                   <span>{group.label}</span>

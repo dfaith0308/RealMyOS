@@ -295,6 +295,7 @@ export async function getSalesHistory(customerId?: string): Promise<ActionResult
   let q = supabase.from('contact_logs')
     .select('id, customer_id, contact_method, result, memo, next_action_date, next_action_type, contacted_at, customers(name)')
     .eq('tenant_id', ctx.tenant_id)
+    .in('contact_method', ['call', 'visit', 'message'])  // 영업 행동만 — 수금/시스템 제외
     .order('contacted_at', { ascending: false })
     .limit(200)
 

@@ -34,7 +34,7 @@ export default function SalesHistoryClient({ initialHistory }: { initialHistory:
       </div>
 
       {filtered.length === 0 ? (
-        <div style={{ textAlign: 'center', color: '#9ca3af', padding: '60px 0', fontSize: 14 }}>이력이 없습니다.</div>
+        <div style={{ textAlign: 'center', color: '#9ca3af', padding: '60px 0', fontSize: 14 }}>영업 기록이 없습니다.</div>
       ) : (
         <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
@@ -62,7 +62,7 @@ export default function SalesHistoryClient({ initialHistory }: { initialHistory:
                         </span>
                       ) : '-'}
                     </td>
-                    <td style={{ padding: '9px 14px', color: '#6b7280', maxWidth: 200 }}>{h.memo ?? '-'}</td>
+                    <td style={{ padding: '9px 14px', color: '#6b7280', maxWidth: 200 }}>{h.memo || ''}</td>
                     <td style={{ padding: '9px 14px', color: h.next_action_date ? '#D97706' : '#9ca3af', fontSize: 12 }}>
                       {h.next_action_date ? `${h.next_action_date} ${h.next_action_type ?? ''}` : '-'}
                     </td>
