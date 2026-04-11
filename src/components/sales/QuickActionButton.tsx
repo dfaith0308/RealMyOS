@@ -1,9 +1,24 @@
 'use client'
 
 import { useState } from 'react'
-import { getSalesScripts, applyTemplateVars, executeMessage } from '@/actions/sales'
+import { getSalesScripts, executeMessage } from '@/actions/sales'
 import { createContactLog } from '@/actions/contact'
 import type { SalesScript } from '@/actions/sales'
+
+// 변수 치환 유틸 (Server Action 아님 — 클라이언트 전용)
+function applyTemplateVars(content: string, vars: {
+  customer_name: string; last_order_date?: string; last_order_amount?: number
+  overdue_amount?: number; main_product?: string; my_name?: string; company_name?: string
+}): string {
+  return content
+    .replace(/\{\{customer_name\}\}/g,     vars.customer_name)
+    .replace(/\{\{last_order_date\}\}/g,   vars.last_order_date    ?? '')
+    .replace(/\{\{last_order_amount\}\}/g, vars.last_order_amount != null ? vars.last_order_amount.toLocaleString() + '원' : '')
+    .replace(/\{\{overdue_amount\}\}/g,    vars.overdue_amount     != null ? vars.overdue_amount.toLocaleString() + '원' : '')
+    .replace(/\{\{main_product\}\}/g,      vars.main_product       ?? '')
+    .replace(/\{\{my_name\}\}/g,           vars.my_name            ?? '')
+    .replace(/\{\{company_name\}\}/g,      vars.company_name       ?? '')
+}
 
 interface QuickActionButtonProps {
   customerId:       string

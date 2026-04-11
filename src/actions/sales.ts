@@ -320,7 +320,7 @@ export async function getSalesHistory(customerId?: string): Promise<ActionResult
 // ============================================================
 
 // 변수 치환 (고정 변수 목록)
-export function applyTemplateVars(
+function applyTemplateVars(
   content: string,
   vars: {
     customer_name:       string
