@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { convertQuoteToOrder, deleteQuote } from '@/actions/quote'
-import type { QuoteDetail, QuoteItem } from '@/types/quote'
+import type { QuoteDetail } from '@/types/quote'
 
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
   draft:               { label: '초안',     color: '#6b7280' },
@@ -34,22 +34,10 @@ export default function QuoteDetailClient({ quote }: { quote: QuoteDetail }) {
     Object.fromEntries(
       quote.items.map((item) => [
         item.id,
-        {
-          checked: item.status !== 'converted',
-          qty:     item.quantity - item.converted_quantity,
-          price:   item.quoted_price,
-        },
+        { checked: item.status !== 'converted', qty: item.quantity - item.converted_quantity, price: item.quoted_price },
       ])
     )
   )
-
-  const printRef = useRef<HTMLDivElement>(null)
-
-  function handlePrint() { window.print() }
-  function handleDownloadJpg() {
-    alert('브라우저 프린트 → "PDF로 저장" 또는 스크린샷으로 JPG 저장하세요.')
-    window.print()
-  }
 
   const st = STATUS_LABEL[quote.status] ?? { label: quote.status, color: '#6b7280' }
   const canConvert = quote.status !== 'converted' && quote.status !== 'expired'
@@ -57,7 +45,6 @@ export default function QuoteDetailClient({ quote }: { quote: QuoteDetail }) {
   async function handleConvert() {
     const selected = quote.items.filter((item) => convState[item.id]?.checked && convState[item.id]?.qty > 0)
     if (!selected.length) { setError('전환할 항목을 선택해주세요.'); return }
-
     setConverting(true); setError(null)
     const res = await convertQuoteToOrder({
       quote_id: quote.id,
@@ -71,7 +58,6 @@ export default function QuoteDetailClient({ quote }: { quote: QuoteDetail }) {
         product_name: item.product_name,
       })),
     })
-
     if (res.success) {
       setSuccess(`주문 ${res.data!.order_number} 생성 완료`)
       setShowConvert(false)
@@ -89,31 +75,11 @@ export default function QuoteDetailClient({ quote }: { quote: QuoteDetail }) {
   }
 
   return (
-    <>
-      <style>{`
-        @media print {
-          /* 프린트 시 사이드바, 네비 등 전체 숨김 */
-          body * { visibility: hidden; }
-          .quote-print-area, .quote-print-area * { visibility: visible; }
-          .quote-print-area {
-            position: absolute;
-            top: 0; left: 0;
-            width: 100%;
-            padding: 20mm 15mm;
-            box-sizing: border-box;
-          }
-          .no-print { display: none !important; }
-          /* A4 기준 페이지 설정 */
-          @page {
-            size: A4;
-            margin: 15mm;
-          }
-        }
-      `}</style>
     <div className="quote-print-area" style={{ maxWidth: 960, margin: '0 auto', padding: '28px 24px', fontFamily: '-apple-system, "Noto Sans KR", sans-serif' }}>
-      {/* 인쇄용 타이틀 — 화면에서는 숨김 */}
-      <div style={{ display: 'none' }} className="print-only">
-        <div style={{ textAlign: 'center', fontSize: 22, fontWeight: 700, marginBottom: 20 }}>견 적 서</div>
+
+      {/* 인쇄용 타이틀 — 화면 숨김, 인쇄 시 표시 */}
+      <div style={{ display: 'none', textAlign: 'center', fontSize: 22, fontWeight: 700, marginBottom: 20 }}>
+        견 적 서
       </div>
 
       {/* 헤더 */}
@@ -130,7 +96,7 @@ export default function QuoteDetailClient({ quote }: { quote: QuoteDetail }) {
           <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 12, background: st.color + '20', color: st.color, fontWeight: 600 }}>
             {st.label}
           </span>
-          <button onClick={handlePrint}
+          <button onClick={() => window.print()}
             style={{ padding: '8px 14px', border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', fontSize: 13, cursor: 'pointer' }}>
             🖨️ 인쇄/PDF
           </button>
@@ -149,12 +115,20 @@ export default function QuoteDetailClient({ quote }: { quote: QuoteDetail }) {
         </div>
       </div>
 
-      {error && <div style={{ background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 16 }}>{error}</div>}
-      {success && <div style={{ background: '#F0FDF4', color: '#15803D', border: '1px solid #BBF7D0', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 16 }}>{success}</div>}
+      {error && (
+        <div style={{ background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 16 }}>
+          {error}
+        </div>
+      )}
+      {success && (
+        <div style={{ background: '#F0FDF4', color: '#15803D', border: '1px solid #BBF7D0', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 16 }}>
+          {success}
+        </div>
+      )}
 
       {/* 전환 UI */}
-      {showConvert && (<div className="no-print">{
-        <div style={{ border: '2px solid #2563EB', borderRadius: 10, padding: 16, marginBottom: 20, background: '#F0F9FF' }}>
+      {showConvert && (
+        <div className="no-print" style={{ border: '2px solid #2563EB', borderRadius: 10, padding: 16, marginBottom: 20, background: '#F0F9FF' }}>
           <div style={{ fontSize: 14, fontWeight: 600, color: '#1D4ED8', marginBottom: 12 }}>주문 전환 — 항목 선택</div>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
@@ -166,9 +140,8 @@ export default function QuoteDetailClient({ quote }: { quote: QuoteDetail }) {
             </thead>
             <tbody>
               {quote.items.filter((item) => item.status !== 'converted').map((item) => {
-                const cs = convState[item.id]
+                const cs       = convState[item.id]
                 const remaining = item.quantity - item.converted_quantity
-                const lineTotal = cs.price * cs.qty
                 return (
                   <tr key={item.id} style={{ borderBottom: '1px solid #E0F2FE' }}>
                     <td style={{ padding: '7px 10px' }}>
@@ -182,8 +155,7 @@ export default function QuoteDetailClient({ quote }: { quote: QuoteDetail }) {
                     <td style={{ padding: '7px 10px' }}>
                       <input type="number" min={1} max={remaining}
                         style={{ width: 70, padding: '4px 6px', border: '1px solid #BFDBFE', borderRadius: 6, fontSize: 13, textAlign: 'center' }}
-                        value={cs.qty}
-                        disabled={!cs.checked}
+                        value={cs.qty} disabled={!cs.checked}
                         onChange={(e) => {
                           const v = Math.min(Math.max(1, parseInt(e.target.value, 10) || 1), remaining)
                           setConvState((prev) => ({ ...prev, [item.id]: { ...prev[item.id], qty: v } }))
@@ -193,15 +165,14 @@ export default function QuoteDetailClient({ quote }: { quote: QuoteDetail }) {
                     <td style={{ padding: '7px 10px' }}>
                       <input type="number" min={0}
                         style={{ width: 90, padding: '4px 6px', border: '1px solid #BFDBFE', borderRadius: 6, fontSize: 13, textAlign: 'right' }}
-                        value={cs.price}
-                        disabled={!cs.checked}
+                        value={cs.price} disabled={!cs.checked}
                         onChange={(e) => {
                           const v = Math.max(0, parseInt(e.target.value, 10) || 0)
                           setConvState((prev) => ({ ...prev, [item.id]: { ...prev[item.id], price: v } }))
                         }} />
                     </td>
                     <td style={{ padding: '7px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                      {cs.checked ? lineTotal.toLocaleString() + '원' : '-'}
+                      {cs.checked ? (cs.price * cs.qty).toLocaleString() + '원' : '-'}
                     </td>
                   </tr>
                 )
@@ -210,7 +181,9 @@ export default function QuoteDetailClient({ quote }: { quote: QuoteDetail }) {
           </table>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 14 }}>
             <button onClick={() => setShowConvert(false)}
-              style={{ padding: '9px 16px', border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', fontSize: 13, cursor: 'pointer' }}>취소</button>
+              style={{ padding: '9px 16px', border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', fontSize: 13, cursor: 'pointer' }}>
+              취소
+            </button>
             <button onClick={handleConvert} disabled={converting}
               style={{ padding: '9px 20px', background: converting ? '#93C5FD' : '#2563EB', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
               {converting ? '전환 중...' : '주문 생성'}
@@ -241,7 +214,11 @@ export default function QuoteDetailClient({ quote }: { quote: QuoteDetail }) {
                 <td style={{ padding: '10px 14px', fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>{item.line_total.toLocaleString()}</td>
                 <td style={{ padding: '10px 14px', color: '#6b7280' }}>{item.converted_quantity} / {item.quantity}</td>
                 <td style={{ padding: '10px 14px' }}>
-                  <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 10, background: item.status === 'converted' ? '#DCFCE7' : item.status === 'partially_converted' ? '#FEF3C7' : '#F3F4F6', color: item.status === 'converted' ? '#15803D' : item.status === 'partially_converted' ? '#92400E' : '#6b7280' }}>
+                  <span style={{
+                    fontSize: 11, padding: '2px 7px', borderRadius: 10,
+                    background: item.status === 'converted' ? '#DCFCE7' : item.status === 'partially_converted' ? '#FEF3C7' : '#F3F4F6',
+                    color:      item.status === 'converted' ? '#15803D' : item.status === 'partially_converted' ? '#92400E' : '#6b7280',
+                  }}>
                     {ITEM_STATUS_LABEL[item.status]}
                   </span>
                 </td>
@@ -263,6 +240,5 @@ export default function QuoteDetailClient({ quote }: { quote: QuoteDetail }) {
         </div>
       )}
     </div>
-    </>
   )
 }

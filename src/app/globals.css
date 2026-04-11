@@ -154,3 +154,26 @@ tr[data-status="cancelled"] {
     font-size: 12px;
   }
 }
+
+/* ============================================================
+   견적서 인쇄 스타일
+   ============================================================ */
+@media print {
+  body * { visibility: hidden; }
+  .quote-print-area,
+  .quote-print-area * { visibility: visible; }
+  .quote-print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 20mm 15mm;
+    box-sizing: border-box;
+  }
+  .no-print { display: none !important; }
+}
+
+@page {
+  size: A4;
+  margin: 15mm;
+}
