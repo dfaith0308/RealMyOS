@@ -32,6 +32,7 @@ const MENU: MenuGroup[] = [
     items: [
       { label: '주문 목록', href: '/orders' },
       { label: '주문 등록', href: '/orders/new' },
+      { label: '견적관리',  href: '/orders/quotes' },
     ],
   },
   {
@@ -57,12 +58,7 @@ const MENU: MenuGroup[] = [
     ],
   },
   { label: '설정', icon: '⚙️', href: '/settings' },
-  { label: '견적관리', icon: '📄', href: '/orders/quotes',
-    children: [
-      { label: '견적 목록', href: '/orders/quotes' },
-      { label: '견적 등록', href: '/orders/quotes/new' },
-    ],
-  },
+
   { label: '매입관리',   icon: '🚚', soon: true },
   { label: '원장관리',   icon: '📒', soon: true },
   { label: '매출분석',   icon: '📈', soon: true },
