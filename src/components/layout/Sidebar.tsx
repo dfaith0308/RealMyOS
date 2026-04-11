@@ -61,6 +61,13 @@ const MENU: MenuGroup[] = [
 
   { label: '매입관리',   icon: '🚚', soon: true },
   { label: '원장관리',   icon: '📒', soon: true },
+  { label: '자동화영업', icon: '🎯', href: '/sales/schedule',
+    children: [
+      { label: '영업스케쥴', href: '/sales/schedule' },
+      { label: '영업이력',   href: '/sales/history' },
+      { label: '스크립트관', href: '/sales/scripts' },
+    ],
+  },
   { label: '매출분석',   icon: '📈', soon: true },
   { label: '자동화영업', icon: '🤖', soon: true },
 ]

@@ -16,14 +16,19 @@ import type { ActionResult } from '@/types/order'
 // payment      = 수금 완료 (자동 기록)
 export type ContactMethod = 'call' | 'call_attempt' | 'visit' | 'message' | 'payment'
 
+export type ContactResult = 'connected' | 'no_answer' | 'interested' | 'rejected' | 'scheduled'
+export type NextActionType = 'call' | 'visit' | 'message'
+
 export interface CreateContactLogInput {
-  customer_id: string
-  contact_method: ContactMethod
-  memo?: string
-  action_log_id?: string
-  // 이 연락이 action_log의 conversion에 해당하는 상태
-  // call_attempt → 'attempt', payment → 'success'
+  customer_id:       string
+  contact_method:    ContactMethod
+  memo?:             string
+  action_log_id?:    string
   conversion_status?: ConversionStatus
+  // 영업이력 확장 필드
+  result?:           ContactResult
+  next_action_date?: string        // YYYY-MM-DD
+  next_action_type?: NextActionType
 }
 
 export async function createContactLog(
@@ -45,14 +50,17 @@ export async function createContactLog(
   const { data, error } = await supabase
     .from('contact_logs')
     .insert({
-      tenant_id:      ctx.tenant_id,
-      customer_id:    input.customer_id,
-      contact_method: input.contact_method,
-      memo:           input.memo ?? null,
-      contacted_by:   user.id,
-      contacted_at:   new Date().toISOString(),
-      action_log_id:  input.action_log_id ?? null,
-      outcome:        input.outcome ?? null,
+      tenant_id:        ctx.tenant_id,
+      customer_id:      input.customer_id,
+      contact_method:   input.contact_method,
+      memo:             input.memo ?? null,
+      contacted_by:     ctx.user_id,           // 버그 수정: user.id → ctx.user_id
+      contacted_at:     new Date().toISOString(),
+      action_log_id:    input.action_log_id ?? null,
+      outcome:          input.result ?? null,  // result → outcome 컬럼
+      result:           input.result ?? null,
+      next_action_date: input.next_action_date ?? null,
+      next_action_type: input.next_action_type ?? null,
     })
     .select('id')
     .single()
