@@ -37,11 +37,15 @@ export interface SalesHistory {
   customer_id:      string
   customer_name:    string
   contact_method:   string
+  methods:          string[] | null
   result:           string | null
+  outcome_type:     string | null
+  customer_status:  string | null
   memo:             string | null
   next_action_date: string | null
   next_action_type: string | null
   contacted_at:     string
+  created_at:       string
 }
 
 export interface SalesSchedule {
@@ -293,10 +297,9 @@ export async function getSalesHistory(customerId?: string): Promise<ActionResult
   if (!ctx) return { success: false, error: '로그인 필요' }
 
   let q = supabase.from('contact_logs')
-    .select('id, customer_id, contact_method, result, memo, next_action_date, next_action_type, contacted_at, customers(name)')
+    .select('id, customer_id, contact_method, methods, result, outcome_type, customer_status, memo, next_action_date, next_action_type, contacted_at, created_at, customers(name)')
     .eq('tenant_id', ctx.tenant_id)
-    .in('contact_method', ['call', 'visit', 'message'])  // 영업 행동만 — 수금/시스템 제외
-    .not('contact_method', 'is', null)                      // NULL 제외
+    .in('contact_method', ['call', 'visit', 'message', 'call_attempt'])
     .order('created_at', { ascending: false })
     .limit(200)
 
@@ -310,9 +313,12 @@ export async function getSalesHistory(customerId?: string): Promise<ActionResult
     data: (data ?? []).map((r: any) => ({
       id: r.id, customer_id: r.customer_id,
       customer_name: r.customers?.name ?? '',
-      contact_method: r.contact_method, result: r.result,
+      contact_method: r.contact_method, methods: r.methods ?? null,
+      result: r.result, outcome_type: r.outcome_type ?? null,
+      customer_status: r.customer_status ?? null,
       memo: r.memo, next_action_date: r.next_action_date,
-      next_action_type: r.next_action_type, contacted_at: r.contacted_at,
+      next_action_type: r.next_action_type,
+      contacted_at: r.contacted_at, created_at: r.created_at,
     })),
   }
 }
@@ -523,4 +529,52 @@ export async function snoozeSchedule(id: string): Promise<ActionResult<{ new_dat
 
   revalidatePath('/sales/schedule')
   return { success: true, data: { new_date } }
+}
+
+// ============================================================
+// 영업이력 삭제
+// ============================================================
+
+export async function deleteContactLog(id: string): Promise<ActionResult> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const { error } = await supabase
+    .from('contact_logs')
+    .delete()
+    .eq('id', id)
+    .eq('tenant_id', ctx.tenant_id)
+
+  if (error) return { success: false, error: error.message }
+  revalidatePath('/sales/history')
+  return { success: true }
+}
+
+// ============================================================
+// 영업이력 수정
+// ============================================================
+
+export async function updateContactLog(
+  id: string,
+  data: {
+    outcome_type?:    string
+    memo?:            string
+    next_action_date?: string
+    customer_status?: string
+  }
+): Promise<ActionResult> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const { error } = await supabase
+    .from('contact_logs')
+    .update(data)
+    .eq('id', id)
+    .eq('tenant_id', ctx.tenant_id)
+
+  if (error) return { success: false, error: error.message }
+  revalidatePath('/sales/history')
+  return { success: true }
 }
