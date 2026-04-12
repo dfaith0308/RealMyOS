@@ -60,12 +60,15 @@ function ScheduleEditModal({ schedule, onSave, onClose }: {
         <div style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', marginBottom: 6 }}>방법</div>
           <div style={{ display: 'flex', gap: 8 }}>
-            {[['call','📞 전화'],['message','💬 문자'],['visit','🚗 방문']] as const}.map(([v, label]) => (
-              <button key={v} onClick={() => setAction(v)}
-                style={{ flex: 1, padding: '8px 0', border: `2px solid ${action === v ? '#111827' : '#e5e7eb'}`, borderRadius: 7, fontSize: 13, cursor: 'pointer', background: action === v ? '#111827' : '#fff', color: action === v ? '#fff' : '#374151', fontWeight: action === v ? 600 : 400 }}>
-                {label}
-              </button>
-            ))}
+            {(['call','message','visit'] as const).map((v) => {
+              const label = v === 'call' ? '📞 전화' : v === 'message' ? '💬 문자' : '🚗 방문'
+              return (
+                <button key={v} onClick={() => setAction(v)}
+                  style={{ flex: 1, padding: '8px 0', border: `2px solid ${action === v ? '#111827' : '#e5e7eb'}`, borderRadius: 7, fontSize: 13, cursor: 'pointer', background: action === v ? '#111827' : '#fff', color: action === v ? '#fff' : '#374151', fontWeight: action === v ? 600 : 400 }}>
+                  {label}
+                </button>
+              )
+            })}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
@@ -349,16 +352,26 @@ export default function SalesScheduleClient({ initialTargets, initialScripts, in
                   )}
                 </div>
                 {!isDone && (
-                  <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
                     <button onClick={() => handleActionSchedule(sch)}
                       style={{ padding: '5px 12px', background: '#111827', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, cursor: 'pointer', fontWeight: 500 }}>🎯 영업 실행</button>
                     <button onClick={() => handleSnooze(sch)} disabled={isSnoozingThis}
-                      style={{ padding: '5px 12px', background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 6, fontSize: 12, cursor: isSnoozingThis ? 'not-allowed' : 'pointer', color: '#92400E' }}>
-                      {isSnoozingThis ? '미루는 중...' : '내일로 미루기'}
+                      style={{ padding: '5px 10px', background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 6, fontSize: 12, cursor: isSnoozingThis ? 'not-allowed' : 'pointer', color: '#92400E' }}>
+                      {isSnoozingThis ? '...' : '내일로'}
                     </button>
+                    <button onClick={() => setEditTarget(sch)}
+                      style={{ padding: '5px 10px', border: '1px solid #DBEAFE', borderRadius: 6, fontSize: 12, cursor: 'pointer', background: '#EFF6FF', color: '#2563EB' }}>✏️ 수정</button>
+                    <button onClick={() => handleDeleteSchedule(sch.id)}
+                      style={{ padding: '5px 10px', border: '1px solid #FECACA', borderRadius: 6, fontSize: 12, cursor: 'pointer', background: '#FFF', color: '#DC2626' }}>🗑</button>
                   </div>
                 )}
-                {isDone && <div style={{ fontSize: 12, color: '#16A34A', fontWeight: 500, marginTop: 6 }}>✓ 완료</div>}
+                {isDone && (
+                  <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center' }}>
+                    <span style={{ fontSize: 12, color: '#16A34A', fontWeight: 500 }}>✓ 완료</span>
+                    <button onClick={() => handleDeleteSchedule(sch.id)}
+                      style={{ padding: '3px 8px', border: '1px solid #FECACA', borderRadius: 5, fontSize: 11, cursor: 'pointer', background: '#fff', color: '#DC2626' }}>🗑</button>
+                  </div>
+                )}
               </div>
             )
           })}

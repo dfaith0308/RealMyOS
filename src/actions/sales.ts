@@ -873,3 +873,115 @@ export async function getTodaySalesWork(): Promise<ActionResult<TodaySalesSummar
     },
   }
 }
+
+// ============================================================
+// STEP 4 — 영업 → 주문 전환 추적
+// ============================================================
+
+export interface ConversionStats {
+  total_attempts:   number   // outcome_type = 'order_placed' 기록 수
+  conversions:      number   // 그 중 7일 내 실제 주문 발생 수
+  conversion_rate:  number   // 0~100 (%)
+  last_converted_at: string | null
+}
+
+const CONVERSION_WINDOW_DAYS = 7
+
+export async function getConversionStats(
+  customerId: string
+): Promise<ActionResult<ConversionStats>> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  // 1. order_placed 기록 조회 (최근 90일)
+  const d90 = new Date(Date.now() - 90 * 86400000).toISOString()
+  const { data: attempts } = await supabase
+    .from('contact_logs')
+    .select('id, created_at')
+    .eq('tenant_id', ctx.tenant_id)
+    .eq('customer_id', customerId)
+    .eq('outcome_type', 'order_placed')
+    .gte('created_at', d90)
+    .order('created_at', { ascending: true })
+
+  if (!attempts || attempts.length === 0) {
+    return { success: true, data: { total_attempts: 0, conversions: 0, conversion_rate: 0, last_converted_at: null } }
+  }
+
+  // 2. 해당 기간 내 실제 주문 조회
+  const { data: orders } = await supabase
+    .from('orders')
+    .select('id, order_date, created_at')
+    .eq('tenant_id', ctx.tenant_id)
+    .eq('customer_id', customerId)
+    .eq('status', 'confirmed')
+    .is('deleted_at', null)
+    .gte('created_at', d90)
+    .order('created_at', { ascending: true })
+
+  const orderDates = (orders ?? []).map(o => new Date(o.created_at).getTime())
+
+  // 3. attempt별 7일 내 주문 존재 여부 확인
+  let conversions       = 0
+  let lastConvertedAt: string | null = null
+
+  for (const attempt of attempts) {
+    const attemptTime = new Date(attempt.created_at).getTime()
+    const windowEnd   = attemptTime + CONVERSION_WINDOW_DAYS * 86400000
+
+    const converted = orderDates.some(ot => ot >= attemptTime && ot <= windowEnd)
+    if (converted) {
+      conversions++
+      lastConvertedAt = attempt.created_at
+    }
+  }
+
+  return {
+    success: true,
+    data: {
+      total_attempts:   attempts.length,
+      conversions,
+      conversion_rate:  Math.round((conversions / attempts.length) * 100),
+      last_converted_at: lastConvertedAt,
+    },
+  }
+}
+
+// 영업이력 row별 전환 여부 (7일 내 주문)
+export async function getConversionMap(
+  customerId: string
+): Promise<ActionResult<Map<string, boolean>>> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const d90 = new Date(Date.now() - 90 * 86400000).toISOString()
+
+  const [{ data: logs }, { data: orders }] = await Promise.all([
+    supabase.from('contact_logs')
+      .select('id, created_at')
+      .eq('tenant_id', ctx.tenant_id)
+      .eq('customer_id', customerId)
+      .eq('outcome_type', 'order_placed')
+      .gte('created_at', d90),
+    supabase.from('orders')
+      .select('created_at')
+      .eq('tenant_id', ctx.tenant_id)
+      .eq('customer_id', customerId)
+      .eq('status', 'confirmed')
+      .is('deleted_at', null)
+      .gte('created_at', d90),
+  ])
+
+  const orderTimes = (orders ?? []).map(o => new Date(o.created_at).getTime())
+  const result     = new Map<string, boolean>()
+
+  for (const log of logs ?? []) {
+    const t   = new Date(log.created_at).getTime()
+    const end = t + CONVERSION_WINDOW_DAYS * 86400000
+    result.set(log.id, orderTimes.some(ot => ot >= t && ot <= end))
+  }
+
+  return { success: true, data: result }
+}

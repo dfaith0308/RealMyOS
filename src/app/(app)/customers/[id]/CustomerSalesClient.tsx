@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { deleteContactLog, updateContactLog } from '@/actions/sales'
 import QuickActionButton from '@/components/sales/QuickActionButton'
-import type { SalesHistory } from '@/actions/sales'
+import type { SalesHistory, ConversionStats } from '@/actions/sales'
 
 // ============================================================
 // 상수
@@ -46,6 +46,7 @@ interface CustomerSalesClientProps {
   }
   initialHistory: SalesHistory[]
   nextAction:     { date: string; type: string } | null
+  conversionStats: ConversionStats | null
 }
 
 // ============================================================
@@ -112,7 +113,7 @@ function EditModal({ log, onSave, onClose }: {
 // 메인 컴포넌트
 // ============================================================
 
-export default function CustomerSalesClient({ customer, initialHistory, nextAction }: CustomerSalesClientProps) {
+export default function CustomerSalesClient({ customer, initialHistory, nextAction, conversionStats }: CustomerSalesClientProps) {
   const [history,    setHistory]    = useState(initialHistory)
   const [editTarget, setEditTarget] = useState<SalesHistory | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -186,6 +187,15 @@ export default function CustomerSalesClient({ customer, initialHistory, nextActi
               label: '고객 상태',
               value: customer.sales_status ?? '미분류',
             },
+            ...(conversionStats ? [{
+              label: '주문 전환율',
+              value: conversionStats.total_attempts === 0
+                ? '-'
+                : `${conversionStats.conversion_rate}% (${conversionStats.conversions}/${conversionStats.total_attempts})`,
+              color: conversionStats.conversion_rate >= 50 ? '#16A34A'
+                   : conversionStats.conversion_rate > 0  ? '#D97706'
+                   : '#9ca3af',
+            }] : []),
           ].map(item => (
             <div key={item.label} style={{ minWidth: 100, background: '#f9fafb', borderRadius: 8, padding: '10px 14px' }}>
               <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 3 }}>{item.label}</div>
@@ -228,6 +238,9 @@ export default function CustomerSalesClient({ customer, initialHistory, nextActi
                     )}
                     {h.schedule_id && (
                       <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 10, background: '#ECFDF5', color: '#059669' }}>📅 스케줄</span>
+                    )}
+                    {h.outcome_type === 'order_placed' && (
+                      <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 10, background: '#F0FDF4', color: '#16A34A', fontWeight: 600 }}>🟢 주문발생</span>
                     )}
                   </div>
 
