@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { snoozeSchedule, updateScheduleStatus, createSalesSchedule } from '@/actions/sales'
+import QuickActionButton from '@/components/sales/QuickActionButton'
 import { createContactLog } from '@/actions/contact'
 import type { SalesTarget, SalesScript, SalesSchedule } from '@/actions/sales'
 import type { ContactResult, NextActionType } from '@/actions/contact'
@@ -82,6 +83,17 @@ function MiniCalendar({ selected, onSelect, markedDates }: {
         })}
       </div>
     </div>
+      {/* 스케줄 영업 실행 모달 */}
+      {actionSchedule && (
+        <QuickActionButton
+          customerId={actionSchedule.customerId}
+          customerName={actionSchedule.customerName}
+          phone={actionSchedule.phone}
+          onDone={() => handleScheduleDone(actionSchedule.id)}
+          _forceOpen
+        />
+      )}
+    </div>
   )
 }
 
@@ -98,6 +110,7 @@ export default function SalesScheduleClient({ initialTargets, initialScripts, in
   const [selectedDate, setSelectedDate] = useState(todayKST())
   const [snoozingId,   setSnoozingId]   = useState<string | null>(null)
   const [doneIds,      setDoneIds]      = useState<Set<string>>(new Set())
+  const [actionSchedule, setActionSchedule] = useState<{id: string; customerId: string; customerName: string; phone?: string|null} | null>(null)
   const [showAdd,      setShowAdd]      = useState(false)
   const [newCustName,  setNewCustName]  = useState('')
   const [newAction,    setNewAction]    = useState<'call'|'message'|'visit'>('call')
@@ -132,11 +145,18 @@ export default function SalesScheduleClient({ initialTargets, initialScripts, in
     setSnoozingId(null)
   }
 
-  async function handleDone(id: string) {
-    if (doneIds.has(id)) return
-    setDoneIds(prev => new Set(prev).add(id))
-    await updateScheduleStatus(id, 'done')
-    setSchedules(prev => prev.map(s => s.id === id ? { ...s, status: 'done' } : s))
+  // 완료 버튼 → QuickActionButton 모달 열기 (기록 없이 완료 불가)
+  function handleActionSchedule(sch: { id: string; customer_id: string; customer_name: string }) {
+    setActionSchedule({ id: sch.id, customerId: sch.customer_id, customerName: sch.customer_name })
+  }
+
+  // QuickActionButton 저장 완료 후 스케줄 done 처리
+  async function handleScheduleDone(scheduleId: string) {
+    if (doneIds.has(scheduleId)) return
+    setDoneIds(prev => new Set(prev).add(scheduleId))
+    await updateScheduleStatus(scheduleId, 'done')
+    setSchedules(prev => prev.map(s => s.id === scheduleId ? { ...s, status: 'done' } : s))
+    setActionSchedule(null)
   }
 
   async function handleAdd() {
@@ -258,8 +278,8 @@ export default function SalesScheduleClient({ initialTargets, initialScripts, in
                 </div>
                 {!isDone && (
                   <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                    <button onClick={() => handleDone(sch.id)}
-                      style={{ padding: '5px 12px', background: '#f3f4f6', border: 'none', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}>완료</button>
+                    <button onClick={() => handleActionSchedule(sch)}
+                      style={{ padding: '5px 12px', background: '#111827', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, cursor: 'pointer', fontWeight: 500 }}>🎯 영업 실행</button>
                     <button onClick={() => handleSnooze(sch)} disabled={isSnoozingThis}
                       style={{ padding: '5px 12px', background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 6, fontSize: 12, cursor: isSnoozingThis ? 'not-allowed' : 'pointer', color: '#92400E' }}>
                       {isSnoozingThis ? '미루는 중...' : '내일로 미루기'}

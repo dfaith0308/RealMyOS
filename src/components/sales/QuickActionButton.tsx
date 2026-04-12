@@ -73,6 +73,8 @@ interface QuickActionButtonProps {
   phone?:        string | null
   avgOrderCycle?: number
   compact?:      boolean
+  onDone?:       () => void   // 저장 완료 후 콜백
+  _forceOpen?:   boolean      // 외부에서 강제 열기 (스케줄 완료 연동)
 }
 
 // ============================================================
@@ -152,12 +154,12 @@ export default function QuickActionButton({
     }
 
     setDone(true)
-    setTimeout(handleClose, 1200)
+    setTimeout(() => { handleClose(); onDone?.() }, 1000)
   }
 
   // ── 렌더 ────────────────────────────────────────────────
 
-  if (!open) {
+  if (!open && !_forceOpen) {
     return (
       <button onClick={handleOpen}
         style={{ padding: compact ? '4px 10px' : '7px 14px', background: '#111827', color: '#fff', border: 'none', borderRadius: 6, fontSize: compact ? 11 : 13, cursor: 'pointer', fontWeight: 500, whiteSpace: 'nowrap' }}>
