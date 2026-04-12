@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { getCustomerSalesProfile } from '@/actions/sales'
+import { getCustomerSalesProfile, getConversionStats } from '@/actions/sales'
 import CustomerSalesClient from './CustomerSalesClient'
 
 export const metadata = { title: '거래처 상세 — RealMyOS' }
@@ -10,7 +10,10 @@ export default async function CustomerDetailPage({
 }: {
   params: { id: string }
 }) {
-  const result = await getCustomerSalesProfile(params.id)
+  const [result, convResult] = await Promise.all([
+    getCustomerSalesProfile(params.id),
+    getConversionStats(params.id),
+  ])
   if (!result.success || !result.data) notFound()
 
   const { customer, history, next_action } = result.data
@@ -28,6 +31,7 @@ export default async function CustomerDetailPage({
         customer={customer}
         initialHistory={history}
         nextAction={next_action}
+        conversionStats={convResult.data ?? null}
       />
     </div>
   )
