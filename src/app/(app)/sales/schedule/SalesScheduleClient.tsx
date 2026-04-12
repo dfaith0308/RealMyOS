@@ -447,9 +447,9 @@ export default function SalesScheduleClient({ initialTargets, initialScripts, in
         customerId={actionSchedule.customerId}
         customerName={actionSchedule.customerName}
         phone={actionSchedule.phone ?? undefined}
-        scheduleId={actionSchedule.id}  // 스케줄 → 이력 연결
+        scheduleId={actionSchedule.id}
+        defaultOpen={true}
         onDone={() => handleScheduleDone(actionSchedule.id)}
-        _forceOpen
       />
     )}
     </>
