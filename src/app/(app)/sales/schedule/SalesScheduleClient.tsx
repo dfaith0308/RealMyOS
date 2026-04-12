@@ -83,17 +83,7 @@ function MiniCalendar({ selected, onSelect, markedDates }: {
         })}
       </div>
     </div>
-      {/* 스케줄 영업 실행 모달 */}
-      {actionSchedule && (
-        <QuickActionButton
-          customerId={actionSchedule.customerId}
-          customerName={actionSchedule.customerName}
-          phone={actionSchedule.phone}
-          onDone={() => handleScheduleDone(actionSchedule.id)}
-          _forceOpen
-        />
-      )}
-    </div>
+
   )
 }
 
@@ -185,6 +175,7 @@ export default function SalesScheduleClient({ initialTargets, initialScripts, in
   }
 
   return (
+    <>
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '28px 24px', fontFamily: '-apple-system, "Noto Sans KR", sans-serif' }}>
       <h1 style={{ fontSize: 20, fontWeight: 600, margin: '0 0 20px' }}>영업 스케쥴</h1>
 
@@ -347,5 +338,16 @@ export default function SalesScheduleClient({ initialTargets, initialScripts, in
         )}
       </div>
     </div>
+
+    {actionSchedule && (
+      <QuickActionButton
+        customerId={actionSchedule.customerId}
+        customerName={actionSchedule.customerName}
+        phone={actionSchedule.phone ?? undefined}
+        onDone={() => handleScheduleDone(actionSchedule.id)}
+        _forceOpen
+      />
+    )}
+    </>
   )
 }
