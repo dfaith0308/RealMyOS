@@ -7,6 +7,8 @@ import type { CustomerStatus, CustomerWithScore } from '@/actions/ledger'
 import type { ActionType } from '@/lib/customer-logic'
 import CallButton from '@/components/customer/CallButton'
 import ActionButton from '@/components/customer/ActionButton'
+import TodaySalesWidget from '@/components/sales/TodaySalesWidget'
+import { getTodaySalesWork } from '@/actions/sales'
 
 export const metadata = { title: '오늘 할 일 — RealMyOS' }
 
@@ -48,7 +50,10 @@ export default async function CustomersPage({
   const { filter } = searchParams
 
   const _t0 = Date.now()
-  const result = await getCustomersWithStats()
+  const [result, todaySalesResult] = await Promise.all([
+    getCustomersWithStats(),
+    getTodaySalesWork(),
+  ])
 
   const all = result.data ?? []
 
@@ -127,6 +132,11 @@ export default async function CustomersPage({
           <span style={s.kpiVal}>{all.length}곳</span>
         </div>
       </div>
+
+      {/* 오늘 해야 할 영업 위젯 */}
+      {todaySalesResult.data && todaySalesResult.data.total > 0 && (
+        <TodaySalesWidget data={todaySalesResult.data} />
+      )}
 
       {/* TOP 3 */}
       {top3.length > 0 && (

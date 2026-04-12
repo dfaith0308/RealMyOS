@@ -687,3 +687,189 @@ export async function updateContactLog(
   revalidatePath('/sales/history')
   return { success: true }
 }
+
+// ============================================================
+// 거래처 상세 — 영업 프로필 (상단 요약 + 이력)
+// ============================================================
+
+export interface CustomerSalesProfile {
+  customer: {
+    id:                       string
+    name:                     string
+    phone:                    string | null
+    preferred_contact_method: string | null
+    preferred_contact_time:   string | null
+    last_contact_date:        string | null
+    last_contact_outcome:     string | null
+    sales_status:             string | null
+  }
+  history:      SalesHistory[]
+  next_action:  { date: string; type: string } | null
+}
+
+export async function getCustomerSalesProfile(
+  customerId: string
+): Promise<ActionResult<CustomerSalesProfile>> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  // 1. 고객 기본 정보
+  const { data: customer } = await supabase
+    .from('customers')
+    .select('id, name, phone, preferred_contact_method, preferred_contact_time, last_contact_date, last_contact_outcome, sales_status')
+    .eq('id', customerId)
+    .eq('tenant_id', ctx.tenant_id)
+    .is('deleted_at', null)
+    .single()
+
+  if (!customer) return { success: false, error: '거래처를 찾을 수 없습니다.' }
+
+  // 2. 영업이력 (최근 20건)
+  const { data: logs } = await supabase
+    .from('contact_logs')
+    .select('id, customer_id, contact_method, methods, result, outcome_type, customer_status, memo, next_action_date, next_action_type, contacted_at, created_at, schedule_id, customers(name)')
+    .eq('customer_id', customerId)
+    .eq('tenant_id', ctx.tenant_id)
+    .in('contact_method', ['call', 'visit', 'message', 'call_attempt'])
+    .not('contact_method', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(20)
+
+  const history: SalesHistory[] = (logs ?? []).map((r: any) => ({
+    id:               r.id,
+    customer_id:      r.customer_id,
+    customer_name:    r.customers?.name ?? '',
+    contact_method:   r.contact_method,
+    methods:          r.methods ?? null,
+    result:           r.result,
+    outcome_type:     r.outcome_type ?? null,
+    customer_status:  r.customer_status ?? null,
+    memo:             r.memo,
+    next_action_date: r.next_action_date,
+    next_action_type: r.next_action_type,
+    contacted_at:     r.contacted_at,
+    created_at:       r.created_at,
+    schedule_id:      r.schedule_id ?? null,
+  }))
+
+  // 3. 다음 행동 (가장 가까운 미래 날짜)
+  const today = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10)
+  const upcoming = history
+    .filter(h => h.next_action_date && h.next_action_date >= today)
+    .sort((a, b) => (a.next_action_date ?? '').localeCompare(b.next_action_date ?? ''))[0]
+
+  return {
+    success: true,
+    data: {
+      customer: {
+        id:                       customer.id,
+        name:                     customer.name,
+        phone:                    customer.phone ?? null,
+        preferred_contact_method: customer.preferred_contact_method ?? null,
+        preferred_contact_time:   customer.preferred_contact_time ?? null,
+        last_contact_date:        customer.last_contact_date ?? null,
+        last_contact_outcome:     customer.last_contact_outcome ?? null,
+        sales_status:             customer.sales_status ?? null,
+      },
+      history,
+      next_action: upcoming
+        ? { date: upcoming.next_action_date!, type: upcoming.next_action_type ?? 'call' }
+        : null,
+    },
+  }
+}
+
+// ============================================================
+// 대시보드 — 오늘 해야 할 영업 (스케줄 + next_action_date)
+// ============================================================
+
+export interface TodaySalesItem {
+  type:          'schedule' | 'next_action'
+  schedule_id?:  string
+  customer_id:   string
+  customer_name: string
+  phone:         string | null
+  action_type:   string
+  status?:       string
+  source:        string  // 표시용 출처
+}
+
+export interface TodaySalesSummary {
+  total:     number
+  done:      number
+  pending:   number
+  items:     TodaySalesItem[]
+}
+
+export async function getTodaySalesWork(): Promise<ActionResult<TodaySalesSummary>> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const todayStr = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10)
+
+  // 1. 오늘 예약된 스케줄
+  const { data: schedules } = await supabase
+    .from('sales_schedules')
+    .select('id, customer_id, action_type, status, customers(name, phone)')
+    .eq('tenant_id', ctx.tenant_id)
+    .eq('scheduled_date', todayStr)
+    .neq('status', 'cancelled')
+    .order('created_at', { ascending: true })
+
+  // 2. next_action_date = 오늘인 contact_logs
+  const { data: nextActions } = await supabase
+    .from('contact_logs')
+    .select('id, customer_id, next_action_type, customers(name, phone)')
+    .eq('tenant_id', ctx.tenant_id)
+    .eq('next_action_date', todayStr)
+    .not('next_action_date', 'is', null)
+    .order('created_at', { ascending: false })
+
+  const items: TodaySalesItem[] = []
+
+  // 스케줄 항목
+  for (const s of schedules ?? []) {
+    const c = s.customers as any
+    items.push({
+      type:          'schedule',
+      schedule_id:   s.id,
+      customer_id:   s.customer_id,
+      customer_name: c?.name ?? '',
+      phone:         c?.phone ?? null,
+      action_type:   s.action_type,
+      status:        s.status,
+      source:        '스케줄',
+    })
+  }
+
+  // next_action_date 항목 — 스케줄에 없는 거래처만
+  const seen = new Set(items.map(i => i.customer_id))
+  for (const n of nextActions ?? []) {
+    if (seen.has(n.customer_id)) continue
+    const c = n.customers as any
+    items.push({
+      type:          'next_action',
+      customer_id:   n.customer_id,
+      customer_name: c?.name ?? '',
+      phone:         c?.phone ?? null,
+      action_type:   n.next_action_type ?? 'call',
+      source:        '다음행동',
+    })
+    seen.add(n.customer_id)
+  }
+
+  const done    = items.filter(i => i.status === 'done').length
+  const pending = items.filter(i => i.status !== 'done').length
+
+  return {
+    success: true,
+    data: {
+      total:   items.length,
+      done,
+      pending,
+      items:   items.slice(0, 10),  // 최대 10건
+    },
+  }
+}
