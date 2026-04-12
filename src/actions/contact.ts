@@ -44,26 +44,6 @@ export const CUSTOMER_STATUS_OPTIONS = [
 export type CustomerStatusType = typeof CUSTOMER_STATUS_OPTIONS[number]['value']
 
 // next_action_date 자동 계산 (추천값)
-export function calcNextActionDate(outcome: OutcomeType, avgCycleDays: number): string {
-  const multipliers: Record<OutcomeType, number> = {
-    interested:         0.3,
-    potential:          0.5,
-    maintained:         0.8,
-    churn_risk:         0.2,
-    competitor:         1.5,
-    rejected:           2.0,
-    no_answer:          0,    // 고정 2일
-    callback_requested: 0,    // 고정 1일
-    order_placed:       0.9,
-  }
-  const days = outcome === 'no_answer' ? 2
-             : outcome === 'callback_requested' ? 1
-             : Math.round(avgCycleDays * (multipliers[outcome] ?? 1))
-  const d = new Date(Date.now() + 9 * 3600000)
-  d.setDate(d.getDate() + Math.max(1, days))
-  return d.toISOString().slice(0, 10)
-}
-
 export interface CreateContactLogInput {
   customer_id:       string
   contact_method:    ContactMethod
