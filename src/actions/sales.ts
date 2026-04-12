@@ -551,16 +551,7 @@ export async function deleteContactLog(id: string): Promise<ActionResult> {
     .eq('tenant_id', ctx.tenant_id)
     .single()
 
-  // 2. 이력 삭제
-  const { error } = await supabase
-    .from('contact_logs')
-    .delete()
-    .eq('id', id)
-    .eq('tenant_id', ctx.tenant_id)
-
-  if (error) return { success: false, error: error.message }
-
-  // 3. 연결된 스케줄 → pending 롤백
+  // 2. 연결된 스케줄 → pending 롤백 (삭제 전)
   if (log?.schedule_id) {
     await supabase
       .from('sales_schedules')
@@ -568,6 +559,15 @@ export async function deleteContactLog(id: string): Promise<ActionResult> {
       .eq('id', log.schedule_id)
       .eq('tenant_id', ctx.tenant_id)
   }
+
+  // 3. 이력 삭제
+  const { error } = await supabase
+    .from('contact_logs')
+    .delete()
+    .eq('id', id)
+    .eq('tenant_id', ctx.tenant_id)
+
+  if (error) return { success: false, error: error.message }
 
   revalidatePath('/sales/history')
   revalidatePath('/sales/schedule')
