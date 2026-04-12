@@ -76,6 +76,7 @@ interface Props {
   scheduleId?:    string | null
   defaultOpen?:   boolean
   onDone?:        () => void
+  onClose?:       () => void
 }
 
 // ── 컴포넌트 ─────────────────────────────────────────────────
@@ -89,6 +90,7 @@ export default function QuickActionButton({
   scheduleId    = null,
   defaultOpen   = false,
   onDone,
+  onClose,
 }: Props) {
   const cycle = Math.max(1, avgOrderCycle ?? 7)
 
@@ -117,7 +119,7 @@ export default function QuickActionButton({
   }
 
   function handleOpen()  { reset(); setOpen(true) }
-  function handleClose() { reset(); setOpen(false) }
+  function handleClose() { reset(); setOpen(false); onClose?.() }
 
   function toggleMethod(m: string) {
     setMethods(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m])

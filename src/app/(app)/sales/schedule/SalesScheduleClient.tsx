@@ -450,6 +450,7 @@ export default function SalesScheduleClient({ initialTargets, initialScripts, in
         scheduleId={actionSchedule.id}
         defaultOpen={true}
         onDone={() => handleScheduleDone(actionSchedule.id)}
+        onClose={() => setActionSchedule(null)}
       />
     )}
     </>
