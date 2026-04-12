@@ -300,6 +300,7 @@ export async function getSalesHistory(customerId?: string): Promise<ActionResult
     .select('id, customer_id, contact_method, methods, result, outcome_type, customer_status, memo, next_action_date, next_action_type, contacted_at, created_at, customers(name)')
     .eq('tenant_id', ctx.tenant_id)
     .in('contact_method', ['call', 'visit', 'message', 'call_attempt'])
+    .not('contact_method', 'is', null)
     .order('created_at', { ascending: false })
     .limit(200)
 
