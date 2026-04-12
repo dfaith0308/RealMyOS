@@ -64,7 +64,7 @@ export default function SalesHistoryClient({ initialHistory }: { initialHistory:
           {filtered.map(h => {
             const ot = (h as any).outcome_type as string | null
             const cs = (h as any).customer_status as string | null
-            const om = (h as any).outcome_memo as string | null
+            const om = h.memo as string | null  // memo 단일 필드 사용
             const ms = (h as any).methods as string[] | null
             const outcomeInfo = ot ? OUTCOME_LABEL[ot] : null
 

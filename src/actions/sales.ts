@@ -123,7 +123,7 @@ export async function getSalesTargets(): Promise<ActionResult<SalesTarget[]>> {
     supabase.from('contact_logs')
       .select('customer_id, contacted_at, result, next_action_date, next_action_type')
       .eq('tenant_id', ctx.tenant_id)
-      .order('contacted_at', { ascending: false }),
+      .order('created_at', { ascending: false }),
 
     // avg_order_cycle: 최근 90일 주문 날짜만
     supabase.from('orders')
@@ -297,7 +297,7 @@ export async function getSalesHistory(customerId?: string): Promise<ActionResult
     .eq('tenant_id', ctx.tenant_id)
     .in('contact_method', ['call', 'visit', 'message'])  // 영업 행동만 — 수금/시스템 제외
     .not('contact_method', 'is', null)                      // NULL 제외
-    .order('contacted_at', { ascending: false })
+    .order('created_at', { ascending: false })
     .limit(200)
 
   if (customerId) q = q.eq('customer_id', customerId)
