@@ -96,7 +96,7 @@ export default function QuickActionButton({
   const [done,           setDone]           = useState(false)
 
   function reset() {
-    setMethods(['call']); setOutcome(''); setOutcomeMemo('')
+    setMethods(['call']); setOutcome('')
     setCustomerStatus(''); setNextDate(calcNextActionDate('', avgOrderCycle))
     setSaving(false); setError(''); setDone(false)
   }
@@ -126,6 +126,7 @@ export default function QuickActionButton({
     if (err) { setError(err); return }
     if (saving) return
 
+    console.log('[QuickAction SAVE]', { outcome, memo: memo.trim(), methods, nextDate })
     setSaving(true); setError('')
 
     // 전화 다이얼 — 전화 선택 시
