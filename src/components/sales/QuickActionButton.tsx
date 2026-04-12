@@ -73,8 +73,9 @@ interface QuickActionButtonProps {
   phone?:        string | null
   avgOrderCycle?: number
   compact?:      boolean
-  onDone?:       () => void   // 저장 완료 후 콜백
-  _forceOpen?:   boolean      // 외부에서 강제 열기 (스케줄 완료 연동)
+  scheduleId?:   string | null  // 스케줄 연결
+  onDone?:       () => void
+  _forceOpen?:   boolean
 }
 
 // ============================================================
@@ -146,6 +147,7 @@ export default function QuickActionButton({
       next_action_date: nextDate || undefined,
       next_action_type: 'call',
       memo:            memo.trim(),
+      schedule_id:     scheduleId ?? null,
     })
 
     if (!res.success) {

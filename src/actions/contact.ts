@@ -56,6 +56,7 @@ export interface CreateContactLogInput {
   // CRM 확장 필드
   outcome_type?:     OutcomeType
   customer_status?:  CustomerStatusType
+  schedule_id?:      string | null   // 스케줄 연결
   methods?:          string[]        // 실제 행동 배열
 }
 
@@ -91,6 +92,7 @@ export async function createContactLog(
       next_action_type: input.next_action_type ?? null,
       outcome_type:     input.outcome_type     ?? null,
       customer_status:  input.customer_status  ?? null,
+      schedule_id:      input.schedule_id     ?? null,
       methods:          input.methods          ?? null,
     })
     .select('id')

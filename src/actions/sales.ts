@@ -46,6 +46,7 @@ export interface SalesHistory {
   next_action_type: string | null
   contacted_at:     string
   created_at:       string
+  schedule_id:      string | null
 }
 
 export interface SalesSchedule {
@@ -297,7 +298,7 @@ export async function getSalesHistory(customerId?: string): Promise<ActionResult
   if (!ctx) return { success: false, error: '로그인 필요' }
 
   let q = supabase.from('contact_logs')
-    .select('id, customer_id, contact_method, methods, result, outcome_type, customer_status, memo, next_action_date, next_action_type, contacted_at, created_at, customers(name)')
+    .select('id, customer_id, contact_method, methods, result, outcome_type, customer_status, memo, next_action_date, next_action_type, contacted_at, created_at, schedule_id, customers(name)')
     .eq('tenant_id', ctx.tenant_id)
     .in('contact_method', ['call', 'visit', 'message', 'call_attempt'])
     .not('contact_method', 'is', null)
@@ -320,6 +321,7 @@ export async function getSalesHistory(customerId?: string): Promise<ActionResult
       memo: r.memo, next_action_date: r.next_action_date,
       next_action_type: r.next_action_type,
       contacted_at: r.contacted_at, created_at: r.created_at,
+      schedule_id: r.schedule_id ?? null,
     })),
   }
 }
@@ -541,6 +543,15 @@ export async function deleteContactLog(id: string): Promise<ActionResult> {
   const ctx = await getAuthCtx(supabase)
   if (!ctx) return { success: false, error: '로그인 필요' }
 
+  // 1. schedule_id 먼저 조회
+  const { data: log } = await supabase
+    .from('contact_logs')
+    .select('schedule_id')
+    .eq('id', id)
+    .eq('tenant_id', ctx.tenant_id)
+    .single()
+
+  // 2. 이력 삭제
   const { error } = await supabase
     .from('contact_logs')
     .delete()
@@ -548,7 +559,18 @@ export async function deleteContactLog(id: string): Promise<ActionResult> {
     .eq('tenant_id', ctx.tenant_id)
 
   if (error) return { success: false, error: error.message }
+
+  // 3. 연결된 스케줄 → pending 롤백
+  if (log?.schedule_id) {
+    await supabase
+      .from('sales_schedules')
+      .update({ status: 'pending' })
+      .eq('id', log.schedule_id)
+      .eq('tenant_id', ctx.tenant_id)
+  }
+
   revalidatePath('/sales/history')
+  revalidatePath('/sales/schedule')
   return { success: true }
 }
 
