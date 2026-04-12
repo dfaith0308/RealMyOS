@@ -153,7 +153,9 @@ export default function QuickActionButton({
       })
 
       if (!res.success) {
-        setError(res.error ?? '저장에 실패했습니다.')
+        // 서버 에러 원문 그대로 표시
+        console.error('[QuickActionButton] save error:', res)
+        setError(res.error || '저장 실패')
         return
       }
 
@@ -164,9 +166,9 @@ export default function QuickActionButton({
       handleClose()
       onDone?.()
 
-    } catch (e) {
-      console.error('[QuickActionButton] 저장 실패:', e)
-      setError('저장 중 오류가 발생했습니다.')
+    } catch (e: any) {
+      console.error('[QuickActionButton] unexpected error:', e)
+      setError(e?.message || '알 수 없는 오류가 발생했습니다.')
     } finally {
       setLoading(false)
     }
