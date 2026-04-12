@@ -300,7 +300,7 @@ export async function getSalesHistory(customerId?: string): Promise<ActionResult
   let q = supabase.from('contact_logs')
     .select('id, customer_id, contact_method, methods, result, outcome_type, customer_status, memo, next_action_date, next_action_type, contacted_at, created_at, schedule_id, customers(name)')
     .eq('tenant_id', ctx.tenant_id)
-    .in('contact_method', ['call', 'visit', 'message', 'call_attempt'])
+    .in('contact_method', ['call', 'visit', 'message'])
     .not('contact_method', 'is', null)
     .order('created_at', { ascending: false })
     .limit(200)
@@ -731,7 +731,7 @@ export async function getCustomerSalesProfile(
     .select('id, customer_id, contact_method, methods, result, outcome_type, customer_status, memo, next_action_date, next_action_type, contacted_at, created_at, schedule_id, customers(name)')
     .eq('customer_id', customerId)
     .eq('tenant_id', ctx.tenant_id)
-    .in('contact_method', ['call', 'visit', 'message', 'call_attempt'])
+    .in('contact_method', ['call', 'visit', 'message'])
     .not('contact_method', 'is', null)
     .order('created_at', { ascending: false })
     .limit(20)
@@ -894,8 +894,9 @@ export async function getConversionStats(
   const ctx = await getAuthCtx(supabase)
   if (!ctx) return { success: false, error: '로그인 필요' }
 
-  // 1. order_placed 기록 조회 (최근 90일)
   const d90 = new Date(Date.now() - 90 * 86400000).toISOString()
+
+  // 1. order_placed 기록 (최근 90일, 시간순)
   const { data: attempts } = await supabase
     .from('contact_logs')
     .select('id, created_at')
@@ -909,10 +910,10 @@ export async function getConversionStats(
     return { success: true, data: { total_attempts: 0, conversions: 0, conversion_rate: 0, last_converted_at: null } }
   }
 
-  // 2. 해당 기간 내 실제 주문 조회
+  // 2. 실제 주문 (최근 90일, 시간순)
   const { data: orders } = await supabase
     .from('orders')
-    .select('id, order_date, created_at')
+    .select('id, created_at')
     .eq('tenant_id', ctx.tenant_id)
     .eq('customer_id', customerId)
     .eq('status', 'confirmed')
@@ -920,18 +921,27 @@ export async function getConversionStats(
     .gte('created_at', d90)
     .order('created_at', { ascending: true })
 
-  const orderDates = (orders ?? []).map(o => new Date(o.created_at).getTime())
+  const orderList = (orders ?? []).map(o => ({
+    id: o.id,
+    t:  new Date(o.created_at).getTime(),
+  }))
 
-  // 3. attempt별 7일 내 주문 존재 여부 확인
-  let conversions       = 0
+  // 3. 1:1 매칭 — 각 attempt에 가장 가까운 미래 주문 1건만 매칭
+  //    한 번 매칭된 주문은 다른 attempt에 재사용 불가
+  const usedOrderIds = new Set<string>()
+  let conversions        = 0
   let lastConvertedAt: string | null = null
 
   for (const attempt of attempts) {
-    const attemptTime = new Date(attempt.created_at).getTime()
-    const windowEnd   = attemptTime + CONVERSION_WINDOW_DAYS * 86400000
+    const windowStart = new Date(attempt.created_at).getTime()
+    const windowEnd   = windowStart + CONVERSION_WINDOW_DAYS * 86400000
 
-    const converted = orderDates.some(ot => ot >= attemptTime && ot <= windowEnd)
-    if (converted) {
+    // 7일 창 안의 미사용 주문 중 가장 가까운 것
+    const matched = orderList.find(
+      o => o.t >= windowStart && o.t <= windowEnd && !usedOrderIds.has(o.id)
+    )
+    if (matched) {
+      usedOrderIds.add(matched.id)
       conversions++
       lastConvertedAt = attempt.created_at
     }
@@ -940,15 +950,15 @@ export async function getConversionStats(
   return {
     success: true,
     data: {
-      total_attempts:   attempts.length,
+      total_attempts:    attempts.length,
       conversions,
-      conversion_rate:  Math.round((conversions / attempts.length) * 100),
+      conversion_rate:   Math.round((conversions / attempts.length) * 100),
       last_converted_at: lastConvertedAt,
     },
   }
 }
 
-// 영업이력 row별 전환 여부 (7일 내 주문)
+
 export async function getConversionMap(
   customerId: string
 ): Promise<ActionResult<Map<string, boolean>>> {
@@ -964,24 +974,38 @@ export async function getConversionMap(
       .eq('tenant_id', ctx.tenant_id)
       .eq('customer_id', customerId)
       .eq('outcome_type', 'order_placed')
-      .gte('created_at', d90),
+      .gte('created_at', d90)
+      .order('created_at', { ascending: true }),
     supabase.from('orders')
-      .select('created_at')
+      .select('id, created_at')
       .eq('tenant_id', ctx.tenant_id)
       .eq('customer_id', customerId)
       .eq('status', 'confirmed')
       .is('deleted_at', null)
-      .gte('created_at', d90),
+      .gte('created_at', d90)
+      .order('created_at', { ascending: true }),
   ])
 
-  const orderTimes = (orders ?? []).map(o => new Date(o.created_at).getTime())
-  const result     = new Map<string, boolean>()
+  const orderList    = (orders ?? []).map(o => ({ id: o.id, t: new Date(o.created_at).getTime() }))
+  const usedOrderIds = new Set<string>()
+  const result       = new Map<string, boolean>()
 
+  // 1:1 매칭 — 가장 가까운 미사용 주문 매칭
   for (const log of logs ?? []) {
-    const t   = new Date(log.created_at).getTime()
-    const end = t + CONVERSION_WINDOW_DAYS * 86400000
-    result.set(log.id, orderTimes.some(ot => ot >= t && ot <= end))
+    const windowStart = new Date(log.created_at).getTime()
+    const windowEnd   = windowStart + CONVERSION_WINDOW_DAYS * 86400000
+    const matched = orderList.find(
+      o => o.t >= windowStart && o.t <= windowEnd && !usedOrderIds.has(o.id)
+    )
+    if (matched) {
+      usedOrderIds.add(matched.id)
+      result.set(log.id, true)
+    } else {
+      result.set(log.id, false)
+    }
   }
 
   return { success: true, data: result }
 }
+
+

@@ -3,10 +3,6 @@
 // ============================================================
 // RealMyOS - 전화 버튼
 // src/components/customer/CallButton.tsx
-//
-// 전화 클릭 = "시도" (success 아님)
-//   action_logs.conversion_status = 'attempt'
-//   contact_logs.contact_method   = 'call_attempt'
 // ============================================================
 
 import { useTransition } from 'react'
@@ -52,11 +48,11 @@ export default function CallButton({
     // 2. 전화 즉시 실행
     window.location.href = `tel:${phone}`
 
-    // 3. contact_log = call_attempt + conversion = attempt (백그라운드)
+    // 3. contact_log = call + conversion = attempt (백그라운드)
     startTransition(() =>
       createContactLog({
         customer_id:       customerId,
-        contact_method:    'call_attempt',
+        contact_method:    'call',
         action_log_id:     actionLogId ?? undefined,
         conversion_status: 'attempt',
       })

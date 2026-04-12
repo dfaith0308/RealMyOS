@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createContactLog } from '@/actions/contact'
 import { updateScheduleStatus } from '@/actions/sales'
+import { normalizeContactMethod } from '@/lib/contact-utils'
 import type { OutcomeType, CustomerStatus } from '@/actions/contact'
 
 const OUTCOME_TYPES: { value: OutcomeType; label: string; color: string }[] = [
@@ -141,10 +142,7 @@ export default function QuickActionButton({
     try {
       const res = await createContactLog({
         customer_id:      customerId,
-        contact_method:   (() => {
-          const first = methods[0] ?? 'call'
-          return (first === 'sms' || first === 'kakao' ? 'message' : first) as any
-        })(),
+        contact_method:   normalizeContactMethod(methods),
         methods,
         outcome_type:     outcome as OutcomeType,
         customer_status:  customerStatus || undefined,

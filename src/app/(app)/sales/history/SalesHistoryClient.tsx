@@ -21,7 +21,7 @@ const CUSTOMER_STATUS_LABEL: Record<string, string> = {
 }
 
 const METHOD_ICON: Record<string, string> = {
-  call: '📞', message: '💬', visit: '🚗', kakao: '🟡', sms: '💬', call_attempt: '📞',
+  call: '📞', message: '💬', visit: '🚗', kakao: '🟡', sms: '💬',
 }
 
 // 수정 모달
@@ -185,9 +185,9 @@ export default function SalesHistoryClient({ initialHistory }: { initialHistory:
                         {CUSTOMER_STATUS_LABEL[h.customer_status] ?? h.customer_status}
                       </span>
                     )}
-                    {/* 스케줄 연결 여부 */}
-                    <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 10, background: h.schedule_id ? '#ECFDF5' : '#F9FAFB', color: h.schedule_id ? '#059669' : '#9ca3af' }}>
-                      {h.schedule_id ? '📅 스케줄 연결' : '수동 기록'}
+                    {/* 출처 뱃지 */}
+                    <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 10, fontWeight: 500, background: h.schedule_id ? '#ECFDF5' : '#F5F3FF', color: h.schedule_id ? '#059669' : '#7C3AED' }}>
+                      {h.schedule_id ? '📅 스케줄' : '✍️ 수동'}
                     </span>
                   </div>
 

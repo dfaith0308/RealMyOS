@@ -22,7 +22,7 @@ const OUTCOME_LABEL: Record<string, { label: string; color: string }> = {
 }
 
 const METHOD_ICON: Record<string, string> = {
-  call: '📞', message: '💬', visit: '🚗', kakao: '🟡', call_attempt: '📞',
+  call: '📞', message: '💬', visit: '🚗', kakao: '🟡',
 }
 
 const PREFERRED_TIME: Record<string, string> = {

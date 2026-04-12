@@ -251,7 +251,7 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
       supabase.from('contact_logs')
         .select('customer_id, contacted_at, contact_method, outcome')
         .in('customer_id', ids)
-        .in('contact_method', ['call', 'call_attempt'])
+        .in('contact_method', ['call'])
         .order('contacted_at', { ascending: false }),
 
       supabase.from('action_logs')
@@ -289,7 +289,7 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
   const connected7d    = new Map<string, number>()
   for (const cl of contactRows ?? []) {
     if (cl.contacted_at < WINDOW_7D) continue
-    if (cl.contact_method === 'call_attempt')
+    if (cl.contact_method === 'call')
       callAttempts7d.set(cl.customer_id, (callAttempts7d.get(cl.customer_id) ?? 0) + 1)
     if (cl.outcome === 'connected')
       connected7d.set(cl.customer_id, (connected7d.get(cl.customer_id) ?? 0) + 1)
