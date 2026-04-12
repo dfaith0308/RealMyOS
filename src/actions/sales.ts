@@ -535,6 +535,92 @@ export async function snoozeSchedule(id: string): Promise<ActionResult<{ new_dat
 }
 
 // ============================================================
+// 스케줄 삭제
+// ============================================================
+
+export async function deleteSchedule(id: string): Promise<ActionResult> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  // 1. 연결된 영업이력 schedule_id 해제 (이력 자체는 보존)
+  await supabase
+    .from('contact_logs')
+    .update({ schedule_id: null })
+    .eq('schedule_id', id)
+    .eq('tenant_id', ctx.tenant_id)
+
+  // 2. 스케줄 삭제
+  const { error } = await supabase
+    .from('sales_schedules')
+    .delete()
+    .eq('id', id)
+    .eq('tenant_id', ctx.tenant_id)
+
+  if (error) return { success: false, error: error.message }
+  revalidatePath('/sales/schedule')
+  return { success: true }
+}
+
+// ============================================================
+// 스케줄 수정
+// ============================================================
+
+export async function updateSchedule(
+  id: string,
+  data: { scheduled_date?: string; action_type?: string; memo?: string }
+): Promise<ActionResult> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const { error } = await supabase
+    .from('sales_schedules')
+    .update(data)
+    .eq('id', id)
+    .eq('tenant_id', ctx.tenant_id)
+
+  if (error) return { success: false, error: error.message }
+  revalidatePath('/sales/schedule')
+  return { success: true }
+}
+
+// ============================================================
+// 스케줄 단건 조회 (실행 전 최신 데이터 확인용)
+// ============================================================
+
+export async function getScheduleById(id: string): Promise<ActionResult<SalesSchedule>> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const { data, error } = await supabase
+    .from('sales_schedules')
+    .select('id, customer_id, scheduled_date, action_type, script_id, status, snooze_count, original_date, memo, customers(name)')
+    .eq('id', id)
+    .eq('tenant_id', ctx.tenant_id)
+    .single()
+
+  if (error || !data) return { success: false, error: error?.message ?? '스케줄 없음' }
+
+  return {
+    success: true,
+    data: {
+      id:             data.id,
+      customer_id:    data.customer_id,
+      customer_name:  (data.customers as any)?.name ?? '',
+      scheduled_date: data.scheduled_date,
+      action_type:    data.action_type as 'call' | 'message' | 'visit',
+      script_id:      data.script_id,
+      status:         data.status as SalesSchedule['status'],
+      snooze_count:   data.snooze_count,
+      original_date:  data.original_date ?? null,
+      memo:           data.memo ?? null,
+    }
+  }
+}
+
+// ============================================================
 // 영업이력 삭제
 // ============================================================
 

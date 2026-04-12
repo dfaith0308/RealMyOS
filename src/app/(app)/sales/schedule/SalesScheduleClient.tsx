@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { snoozeSchedule, updateScheduleStatus, createSalesSchedule } from '@/actions/sales'
+import { snoozeSchedule, updateScheduleStatus, createSalesSchedule, deleteSchedule, updateSchedule, getScheduleById } from '@/actions/sales'
 import QuickActionButton from '@/components/sales/QuickActionButton'
 import { createContactLog } from '@/actions/contact'
 import type { SalesTarget, SalesScript, SalesSchedule } from '@/actions/sales'
@@ -25,6 +25,62 @@ function todayKST() {
 }
 
 function formatKRW(n: number) { return n > 0 ? n.toLocaleString() + '원' : '-' }
+
+// ============================================================
+// 스케줄 수정 모달
+// ============================================================
+
+function ScheduleEditModal({ schedule, onSave, onClose }: {
+  schedule: { id: string; customer_name: string; scheduled_date: string; action_type: string }
+  onSave:   (data: { scheduled_date?: string; action_type?: string }) => void
+  onClose:  () => void
+}) {
+  const [date,   setDate]   = useState(schedule.scheduled_date)
+  const [action, setAction] = useState(schedule.action_type)
+  const [saving, setSaving] = useState(false)
+
+  async function handleSave() {
+    setSaving(true)
+    onSave({ scheduled_date: date, action_type: action })
+    setSaving(false)
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300 }}>
+      <div style={{ background: '#fff', borderRadius: 12, padding: 24, width: 360, maxWidth: '95vw' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
+          <span style={{ fontWeight: 700, fontSize: 15 }}>스케줄 수정 — {schedule.customer_name}</span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#9ca3af' }}>✕</button>
+        </div>
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', marginBottom: 6 }}>날짜</div>
+          <input type="date" style={{ width: '100%', padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: 7, fontSize: 14, boxSizing: 'border-box' }}
+            value={date} onChange={e => setDate(e.target.value)} />
+        </div>
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', marginBottom: 6 }}>방법</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {[['call','📞 전화'],['message','💬 문자'],['visit','🚗 방문']] as const}.map(([v, label]) => (
+              <button key={v} onClick={() => setAction(v)}
+                style={{ flex: 1, padding: '8px 0', border: `2px solid ${action === v ? '#111827' : '#e5e7eb'}`, borderRadius: 7, fontSize: 13, cursor: 'pointer', background: action === v ? '#111827' : '#fff', color: action === v ? '#fff' : '#374151', fontWeight: action === v ? 600 : 400 }}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={onClose}
+            style={{ flex: 1, padding: '9px', border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', fontSize: 13, cursor: 'pointer' }}>취소</button>
+          <button onClick={handleSave} disabled={saving}
+            style={{ flex: 2, padding: '9px', background: saving ? '#93C5FD' : '#111827', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+            {saving ? '저장 중...' : '저장'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 
 // ============================================================
 // 인라인 캘린더
@@ -105,6 +161,7 @@ export default function SalesScheduleClient({ initialTargets, initialScripts, in
   const [newCustName,  setNewCustName]  = useState('')
   const [newAction,    setNewAction]    = useState<'call'|'message'|'visit'>('call')
   const [adding,       setAdding]       = useState(false)
+  const [editTarget,   setEditTarget]   = useState<typeof schedules[0] | null>(null)
 
   // 행동 기록 패널
   const [activeTarget, setActive]    = useState<SalesTarget | null>(null)
@@ -135,9 +192,19 @@ export default function SalesScheduleClient({ initialTargets, initialScripts, in
     setSnoozingId(null)
   }
 
-  // 완료 버튼 → QuickActionButton 모달 열기 (기록 없이 완료 불가)
-  function handleActionSchedule(sch: { id: string; customer_id: string; customer_name: string }) {
-    setActionSchedule({ id: sch.id, customerId: sch.customer_id, customerName: sch.customer_name })
+  // 영업 실행 버튼 → 최신 스케줄 재조회 후 모달 열기
+  async function handleActionSchedule(sch: { id: string; customer_id: string; customer_name: string; phone?: string | null }) {
+    // 최신 데이터 확인 — 이미 완료됐거나 취소된 경우 차단
+    const latest = await getScheduleById(sch.id)
+    if (latest.success && latest.data?.status === 'done') {
+      alert('이미 완료된 스케줄입니다.')
+      return
+    }
+    if (latest.success && latest.data?.status === 'cancelled') {
+      alert('취소된 스케줄입니다.')
+      return
+    }
+    setActionSchedule({ id: sch.id, customerId: sch.customer_id, customerName: sch.customer_name, phone: sch.phone })
   }
 
   // QuickActionButton 저장 완료 후 스케줄 done 처리
@@ -147,6 +214,20 @@ export default function SalesScheduleClient({ initialTargets, initialScripts, in
     await updateScheduleStatus(scheduleId, 'done')
     setSchedules(prev => prev.map(s => s.id === scheduleId ? { ...s, status: 'done' } : s))
     setActionSchedule(null)
+  }
+
+  async function handleDeleteSchedule(id: string) {
+    if (!confirm('이 스케줄을 삭제하시겠습니까?')) return
+    const res = await deleteSchedule(id)
+    if (res.success) setSchedules(prev => prev.filter(s => s.id !== id))
+  }
+
+  async function handleUpdateSchedule(id: string, data: { scheduled_date?: string; action_type?: string }) {
+    const res = await updateSchedule(id, data)
+    if (res.success) {
+      setSchedules(prev => prev.map(s => s.id === id ? { ...s, ...data } as typeof s : s))
+      setEditTarget(null)
+    }
   }
 
   async function handleAdd() {
@@ -338,6 +419,15 @@ export default function SalesScheduleClient({ initialTargets, initialScripts, in
         )}
       </div>
     </div>
+
+    {/* 스케줄 수정 모달 */}
+    {editTarget && (
+      <ScheduleEditModal
+        schedule={editTarget}
+        onSave={(data) => handleUpdateSchedule(editTarget.id, data)}
+        onClose={() => setEditTarget(null)}
+      />
+    )}
 
     {actionSchedule && (
       <QuickActionButton
