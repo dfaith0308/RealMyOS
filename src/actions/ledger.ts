@@ -480,6 +480,7 @@ export async function getCustomersWithScore(): Promise<ActionResult<CustomerWith
 export interface CustomerWithStats extends CustomerWithScore {}
 
 export async function getCustomersWithStats(): Promise<ActionResult<CustomerWithScore[]>> {
+  try {
   const _fn0 = Date.now()
   const supabase = await createSupabaseServer()
 
@@ -605,4 +606,8 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
   console.error(`[PERF:MAP] JS 병합: ${Date.now() - _m0}ms`)
   console.error(`[PERF:STATS] getCustomersWithStats 총: ${Date.now() - _fn0}ms | rows:${result.length}`)
   return { success: true, data: result }
+  } catch (e) {
+    console.error('[getCustomersWithStats] unexpected error:', e)
+    return { success: true, data: [] }
+  }
 }

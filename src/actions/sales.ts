@@ -803,74 +803,72 @@ export interface TodaySalesSummary {
 }
 
 export async function getTodaySalesWork(): Promise<ActionResult<TodaySalesSummary>> {
-  const supabase = await createSupabaseServer()
-  const ctx = await getAuthCtx(supabase)
-  if (!ctx) return { success: false, error: '로그인 필요' }
+  try {
+    const supabase = await createSupabaseServer()
+    const ctx = await getAuthCtx(supabase)
+    if (!ctx) return { success: false, error: '로그인 필요' }
 
-  const todayStr = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10)
+    const todayStr = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10)
 
-  // 1. 오늘 예약된 스케줄
-  const { data: schedules } = await supabase
-    .from('sales_schedules')
-    .select('id, customer_id, action_type, status, customers(name, phone)')
-    .eq('tenant_id', ctx.tenant_id)
-    .eq('scheduled_date', todayStr)
-    .neq('status', 'cancelled')
-    .order('created_at', { ascending: true })
+    const [{ data: schedules }, { data: nextActions }] = await Promise.all([
+      supabase
+        .from('sales_schedules')
+        .select('id, customer_id, action_type, status, customers(name, phone)')
+        .eq('tenant_id', ctx.tenant_id)
+        .eq('scheduled_date', todayStr)
+        .neq('status', 'cancelled')
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('contact_logs')
+        .select('id, customer_id, next_action_type, customers(name, phone)')
+        .eq('tenant_id', ctx.tenant_id)
+        .eq('next_action_date', todayStr)
+        .not('next_action_date', 'is', null)
+        .order('created_at', { ascending: false }),
+    ])
 
-  // 2. next_action_date = 오늘인 contact_logs
-  const { data: nextActions } = await supabase
-    .from('contact_logs')
-    .select('id, customer_id, next_action_type, customers(name, phone)')
-    .eq('tenant_id', ctx.tenant_id)
-    .eq('next_action_date', todayStr)
-    .not('next_action_date', 'is', null)
-    .order('created_at', { ascending: false })
+    const items: TodaySalesItem[] = []
 
-  const items: TodaySalesItem[] = []
+    for (const s of schedules ?? []) {
+      const c = s.customers as any
+      items.push({
+        type:          'schedule',
+        schedule_id:   s.id,
+        customer_id:   s.customer_id,
+        customer_name: c?.name ?? '',
+        phone:         c?.phone ?? null,
+        action_type:   s.action_type,
+        status:        s.status,
+        source:        '스케줄',
+      })
+    }
 
-  // 스케줄 항목
-  for (const s of schedules ?? []) {
-    const c = s.customers as any
-    items.push({
-      type:          'schedule',
-      schedule_id:   s.id,
-      customer_id:   s.customer_id,
-      customer_name: c?.name ?? '',
-      phone:         c?.phone ?? null,
-      action_type:   s.action_type,
-      status:        s.status,
-      source:        '스케줄',
-    })
-  }
+    const seen = new Set(items.map(i => i.customer_id))
+    for (const n of nextActions ?? []) {
+      if (seen.has(n.customer_id)) continue
+      const c = n.customers as any
+      items.push({
+        type:          'next_action',
+        customer_id:   n.customer_id,
+        customer_name: c?.name ?? '',
+        phone:         c?.phone ?? null,
+        action_type:   n.next_action_type ?? 'call',
+        source:        '다음행동',
+      })
+      seen.add(n.customer_id)
+    }
 
-  // next_action_date 항목 — 스케줄에 없는 거래처만
-  const seen = new Set(items.map(i => i.customer_id))
-  for (const n of nextActions ?? []) {
-    if (seen.has(n.customer_id)) continue
-    const c = n.customers as any
-    items.push({
-      type:          'next_action',
-      customer_id:   n.customer_id,
-      customer_name: c?.name ?? '',
-      phone:         c?.phone ?? null,
-      action_type:   n.next_action_type ?? 'call',
-      source:        '다음행동',
-    })
-    seen.add(n.customer_id)
-  }
+    const done    = items.filter(i => i.status === 'done').length
+    const pending = items.filter(i => i.status !== 'done').length
 
-  const done    = items.filter(i => i.status === 'done').length
-  const pending = items.filter(i => i.status !== 'done').length
+    return {
+      success: true,
+      data: { total: items.length, done, pending, items: items.slice(0, 10) },
+    }
 
-  return {
-    success: true,
-    data: {
-      total:   items.length,
-      done,
-      pending,
-      items:   items.slice(0, 10),  // 최대 10건
-    },
+  } catch (e) {
+    console.error('[getTodaySalesWork] error:', e)
+    return { success: true, data: { total: 0, done: 0, pending: 0, items: [] } }
   }
 }
 
@@ -1007,5 +1005,3 @@ export async function getConversionMap(
 
   return { success: true, data: result }
 }
-
-

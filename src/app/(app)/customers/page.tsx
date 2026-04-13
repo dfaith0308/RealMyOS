@@ -51,8 +51,8 @@ export default async function CustomersPage({
 
   const _t0 = Date.now()
   const [result, todaySalesResult] = await Promise.all([
-    getCustomersWithStats(),
-    getTodaySalesWork(),
+    getCustomersWithStats().catch(e => { console.error('[customers/page] getCustomersWithStats error:', e); return { success: false as const, error: String(e) } }),
+    getTodaySalesWork().catch(e => { console.error('[customers/page] getTodaySalesWork error:', e); return { success: true as const, data: { total: 0, done: 0, pending: 0, items: [] } } }),
   ])
 
   const all = result.data ?? []
