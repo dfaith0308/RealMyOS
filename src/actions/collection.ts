@@ -188,21 +188,26 @@ export async function getPendingCollectionMap(
   tenant_id: string,
   supabase:  any
 ): Promise<Map<string, CollectionSchedule>> {
-  const { data } = await supabase
-    .from('collection_schedules')
-    .select('id, customer_id, scheduled_date, method, note, status, created_at')
-    .eq('tenant_id', tenant_id)
-    .eq('status',    'pending')
-    .order('scheduled_date', { ascending: true })
+  try {
+    const { data } = await supabase
+      .from('collection_schedules')
+      .select('id, customer_id, scheduled_date, method, note, status, created_at')
+      .eq('tenant_id', tenant_id)
+      .eq('status',    'pending')
+      .order('scheduled_date', { ascending: true })
 
-  const map = new Map<string, CollectionSchedule>()
-  for (const row of data ?? []) {
-    // 고객당 가장 가까운 날짜 1건만 유지
-    if (!map.has(row.customer_id)) {
-      map.set(row.customer_id, row)
+    const map = new Map<string, CollectionSchedule>()
+    for (const row of data ?? []) {
+      // 고객당 가장 가까운 날짜 1건만 유지
+      if (!map.has(row.customer_id)) {
+        map.set(row.customer_id, row)
+      }
     }
+    return map
+  } catch (e) {
+    console.error('[getPendingCollectionMap] error:', e)
+    return new Map()
   }
-  return map
 }
 
 // ============================================================
