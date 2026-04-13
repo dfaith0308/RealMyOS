@@ -501,7 +501,7 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
       .select('customer_id, current_balance, total_sales, last_payment_date')
       .eq('tenant_id', ctx.tenant_id),
     supabase.from('orders')
-      .select('customer_id, total_amount, point_used')
+      .select('customer_id, final_amount')
       .eq('tenant_id', ctx.tenant_id).eq('status', 'confirmed').is('deleted_at', null),
     supabase.from('payments')
       .select('customer_id, amount')
@@ -515,12 +515,10 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
   const statsMap    = new Map((statsRows    ?? []).map((s: any) => [s.customer_id, s]))
   const settingsMap = new Map((settingsRows ?? []).map((s: any) => [s.customer_id, s]))
 
-  // receivable 정확 계산용 맵 — point_used 포함
-  const orderTotalMap = new Map<string, number>()
-  const orderPointMap = new Map<string, number>()
+  // final_amount = total_amount - discount_amount - point_used (DB에서 직접 가져옴)
+  const orderFinalMap = new Map<string, number>()
   for (const o of orderRows ?? []) {
-    orderTotalMap.set(o.customer_id, (orderTotalMap.get(o.customer_id) ?? 0) + (o.total_amount ?? 0))
-    orderPointMap.set(o.customer_id, (orderPointMap.get(o.customer_id) ?? 0) + (o.point_used ?? 0))
+    orderFinalMap.set(o.customer_id, (orderFinalMap.get(o.customer_id) ?? 0) + ((o as any).final_amount ?? 0))
   }
   const paidMap = new Map<string, number>()
   for (const p of paymentRows ?? []) {
@@ -543,11 +541,10 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
     const last_payment_date = (stats as any).last_payment_date ?? null
 
     // receivable: orders - (payments + point_used) — getCustomersWithBalance와 동일 계산
-    const orderTotal    = orderTotalMap.get(c.id) ?? 0
-    const orderPoint    = orderPointMap.get(c.id) ?? 0
+    const orderFinal    = orderFinalMap.get(c.id) ?? 0
     const paid          = paidMap.get(c.id)        ?? 0
-    const receivable_amount = Math.max(0, orderTotal - paid - orderPoint)
-    const deposit_amount    = Math.max(0, paid - orderTotal)  // 포인트 제외 — 초과 현금 수금만
+    const receivable_amount = Math.max(0, orderFinal - paid)
+    const deposit_amount    = Math.max(0, paid - orderFinal)
     const overdue_amount    = 0   // stats에 due_date 없음
 
     const days_since_order  = last_payment_date
