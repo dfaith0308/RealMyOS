@@ -561,11 +561,11 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
     const total_sales       = Number((stats as any).total_sales ?? 0)
     const last_payment_date = (stats as any).last_payment_date ?? null
 
-    // receivable: orders - (payments + point_used) — getCustomersWithBalance와 동일 계산
+    // receivable: opening + orders - payments (getCustomersWithBalance와 동일 공식)
     const orderFinal    = orderFinalMap.get(c.id) ?? 0
     const paid          = paidMap.get(c.id)        ?? 0
-    const receivable_amount = Math.max(0, orderFinal - paid)
-    const deposit_amount    = Math.max(0, paid - orderFinal)
+    const receivable_amount = Math.max(0, opening + orderFinal - paid)
+    const deposit_amount    = Math.max(0, paid - opening - orderFinal)
     const overdue_amount    = 0   // stats에 due_date 없음
 
     const days_since_order  = last_payment_date
@@ -580,7 +580,7 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
     const isNew     = days_since_order !== null && days_since_order <= new_customer_days
     const isDanger  = current_balance  > Number((cfg as any).overdue_danger_amount  ?? 500000)
     const isWarning = current_balance  > Number((cfg as any).overdue_warning_amount ?? 100000)
-    const status: CustomerStatus =
+    let status: CustomerStatus =
       isNew ? 'new' : isDanger ? 'danger' : isWarning ? 'warning' : 'normal'
 
     // action_score — 모든 입력 null-safe (calcActionScore 내부도 방어됨)

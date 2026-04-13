@@ -72,34 +72,52 @@ export default async function CustomersPage({
   ])
 
   // ── 안전한 기본값 — undefined/null 접근 없음 ──
-  const all:              typeof customersResult.data           = customersResult?.data ?? []
+  const rawCustomers      = customersResult?.data ?? []
   const todayWork         = salesResult?.data ?? { total: 0, done: 0, pending: 0, items: [] as any[] }
   const collectionData:   Record<string, CollectionSchedule | null> = collectionResult?.data ?? {}
   const collectionEnabled: boolean                             = collectionResult?.enabled ?? false
 
-  const dangerList  = all.filter((c) => c.status === 'danger')
-  const warningList = all.filter((c) => c.status === 'warning')
-  const newList     = all.filter((c) => c.status === 'new')
-  const normalList  = all.filter((c) => c.status === 'normal')
-  const overdueList = all.filter((c) => c.overdue_amount > 0)
+  // 수금예정 상태 오버라이드 — collectionData 기반
+  // danger/warning 거래처에 pending collection이 있으면 → 'scheduled'로 변경
+  const todayKST = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10)
+  const all = rawCustomers.map(c => {
+    const col = collectionData[c.id]
+    if (col && (c.status === 'danger' || c.status === 'warning')) {
+      if (col.scheduled_date >= todayKST) {
+        return { ...c, status: 'scheduled' as const }
+      }
+    }
+    return c
+  })
+
+  const dangerList    = all.filter((c) => c.status === 'danger')
+  const warningList   = all.filter((c) => c.status === 'warning')
+  const scheduledList = all.filter((c) => c.status === 'scheduled')
+  const newList       = all.filter((c) => c.status === 'new')
+  const normalList    = all.filter((c) => c.status === 'normal')
+  const overdueList   = all.filter((c) => c.overdue_amount > 0)
 
   const totalOverdue    = all.reduce((s, c) => s + c.overdue_amount, 0)
   const totalReceivable = all.reduce((s, c) => s + c.receivable_amount, 0)
   const overdueCount    = overdueList.length
 
+  // 오늘 반드시 행동 — scheduled(수금예정) 거래처 제외
   const mustAct = all.filter((c) =>
-    c.status === 'danger' ||
-    (c.status === 'warning' && ((c.days_since_contact ?? 99) >= 3 || !c.last_contacted_at))
+    c.status !== 'scheduled' && (
+      c.status === 'danger' ||
+      (c.status === 'warning' && ((c.days_since_contact ?? 99) >= 3 || !c.last_contacted_at))
+    )
   )
   const top5ids = new Set(all.slice(0, 5).map((c) => c.id))
-  const top3    = dangerList.slice(0, 3)
+  const top3    = dangerList.filter(c => !collectionData[c.id]).slice(0, 3)
 
   const displayed =
-    filter === 'danger'  ? dangerList  :
-    filter === 'warning' ? warningList :
-    filter === 'new'     ? newList     :
-    filter === 'normal'  ? normalList  :
-    filter === 'overdue' ? overdueList : all
+    filter === 'danger'    ? dangerList    :
+    filter === 'warning'   ? warningList   :
+    filter === 'scheduled' ? scheduledList :
+    filter === 'new'       ? newList       :
+    filter === 'normal'    ? normalList    :
+    filter === 'overdue'   ? overdueList   : all
 
   console.error(`[PERF] /customers: ${Date.now() - _t0}ms | rows:${customersResult?.data?.length ?? 0}`)
 
@@ -196,12 +214,13 @@ export default async function CustomersPage({
       {/* 필터 */}
       <div style={s.filterRow}>
         {[
-          { key: undefined,   label: `전체 ${all.length}` },
-          { key: 'danger',    label: `🔴 위험 ${dangerList.length}` },
-          { key: 'warning',   label: `🟡 주의 ${warningList.length}` },
-          { key: 'overdue',   label: `💸 연체 ${overdueList.length}` },
-          { key: 'new',       label: `🔵 신규 ${newList.length}` },
-          { key: 'normal',    label: `🟢 정상 ${normalList.length}` },
+          { key: undefined,     label: `전체 ${all.length}` },
+          { key: 'danger',      label: `🔴 위험 ${dangerList.length}` },
+          { key: 'warning',     label: `🟡 주의 ${warningList.length}` },
+          { key: 'scheduled',   label: `🟣 수금예정 ${scheduledList.length}` },
+          { key: 'overdue',     label: `💸 연체 ${overdueList.length}` },
+          { key: 'new',         label: `🔵 신규 ${newList.length}` },
+          { key: 'normal',      label: `🟢 정상 ${normalList.length}` },
         ].map(({ key, label }) => (
           <Link key={label}
             href={key ? `/customers?filter=${key}` : '/customers'}
@@ -240,6 +259,14 @@ function CustomerCard({ c, rank, isTop, collectionData }: {
     <div style={{ ...s.card, borderLeft: `4px solid ${cfg.color}`, boxShadow: isTop ? '0 2px 8px rgba(0,0,0,0.08)' : undefined }}>
       {recontact && <div style={s.recontactBanner}>🔁 {recontact}</div>}
 
+      {/* 수금예정 배너 */}
+      {c.status === 'scheduled' && collectionData[c.id] && (
+        <div style={{ padding: '7px 16px', background: '#F5F3FF', borderBottom: '1px solid #C4B5FD', fontSize: 12, fontWeight: 600, color: '#7C3AED', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>🟣 수금 예정일: {collectionData[c.id]!.scheduled_date}</span>
+          <span style={{ fontWeight: 400, color: '#9ca3af' }}>{collectionData[c.id]!.method ?? ''}</span>
+        </div>
+      )}
+
       <div style={{ ...s.actionBanner,
         background: isHigh ? '#FEF2F2' : isMid ? '#FFFBEB' : '#F9FAFB',
         borderBottom: `1px solid ${cfg.border}`,
@@ -267,7 +294,7 @@ function CustomerCard({ c, rank, isTop, collectionData }: {
           <div style={s.metaRow}>
             <MetaItem label="연체금"    value={formatKRW(c.overdue_amount)}     highlight={c.overdue_amount > 0} />
             <MetaItem label="미수금"    value={formatKRW(c.receivable_amount)}  style={{ color: c.receivable_amount > c.overdue_amount ? '#B45309' : '#6b7280' }} />
-            {(c as any).deposit_amount > 0 && (
+            {(c as any).deposit_amount >= 100 && (
               <MetaItem label="예치금"  value={formatKRW((c as any).deposit_amount)} style={{ color: '#1D4ED8' }} />
             )}
             <MetaItem label="이번달"    value={formatKRW(c.monthly_revenue)} />

@@ -146,14 +146,18 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
                       ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums',
                       fontSize: 12,
                       color: o.current_balance === null ? '#d1d5db'
-                           : o.current_balance > 0 ? '#B91C1C'
-                           : o.current_balance < 0 ? '#1D4ED8'
+                           : o.current_balance > 0    ? '#B91C1C'
+                           : (o.current_balance < 0 && Math.abs(o.current_balance) >= 100) ? '#1D4ED8'
                            : '#6b7280',
-                      fontWeight: o.current_balance && o.current_balance !== 0 ? 600 : 400,
+                      fontWeight: (o.current_balance && Math.abs(o.current_balance) >= 100) ? 600 : 400,
                     }}>
-                      {o.current_balance === null ? '-'
-                        : (o.current_balance ?? 0) < 0 ? `예치 ${formatKRW(Math.abs(o.current_balance ?? 0))}`
-                        : formatKRW(o.current_balance ?? 0)}
+                      {(() => {
+                        const b = o.current_balance ?? 0
+                        if (o.current_balance === null) return '-'
+                        if (b < 0 && Math.abs(b) >= 100) return `예치 ${formatKRW(Math.abs(b))}`
+                        if (b < 0 && Math.abs(b) < 100)  return '0원'   // 예치 1원 노이즈 제거
+                        return formatKRW(b)
+                      })()}
                     </td>
                     <td style={td}>
                       <span style={{ ...s.badge, color: cfg.color, background: cfg.bg }}>{cfg.label}</span>
@@ -233,7 +237,7 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
 }
 
 const th: React.CSSProperties = { padding: '7px 10px', textAlign: 'left' as const }
-const td: React.CSSProperties = { padding: '7px 10px', verticalAlign: 'middle' }
+const td: React.CSSProperties = { padding: '7px 10px', verticalAlign: 'middle', whiteSpace: 'nowrap' }
 const s: Record<string, React.CSSProperties> = {
   newBtn:         { padding: '8px 16px', background: '#111827', color: '#fff', borderRadius: 8, fontSize: 13, fontWeight: 500, textDecoration: 'none' },
   filterRow:      { display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' },
