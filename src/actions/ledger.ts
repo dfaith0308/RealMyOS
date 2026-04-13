@@ -547,7 +547,7 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
     const orderPoint    = orderPointMap.get(c.id) ?? 0
     const paid          = paidMap.get(c.id)        ?? 0
     const receivable_amount = Math.max(0, orderTotal - paid - orderPoint)
-    const deposit_amount    = Math.max(0, paid + orderPoint - orderTotal)
+    const deposit_amount    = Math.max(0, paid - orderTotal)  // 포인트 제외 — 초과 현금 수금만
     const overdue_amount    = 0   // stats에 due_date 없음
 
     const days_since_order  = last_payment_date
