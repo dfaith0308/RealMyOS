@@ -122,16 +122,15 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
                   <tr key={o.id}
                     style={{ borderBottom: expanded ? 'none' : '1px solid #f3f4f6', cursor: 'pointer' }}
                     onDoubleClick={() => setExpandedId(expanded ? null : o.id)}>
-                    <td style={{ ...td, color: '#6b7280', fontFamily: 'monospace', fontSize: 12 }}>
+                    <td style={{ ...td, color: '#6b7280', fontSize: 12, whiteSpace: 'nowrap' }}>
                       {o.order_date}
-                      <div style={{ fontSize: 10, color: '#d1d5db' }}>{o.order_number}</div>
                     </td>
                     <td style={{ ...td, fontWeight: 500 }}>{o.customer_name}</td>
-                    <td style={td}>
+                    <td style={{ ...td, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       <span
                         style={{ cursor: 'pointer', color: '#374151' }}
                         onClick={() => setExpandedId(expanded ? null : o.id)}
-                        title="클릭하여 상세 품목 펼치기">
+                        title={o.order_lines.map(l => `${l.product_name} ${l.quantity}개`).join(', ')}>
                         {summarizeLines(o.order_lines)}
                         {o.order_lines.length > 1 && (
                           <span style={{ marginLeft: 4, fontSize: 10, color: '#9ca3af' }}>
@@ -169,9 +168,7 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
                           </button>
                         </>
                       )}
-                      <Link href={`/orders/new?customer_id=reorder_${o.customer_id}`} style={s.reorderBtn}>
-                        재주문
-                      </Link>
+
                     </td>
                   </tr>
 
@@ -235,8 +232,8 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
   )
 }
 
-const th: React.CSSProperties = { padding: '10px 12px', textAlign: 'left' as const }
-const td: React.CSSProperties = { padding: '10px 12px', verticalAlign: 'middle' }
+const th: React.CSSProperties = { padding: '7px 10px', textAlign: 'left' as const }
+const td: React.CSSProperties = { padding: '7px 10px', verticalAlign: 'middle' }
 const s: Record<string, React.CSSProperties> = {
   newBtn:         { padding: '8px 16px', background: '#111827', color: '#fff', borderRadius: 8, fontSize: 13, fontWeight: 500, textDecoration: 'none' },
   filterRow:      { display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' },
@@ -247,7 +244,6 @@ const s: Record<string, React.CSSProperties> = {
   badge:          { display: 'inline-block', padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600 },
   editBtn:        { padding: '4px 8px', background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 11, color: '#374151', textDecoration: 'none' },
   cancelBtn:      { padding: '4px 8px', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 6, fontSize: 11, color: '#B91C1C', cursor: 'pointer' },
-  reorderBtn:     { padding: '4px 8px', background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 6, fontSize: 11, color: '#1D4ED8', textDecoration: 'none' },
   overlay:        { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' },
   modal:          { background: '#fff', borderRadius: 12, padding: 24, width: 360, boxShadow: '0 20px 60px rgba(0,0,0,0.15)' },
   modalTitle:     { fontSize: 16, fontWeight: 600, margin: '0 0 8px 0', color: '#B91C1C' },

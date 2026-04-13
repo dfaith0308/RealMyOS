@@ -237,7 +237,7 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
   const [{ data: allOrders }, { data: paymentRows }, { data: contactRows }, { data: actionRows7d }] =
     await Promise.all([
       supabase.from('orders')
-        .select('customer_id, total_amount, point_used, order_date')
+        .select('customer_id, final_amount, total_amount, order_date')
         .in('customer_id', ids)
         .eq('status', 'confirmed')
         .is('deleted_at', null)
@@ -267,7 +267,7 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
   const termsMap    = new Map(customers.map((c) => [c.id, c.payment_terms_days ?? 0]))
   const openingMap  = new Map(customers.map((c) => [c.id, c.opening_balance ?? 0]))
 
-  const ordersByCustomer = new Map<string, Array<{ total_amount: number; point_used: number; order_date: string }>>()
+  const ordersByCustomer = new Map<string, Array<{ final_amount: number; total_amount: number; order_date: string }>>()
   for (const o of allOrders ?? []) {
     const list = ordersByCustomer.get(o.customer_id) ?? []
     list.push(o)
@@ -310,15 +310,17 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
     const orders  = ordersByCustomer.get(c.id) ?? []
     const terms   = termsMap.get(c.id) ?? 0
     const opening = openingMap.get(c.id) ?? 0
-    const paid          = paymentMap.get(c.id) ?? 0
-    const deposit_amount = depositMap.get(c.id) ?? 0
+    const paid    = paymentMap.get(c.id) ?? 0
 
-    const totalOrdersAmt  = orders.reduce((s, o) => s + o.total_amount, 0)
-    const totalPointUsed  = orders.reduce((s, o) => s + (o.point_used ?? 0), 0)
-    const current_balance = opening + totalOrdersAmt - paid - totalPointUsed
+    const totalFinal      = orders.reduce((s, o) => s + ((o as any).final_amount ?? o.total_amount), 0)
+    const totalOrdersAmt  = orders.reduce((s, o) => s + o.total_amount, 0)  // 매출 집계용 (레거시)
+    const current_balance = opening + totalFinal - paid
 
-    // receivable: 주문합 - (수금 + 적립금) — 적립금은 즉시 납부로 처리
-    const receivable_amount = Math.max(0, totalOrdersAmt - paid - totalPointUsed)
+    // receivable = opening + SUM(final_amount) - paid
+    const receivable_amount = Math.max(0, opening + totalFinal - paid)
+
+    // deposit = max(0, paid - SUM(final_amount))  — opening 무관
+    const deposit_amount    = Math.max(0, paid - totalFinal)
 
     // overdue: terms > 0인 경우만 계산 (terms=0은 즉시결제, 연체 개념 없음)
     let overdueSum = 0
@@ -327,10 +329,10 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
         const dueDate = new Date(o.order_date + 'T00:00:00Z')
         dueDate.setUTCDate(dueDate.getUTCDate() + terms)
         const dueDateStr = dueDate.toISOString().slice(0, 10)
-        if (dueDateStr < todayStr) overdueSum += o.total_amount
+        if (dueDateStr < todayStr) overdueSum += (o as any).final_amount ?? o.total_amount
       }
     }
-    const overdue_amount = Math.max(0, overdueSum - paid - totalPointUsed)
+    const overdue_amount = Math.max(0, overdueSum - paid)
 
     const last_order_date   = orders[0]?.order_date ?? null
     const last_order_amount = orders[0]?.total_amount ?? null
