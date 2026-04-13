@@ -4,6 +4,7 @@ import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import { getSettings } from '@/actions/settings'
 import { DEFAULT_SETTINGS } from '@/constants/settings'
 import { calcActionScore, calcAction, calcOrderCycle, calcCustomerStatus, calcNextActionDate } from '@/lib/customer-logic'
+import { getPendingCollectionMap } from '@/actions/collection'
 import type { ActionMessage } from '@/lib/customer-logic'
 import type { ActionResult } from '@/types/order'
 
@@ -131,7 +132,7 @@ export async function getCustomerLedger(
 // 거래처 목록
 // ============================================================
 
-export type CustomerStatus = 'danger' | 'warning' | 'new' | 'normal'
+export type CustomerStatus = 'danger' | 'warning' | 'new' | 'normal' | 'scheduled'
 
 export interface CustomerWithBalance {
   id: string
@@ -234,7 +235,9 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
   if (!customers?.length) return { success: true, data: [] }
   const ids = customers.map((c) => c.id)
 
-  const [{ data: allOrders }, { data: paymentRows }, { data: contactRows }, { data: actionRows7d }] =
+  const collectionMap = await getPendingCollectionMap(ctx.tenant_id, supabase)
+
+    const [{ data: allOrders }, { data: paymentRows }, { data: contactRows }, { data: actionRows7d }] =
     await Promise.all([
       supabase.from('orders')
         .select('customer_id, final_amount, total_amount, order_date')
@@ -371,7 +374,7 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
       ? days_since_order !== null && days_since_order <= cfg.new_customer_days
       : false
 
-    const status = calcCustomerStatus({
+    let status = calcCustomerStatus({
       overdue_amount,
       days_since_order,
       order_cycle_days,
@@ -383,6 +386,16 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
       warning_days:             cfg.warning_days,
       danger_days:              cfg.danger_days,
     })
+
+    // 수금 예정 — pending schedule 있고 예정일이 오늘 이후이면 scheduled
+    const pendingSchedule = collectionMap.get(c.id) ?? null
+    if (pendingSchedule && (status === 'danger' || status === 'warning')) {
+      const todayKST = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10)
+      if (pendingSchedule.scheduled_date >= todayKST) {
+        status = 'scheduled'
+      }
+      // 예정일 경과 → 원래 danger/warning 유지
+    }
 
     const call_attempts_7d = callAttempts7d.get(c.id) ?? 0
     const connected_7d     = connected7d.get(c.id) ?? 0
@@ -407,7 +420,7 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
     }
   })
 
-  const statusOrder: Record<CustomerStatus, number> = { danger: 0, warning: 1, new: 2, normal: 3 }
+  const statusOrder: Record<CustomerStatus, number> = { danger: 0, warning: 1, scheduled: 2, new: 3, normal: 4 }
   result.sort((a, b) => statusOrder[a.status] - statusOrder[b.status])
   return { success: true, data: result }
 }

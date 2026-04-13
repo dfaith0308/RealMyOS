@@ -245,20 +245,18 @@ export async function getTodayCollections(): Promise<ActionResult<CollectionTarg
   const [{ data: customers }, { data: orders }, { data: payments }] = await Promise.all([
     supabase.from('customers').select('id, name, opening_balance')
       .eq('tenant_id', tid).is('deleted_at', null),
-    supabase.from('orders').select('customer_id, total_amount, point_used')
+    supabase.from('orders').select('customer_id, final_amount')
       .eq('tenant_id', tid).eq('status', 'confirmed').is('deleted_at', null),
     supabase.from('payments').select('customer_id, amount, payment_date')
       .eq('tenant_id', tid).eq('status', 'confirmed'),
   ])
 
-  const orderMap   = new Map<string, number>()
-  const pointMap   = new Map<string, number>()
+  const finalMap   = new Map<string, number>()
   const payMap     = new Map<string, number>()
   const lastPayMap = new Map<string, string>()
 
   for (const o of orders ?? []) {
-    orderMap.set(o.customer_id, (orderMap.get(o.customer_id) ?? 0) + (o.total_amount ?? 0))
-    pointMap.set(o.customer_id, (pointMap.get(o.customer_id) ?? 0) + ((o as any).point_used ?? 0))
+    finalMap.set(o.customer_id, (finalMap.get(o.customer_id) ?? 0) + ((o as any).final_amount ?? 0))
   }
   for (const p of payments ?? []) {
     payMap.set(p.customer_id, (payMap.get(p.customer_id) ?? 0) + p.amount)
@@ -268,7 +266,7 @@ export async function getTodayCollections(): Promise<ActionResult<CollectionTarg
 
   const result: CollectionTarget[] = []
   for (const c of customers ?? []) {
-    const balance = (c.opening_balance ?? 0) + (orderMap.get(c.id) ?? 0) - (payMap.get(c.id) ?? 0) - (pointMap.get(c.id) ?? 0)
+    const balance = (c.opening_balance ?? 0) + (finalMap.get(c.id) ?? 0) - (payMap.get(c.id) ?? 0)
     if (balance <= 0) continue
     const lastPay   = lastPayMap.get(c.id) ?? null
     const daysSince = lastPay

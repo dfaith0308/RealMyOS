@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { markCollectionDone } from '@/actions/collection'
 import { linkActionResult } from '@/actions/action-log'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import type { ActionResult } from '@/types/order'
@@ -77,6 +78,13 @@ export async function createPayment(
     result_amount:      input.amount,
     related_payment_id: rpcData.id as string,
   })
+
+  // 수금 후 잔액 계산 — 잔액 0 이하일 때만 예정 done 처리
+  // rpcData.balance_before - applied_amount = 수금 후 잔액
+  const balanceAfter = (rpcData.balance_before as number) - (rpcData.applied_amount as number)
+  if (balanceAfter <= 0) {
+    await markCollectionDone(input.customer_id, ctx.tenant_id)
+  }
 
   revalidatePath('/customers')
   revalidatePath('/payments/new')

@@ -6,6 +6,8 @@ import { calcRecontactMessage, calcNoContactMessage } from '@/lib/customer-logic
 import type { CustomerStatus, CustomerWithScore } from '@/actions/ledger'
 import type { ActionType } from '@/lib/customer-logic'
 import CallButton from '@/components/customer/CallButton'
+import CollectionScheduleButton from '@/components/customer/CollectionScheduleButton'
+import { getCollectionScheduleMap } from '@/actions/collection'
 import ActionButton from '@/components/customer/ActionButton'
 import TodaySalesWidget from '@/components/sales/TodaySalesWidget'
 import { getTodaySalesWork } from '@/actions/sales'
@@ -13,10 +15,11 @@ import { getTodaySalesWork } from '@/actions/sales'
 export const metadata = { title: '오늘 할 일 — RealMyOS' }
 
 const STATUS_CFG: Record<CustomerStatus, { label: string; color: string; bg: string; border: string }> = {
-  danger:  { label: '위험', color: '#B91C1C', bg: '#FEF2F2', border: '#FCA5A5' },
-  warning: { label: '주의', color: '#B45309', bg: '#FFFBEB', border: '#FCD34D' },
-  new:     { label: '신규', color: '#1D4ED8', bg: '#EFF6FF', border: '#93C5FD' },
-  normal:  { label: '정상', color: '#15803D', bg: '#F0FDF4', border: '#86EFAC' },
+  danger:    { label: '위험',    color: '#B91C1C', bg: '#FEF2F2', border: '#FCA5A5' },
+  warning:   { label: '주의',    color: '#B45309', bg: '#FFFBEB', border: '#FCD34D' },
+  scheduled: { label: '수금예정', color: '#7C3AED', bg: '#F5F3FF', border: '#C4B5FD' },
+  new:       { label: '신규',    color: '#1D4ED8', bg: '#EFF6FF', border: '#93C5FD' },
+  normal:    { label: '정상',    color: '#15803D', bg: '#F0FDF4', border: '#86EFAC' },
 }
 
 const ACTION_CFG: Record<ActionType, { label: string; color: string; bg: string }> = {
@@ -50,9 +53,10 @@ export default async function CustomersPage({
   const { filter } = searchParams
 
   const _t0 = Date.now()
-  const [result, todaySalesResult] = await Promise.all([
+  const [result, todaySalesResult, collectionMap] = await Promise.all([
     getCustomersWithStats().catch(e => { console.error('[customers/page] getCustomersWithStats error:', e); return { success: false as const, error: String(e) } }),
     getTodaySalesWork().catch(e => { console.error('[customers/page] getTodaySalesWork error:', e); return { success: true as const, data: { total: 0, done: 0, pending: 0, items: [] } } }),
+    getCollectionScheduleMap().catch(() => new Map()),
   ])
 
   const all = result.data ?? []
@@ -282,6 +286,14 @@ function CustomerCard({ c, rank, isTop }: { c: CustomerWithScore; rank: number; 
             label="수금" btnStyle={isHigh ? bs.payHot : bs.payNormal}
             triggeredMessage={c.action.text} messageKey={c.action.key}
             customerStatus={c.status} scoreAtTime={c.action_score} amountAtTime={c.overdue_amount} />
+          {c.receivable_amount > 0 && (
+            <CollectionScheduleButton
+              customerId={c.id}
+              customerName={c.name}
+              existing={collectionMap.get(c.id) ?? null}
+              compact
+            />
+          )}
           <ActionButton customerId={c.id} actionType="order" href={`/orders/new?customer_id=${c.id}`}
             label="주문" btnStyle={bs.order}
             triggeredMessage={c.action.text} messageKey={c.action.key}
