@@ -307,6 +307,10 @@ export async function updateOrder(input: UpdateOrderInput): Promise<ActionResult
     .from('order_lines').select('*').eq('order_id', input.order_id)
   const beforeData = { order, lines: beforeLines ?? [] }
 
+  // 입력 방어
+  if (!Array.isArray(input.lines) || input.lines.length === 0)
+    return { success: false, error: '상품을 1개 이상 포함해야 합니다.' }
+
   // 라인 계산 — line_total이 진실값
   const lineRows = input.lines.map((l) => {
     const line_total = typeof (l as any).line_total_override === 'number'
@@ -339,10 +343,12 @@ export async function updateOrder(input: UpdateOrderInput): Promise<ActionResult
   })
 
   // delete + insert atomic (RPC)
+  // p_line_rows: jsonb 타입이면 객체 직접 전달, text 타입이면 stringify
+  // → 이중 인코딩 방지를 위해 객체 직접 전달 시도
   const { error: rpcErr } = await supabase.rpc('update_order_lines', {
     p_order_id:  input.order_id,
     p_tenant_id: ctx.tenant_id,
-    p_line_rows: JSON.stringify(lineRows),
+    p_line_rows: lineRows,  // JSON.stringify 제거 — supabase-js가 자동 직렬화
   })
   if (rpcErr) return { success: false, error: `라인 저장 실패: ${rpcErr.message}` }
 
