@@ -53,15 +53,28 @@ export default async function CustomersPage({
   const { filter } = searchParams
 
   const _t0 = Date.now()
-  const [result, todaySalesResult, collectionResult] = await Promise.all([
-    getCustomersWithStats().catch(e => { console.error('[customers/page] getCustomersWithStats error:', e); return { success: false as const, error: String(e) } }),
-    getTodaySalesWork().catch(e => { console.error('[customers/page] getTodaySalesWork error:', e); return { success: true as const, data: { total: 0, done: 0, pending: 0, items: [] } } }),
-    getCollectionScheduleMap().catch(() => ({ data: {} as Record<string, any>, enabled: false, error: 'fetch failed' })),
-  ])
-  const collectionData: Record<string, any> = collectionResult?.data ?? {}
-  const collectionEnabled: boolean = collectionResult?.enabled ?? false
 
-  const all = result.data ?? []
+  // ── 3개 병렬 fetch — 각각 독립 fallback, 절대 throw 없음 ──
+  const [customersResult, salesResult, collectionResult] = await Promise.all([
+    getCustomersWithStats().catch(e => {
+      console.error('[customers/page] getCustomersWithStats error:', e)
+      return { success: true as const, data: [] }
+    }),
+    getTodaySalesWork().catch(e => {
+      console.error('[customers/page] getTodaySalesWork error:', e)
+      return { success: true as const, data: { total: 0, done: 0, pending: 0, items: [] as any[] } }
+    }),
+    getCollectionScheduleMap().catch(e => {
+      console.error('[customers/page] getCollectionScheduleMap error:', e)
+      return { enabled: false, data: {} as Record<string, any>, error: String(e) }
+    }),
+  ])
+
+  // ── 안전한 기본값 — undefined/null 접근 없음 ──
+  const all:              typeof customersResult.data           = customersResult?.data ?? []
+  const todayWork         = salesResult?.data ?? { total: 0, done: 0, pending: 0, items: [] as any[] }
+  const collectionData:   Record<string, any>                  = collectionResult?.data ?? {}
+  const collectionEnabled: boolean                             = collectionResult?.enabled ?? false
 
   const dangerList  = all.filter((c) => c.status === 'danger')
   const warningList = all.filter((c) => c.status === 'warning')
@@ -146,8 +159,8 @@ export default async function CustomersPage({
       </div>
 
       {/* 오늘 해야 할 영업 위젯 */}
-      {todaySalesResult.data && todaySalesResult.data.total > 0 && (
-        <TodaySalesWidget data={todaySalesResult.data} />
+      {todayWork.total > 0 && (
+        <TodaySalesWidget data={todayWork} />
       )}
 
       {/* TOP 3 */}

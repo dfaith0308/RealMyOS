@@ -186,8 +186,8 @@ export async function getPendingCollectionSchedule(
 // ============================================================
 
 export interface CollectionMapResult {
-  data:    Record<string, CollectionSchedule>
   enabled: boolean
+  data:    Record<string, CollectionSchedule>
   error:   string | null
 }
 
@@ -205,6 +205,7 @@ export async function getPendingCollectionMap(
 
     if (error) {
       console.error('[getPendingCollectionMap] error:', error.message)
+      console.error('[getPendingCollectionMap] db error:', error.message)
       return { data: {}, enabled: false, error: error.message }
     }
 
@@ -212,10 +213,10 @@ export async function getPendingCollectionMap(
     for (const row of data ?? []) {
       if (!result[row.customer_id]) result[row.customer_id] = row
     }
-    return serializeSafe({ data: result, enabled: true, error: null })
+    return serializeSafe({ enabled: true, data: result, error: null })
   } catch (e: any) {
     console.error('[getPendingCollectionMap] exception:', e)
-    return { data: {}, enabled: false, error: e?.message ?? 'unknown' }
+    return { enabled: false, data: {}, error: e?.message ?? 'unknown' }
   }
 }
 
@@ -223,16 +224,13 @@ export async function getPendingCollectionMap(
 // 전체 pending 맵 — page.tsx Server Component용
 // ============================================================
 
-export interface CollectionScheduleMapResult {
-  data:    Record<string, CollectionSchedule>
-  enabled: boolean
-  error:   string | null
-}
+// CollectionScheduleMapResult = CollectionMapResult 와 동일 구조
+export type CollectionScheduleMapResult = CollectionMapResult
 
-export async function getCollectionScheduleMap(): Promise<CollectionScheduleMapResult> {
+export async function getCollectionScheduleMap(): Promise<CollectionMapResult> {
   const supabase = await createSupabaseServer()
   const ctx      = await getAuthCtx(supabase)
-  if (!ctx) return { data: {}, enabled: false, error: '로그인 필요' }
+  if (!ctx) return { enabled: false, data: {}, error: '로그인 필요' }
 
   try {
     const { data, error } = await supabase
@@ -243,17 +241,17 @@ export async function getCollectionScheduleMap(): Promise<CollectionScheduleMapR
       .order('scheduled_date', { ascending: true })
 
     if (error) {
-      console.error('[getCollectionScheduleMap] error:', error.message)
-      return { data: {}, enabled: false, error: error.message }
+      console.error('[getCollectionScheduleMap] db error:', error.message)
+      return { enabled: false, data: {}, error: error.message }
     }
 
     const result: Record<string, CollectionSchedule> = {}
     for (const row of data ?? []) {
       if (!result[row.customer_id]) result[row.customer_id] = row
     }
-    return serializeSafe({ data: result, enabled: true, error: null })
+    return serializeSafe({ enabled: true, data: result, error: null })
   } catch (e: any) {
     console.error('[getCollectionScheduleMap] exception:', e)
-    return { data: {}, enabled: false, error: e?.message ?? 'unknown' }
+    return { enabled: false, data: {}, error: e?.message ?? 'unknown' }
   }
 }

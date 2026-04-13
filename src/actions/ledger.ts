@@ -238,7 +238,7 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
 
   const collectionResult = await getPendingCollectionMap(ctx.tenant_id, supabase).catch(e => {
     console.error('[getCustomersWithBalance] collectionMap error:', e)
-    return { data: {}, enabled: false, error: 'unknown' }
+    return { enabled: false, data: {}, error: String(e) }
   })
   const collectionMap = collectionResult.data ?? {}
 
@@ -625,6 +625,6 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
   return serializeSafe({ success: true as const, data: result })
   } catch (e) {
     console.error('[getCustomersWithStats] unexpected error:', e)
-    return { success: true, data: [] }
+    return serializeSafe({ success: true as const, data: [] })
   }
 }
