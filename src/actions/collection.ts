@@ -184,29 +184,36 @@ export async function getPendingCollectionSchedule(
 // 전체 pending 예정 맵 조회 (ledger/dashboard 배치용)
 // ============================================================
 
+export interface CollectionMapResult {
+  map:     Map<string, CollectionSchedule>
+  enabled: boolean
+}
+
 export async function getPendingCollectionMap(
   tenant_id: string,
   supabase:  any
-): Promise<Map<string, CollectionSchedule>> {
+): Promise<CollectionMapResult> {
   try {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('collection_schedules')
       .select('id, customer_id, scheduled_date, method, note, status, created_at')
       .eq('tenant_id', tenant_id)
       .eq('status',    'pending')
       .order('scheduled_date', { ascending: true })
 
+    if (error) {
+      console.error('[getPendingCollectionMap] error:', error.message)
+      return { map: new Map(), enabled: false }
+    }
+
     const map = new Map<string, CollectionSchedule>()
     for (const row of data ?? []) {
-      // 고객당 가장 가까운 날짜 1건만 유지
-      if (!map.has(row.customer_id)) {
-        map.set(row.customer_id, row)
-      }
+      if (!map.has(row.customer_id)) map.set(row.customer_id, row)
     }
-    return map
+    return { map, enabled: true }
   } catch (e) {
-    console.error('[getPendingCollectionMap] error:', e)
-    return new Map()
+    console.error('[getPendingCollectionMap] exception:', e)
+    return { map: new Map(), enabled: false }
   }
 }
 
@@ -214,21 +221,36 @@ export async function getPendingCollectionMap(
 // 전체 pending 맵 — page.tsx Server Component용
 // ============================================================
 
-export async function getCollectionScheduleMap(): Promise<Map<string, CollectionSchedule>> {
+export interface CollectionScheduleMapResult {
+  map:     Map<string, CollectionSchedule>
+  enabled: boolean
+}
+
+export async function getCollectionScheduleMap(): Promise<CollectionScheduleMapResult> {
   const supabase = await createSupabaseServer()
   const ctx      = await getAuthCtx(supabase)
-  if (!ctx) return new Map()
+  if (!ctx) return { map: new Map(), enabled: false }
 
-  const { data } = await supabase
-    .from('collection_schedules')
-    .select('id, customer_id, scheduled_date, method, note, status, created_at')
-    .eq('tenant_id', ctx.tenant_id)
-    .eq('status',    'pending')
-    .order('scheduled_date', { ascending: true })
+  try {
+    const { data, error } = await supabase
+      .from('collection_schedules')
+      .select('id, customer_id, scheduled_date, method, note, status, created_at')
+      .eq('tenant_id', ctx.tenant_id)
+      .eq('status',    'pending')
+      .order('scheduled_date', { ascending: true })
 
-  const map = new Map<string, CollectionSchedule>()
-  for (const row of data ?? []) {
-    if (!map.has(row.customer_id)) map.set(row.customer_id, row)
+    if (error) {
+      console.error('[getCollectionScheduleMap] error:', error.message)
+      return { map: new Map(), enabled: false }
+    }
+
+    const map = new Map<string, CollectionSchedule>()
+    for (const row of data ?? []) {
+      if (!map.has(row.customer_id)) map.set(row.customer_id, row)
+    }
+    return { map, enabled: true }
+  } catch (e) {
+    console.error('[getCollectionScheduleMap] exception:', e)
+    return { map: new Map(), enabled: false }
   }
-  return map
 }

@@ -235,10 +235,11 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
   if (!customers?.length) return { success: true, data: [] }
   const ids = customers.map((c) => c.id)
 
-  const collectionMap = await getPendingCollectionMap(ctx.tenant_id, supabase).catch(e => {
+  const collectionResult = await getPendingCollectionMap(ctx.tenant_id, supabase).catch(e => {
     console.error('[getCustomersWithBalance] collectionMap error:', e)
-    return new Map()
+    return { map: new Map(), enabled: false }
   })
+  const collectionMap = collectionResult.map
 
     const [{ data: allOrders }, { data: paymentRows }, { data: contactRows }, { data: actionRows7d }] =
     await Promise.all([

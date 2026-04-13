@@ -53,11 +53,13 @@ export default async function CustomersPage({
   const { filter } = searchParams
 
   const _t0 = Date.now()
-  const [result, todaySalesResult, collectionMap] = await Promise.all([
+  const [result, todaySalesResult, collectionResult] = await Promise.all([
     getCustomersWithStats().catch(e => { console.error('[customers/page] getCustomersWithStats error:', e); return { success: false as const, error: String(e) } }),
     getTodaySalesWork().catch(e => { console.error('[customers/page] getTodaySalesWork error:', e); return { success: true as const, data: { total: 0, done: 0, pending: 0, items: [] } } }),
-    getCollectionScheduleMap().catch(() => new Map()),
+    getCollectionScheduleMap().catch(() => ({ map: new Map(), enabled: false })),
   ])
+  const collectionMap     = collectionResult.map
+  const collectionEnabled = collectionResult.enabled
 
   const all = result.data ?? []
 
@@ -89,6 +91,12 @@ export default async function CustomersPage({
 
   return (
     <main style={s.page}>
+      {/* 수금 예정 기능 비활성화 배너 */}
+      {!collectionEnabled && (
+        <div style={{ background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 8, padding: '10px 16px', marginBottom: 16, fontSize: 13, color: '#B45309', display: 'flex', alignItems: 'center', gap: 8 }}>
+          ⚠️ 수금 예정 기능이 아직 활성화되지 않았습니다. SQL 마이그레이션을 실행해주세요.
+        </div>
+      )}
       {/* 헤더 */}
       <div style={s.header}>
         <div>
