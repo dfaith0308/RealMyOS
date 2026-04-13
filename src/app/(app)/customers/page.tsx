@@ -56,10 +56,10 @@ export default async function CustomersPage({
   const [result, todaySalesResult, collectionResult] = await Promise.all([
     getCustomersWithStats().catch(e => { console.error('[customers/page] getCustomersWithStats error:', e); return { success: false as const, error: String(e) } }),
     getTodaySalesWork().catch(e => { console.error('[customers/page] getTodaySalesWork error:', e); return { success: true as const, data: { total: 0, done: 0, pending: 0, items: [] } } }),
-    getCollectionScheduleMap().catch(() => ({ map: {} as Record<string, any>, enabled: false })),
+    getCollectionScheduleMap().catch(() => ({ data: {} as Record<string, any>, enabled: false, error: 'fetch failed' })),
   ])
-  const collectionMap     = collectionResult.map
-  const collectionEnabled = collectionResult.enabled
+  const collectionData: Record<string, any> = collectionResult?.data ?? {}
+  const collectionEnabled: boolean = collectionResult?.enabled ?? false
 
   const all = result.data ?? []
 
@@ -200,14 +200,14 @@ export default async function CustomersPage({
       {displayed.length === 0 && <div style={s.empty}>해당 거래처가 없습니다.</div>}
       <div style={s.list}>
         {displayed.map((c, i) => (
-          <CustomerCard key={c.id} c={c} rank={i + 1} isTop={top5ids.has(c.id)} />
+          <CustomerCard key={c.id} c={c} rank={i + 1} isTop={top5ids.has(c.id)} collectionData={collectionData} />
         ))}
       </div>
     </main>
   )
 }
 
-function CustomerCard({ c, rank, isTop }: { c: CustomerWithScore; rank: number; isTop: boolean }) {
+function CustomerCard({ c, rank, isTop, collectionData }: { c: CustomerWithScore; rank: number; isTop: boolean; collectionData: Record<string, any> }) {
   const cfg    = STATUS_CFG[c.status]
   const actCfg = ACTION_CFG[c.action?.action_type as ActionType] ?? ACTION_CFG['maintain']
   const isHigh = c.action.urgency === 'high'
@@ -298,7 +298,7 @@ function CustomerCard({ c, rank, isTop }: { c: CustomerWithScore; rank: number; 
             <CollectionScheduleButton
               customerId={c.id}
               customerName={c.name}
-              existing={collectionMap?.[c.id] ?? null}
+              existing={collectionData?.[c.id] ?? null}
               compact
             />
           )}

@@ -7,6 +7,7 @@ import { calcActionScore, calcAction, calcOrderCycle, calcCustomerStatus, calcNe
 import { getPendingCollectionMap } from '@/actions/collection'
 import type { ActionMessage } from '@/lib/customer-logic'
 import type { ActionResult } from '@/types/order'
+import { serializeSafe } from '@/lib/serialize-safe'
 
 // ============================================================
 // 거래처별 원장
@@ -237,9 +238,9 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
 
   const collectionResult = await getPendingCollectionMap(ctx.tenant_id, supabase).catch(e => {
     console.error('[getCustomersWithBalance] collectionMap error:', e)
-    return { map: {}, enabled: false }
+    return { data: {}, enabled: false, error: 'unknown' }
   })
-  const collectionMap = collectionResult.map
+  const collectionMap = collectionResult.data ?? {}
 
     const [{ data: allOrders }, { data: paymentRows }, { data: contactRows }, { data: actionRows7d }] =
     await Promise.all([
@@ -621,7 +622,7 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
 
   console.error(`[PERF:MAP] JS 병합: ${Date.now() - _m0}ms`)
   console.error(`[PERF:STATS] getCustomersWithStats 총: ${Date.now() - _fn0}ms | rows:${result.length}`)
-  return { success: true, data: result }
+  return serializeSafe({ success: true as const, data: result })
   } catch (e) {
     console.error('[getCustomersWithStats] unexpected error:', e)
     return { success: true, data: [] }

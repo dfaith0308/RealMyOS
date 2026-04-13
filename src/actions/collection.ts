@@ -1,5 +1,6 @@
 'use server'
 
+import { serializeSafe } from '@/lib/serialize-safe'
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import type { ActionResult } from '@/types/order'
@@ -185,8 +186,9 @@ export async function getPendingCollectionSchedule(
 // ============================================================
 
 export interface CollectionMapResult {
-  map:     Record<string, CollectionSchedule>
+  data:    Record<string, CollectionSchedule>
   enabled: boolean
+  error:   string | null
 }
 
 export async function getPendingCollectionMap(
@@ -203,17 +205,17 @@ export async function getPendingCollectionMap(
 
     if (error) {
       console.error('[getPendingCollectionMap] error:', error.message)
-      return { map: {}, enabled: false }
+      return { data: {}, enabled: false, error: error.message }
     }
 
-    const map: Record<string, CollectionSchedule> = {}
+    const result: Record<string, CollectionSchedule> = {}
     for (const row of data ?? []) {
-      if (!map[row.customer_id]) map[row.customer_id] = row
+      if (!result[row.customer_id]) result[row.customer_id] = row
     }
-    return { map, enabled: true }
-  } catch (e) {
+    return serializeSafe({ data: result, enabled: true, error: null })
+  } catch (e: any) {
     console.error('[getPendingCollectionMap] exception:', e)
-    return { map: {}, enabled: false }
+    return { data: {}, enabled: false, error: e?.message ?? 'unknown' }
   }
 }
 
@@ -222,14 +224,15 @@ export async function getPendingCollectionMap(
 // ============================================================
 
 export interface CollectionScheduleMapResult {
-  map:     Record<string, CollectionSchedule>
+  data:    Record<string, CollectionSchedule>
   enabled: boolean
+  error:   string | null
 }
 
 export async function getCollectionScheduleMap(): Promise<CollectionScheduleMapResult> {
   const supabase = await createSupabaseServer()
   const ctx      = await getAuthCtx(supabase)
-  if (!ctx) return { map: {}, enabled: false }
+  if (!ctx) return { data: {}, enabled: false, error: '로그인 필요' }
 
   try {
     const { data, error } = await supabase
@@ -241,16 +244,16 @@ export async function getCollectionScheduleMap(): Promise<CollectionScheduleMapR
 
     if (error) {
       console.error('[getCollectionScheduleMap] error:', error.message)
-      return { map: {}, enabled: false }
+      return { data: {}, enabled: false, error: error.message }
     }
 
-    const map: Record<string, CollectionSchedule> = {}
+    const result: Record<string, CollectionSchedule> = {}
     for (const row of data ?? []) {
-      if (!map[row.customer_id]) map[row.customer_id] = row
+      if (!result[row.customer_id]) result[row.customer_id] = row
     }
-    return { map, enabled: true }
-  } catch (e) {
+    return serializeSafe({ data: result, enabled: true, error: null })
+  } catch (e: any) {
     console.error('[getCollectionScheduleMap] exception:', e)
-    return { map: {}, enabled: false }
+    return { data: {}, enabled: false, error: e?.message ?? 'unknown' }
   }
 }
