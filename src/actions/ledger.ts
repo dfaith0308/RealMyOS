@@ -237,7 +237,7 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
 
   const collectionResult = await getPendingCollectionMap(ctx.tenant_id, supabase).catch(e => {
     console.error('[getCustomersWithBalance] collectionMap error:', e)
-    return { map: new Map(), enabled: false }
+    return { map: {}, enabled: false }
   })
   const collectionMap = collectionResult.map
 
@@ -392,7 +392,7 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
     })
 
     // 수금 예정 — pending schedule 있고 예정일이 오늘 이후이면 scheduled
-    const pendingSchedule = collectionMap.get(c.id) ?? null
+    const pendingSchedule = collectionMap?.[c.id] ?? null
     if (pendingSchedule && (status === 'danger' || status === 'warning')) {
       const todayKST = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10)
       if (pendingSchedule.scheduled_date >= todayKST) {

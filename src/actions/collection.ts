@@ -185,7 +185,7 @@ export async function getPendingCollectionSchedule(
 // ============================================================
 
 export interface CollectionMapResult {
-  map:     Map<string, CollectionSchedule>
+  map:     Record<string, CollectionSchedule>
   enabled: boolean
 }
 
@@ -203,17 +203,17 @@ export async function getPendingCollectionMap(
 
     if (error) {
       console.error('[getPendingCollectionMap] error:', error.message)
-      return { map: new Map(), enabled: false }
+      return { map: {}, enabled: false }
     }
 
-    const map = new Map<string, CollectionSchedule>()
+    const map: Record<string, CollectionSchedule> = {}
     for (const row of data ?? []) {
-      if (!map.has(row.customer_id)) map.set(row.customer_id, row)
+      if (!map[row.customer_id]) map[row.customer_id] = row
     }
     return { map, enabled: true }
   } catch (e) {
     console.error('[getPendingCollectionMap] exception:', e)
-    return { map: new Map(), enabled: false }
+    return { map: {}, enabled: false }
   }
 }
 
@@ -222,14 +222,14 @@ export async function getPendingCollectionMap(
 // ============================================================
 
 export interface CollectionScheduleMapResult {
-  map:     Map<string, CollectionSchedule>
+  map:     Record<string, CollectionSchedule>
   enabled: boolean
 }
 
 export async function getCollectionScheduleMap(): Promise<CollectionScheduleMapResult> {
   const supabase = await createSupabaseServer()
   const ctx      = await getAuthCtx(supabase)
-  if (!ctx) return { map: new Map(), enabled: false }
+  if (!ctx) return { map: {}, enabled: false }
 
   try {
     const { data, error } = await supabase
@@ -241,16 +241,16 @@ export async function getCollectionScheduleMap(): Promise<CollectionScheduleMapR
 
     if (error) {
       console.error('[getCollectionScheduleMap] error:', error.message)
-      return { map: new Map(), enabled: false }
+      return { map: {}, enabled: false }
     }
 
-    const map = new Map<string, CollectionSchedule>()
+    const map: Record<string, CollectionSchedule> = {}
     for (const row of data ?? []) {
-      if (!map.has(row.customer_id)) map.set(row.customer_id, row)
+      if (!map[row.customer_id]) map[row.customer_id] = row
     }
     return { map, enabled: true }
   } catch (e) {
     console.error('[getCollectionScheduleMap] exception:', e)
-    return { map: new Map(), enabled: false }
+    return { map: {}, enabled: false }
   }
 }

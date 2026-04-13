@@ -56,7 +56,7 @@ export default async function CustomersPage({
   const [result, todaySalesResult, collectionResult] = await Promise.all([
     getCustomersWithStats().catch(e => { console.error('[customers/page] getCustomersWithStats error:', e); return { success: false as const, error: String(e) } }),
     getTodaySalesWork().catch(e => { console.error('[customers/page] getTodaySalesWork error:', e); return { success: true as const, data: { total: 0, done: 0, pending: 0, items: [] } } }),
-    getCollectionScheduleMap().catch(() => ({ map: new Map(), enabled: false })),
+    getCollectionScheduleMap().catch(() => ({ map: {} as Record<string, any>, enabled: false })),
   ])
   const collectionMap     = collectionResult.map
   const collectionEnabled = collectionResult.enabled
@@ -298,7 +298,7 @@ function CustomerCard({ c, rank, isTop }: { c: CustomerWithScore; rank: number; 
             <CollectionScheduleButton
               customerId={c.id}
               customerName={c.name}
-              existing={collectionMap.get(c.id) ?? null}
+              existing={collectionMap?.[c.id] ?? null}
               compact
             />
           )}
