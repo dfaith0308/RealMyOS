@@ -2,11 +2,12 @@ import { getSalesTargets, getSalesScripts, getSalesSchedules } from '@/actions/s
 import SalesScheduleClient from './SalesScheduleClient'
 
 export default async function SalesSchedulePage() {
-  const todayStr = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10)
+  const todayStr   = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10)
+  const twoWeeksLater = new Date(Date.now() + 9 * 3600000 + 14 * 86400000).toISOString().slice(0, 10)
   const [targets, scripts, schedules] = await Promise.all([
     getSalesTargets(),
     getSalesScripts(),
-    getSalesSchedules(todayStr, new Date(Date.now() + 9 * 3600000 + 14 * 86400000).toISOString().slice(0, 10)),
+    getSalesSchedules(undefined, twoWeeksLater),  // dateFrom 제거 — 과거 미완료 스케줄 포함
   ])
   return (
     <SalesScheduleClient
