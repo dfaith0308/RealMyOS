@@ -2,9 +2,7 @@ import Link from 'next/link'
 import { Suspense } from 'react'
 import { getCustomersWithStats } from '@/actions/ledger'
 import { formatKRW } from '@/lib/calc'
-import { calcRecontactMessage, calcNoContactMessage } from '@/lib/customer-logic'
 import type { CustomerStatus, CustomerWithScore } from '@/actions/ledger'
-import type { ActionType } from '@/lib/customer-logic'
 import CallButton from '@/components/customer/CallButton'
 import CollectionScheduleButton from '@/components/customer/CollectionScheduleButton'
 import { getCollectionScheduleMap } from '@/actions/collection'
@@ -21,15 +19,6 @@ const STATUS_CFG: Record<CustomerStatus, { label: string; color: string; bg: str
   scheduled: { label: '수금예정', color: '#7C3AED', bg: '#F5F3FF', border: '#C4B5FD' },
   new:       { label: '신규',    color: '#1D4ED8', bg: '#EFF6FF', border: '#93C5FD' },
   normal:    { label: '정상',    color: '#15803D', bg: '#F0FDF4', border: '#86EFAC' },
-}
-
-const ACTION_CFG: Record<ActionType, { label: string; color: string; bg: string }> = {
-  collect_payment: { label: '수금 요청', color: '#B91C1C', bg: '#FEF2F2' },
-  visit:           { label: '방문 필요', color: '#7C3AED', bg: '#F5F3FF' },
-  call:            { label: '주문 독려', color: '#B45309', bg: '#FFFBEB' },
-  new_customer:    { label: '신규 관리', color: '#1D4ED8', bg: '#EFF6FF' },
-  upsell:          { label: '매출 확대', color: '#0369A1', bg: '#F0F9FF' },
-  maintain:        { label: '유지',      color: '#15803D', bg: '#F0FDF4' },
 }
 
 function dday(dateStr: string | null): string | null {
@@ -245,52 +234,57 @@ function CustomerCard({ c, rank, isTop, collectionData }: {
   rank:           number
   isTop:          boolean
   collectionData: Record<string, CollectionSchedule | null>
-  key?:           string  // React key prop
+  key?:           string
 }) {
-  const cfg    = STATUS_CFG[c.status]
-  const actCfg = ACTION_CFG[c.action?.action_type as ActionType] ?? ACTION_CFG['maintain']
-  const isHigh = c.action.urgency === 'high'
-  const isMid  = c.action.urgency === 'mid'
-  const recontact    = calcRecontactMessage(c.overdue_amount, c.days_since_contact, c.status)
-  const noContactMsg = !c.last_contacted_at ? calcNoContactMessage(c.status, c.overdue_amount) : null
-  const nextDday     = dday(c.next_action_date)
+  const cfg        = STATUS_CFG[c.status] ?? STATUS_CFG.normal
+  const isScheduled = c.status === 'scheduled'
+  const isUrgent    = c.status === 'danger' || c.status === 'warning'
+  const colItem     = collectionData[c.id]
+  const nextDday    = dday(c.next_action_date)
+
+  // 배너 메시지 — 상태별 단 하나만
+  const bannerMsg = isScheduled
+    ? null  // 수금예정 전용 배너 별도 표시
+    : isUrgent
+      ? (c.overdue_amount > 0
+          ? `연체금 ${formatKRW(c.overdue_amount)} — 지금 바로 연락하세요`
+          : c.receivable_amount > 0
+            ? `미수금 ${formatKRW(c.receivable_amount)} — 수금이 필요합니다`
+            : null)
+      : null
 
   return (
     <div style={{ ...s.card, borderLeft: `4px solid ${cfg.color}`, boxShadow: isTop ? '0 2px 8px rgba(0,0,0,0.08)' : undefined }}>
-      {recontact && <div style={s.recontactBanner}>🔁 {recontact}</div>}
 
-      {/* 수금예정 배너 */}
-      {c.status === 'scheduled' && collectionData[c.id] && (
-        <div style={{ padding: '7px 16px', background: '#F5F3FF', borderBottom: '1px solid #C4B5FD', fontSize: 12, fontWeight: 600, color: '#7C3AED', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>🟣 수금 예정일: {collectionData[c.id]!.scheduled_date}</span>
-          <span style={{ fontWeight: 400, color: '#9ca3af' }}>{collectionData[c.id]!.method ?? ''}</span>
+      {/* 수금예정 배너 — scheduled만 */}
+      {isScheduled && colItem && (
+        <div style={{ padding: '8px 16px', background: '#F5F3FF', borderBottom: '1px solid #C4B5FD', fontSize: 12, fontWeight: 600, color: '#7C3AED', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>🟣 수금 예정일: {colItem.scheduled_date}</span>
+          {colItem.method && <span style={{ fontWeight: 400, color: '#9ca3af', fontSize: 11 }}>{colItem.method}</span>}
         </div>
       )}
 
-      <div style={{ ...s.actionBanner,
-        background: isHigh ? '#FEF2F2' : isMid ? '#FFFBEB' : '#F9FAFB',
-        borderBottom: `1px solid ${cfg.border}`,
-        color: isHigh ? '#B91C1C' : isMid ? '#B45309' : '#6b7280',
-      }}>
-        <span style={s.actionIcon}>{isHigh ? '🔴' : isMid ? '🟡' : '🟢'}</span>
-        <span style={{ ...s.actionText, fontWeight: isHigh ? 700 : 500, fontSize: isHigh ? 14 : 13 }}>
-          {c.action.text}
-        </span>
+      {/* 긴급 배너 — urgent만 */}
+      {bannerMsg && (
+        <div style={{ padding: '7px 16px', background: c.overdue_amount > 0 ? '#FFF1F2' : '#FFFBEB', borderBottom: `1px solid ${cfg.border}`, fontSize: 12, fontWeight: 600, color: c.overdue_amount > 0 ? '#B91C1C' : '#B45309' }}>
+          🔴 {bannerMsg}
+        </div>
+      )}
+
+      {/* 행동 헤더 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', background: '#F9FAFB', borderBottom: `1px solid ${cfg.border}` }}>
+        <div style={s.nameRow}>
+          <Link href={`/customers/${c.id}`} prefetch={false} style={{ ...s.custName, textDecoration: 'none', color: '#111827' }}>{c.name}</Link>
+          <span style={{ ...s.badge, color: cfg.color, background: cfg.bg, border: `1px solid ${cfg.border}` }}>
+            {cfg.label}
+          </span>
+        </div>
+        <div style={{ flex: 1 }} />
         <ScorePill rank={rank} score={c.action_score} customer={c} />
       </div>
 
       <div style={s.cardBody}>
         <div style={s.cardInfo}>
-          <div style={s.nameRow}>
-            <span style={s.custName}>{c.name}</span>
-            <span style={{ ...s.badge, color: cfg.color, background: cfg.bg, border: `1px solid ${cfg.border}` }}>
-              {cfg.label}
-            </span>
-            <span style={{ ...s.badge, color: actCfg?.color ?? '#6b7280', background: actCfg?.bg ?? '#F3F4F6' }}>
-              {actCfg?.label ?? '-'}
-            </span>
-          </div>
-
           <div style={s.metaRow}>
             <MetaItem label="연체금"    value={formatKRW(c.overdue_amount)}     highlight={c.overdue_amount > 0} />
             <MetaItem label="미수금"    value={formatKRW(c.receivable_amount)}  style={{ color: c.receivable_amount > c.overdue_amount ? '#B45309' : '#6b7280' }} />
@@ -314,46 +308,58 @@ function CustomerCard({ c, rank, isTop, collectionData }: {
               highlight={nextDday?.includes('지남') ?? false}
               warn={nextDday === '오늘'} />
             <MetaItem label="전화"
-              value={c.last_contacted_at ? `${c.days_since_contact}일 전` : (noContactMsg ?? '기록 없음')}
-              highlight={!c.last_contacted_at && (c.status === 'danger' || c.status === 'warning')}
+              value={c.last_contacted_at ? `${c.days_since_contact}일 전` : '기록 없음'}
+              highlight={isUrgent && !c.last_contacted_at}
               warn={(c.days_since_contact ?? 0) >= 5} />
             {c.call_connect_rate !== null && (
               <MetaItem label="📞 연결률"
                 value={`${Math.round(c.call_connect_rate * 100)}%`}
                 warn={c.call_connect_rate < 0.3} />
             )}
-            {c.connect_to_payment_rate !== null && (
-              <MetaItem label="💰 수금전환"
-                value={`${Math.round(c.connect_to_payment_rate * 100)}%`}
-                highlight={c.connect_to_payment_rate >= 0.3}
-                warn={c.connect_to_payment_rate < 0.1} />
-            )}
           </div>
         </div>
 
+        {/* 버튼 — 상태별 단일 흐름 */}
         <div style={s.cardBtns}>
-          {c.phone && (
-            <CallButton customerId={c.id} phone={c.phone} style={isHigh ? 'hot' : 'cold'}
-              triggeredMessage={c.action.text} messageKey={c.action.key}
-              customerStatus={c.status} scoreAtTime={c.action_score} amountAtTime={c.overdue_amount} />
+          {isScheduled ? (
+            // 수금예정: [수금하기] [일정변경] [원장]
+            <>
+              <ActionButton customerId={c.id} actionType="collect" href={`/payments/new?customer_id=${c.id}`}
+                label="수금하기" btnStyle={bs.payHot}
+                triggeredMessage="수금예정 거래처" messageKey="scheduled_payment"
+                customerStatus={c.status} scoreAtTime={c.action_score} amountAtTime={c.overdue_amount} />
+              <CollectionScheduleButton
+                customerId={c.id}
+                customerName={c.name}
+                existing={colItem ?? null}
+                compact
+              />
+              <Link href={`/customers/${c.id}/ledger`} prefetch={false} style={s.ledgerBtn}>원장 →</Link>
+            </>
+          ) : isUrgent ? (
+            // 긴급: [전화] [수금하기] [원장]
+            <>
+              {c.phone && (
+                <CallButton customerId={c.id} phone={c.phone} style="hot"
+                  triggeredMessage={c.action.text} messageKey={c.action.key}
+                  customerStatus={c.status} scoreAtTime={c.action_score} amountAtTime={c.overdue_amount} />
+              )}
+              <ActionButton customerId={c.id} actionType="collect" href={`/payments/new?customer_id=${c.id}`}
+                label="수금하기" btnStyle={bs.payHot}
+                triggeredMessage={c.action.text} messageKey={c.action.key}
+                customerStatus={c.status} scoreAtTime={c.action_score} amountAtTime={c.overdue_amount} />
+              <Link href={`/customers/${c.id}/ledger`} prefetch={false} style={s.ledgerBtn}>원장 →</Link>
+            </>
+          ) : (
+            // 일반: [주문] [원장]
+            <>
+              <ActionButton customerId={c.id} actionType="order" href={`/orders/new?customer_id=${c.id}`}
+                label="주문" btnStyle={bs.order}
+                triggeredMessage={c.action.text} messageKey={c.action.key}
+                customerStatus={c.status} scoreAtTime={c.action_score} amountAtTime={c.overdue_amount} />
+              <Link href={`/customers/${c.id}/ledger`} prefetch={false} style={s.ledgerBtn}>원장 →</Link>
+            </>
           )}
-          <ActionButton customerId={c.id} actionType="collect" href={`/payments/new?customer_id=${c.id}`}
-            label="수금" btnStyle={isHigh ? bs.payHot : bs.payNormal}
-            triggeredMessage={c.action.text} messageKey={c.action.key}
-            customerStatus={c.status} scoreAtTime={c.action_score} amountAtTime={c.overdue_amount} />
-          {c.receivable_amount > 0 && (
-            <CollectionScheduleButton
-              customerId={c.id}
-              customerName={c.name}
-              existing={collectionData?.[c.id] ?? null}
-              compact
-            />
-          )}
-          <ActionButton customerId={c.id} actionType="order" href={`/orders/new?customer_id=${c.id}`}
-            label="주문" btnStyle={bs.order}
-            triggeredMessage={c.action.text} messageKey={c.action.key}
-            customerStatus={c.status} scoreAtTime={c.action_score} amountAtTime={c.overdue_amount} />
-          <Link href={`/customers/${c.id}/ledger`} prefetch={false} style={s.ledgerBtn}>원장 →</Link>
         </div>
       </div>
     </div>
@@ -403,21 +409,24 @@ function getScoreReasons(c: any): string[] {
 }
 
 function ScorePill({ rank, score, customer }: { rank: number; score: number; customer: any }) {
-  const isHigh = score >= 300
-  const isMid  = score >= 100 && score < 300
-  const bg     = isHigh ? '#FEE2E2' : isMid ? '#FEF3C7' : '#F3F4F6'
-  const color  = isHigh ? '#B91C1C' : isMid ? '#92400E' : '#9ca3af'
+  // 점수 → 등급 (숫자 미노출)
+  const grade  = score >= 500 ? { label: 'S', emoji: '🔥', color: '#B91C1C', bg: '#FEE2E2' }
+               : score >= 300 ? { label: 'A', emoji: '⚡', color: '#B91C1C', bg: '#FEE2E2' }
+               : score >= 150 ? { label: 'B', emoji: '⚠️', color: '#92400E', bg: '#FEF3C7' }
+               : score >= 50  ? { label: 'C', emoji: '',   color: '#374151', bg: '#F3F4F6' }
+               :                { label: 'D', emoji: '',   color: '#9ca3af', bg: '#F9FAFB' }
   const reasons = getScoreReasons(customer)
+  const title   = `수금 우선순위 ${grade.label}등급\n원인: ${reasons.join(', ') || '없음'}\n(내부 점수: ${score}점)`
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flexShrink: 0 }}>
-      <span
-        title="연체금, 미수금, 주문주기 초과, 미연락 기간 등을 기반으로 계산된 수금 우선순위 점수입니다."
-        style={{ fontSize: 10, padding: '3px 8px', borderRadius: 10, fontWeight: 700, background: bg, color, cursor: 'default' }}>
-        #{rank} · {score}점
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, flexShrink: 0 }}>
+      <span title={title}
+        style={{ fontSize: 10, padding: '3px 8px', borderRadius: 10, fontWeight: 700,
+                 background: grade.bg, color: grade.color, cursor: 'default', whiteSpace: 'nowrap' }}>
+        #{rank} {grade.emoji} {grade.label}등급
       </span>
       {reasons.length > 0 && (
-        <span style={{ fontSize: 9, color: isHigh ? '#B91C1C' : '#B45309', fontWeight: 500 }}>
+        <span style={{ fontSize: 9, color: grade.color, fontWeight: 500 }}>
           {reasons.join(' · ')}
         </span>
       )}
