@@ -237,8 +237,9 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
   const ids = customers.map((c) => c.id)
 
   const collectionResult = await getPendingCollectionMap(ctx.tenant_id, supabase).catch(e => {
-    console.error('[getCustomersWithBalance] collectionMap error:', e)
-    return { enabled: false, data: {}, error: String(e) }
+    const msg = e instanceof Error ? e.message : 'unknown error'
+    console.error('[getCustomersWithBalance] getPendingCollectionMap error:', msg)
+    return { enabled: false, data: {} as Record<string, import('@/actions/collection').CollectionSchedule | null>, error: msg }
   })
   const collectionMap = collectionResult.data ?? {}
 
@@ -624,7 +625,8 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
   console.error(`[PERF:STATS] getCustomersWithStats 총: ${Date.now() - _fn0}ms | rows:${result.length}`)
   return serializeSafe({ success: true as const, data: result })
   } catch (e) {
-    console.error('[getCustomersWithStats] unexpected error:', e)
-    return serializeSafe({ success: true as const, data: [] })
+    const msg = e instanceof Error ? e.message : 'unknown error'
+    console.error('[getCustomersWithStats] unexpected error:', msg)
+    return { success: true as const, data: [] }
   }
 }

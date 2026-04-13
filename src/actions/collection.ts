@@ -187,7 +187,7 @@ export async function getPendingCollectionSchedule(
 
 export interface CollectionMapResult {
   enabled: boolean
-  data:    Record<string, CollectionSchedule>
+  data:    Record<string, CollectionSchedule | null>
   error:   string | null
 }
 
@@ -204,19 +204,19 @@ export async function getPendingCollectionMap(
       .order('scheduled_date', { ascending: true })
 
     if (error) {
-      console.error('[getPendingCollectionMap] error:', error.message)
       console.error('[getPendingCollectionMap] db error:', error.message)
-      return { data: {}, enabled: false, error: error.message }
+      return { enabled: false, data: {}, error: error.message }
     }
 
-    const result: Record<string, CollectionSchedule> = {}
+    const result: Record<string, CollectionSchedule | null> = {}
     for (const row of data ?? []) {
       if (!result[row.customer_id]) result[row.customer_id] = row
     }
     return serializeSafe({ enabled: true, data: result, error: null })
-  } catch (e: any) {
-    console.error('[getPendingCollectionMap] exception:', e)
-    return { enabled: false, data: {}, error: e?.message ?? 'unknown' }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'unknown error'
+    console.error('[getPendingCollectionMap] exception:', msg)
+    return { enabled: false, data: {}, error: msg }
   }
 }
 
@@ -224,7 +224,7 @@ export async function getPendingCollectionMap(
 // 전체 pending 맵 — page.tsx Server Component용
 // ============================================================
 
-// CollectionScheduleMapResult = CollectionMapResult 와 동일 구조
+/** @deprecated CollectionMapResult 사용 */
 export type CollectionScheduleMapResult = CollectionMapResult
 
 export async function getCollectionScheduleMap(): Promise<CollectionMapResult> {
@@ -245,13 +245,14 @@ export async function getCollectionScheduleMap(): Promise<CollectionMapResult> {
       return { enabled: false, data: {}, error: error.message }
     }
 
-    const result: Record<string, CollectionSchedule> = {}
+    const result: Record<string, CollectionSchedule | null> = {}
     for (const row of data ?? []) {
       if (!result[row.customer_id]) result[row.customer_id] = row
     }
     return serializeSafe({ enabled: true, data: result, error: null })
-  } catch (e: any) {
-    console.error('[getCollectionScheduleMap] exception:', e)
-    return { enabled: false, data: {}, error: e?.message ?? 'unknown' }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'unknown error'
+    console.error('[getCollectionScheduleMap] exception:', msg)
+    return { enabled: false, data: {}, error: msg }
   }
 }

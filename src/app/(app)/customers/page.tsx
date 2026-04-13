@@ -8,6 +8,7 @@ import type { ActionType } from '@/lib/customer-logic'
 import CallButton from '@/components/customer/CallButton'
 import CollectionScheduleButton from '@/components/customer/CollectionScheduleButton'
 import { getCollectionScheduleMap } from '@/actions/collection'
+import type { CollectionSchedule } from '@/actions/collection'
 import ActionButton from '@/components/customer/ActionButton'
 import TodaySalesWidget from '@/components/sales/TodaySalesWidget'
 import { getTodaySalesWork } from '@/actions/sales'
@@ -73,7 +74,7 @@ export default async function CustomersPage({
   // ── 안전한 기본값 — undefined/null 접근 없음 ──
   const all:              typeof customersResult.data           = customersResult?.data ?? []
   const todayWork         = salesResult?.data ?? { total: 0, done: 0, pending: 0, items: [] as any[] }
-  const collectionData:   Record<string, any>                  = collectionResult?.data ?? {}
+  const collectionData:   Record<string, CollectionSchedule | null> = collectionResult?.data ?? {}
   const collectionEnabled: boolean                             = collectionResult?.enabled ?? false
 
   const dangerList  = all.filter((c) => c.status === 'danger')
@@ -100,7 +101,7 @@ export default async function CustomersPage({
     filter === 'normal'  ? normalList  :
     filter === 'overdue' ? overdueList : all
 
-  console.error(`[PERF] /customers: ${Date.now() - _t0}ms | rows:${result.data?.length ?? 0}`)
+  console.error(`[PERF] /customers: ${Date.now() - _t0}ms | rows:${customersResult?.data?.length ?? 0}`)
 
   return (
     <main style={s.page}>
@@ -220,7 +221,13 @@ export default async function CustomersPage({
   )
 }
 
-function CustomerCard({ c, rank, isTop, collectionData }: { c: CustomerWithScore; rank: number; isTop: boolean; collectionData: Record<string, any> }) {
+function CustomerCard({ c, rank, isTop, collectionData }: {
+  c:              CustomerWithScore
+  rank:           number
+  isTop:          boolean
+  collectionData: Record<string, CollectionSchedule | null>
+  key?:           string  // React key prop
+}) {
   const cfg    = STATUS_CFG[c.status]
   const actCfg = ACTION_CFG[c.action?.action_type as ActionType] ?? ACTION_CFG['maintain']
   const isHigh = c.action.urgency === 'high'
