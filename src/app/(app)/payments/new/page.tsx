@@ -5,9 +5,10 @@ export const metadata = { title: '수금 등록 — RealMyOS' }
 export default function PaymentNewPage({
   searchParams,
 }: {
-  searchParams: { customer_id?: string }
+  searchParams: { customer_id?: string; collection_schedule_id?: string }
 }) {
-  const initialCustomerId = searchParams.customer_id ?? ''
+  const initialCustomerId        = searchParams.customer_id ?? ''
+  const collectionScheduleId = searchParams.collection_schedule_id ?? ''
 
   return (
     <main style={{ minHeight: '100vh', background: '#f8f9fa', paddingTop: 40 }}>
@@ -18,7 +19,10 @@ export default function PaymentNewPage({
             거래처 선택 시 현재 미수금이 표시됩니다.
           </p>
         </div>
-        <PaymentCreateForm initialCustomerId={initialCustomerId} />
+        <PaymentCreateForm
+          initialCustomerId={initialCustomerId}
+          collectionScheduleId={collectionScheduleId}
+        />
       </div>
     </main>
   )

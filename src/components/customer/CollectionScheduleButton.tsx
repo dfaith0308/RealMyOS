@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import CollectionScheduleModal from './CollectionScheduleModal'
 import type { CollectionSchedule } from '@/actions/collection'
 
@@ -58,6 +59,15 @@ export default function CollectionScheduleButton({
 
   return (
     <>
+      {/* 예정 있을 때: 수금하기 버튼 추가 */}
+      {existing && (
+        <Link
+          href={`/payments/new?customer_id=${customerId}&collection_schedule_id=${existing.id}`}
+          style={{ padding: compact ? '4px 8px' : '7px 13px', background: '#111827', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap', textDecoration: 'none', marginRight: 4 }}
+        >
+          💰 수금
+        </Link>
+      )}
       <button
         onClick={() => setOpen(true)}
         title={existing ? `${existing.scheduled_date} ${METHOD_KO[existing.method as keyof typeof METHOD_KO]} ${existing.note ?? ''}` : '수금 예정 등록'}

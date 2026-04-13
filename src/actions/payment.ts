@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { markCollectionDone } from '@/actions/collection'
+import { markCollectionDone, markCollectionDoneById } from '@/actions/collection'
 import { linkActionResult } from '@/actions/action-log'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import type { ActionResult } from '@/types/order'
@@ -9,11 +9,12 @@ import type { ActionResult } from '@/types/order'
 export type PaymentMethod = 'transfer' | 'cash' | 'card' | 'platform'
 
 export interface CreatePaymentInput {
-  customer_id:    string
-  amount:         number
-  payment_date:   string
-  payment_method: PaymentMethod
-  memo?:          string
+  customer_id:          string
+  amount:               number
+  payment_date:         string
+  payment_method:       PaymentMethod
+  memo?:                string
+  collection_schedule_id?: string | null  // 수금 예정에서 수금할 때 전달
 }
 
 export interface CreatePaymentResult {
@@ -71,6 +72,15 @@ export async function createPayment(
   if (rpcErr || !rpcData)
     return { success: false, error: `수금 저장 실패: ${rpcErr?.message}` }
 
+  // collection_schedule_id — RPC가 insert하지 않으므로 UPDATE로 후처리
+  if (input.collection_schedule_id) {
+    await supabase
+      .from('payments')
+      .update({ collection_schedule_id: input.collection_schedule_id })
+      .eq('id', rpcData.id as string)
+      .eq('tenant_id', ctx.tenant_id)
+  }
+
   await linkActionResult({
     customer_id:        input.customer_id,
     tenant_id:          ctx.tenant_id,
@@ -79,10 +89,13 @@ export async function createPayment(
     related_payment_id: rpcData.id as string,
   })
 
-  // 수금 후 잔액 계산 — 잔액 0 이하일 때만 예정 done 처리
-  // rpcData.balance_before - applied_amount = 수금 후 잔액
+  // 수금 후 예정 done 처리
   const balanceAfter = (rpcData.balance_before as number) - (rpcData.applied_amount as number)
-  if (balanceAfter <= 0) {
+  if (input.collection_schedule_id) {
+    // 예정 수금: 해당 schedule_id만 done 처리 (잔액 무관 — 예정 이행으로 간주)
+    await markCollectionDoneById(input.collection_schedule_id, ctx.tenant_id)
+  } else if (balanceAfter <= 0) {
+    // 일반 수금: 잔액 0 이하일 때만 pending 전체 done
     await markCollectionDone(input.customer_id, ctx.tenant_id)
   }
 

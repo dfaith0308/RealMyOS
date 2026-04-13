@@ -121,7 +121,7 @@ export async function cancelCollectionSchedule(
 }
 
 // ============================================================
-// 수금 완료 시 pending → done (payment.ts에서 호출)
+// 수금 완료 시 pending → done (customer 기준 — 일반 수금)
 // ============================================================
 
 export async function markCollectionDone(
@@ -136,6 +136,24 @@ export async function markCollectionDone(
     .eq('customer_id', customer_id)
     .eq('tenant_id',   tenant_id)
     .eq('status',      'pending')
+}
+
+// ============================================================
+// 수금 완료 시 pending → done (schedule_id 기준 — 예정 수금)
+// ============================================================
+
+export async function markCollectionDoneById(
+  schedule_id: string,
+  tenant_id:   string
+): Promise<void> {
+  const supabase = await createSupabaseServer()
+
+  await supabase
+    .from('collection_schedules')
+    .update({ status: 'done', updated_at: new Date().toISOString() })
+    .eq('id',        schedule_id)
+    .eq('tenant_id', tenant_id)
+    .eq('status',    'pending')
 }
 
 // ============================================================

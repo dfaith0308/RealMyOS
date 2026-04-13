@@ -15,9 +15,9 @@ const METHOD_OPTIONS: { value: PaymentMethod; label: string }[] = [
   { value: 'platform',  label: '플랫폼' },
 ]
 
-interface Props { initialCustomerId?: string }
+interface Props { initialCustomerId?: string; collectionScheduleId?: string }
 
-export default function PaymentCreateForm({ initialCustomerId = '' }: Props) {
+export default function PaymentCreateForm({ initialCustomerId = '', collectionScheduleId = '' }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -82,11 +82,12 @@ export default function PaymentCreateForm({ initialCustomerId = '' }: Props) {
 
     startTransition(async () => {
       const r = await createPayment({
-        customer_id:    selectedCustomer.id,
-        amount:         amountNum,
-        payment_date:   paymentDate,
-        payment_method: method,
-        memo:           memo || undefined,
+        customer_id:          selectedCustomer.id,
+        amount:               amountNum,
+        payment_date:         paymentDate,
+        payment_method:       method,
+        memo:                 memo || undefined,
+        collection_schedule_id: collectionScheduleId || undefined,
       })
       if (r.success && r.data) {
         if (r.data.deposit_amount > 0) {
