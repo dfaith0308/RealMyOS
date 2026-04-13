@@ -6,6 +6,7 @@
 // ============================================================
 
 import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { updateProduct } from '@/actions/product'
 
 interface Product {
@@ -41,6 +42,7 @@ export default function ProductList({ products }: { products: Product[] }) {
 }
 
 function ProductRow({ product }: { product: Product }) {
+  const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(product.name)
@@ -162,7 +164,10 @@ function ProductRow({ product }: { product: Product }) {
         {product.tax_type === 'taxable' ? '과세' : '면세'}
       </td>
       <td style={td}>
-        <button style={editBtn} onClick={() => setEditing(true)}>수정</button>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button style={editBtn} onClick={() => setEditing(true)}>수정</button>
+          <button style={copyBtn} onClick={() => router.push(`/products/new?copyId=${product.id}`)}>복사</button>
+        </div>
       </td>
     </tr>
   )
@@ -192,6 +197,10 @@ const editBtn: React.CSSProperties = {
 const saveBtn: React.CSSProperties = {
   padding: '4px 10px', background: '#111827',
   border: 'none', borderRadius: 6, fontSize: 12, color: '#fff', cursor: 'pointer',
+}
+const copyBtn: React.CSSProperties = {
+  padding: '4px 10px', background: '#EFF6FF',
+  border: '1px solid #BFDBFE', borderRadius: 6, fontSize: 12, color: '#2563EB', cursor: 'pointer',
 }
 const cancelBtn: React.CSSProperties = {
   padding: '4px 10px', background: '#fff',

@@ -47,6 +47,18 @@ export async function createProduct(
   if (!input.name.trim()) return { success: false, error: '상품명을 입력해주세요.' }
   if (!input.cost_price || input.cost_price <= 0) return { success: false, error: '매입가를 입력해주세요.' }
 
+  // 바코드 중복 체크 (DB unique constraint 전 1차 방어)
+  if (input.barcode?.trim()) {
+    const { data: existing } = await supabase
+      .from('products')
+      .select('id')
+      .eq('tenant_id', ctx.tenant_id)
+      .eq('barcode', input.barcode.trim())
+      .is('deleted_at', null)
+      .single()
+    if (existing) return { success: false, error: '이미 사용 중인 바코드입니다.' }
+  }
+
   // category_id 존재 여부 검증 (FK 에러 방지)
   if (input.category_id) {
     const { data: cat } = await supabase
@@ -557,4 +569,42 @@ export async function bulkCreateProducts(
       fail_rows,
     },
   }
+}
+
+// ============================================================
+// 상품 복사용 단건 조회
+// ============================================================
+export interface ProductCopyData {
+  name:           string
+  product_code:   string
+  category_id:    string | null
+  supplier_id:    string | null
+  tax_type:       'taxable' | 'exempt'
+  barcode:        string | null
+  cost_price:     number
+  selling_price:  number
+  min_margin_rate: number | null
+  unit:           string | null
+  spec:           string | null
+  memo:           string | null
+}
+
+export async function getProductById(
+  id: string
+): Promise<ActionResult<ProductCopyData>> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const { data, error } = await supabase
+    .from('products')
+    .select('name, product_code, category_id, supplier_id, tax_type, barcode, cost_price, selling_price, min_margin_rate, unit, spec, memo')
+    .eq('id', id)
+    .eq('tenant_id', ctx.tenant_id)
+    .is('deleted_at', null)
+    .single()
+
+  if (error || !data) return { success: false, error: '상품을 찾을 수 없습니다.' }
+
+  return { success: true, data: data as ProductCopyData }
 }

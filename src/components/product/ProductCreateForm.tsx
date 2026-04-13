@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createProduct } from '@/actions/product'
+import type { ProductCopyData } from '@/actions/product'
 import { addCategory } from '@/actions/category'
 import { calcMarginRate, formatKRW } from '@/lib/calc'
 import SearchableSelectWithAdd from '@/components/common/SearchableSelectWithAdd'
@@ -14,6 +15,7 @@ interface Supplier { id: string; name: string }
 interface Props {
   categories: Category[]
   suppliers: Supplier[]
+  copyData?: ProductCopyData
 }
 
 // ── 마진 계산 공통 함수 ────────────────────────────────────────
@@ -43,10 +45,12 @@ function MarginTag({ price, cost, minMarginRate }: { price: string; cost: number
   )
 }
 
-export default function ProductCreateForm({ categories: initCats, suppliers }: Props) {
+export default function ProductCreateForm({ categories: initCats, suppliers, copyData }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const nameRef = useRef<HTMLInputElement>(null)
+  const [initialized, setInitialized] = useState(false)
 
   const [categories, setCategories] = useState<SelectOption[]>(initCats)
   const [categoryId, setCategoryId] = useState('')
@@ -58,6 +62,21 @@ export default function ProductCreateForm({ categories: initCats, suppliers }: P
 
   const [costPrice, setCostPrice] = useState('')
   const [sellingPrice, setSellingPrice] = useState('')
+
+  // 복사 초기값 세팅 — initialized 가드로 입력 중 덮어쓰기 방지
+  useEffect(() => {
+    if (!copyData || initialized) return
+    setName(copyData.name ? `${copyData.name} (복사본)` : '')
+    setTaxType(copyData.tax_type ?? 'taxable')
+    setBarcode('')  // 바코드 초기화
+    setMinMargin(copyData.min_margin_rate != null ? String(copyData.min_margin_rate) : '')
+    setCostPrice(copyData.cost_price ? String(copyData.cost_price) : '')
+    setSellingPrice(copyData.selling_price ? String(copyData.selling_price) : '')
+    if (copyData.category_id) setCategoryId(copyData.category_id)
+    if (copyData.supplier_id) setSupplierId(copyData.supplier_id)
+    setInitialized(true)
+    setTimeout(() => nameRef.current?.focus(), 100)
+  }, [copyData, initialized])
   const [siksikiPrice, setSiksikiPrice] = useState('')
   const [subscriptionPrice, setSubscriptionPrice] = useState('')
   const [bulkPrice, setBulkPrice] = useState('')
@@ -114,6 +133,12 @@ export default function ProductCreateForm({ categories: initCats, suppliers }: P
 
   return (
     <div style={s.wrap}>
+      {/* 복사 모드 배너 */}
+      {copyData && (
+        <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 8, padding: '10px 16px', marginBottom: 16, fontSize: 13, color: '#1D4ED8', fontWeight: 500 }}>
+          📋 기존 상품을 복사하여 생성 중입니다. 상품명과 바코드를 확인하세요.
+        </div>
+      )}
       <h1 style={s.title}>상품 등록</h1>
       {error && <div style={s.err}>{error}</div>}
 
@@ -127,7 +152,7 @@ export default function ProductCreateForm({ categories: initCats, suppliers }: P
           placeholder="카테고리 검색 또는 추가" />
 
         <F label="상품명 *">
-          <input style={s.input} value={name}
+          <input ref={nameRef} style={s.input} value={name}
             onChange={(e) => setName(e.target.value)} placeholder="예: 국내산 고추가루 1kg" required />
         </F>
 
