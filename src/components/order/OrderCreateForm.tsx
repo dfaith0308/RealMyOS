@@ -455,6 +455,7 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
             amount:         amt,
             payment_date:   paymentDate,
             payment_method: paymentMethod,
+            order_id:       res.data!.order_id,   // 주문-수금 연결
           })
           if (pr.success && pr.data) {
             const dep  = pr.data.deposit_amount

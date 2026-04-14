@@ -14,6 +14,7 @@ export interface CreatePaymentInput {
   payment_method:           PaymentMethod
   memo?:                    string
   collection_schedule_id?:  string | null
+  order_id?:                string | null   // 주문과 함께 처리 시 연결
 }
 
 export interface CreatePaymentResult {
@@ -70,6 +71,7 @@ export async function createPayment(
     p_memo:                    input.memo ?? null,
     p_created_by:              ctx.user_id,
     p_collection_schedule_id:  input.collection_schedule_id ?? null,
+    p_order_id:                input.order_id ?? null,
   })
 
   // RPC 성공 여부 판단 — 에러 없고 data 존재
@@ -123,6 +125,7 @@ export async function createPayment(
       memo:           input.memo ?? null,
       status:         'confirmed',     // 반드시 confirmed — ledger 집계 기준
       created_by:     ctx.user_id,
+      order_id:       input.order_id ?? null,
     })
     .select('id')
     .single()
