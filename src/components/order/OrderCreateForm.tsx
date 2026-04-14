@@ -451,18 +451,29 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
         const amt = Math.round(Number(paymentAmount))
         if (amt > 0) {
           const pr = await createPayment({
-            customer_id: selectedCustomer.id, amount: amt,
-            payment_date: paymentDate, payment_method: paymentMethod,
+            customer_id:    selectedCustomer.id,
+            amount:         amt,
+            payment_date:   paymentDate,
+            payment_method: paymentMethod,
           })
           if (pr.success && pr.data) {
-            const dep = pr.data.deposit_amount
-            successMsg += dep > 0 ? ` | 수금 완료 (예치금 +${formatKRW(dep)})` : ` | 수금 완료`
+            const dep  = pr.data.deposit_amount
+            const mode = pr.data.mode === 'fallback' ? ' (직접저장)' : ''
+            successMsg += dep > 0
+              ? ` | 수금 완료${mode} · 예치금 +${formatKRW(dep)}`
+              : ` | 수금 완료${mode}`
             setPaymentError(null); setPaymentFailed(null)
             setPaymentWarning(pr.data.warning ?? null)
           } else {
+            // ⚠️ 수금 실패 — 주문은 저장됐지만 수금은 저장 안 됨을 명확히 표시
             setPaymentFailed({ orderId: res.data!.order_id, customerId: selectedCustomer.id, amount: amt })
             setPaymentError(pr.error ?? '알 수 없는 오류')
-            successMsg = `✓ 주문 완료 / ⚠️ 수금 실패`
+            // success 메시지를 경고로 바꿔 사용자가 수금 실패를 인지하게 함
+            setSuccess(null)
+            setError(`주문(${res.data!.order_number})은 저장됐으나 수금이 실패했습니다. 아래 버튼으로 수금을 재시도하세요.
+사유: ${pr.error ?? '알 수 없는 오류'}`)
+            setIsSubmitting(false)
+            return  // successMsg 설정 없이 종료
           }
         }
       }

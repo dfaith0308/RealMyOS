@@ -8,12 +8,12 @@ import type { ActionResult } from '@/types/order'
 export type PaymentMethod = 'transfer' | 'cash' | 'card' | 'platform'
 
 export interface CreatePaymentInput {
-  customer_id:          string
-  amount:               number
-  payment_date:         string
-  payment_method:       PaymentMethod
-  memo?:                string
-  collection_schedule_id?: string | null  // 수금 예정에서 수금할 때 전달
+  customer_id:              string
+  amount:                   number
+  payment_date:             string
+  payment_method:           PaymentMethod
+  memo?:                    string
+  collection_schedule_id?:  string | null
 }
 
 export interface CreatePaymentResult {
@@ -21,19 +21,21 @@ export interface CreatePaymentResult {
   applied_amount: number
   deposit_amount: number
   balance_before: number
-  warning?:       string  // 중복 수금 경고
+  mode:           'rpc' | 'fallback'   // 어떤 경로로 저장됐는지
+  warning?:       string
 }
 
 // ============================================================
-// 수금 등록 — create_payment_atomic RPC 전용
-// JS 계산 완전 금지. 모든 계산은 DB 트랜잭션 내에서 처리.
+// 수금 등록
+// 우선순위: create_payment_atomic RPC → direct insert fallback
+// RPC 실패 시에도 direct insert로 항상 저장 보장
 // ============================================================
 
 export async function createPayment(
   input: CreatePaymentInput,
 ): Promise<ActionResult<CreatePaymentResult>> {
   const supabase = await createSupabaseServer()
-  const ctx = await getAuthCtx(supabase)
+  const ctx      = await getAuthCtx(supabase)
   if (!ctx) return { success: false, error: '로그인이 필요합니다.' }
 
   if (!input.customer_id)
@@ -46,39 +48,99 @@ export async function createPayment(
   const twoMinsAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString()
   const { data: recentPayment } = await supabase
     .from('payments')
-    .select('id, created_at')
+    .select('id')
     .eq('customer_id', input.customer_id)
     .eq('tenant_id', ctx.tenant_id)
     .eq('amount', input.amount)
     .eq('status', 'confirmed')
     .gte('created_at', twoMinsAgo)
     .limit(1)
-    .single()
+    .maybeSingle()
   if (recentPayment) {
     dupWarning = `최근 동일 금액(${input.amount.toLocaleString()}원)의 수금이 등록되어 있습니다. 중복인지 확인하세요.`
   }
 
-  // RPC: balance 계산 + deposit 분리 + schedule done + insert 단일 트랜잭션
+  // ── 1차 시도: RPC (balance 계산 + deposit 분리 + insert 단일 트랜잭션) ──
   const { data: rpcData, error: rpcErr } = await supabase.rpc('create_payment_atomic', {
-    p_tenant_id:                ctx.tenant_id,
-    p_customer_id:              input.customer_id,
-    p_amount:                   input.amount,
-    p_payment_date:             input.payment_date,
-    p_payment_method:           input.payment_method,
-    p_memo:                     input.memo ?? null,
-    p_created_by:               ctx.user_id,
-    p_collection_schedule_id:   input.collection_schedule_id ?? null,
+    p_tenant_id:               ctx.tenant_id,
+    p_customer_id:             input.customer_id,
+    p_amount:                  input.amount,
+    p_payment_date:            input.payment_date,
+    p_payment_method:          input.payment_method,
+    p_memo:                    input.memo ?? null,
+    p_created_by:              ctx.user_id,
+    p_collection_schedule_id:  input.collection_schedule_id ?? null,
   })
-  if (rpcErr || !rpcData)
-    return { success: false, error: `수금 저장 실패: ${rpcErr?.message}` }
+
+  if (!rpcErr && rpcData) {
+    // RPC 성공
+    await linkActionResult({
+      customer_id:        input.customer_id,
+      tenant_id:          ctx.tenant_id,
+      result_type:        'payment_completed',
+      result_amount:      input.amount,
+      related_payment_id: rpcData.id as string,
+    }).catch(() => {})  // action_log 실패는 수금 성공에 영향 없음
+
+    revalidatePath('/customers')
+    revalidatePath('/payments/new')
+
+    return {
+      success: true,
+      data: {
+        id:             rpcData.id             as string,
+        applied_amount: rpcData.applied_amount as number,
+        deposit_amount: rpcData.deposit_amount as number,
+        balance_before: rpcData.balance_before as number,
+        mode:           'rpc',
+        warning:        dupWarning,
+      },
+    }
+  }
+
+  // ── 2차 시도: direct insert fallback (RPC 미존재 또는 에러) ──
+  console.error('[createPayment] RPC 실패 — fallback 시도:', rpcErr?.message)
+
+  const { data: inserted, error: insertErr } = await supabase
+    .from('payments')
+    .insert({
+      tenant_id:      ctx.tenant_id,
+      customer_id:    input.customer_id,
+      amount:         input.amount,
+      deposit_amount: 0,               // fallback: deposit 계산 생략, 정합성은 ledger에서
+      payment_date:   input.payment_date,
+      payment_method: input.payment_method,
+      memo:           input.memo ?? null,
+      status:         'confirmed',     // 반드시 confirmed — ledger 집계 기준
+      created_by:     ctx.user_id,
+    })
+    .select('id')
+    .single()
+
+  if (insertErr || !inserted) {
+    console.error('[createPayment] fallback insert 실패:', insertErr?.message)
+    return {
+      success: false,
+      error:   `수금 저장 실패: ${insertErr?.message ?? rpcErr?.message ?? '알 수 없는 오류'}`,
+    }
+  }
+
+  // collection_schedule 완료 처리 (fallback에서도 처리)
+  if (input.collection_schedule_id) {
+    await supabase
+      .from('collection_schedules')
+      .update({ status: 'done' })
+      .eq('id', input.collection_schedule_id)
+      .eq('tenant_id', ctx.tenant_id)
+  }
 
   await linkActionResult({
     customer_id:        input.customer_id,
     tenant_id:          ctx.tenant_id,
     result_type:        'payment_completed',
     result_amount:      input.amount,
-    related_payment_id: rpcData.id as string,
-  })
+    related_payment_id: inserted.id,
+  }).catch(() => {})
 
   revalidatePath('/customers')
   revalidatePath('/payments/new')
@@ -86,32 +148,38 @@ export async function createPayment(
   return {
     success: true,
     data: {
-      id:             rpcData.id             as string,
-      applied_amount: rpcData.applied_amount as number,
-      deposit_amount: rpcData.deposit_amount as number,
-      balance_before: rpcData.balance_before as number,
+      id:             inserted.id,
+      applied_amount: input.amount,
+      deposit_amount: 0,
+      balance_before: 0,
+      mode:           'fallback',
       warning:        dupWarning,
     },
   }
 }
 
 // ============================================================
-// 수금 취소 — status = 'cancelled'만 변경 (delete 금지)
-// deposit 복구는 ledger가 confirmed만 집계하므로 자동 처리
+// 수금 취소 — status='cancelled'만 변경 (delete 금지)
+// ledger가 confirmed만 집계하므로 취소 시 자동으로 잔액 원복
 // ============================================================
 
 export async function cancelPayment(payment_id: string): Promise<ActionResult> {
   const supabase = await createSupabaseServer()
-  const ctx = await getAuthCtx(supabase)
+  const ctx      = await getAuthCtx(supabase)
   if (!ctx) return { success: false, error: '로그인 필요' }
 
-
+  // 1. payment 조회 + tenant 보호
   const { data: payment } = await supabase
-    .from('payments').select('id, status, tenant_id, customer_id, amount')
-    .eq('id', payment_id).eq('tenant_id', ctx.tenant_id).single()
+    .from('payments')
+    .select('id, status, tenant_id, customer_id, amount')
+    .eq('id', payment_id)
+    .eq('tenant_id', ctx.tenant_id)
+    .single()
+
   if (!payment)                       return { success: false, error: '수금 내역을 찾을 수 없습니다.' }
   if (payment.status === 'cancelled') return { success: false, error: '이미 취소된 수금입니다.' }
 
+  // 2. status → cancelled (ledger 집계에서 자동 제외됨)
   const { error } = await supabase
     .from('payments')
     .update({ status: 'cancelled' })
@@ -120,42 +188,35 @@ export async function cancelPayment(payment_id: string): Promise<ActionResult> {
 
   if (error) return { success: false, error: error.message }
 
-  // customer_stats 업데이트 (optional — RPC 없어도 ledger에서 재계산)
-  try {
-    await supabase.rpc('update_customer_stats', {
-      p_tenant_id:         ctx.tenant_id,
-      p_customer_id:       payment.customer_id,
-      p_balance_delta:     payment.amount,
-      p_sales_delta:       0,
-      p_last_payment_date: null,
-    })
-  } catch (_) { /* RPC 없어도 ledger는 status=confirmed만 집계하므로 자동 처리 */ }
-
   revalidatePath('/customers')
   revalidatePath('/payments/new')
   return { success: true }
 }
 
 // ============================================================
-// 잔액 + 예치금 조회 (UI 표시용 — confirmed 기준)
+// 잔액 + 예치금 조회 (UI 표시용)
+// 공식: opening_balance + confirmed주문 - confirmed수금
 // ============================================================
 
 export async function getCustomerBalance(
   customer_id: string,
 ): Promise<ActionResult<{ balance: number; deposit: number; customer_name: string }>> {
   const supabase = await createSupabaseServer()
-  const ctx = await getAuthCtx(supabase)
+  const ctx      = await getAuthCtx(supabase)
   if (!ctx) return { success: false, error: '로그인 필요' }
 
-
   const { data: customer } = await supabase
-    .from('customers').select('id, name, opening_balance')
-    .eq('id', customer_id).eq('tenant_id', ctx.tenant_id).is('deleted_at', null).single()
+    .from('customers')
+    .select('id, name, opening_balance')
+    .eq('id', customer_id)
+    .eq('tenant_id', ctx.tenant_id)
+    .is('deleted_at', null)
+    .single()
   if (!customer) return { success: false, error: '거래처 없음' }
 
-  const [{ data: orderSum }, { data: paymentSum }] = await Promise.all([
+  const [{ data: orderRows }, { data: paymentRows }] = await Promise.all([
     supabase.from('orders')
-      .select('total_amount')
+      .select('final_amount, total_amount')
       .eq('customer_id', customer_id).eq('tenant_id', ctx.tenant_id)
       .eq('status', 'confirmed').is('deleted_at', null),
     supabase.from('payments')
@@ -164,9 +225,9 @@ export async function getCustomerBalance(
       .eq('status', 'confirmed'),
   ])
 
-  const totalOrders   = (orderSum   ?? []).reduce((s, o) => s + o.total_amount,         0)
-  const totalPayments = (paymentSum ?? []).reduce((s, p) => s + p.amount,                0)
-  const totalDeposit  = (paymentSum ?? []).reduce((s, p) => s + (p.deposit_amount ?? 0), 0)
+  const totalOrders   = (orderRows   ?? []).reduce((s, o) => s + (o.final_amount ?? o.total_amount), 0)
+  const totalPayments = (paymentRows ?? []).reduce((s, p) => s + p.amount,                           0)
+  const totalDeposit  = (paymentRows ?? []).reduce((s, p) => s + (p.deposit_amount ?? 0),            0)
   const balance       = (customer.opening_balance ?? 0) + totalOrders - totalPayments
 
   return { success: true, data: { balance, deposit: totalDeposit, customer_name: customer.name } }
@@ -196,9 +257,8 @@ export async function getPaymentList(filters?: {
   status?:      string
 }): Promise<ActionResult<PaymentListItem[]>> {
   const supabase = await createSupabaseServer()
-  const ctx = await getAuthCtx(supabase)
+  const ctx      = await getAuthCtx(supabase)
   if (!ctx) return { success: false, error: '로그인 필요' }
-
 
   let query = supabase
     .from('payments')
