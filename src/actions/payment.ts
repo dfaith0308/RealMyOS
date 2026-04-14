@@ -72,7 +72,17 @@ export async function createPayment(
     p_collection_schedule_id:  input.collection_schedule_id ?? null,
   })
 
-  if (!rpcErr && rpcData) {
+  // RPC 성공 여부 판단 — 에러 없고 data 존재
+  const rpcOk = !rpcErr && rpcData != null
+  if (!rpcOk) {
+    console.error('[createPayment] RPC 결과:', {
+      error:   rpcErr?.message ?? 'none',
+      code:    rpcErr?.code ?? 'none',
+      hasData: !!rpcData,
+    })
+  }
+
+  if (rpcOk) {
     // RPC 성공
     await linkActionResult({
       customer_id:        input.customer_id,
@@ -99,7 +109,7 @@ export async function createPayment(
   }
 
   // ── 2차 시도: direct insert fallback (RPC 미존재 또는 에러) ──
-  console.error('[createPayment] RPC 실패 — fallback 시도:', rpcErr?.message)
+  console.error('[createPayment] RPC 실패 — fallback insert 시도')
 
   const { data: inserted, error: insertErr } = await supabase
     .from('payments')
