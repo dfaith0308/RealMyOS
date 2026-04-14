@@ -1,7 +1,6 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { markCollectionDone, markCollectionDoneById } from '@/actions/collection'
 import { linkActionResult } from '@/actions/action-log'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import type { ActionResult } from '@/types/order'
@@ -59,27 +58,19 @@ export async function createPayment(
     dupWarning = `최근 동일 금액(${input.amount.toLocaleString()}원)의 수금이 등록되어 있습니다. 중복인지 확인하세요.`
   }
 
-  // RPC: balance 계산 + deposit 분리 + insert 단일 트랜잭션
+  // RPC: balance 계산 + deposit 분리 + schedule done + insert 단일 트랜잭션
   const { data: rpcData, error: rpcErr } = await supabase.rpc('create_payment_atomic', {
-    p_tenant_id:      ctx.tenant_id,
-    p_customer_id:    input.customer_id,
-    p_amount:         input.amount,
-    p_payment_date:   input.payment_date,
-    p_payment_method: input.payment_method,
-    p_memo:           input.memo ?? null,
-    p_created_by:     ctx.user_id,
+    p_tenant_id:                ctx.tenant_id,
+    p_customer_id:              input.customer_id,
+    p_amount:                   input.amount,
+    p_payment_date:             input.payment_date,
+    p_payment_method:           input.payment_method,
+    p_memo:                     input.memo ?? null,
+    p_created_by:               ctx.user_id,
+    p_collection_schedule_id:   input.collection_schedule_id ?? null,
   })
   if (rpcErr || !rpcData)
     return { success: false, error: `수금 저장 실패: ${rpcErr?.message}` }
-
-  // collection_schedule_id — RPC가 insert하지 않으므로 UPDATE로 후처리
-  if (input.collection_schedule_id) {
-    await supabase
-      .from('payments')
-      .update({ collection_schedule_id: input.collection_schedule_id })
-      .eq('id', rpcData.id as string)
-      .eq('tenant_id', ctx.tenant_id)
-  }
 
   await linkActionResult({
     customer_id:        input.customer_id,
@@ -88,16 +79,6 @@ export async function createPayment(
     result_amount:      input.amount,
     related_payment_id: rpcData.id as string,
   })
-
-  // 수금 후 예정 done 처리
-  const balanceAfter = (rpcData.balance_before as number) - (rpcData.applied_amount as number)
-  if (input.collection_schedule_id) {
-    // 예정 수금: 해당 schedule_id만 done 처리 (잔액 무관 — 예정 이행으로 간주)
-    await markCollectionDoneById(input.collection_schedule_id, ctx.tenant_id)
-  } else if (balanceAfter <= 0) {
-    // 일반 수금: 잔액 0 이하일 때만 pending 전체 done
-    await markCollectionDone(input.customer_id, ctx.tenant_id)
-  }
 
   revalidatePath('/customers')
   revalidatePath('/payments/new')
@@ -139,14 +120,16 @@ export async function cancelPayment(payment_id: string): Promise<ActionResult> {
 
   if (error) return { success: false, error: error.message }
 
-  // customer_stats 업데이트
-  await supabase.rpc('update_customer_stats', {
-    p_tenant_id:         ctx.tenant_id,
-    p_customer_id:       input.customer_id,
-    p_balance_delta:     -(input.amount),
-    p_sales_delta:       0,
-    p_last_payment_date: input.payment_date,
-  })
+  // customer_stats 업데이트 (optional — RPC 없어도 ledger에서 재계산)
+  try {
+    await supabase.rpc('update_customer_stats', {
+      p_tenant_id:         ctx.tenant_id,
+      p_customer_id:       payment.customer_id,
+      p_balance_delta:     payment.amount,
+      p_sales_delta:       0,
+      p_last_payment_date: null,
+    })
+  } catch (_) { /* RPC 없어도 ledger는 status=confirmed만 집계하므로 자동 처리 */ }
 
   revalidatePath('/customers')
   revalidatePath('/payments/new')
