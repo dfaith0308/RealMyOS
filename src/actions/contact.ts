@@ -90,10 +90,6 @@ export async function createContactLog(
       result:           input.result ?? input.outcome_type ?? null,
     }
 
-      ...payload,
-      memo: payload.memo?.slice(0, 30),
-    }))
-
     // ── insert ────────────────────────────────────────────────
     const { data, error: insertErr } = await supabase
       .from('contact_logs')
