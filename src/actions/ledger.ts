@@ -8,6 +8,7 @@ import { getPendingCollectionMap } from '@/actions/collection'
 import type { ActionMessage } from '@/lib/customer-logic'
 import type { ActionResult } from '@/types/order'
 import { serializeSafe } from '@/lib/serialize-safe'
+import { effectiveOrderAmount, calcReceivable, calcDeposit, calcCurrentBalance } from '@/lib/ledger-calc'
 
 // ============================================================
 // 거래처별 원장
@@ -321,15 +322,12 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
     const opening = openingMap.get(c.id) ?? 0
     const paid    = paymentMap.get(c.id) ?? 0
 
-    const totalFinal      = orders.reduce((s, o) => s + ((o as any).final_amount ?? o.total_amount), 0)
-    const totalOrdersAmt  = orders.reduce((s, o) => s + o.total_amount, 0)  // 매출 집계용 (레거시)
-    const current_balance = opening + totalFinal - paid
+    const totalFinal      = orders.reduce((s, o) => s + effectiveOrderAmount(o as any), 0)
+    const totalOrdersAmt  = orders.reduce((s, o) => s + o.total_amount, 0)  // 매출 집계용
+    const current_balance = calcCurrentBalance(opening, totalFinal, paid)
 
-    // receivable = opening + SUM(final_amount) - paid
-    const receivable_amount = Math.max(0, opening + totalFinal - paid)
-
-    // deposit = max(0, paid - SUM(final_amount))  — opening 무관
-    const deposit_amount    = Math.max(0, paid - totalFinal)
+    const receivable_amount = calcReceivable(opening, totalFinal, paid)
+    const deposit_amount    = calcDeposit(totalFinal, paid)
 
     // overdue: terms > 0인 경우만 계산 (terms=0은 즉시결제, 연체 개념 없음)
     let overdueSum = 0
@@ -338,7 +336,7 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
         const dueDate = new Date(o.order_date + 'T00:00:00Z')
         dueDate.setUTCDate(dueDate.getUTCDate() + terms)
         const dueDateStr = dueDate.toISOString().slice(0, 10)
-        if (dueDateStr < todayStr) overdueSum += (o as any).final_amount ?? o.total_amount
+        if (dueDateStr < todayStr) overdueSum += effectiveOrderAmount(o as any)
       }
     }
     const overdue_amount = Math.max(0, overdueSum - paid)
@@ -539,7 +537,7 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
   // final_amount = total_amount - discount_amount - point_used (DB에서 직접 가져옴)
   const orderFinalMap = new Map<string, number>()
   for (const o of orderRows ?? []) {
-    orderFinalMap.set(o.customer_id, (orderFinalMap.get(o.customer_id) ?? 0) + ((o as any).final_amount ?? 0))
+    orderFinalMap.set(o.customer_id, (orderFinalMap.get(o.customer_id) ?? 0) + effectiveOrderAmount(o as any))
   }
   const paidMap = new Map<string, number>()
   for (const p of paymentRows ?? []) {
@@ -564,8 +562,8 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
     // receivable: opening + orders - payments (getCustomersWithBalance와 동일 공식)
     const orderFinal    = orderFinalMap.get(c.id) ?? 0
     const paid          = paidMap.get(c.id)        ?? 0
-    const receivable_amount = Math.max(0, opening + orderFinal - paid)
-    const deposit_amount    = Math.max(0, paid - opening - orderFinal)
+    const receivable_amount = calcReceivable(opening, orderFinal, paid)
+    const deposit_amount    = calcDeposit(orderFinal, paid)
     const overdue_amount    = 0   // stats에 due_date 없음
 
     const days_since_order  = last_payment_date

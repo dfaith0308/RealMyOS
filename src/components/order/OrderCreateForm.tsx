@@ -398,8 +398,6 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
 
     // 디버깅 로그 + 총액 불일치 강제 검증
     const resolvedLines = lines.map((l) => ({ product: l.product.name, mode: l.mode, qty: l.quantity, resolved: resolveLine(l) }))
-    console.log('[ORDER-LINE-DEBUG]', resolvedLines)
-    console.log('[ORDER-SUMMARY-DEBUG]', { supply: totals.supply, vat: totals.vat, total: totals.total })
 
     const verifyTotal = resolvedLines.reduce((sum, l) => sum + l.resolved.line_total, 0)
     if (verifyTotal !== totals.total) {

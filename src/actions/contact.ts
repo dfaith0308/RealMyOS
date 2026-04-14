@@ -90,7 +90,6 @@ export async function createContactLog(
       result:           input.result ?? input.outcome_type ?? null,
     }
 
-    console.log('[createContactLog] payload:', JSON.stringify({
       ...payload,
       memo: payload.memo?.slice(0, 30),
     }))
@@ -110,7 +109,6 @@ export async function createContactLog(
       }
     }
 
-    console.log('[createContactLog] insert success, id:', data.id)
 
     // ── customers 동기화 (실패해도 이력 저장은 유지) ──────────
     try {
