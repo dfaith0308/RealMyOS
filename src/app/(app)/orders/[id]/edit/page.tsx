@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation'
-import { createSupabaseServer } from '@/lib/supabase-server'
+import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import { getSettings } from '@/actions/settings'
 import { getProducts } from '@/actions/product'
 import OrderEditForm from '@/components/order/OrderEditForm'
@@ -13,6 +13,8 @@ export default async function OrderEditPage({
 }) {
   const { id } = params
   const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) notFound()
 
   const [{ data: order }, settingsResult, productsResult] = await Promise.all([
     supabase
@@ -28,6 +30,8 @@ export default async function OrderEditPage({
         )
       `)
       .eq('id', id)
+      // 전환: seller_tenant_id 우선 (legacy tenant_id 병행)
+      .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
       .is('deleted_at', null)
       .single(),
     getSettings(),

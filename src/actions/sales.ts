@@ -118,12 +118,17 @@ export async function getSalesTargets(): Promise<ActionResult<SalesTarget[]>> {
 
     supabase.from('orders')
       .select('customer_id, total_amount, point_used, order_date')
-      .eq('tenant_id', ctx.tenant_id).eq('status', 'confirmed').is('deleted_at', null)
+      // 전환: seller_tenant_id 우선 (legacy tenant_id 병행)
+      .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
+      .eq('status', 'confirmed').is('deleted_at', null)
       .order('order_date', { ascending: false }),
 
     supabase.from('payments')
       .select('customer_id, amount')
-      .eq('tenant_id', ctx.tenant_id).eq('status', 'confirmed'),
+      // 전환: payee_tenant_id 우선 (legacy tenant_id 병행)
+      .or(`payee_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
+      .eq('direction', 'inbound')
+      .eq('status', 'confirmed'),
 
     supabase.from('contact_logs')
       .select('customer_id, contacted_at, result, next_action_date, next_action_type')
@@ -133,7 +138,9 @@ export async function getSalesTargets(): Promise<ActionResult<SalesTarget[]>> {
     // avg_order_cycle: 최근 90일 주문 날짜만
     supabase.from('orders')
       .select('customer_id, order_date')
-      .eq('tenant_id', ctx.tenant_id).eq('status', 'confirmed').is('deleted_at', null)
+      // 전환: seller_tenant_id 우선 (legacy tenant_id 병행)
+      .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
+      .eq('status', 'confirmed').is('deleted_at', null)
       .gte('order_date', d90ago)
       .order('order_date', { ascending: true }),
   ])
@@ -912,7 +919,8 @@ export async function getConversionStats(
   const { data: orders } = await supabase
     .from('orders')
     .select('id, created_at')
-    .eq('tenant_id', ctx.tenant_id)
+    // 전환: seller_tenant_id 우선 (legacy tenant_id 병행)
+    .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
     .eq('customer_id', customerId)
     .eq('status', 'confirmed')
     .is('deleted_at', null)
@@ -976,7 +984,8 @@ export async function getConversionMap(
       .order('created_at', { ascending: true }),
     supabase.from('orders')
       .select('id, created_at')
-      .eq('tenant_id', ctx.tenant_id)
+      // 전환: seller_tenant_id 우선 (legacy tenant_id 병행)
+      .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
       .eq('customer_id', customerId)
       .eq('status', 'confirmed')
       .is('deleted_at', null)

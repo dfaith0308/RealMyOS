@@ -63,7 +63,11 @@ export async function bulkUpsertCustomers(
   const today = new Date().toISOString().slice(0, 10)
 
   // 1. acquisition_channel 이름 → id 맵 (N+1 방지: 한 번에 조회)
-  const channelNames = [...new Set(rows.map((r) => r.acquisition_channel?.trim()).filter(Boolean))]
+  const channelNames = [
+    ...new Set(
+      rows.map((r) => r.acquisition_channel?.trim()).filter((n): n is string => Boolean(n)),
+    ),
+  ]
   const { data: existingChannels } = await supabase
     .from('acquisition_channels')
     .select('id, name')
@@ -82,7 +86,7 @@ export async function bulkUpsertCustomers(
           tenant_id,
           name,
           code: name!.toLowerCase().replace(/[^a-z0-9]/g, '_') + '_' + Date.now().toString(36),
-          created_by: user.id,
+          created_by: ctx.user_id,
         }))
       )
       .select('id, name')
@@ -195,7 +199,7 @@ export async function bulkUpsertCustomers(
             customer_id:   existing.id,
             before_amount: existing.opening_balance ?? 0,
             after_amount:  openingBalance,
-            changed_by:    user.id,
+            changed_by:    ctx.user_id,
             reason:        'CSV 대량등록 수정',
           })
         }
@@ -216,7 +220,7 @@ export async function bulkUpsertCustomers(
             customer_id:   newCustomer.id,
             before_amount: 0,
             after_amount:  openingBalance,
-            changed_by:    user.id,
+            changed_by:    ctx.user_id,
             reason:        'CSV 대량등록',
           })
         }

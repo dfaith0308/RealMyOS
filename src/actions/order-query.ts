@@ -46,12 +46,14 @@ export async function getOrderList(filters?: {
   customer_id?: string
 }): Promise<ActionResult<OrderListItem[]>> {
   const supabase = await createSupabaseServer()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { success: false, error: '로그인 필요' }
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
 
   let query = supabase
     .from('orders')
     .select('id, order_number, order_date, customer_id, total_amount, status, customers(name), order_lines(product_name, quantity, unit_price, line_total)')
+    // 전환: seller_tenant_id 우선 (legacy tenant_id 병행)
+    .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
     .is('deleted_at', null)
     .order('order_date', { ascending: false })
     .order('created_at', { ascending: false })
@@ -101,12 +103,14 @@ export async function getLastOrder(
   customer_id: string,
 ): Promise<ActionResult<LastOrderData>> {
   const supabase = await createSupabaseServer()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { success: false, error: '로그인 필요' }
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
 
   const { data: order } = await supabase
     .from('orders')
     .select('id, customer_id, order_lines(product_id, product_name, product_code, quantity, unit_price, tax_type)')
+    // 전환: seller_tenant_id 우선 (legacy tenant_id 병행)
+    .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
     .eq('customer_id', customer_id)
     .eq('status', 'confirmed')
     .is('deleted_at', null)

@@ -51,7 +51,9 @@ export async function createPayment(
     .from('payments')
     .select('id')
     .eq('customer_id', input.customer_id)
-    .eq('tenant_id', ctx.tenant_id)
+    // 전환: payee_tenant_id 우선 (legacy tenant_id 병행)
+    .or(`payee_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
+    .eq('direction', 'inbound')
     .eq('amount', input.amount)
     .eq('status', 'confirmed')
     .gte('created_at', twoMinsAgo)
@@ -117,6 +119,8 @@ export async function createPayment(
     .from('payments')
     .insert({
       tenant_id:      ctx.tenant_id,
+      payee_tenant_id: ctx.tenant_id,
+      direction:      'inbound',
       customer_id:    input.customer_id,
       amount:         input.amount,
       deposit_amount: 0,               // fallback: deposit 계산 생략, 정합성은 ledger에서
@@ -186,7 +190,8 @@ export async function cancelPayment(payment_id: string): Promise<ActionResult> {
     .from('payments')
     .select('id, status, tenant_id, customer_id, amount')
     .eq('id', payment_id)
-    .eq('tenant_id', ctx.tenant_id)
+    // 전환: payee_tenant_id 우선 (legacy tenant_id 병행)
+    .or(`payee_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
     .single()
 
   if (!payment)                       return { success: false, error: '수금 내역을 찾을 수 없습니다.' }
@@ -197,7 +202,8 @@ export async function cancelPayment(payment_id: string): Promise<ActionResult> {
     .from('payments')
     .update({ status: 'cancelled' })
     .eq('id', payment_id)
-    .eq('tenant_id', ctx.tenant_id)
+    // 전환: payee_tenant_id 우선 (legacy tenant_id 병행)
+    .or(`payee_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
 
   if (error) return { success: false, error: error.message }
 
@@ -230,11 +236,16 @@ export async function getCustomerBalance(
   const [{ data: orderRows }, { data: paymentRows }] = await Promise.all([
     supabase.from('orders')
       .select('final_amount, total_amount')
-      .eq('customer_id', customer_id).eq('tenant_id', ctx.tenant_id)
+      .eq('customer_id', customer_id)
+      // 전환: seller_tenant_id 우선 (legacy tenant_id 병행)
+      .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
       .eq('status', 'confirmed').is('deleted_at', null),
     supabase.from('payments')
       .select('amount, deposit_amount')
-      .eq('customer_id', customer_id).eq('tenant_id', ctx.tenant_id)
+      .eq('customer_id', customer_id)
+      // 전환: payee_tenant_id 우선 (legacy tenant_id 병행)
+      .or(`payee_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
+      .eq('direction', 'inbound')
       .eq('status', 'confirmed'),
   ])
 
@@ -276,7 +287,9 @@ export async function getPaymentList(filters?: {
   let query = supabase
     .from('payments')
     .select('id, payment_date, customer_id, amount, deposit_amount, payment_method, memo, status, created_at, customers(id, name)')
-    .eq('tenant_id', ctx.tenant_id)
+    // 전환: payee_tenant_id 우선 (legacy tenant_id 병행)
+    .or(`payee_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
+    .eq('direction', 'inbound')
     .order('payment_date', { ascending: false })
     .order('created_at',   { ascending: false })
     .limit(500)

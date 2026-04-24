@@ -3,6 +3,7 @@
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import { getCustomersWithScore } from '@/actions/ledger'
 import { getDailyFundPlan } from '@/actions/fund'
+import { effectiveOrderAmount } from '@/lib/ledger-calc'
 import type { ActionResult } from '@/types/order'
 
 function todayKST(): string {
@@ -72,7 +73,7 @@ export async function getDashboardData(): Promise<ActionResult<DashboardData>> {
     fundResult,
     { data: monthlySalesRaw },
     { data: customerSalesRaw },
-    { data: productSalesRaw },
+    { data: ordersForProductSales },
     { data: draftOrders },
   ] = await Promise.all([
     getCustomersWithScore(),
@@ -81,28 +82,35 @@ export async function getDashboardData(): Promise<ActionResult<DashboardData>> {
     // 이번달 매출 (confirmed 주문)
     supabase.from('orders')
       .select('total_amount, customer_id')
-      .eq('tenant_id', tid).eq('status', 'confirmed')
+      // supplier-os: seller_tenant_id 기준 + TODO(legacy): seller 미백필 시 tenant_id만 있는 행 — 백필 후 seller만 사용 검토
+      .or(`seller_tenant_id.eq.${tid},tenant_id.eq.${tid}`)
+      .eq('status', 'confirmed')
       .is('deleted_at', null)
       .gte('order_date', monthStart).lte('order_date', today),
 
     // 거래처별 이번달 매출
     supabase.from('orders')
       .select('customer_id, total_amount, customers(name)')
-      .eq('tenant_id', tid).eq('status', 'confirmed')
+      .or(`seller_tenant_id.eq.${tid},tenant_id.eq.${tid}`)
+      .eq('status', 'confirmed')
       .is('deleted_at', null)
       .gte('order_date', monthStart).lte('order_date', today),
 
-    // 상품별 이번달 매출
-    supabase.from('order_lines')
-      .select('product_name, line_total, orders!inner(tenant_id, status, order_date, deleted_at)')
-      .eq('orders.tenant_id', tid).eq('orders.status', 'confirmed')
-      .is('orders.deleted_at', null)
-      .gte('orders.order_date', monthStart).lte('orders.order_date', today),
+    // 상품별 이번달 매출 — orders에서 order_lines 중첩 조회 (seller만 inner join 시 legacy tenant 주문 누락 방지)
+    supabase.from('orders')
+      .select('order_lines(product_name, line_total)')
+      .or(`seller_tenant_id.eq.${tid},tenant_id.eq.${tid}`)
+      .eq('status', 'confirmed')
+      .is('deleted_at', null)
+      .gte('order_date', monthStart).lte('order_date', today),
 
     // draft 주문
     supabase.from('orders')
       .select('id', { count: 'exact', head: true })
-      .eq('tenant_id', tid).eq('status', 'draft').is('deleted_at', null),
+      // 전환: seller_tenant_id 우선 (legacy tenant_id 병행)
+      .or(`seller_tenant_id.eq.${tid},tenant_id.eq.${tid}`)
+      .eq('status', 'draft')
+      .is('deleted_at', null),
   ])
 
   const customers = scoreResult.data ?? []
@@ -120,8 +128,8 @@ export async function getDashboardData(): Promise<ActionResult<DashboardData>> {
       primary_reason = `연체금 ${Math.round(c.overdue_amount / 10000)}만원`
     else if ((c.days_since_contact ?? 0) >= 7)
       primary_reason = `${c.days_since_contact}일 미연락`
-    else if (c.days_since_order !== null && c.order_cycle_days > 0
-             && c.days_since_order > c.order_cycle_days)
+    else if (c.days_since_order !== null && (c.order_cycle_days ?? 0) > 0
+             && c.days_since_order > (c.order_cycle_days ?? 0))
       primary_reason = '주문주기 초과'
     else if (c.receivable_amount > 0)
       primary_reason = `미수금 ${Math.round(c.receivable_amount / 10000)}만원`
@@ -140,8 +148,10 @@ export async function getDashboardData(): Promise<ActionResult<DashboardData>> {
 
   // 상품 매출 TOP5 집계
   const prodSalesMap = new Map<string, number>()
-  for (const l of productSalesRaw ?? []) {
-    prodSalesMap.set(l.product_name, (prodSalesMap.get(l.product_name) ?? 0) + l.line_total)
+  for (const o of ordersForProductSales ?? []) {
+    for (const l of (o as { order_lines?: Array<{ product_name: string; line_total: number }> }).order_lines ?? []) {
+      prodSalesMap.set(l.product_name, (prodSalesMap.get(l.product_name) ?? 0) + l.line_total)
+    }
   }
   const top_product_sales = [...prodSalesMap.entries()]
     .sort((a, b) => b[1] - a[1]).slice(0, 5)
@@ -245,10 +255,15 @@ export async function getTodayCollections(): Promise<ActionResult<CollectionTarg
   const [{ data: customers }, { data: orders }, { data: payments }] = await Promise.all([
     supabase.from('customers').select('id, name, opening_balance')
       .eq('tenant_id', tid).is('deleted_at', null),
-    supabase.from('orders').select('customer_id, final_amount')
-      .eq('tenant_id', tid).eq('status', 'confirmed').is('deleted_at', null),
+    supabase.from('orders').select('customer_id, final_amount, total_amount')
+      .or(`seller_tenant_id.eq.${tid},tenant_id.eq.${tid}`)
+      .eq('status', 'confirmed')
+      .is('deleted_at', null),
     supabase.from('payments').select('customer_id, amount, payment_date')
-      .eq('tenant_id', tid).eq('status', 'confirmed'),
+      // supplier-os 수금: payee_tenant_id + inbound + TODO(legacy): payee 미백필 시 tenant_id 병행 — 백필 후 제거 검토
+      .or(`payee_tenant_id.eq.${tid},tenant_id.eq.${tid}`)
+      .eq('direction', 'inbound')
+      .eq('status', 'confirmed'),
   ])
 
   const finalMap   = new Map<string, number>()
@@ -256,7 +271,10 @@ export async function getTodayCollections(): Promise<ActionResult<CollectionTarg
   const lastPayMap = new Map<string, string>()
 
   for (const o of orders ?? []) {
-    finalMap.set(o.customer_id, (finalMap.get(o.customer_id) ?? 0) + ((o as any).final_amount ?? 0))
+    finalMap.set(
+      o.customer_id,
+      (finalMap.get(o.customer_id) ?? 0) + effectiveOrderAmount(o as { final_amount?: number | null; total_amount: number }),
+    )
   }
   for (const p of payments ?? []) {
     payMap.set(p.customer_id, (payMap.get(p.customer_id) ?? 0) + p.amount)

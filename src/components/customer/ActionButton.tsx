@@ -32,16 +32,17 @@ export default function ActionButton({
   const [, startTransition] = useTransition()
 
   function handleClick() {
-    startTransition(() =>
-      logAction({
+    startTransition(() => {
+      void logAction({
         customer_id:       customerId,
         action_type:       actionType,
         triggered_message: triggeredMessage,
         message_key:       messageKey,
         customer_status:   customerStatus,
-        customer_score:    customerScore,
+        score_at_time:     scoreAtTime,
+        amount_at_time:    amountAtTime,
       })
-    )
+    })
     router.push(href)
   }
 

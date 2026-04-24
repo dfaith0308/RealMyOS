@@ -49,14 +49,14 @@ export default function CallButton({
     window.location.href = `tel:${phone}`
 
     // 3. contact_log = call + conversion = attempt (백그라운드)
-    startTransition(() =>
-      createContactLog({
+    startTransition(() => {
+      void createContactLog({
         customer_id:       customerId,
         contact_method:    'call',
         action_log_id:     actionLogId ?? undefined,
         conversion_status: 'attempt',
       })
-    )
+    })
   }
 
   return (

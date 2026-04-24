@@ -56,7 +56,8 @@ async function issueOrderNumber(
   const { count } = await supabase
     .from('orders')
     .select('id', { count: 'exact', head: true })
-    .eq('tenant_id', tenant_id)
+    // 전환 기간: seller_tenant_id 우선 + legacy tenant_id 병행
+    .or(`seller_tenant_id.eq.${tenant_id},tenant_id.eq.${tenant_id}`)
     .eq('order_date', dateStr)
   return formatOrderNumber(new Date(dateStr), (count ?? 0) + 1)
 }
@@ -162,15 +163,15 @@ export async function createOrder(
     return { success: false, error: `적립금(${point_used})이 할인 후 잔액(${totals.total_amount - discount_amount})을 초과합니다.` }
   }
 
-  const final_amount = totals.total_amount - discount_amount - point_used
-  // DB constraint: final_amount = total_amount - discount_amount - point_used 강제됨
-
-  console.error('[ORDER-AMOUNT]', { total: totals.total_amount, discount: discount_amount, point: point_used, final: final_amount })
+  // final_amount는 DB generated / default — insert 금지 (할인·포인트는 아래 컬럼으로 전달)
+  console.error('[ORDER-AMOUNT]', { total: totals.total_amount, discount: discount_amount, point: point_used })
 
   const { data: newOrder, error: orderErr } = await supabase
     .from('orders')
     .insert({
       tenant_id:          ctx.tenant_id,
+      seller_tenant_id:   ctx.tenant_id,
+      // TODO: buyer_tenant_id는 restaurant-os 연동 확정 후 입력 (현재 supplier CRM customer_id 기반)
       customer_id:        input.customer_id,
       order_number:       orderNumber,
       order_date:         orderDate,
@@ -180,7 +181,6 @@ export async function createOrder(
       total_amount:       totals.total_amount,   // 상품 합계 (할인 전, 매출 기준)
       discount_amount,
       point_used,
-      final_amount,                              // 실제 결제금액
       memo:               input.memo ?? null,
       created_by:         ctx.user_id,
     })
@@ -190,7 +190,7 @@ export async function createOrder(
 
   const { error: linesErr } = await supabase
     .from('order_lines')
-    .insert(lineRows.map((r) => ({ order_id: newOrder.id, ...r })))
+    .insert(lineRows.map((r) => ({ order_id: newOrder.id, tenant_id: ctx.tenant_id, ...r })))
   if (linesErr) {
     await supabase.from('orders').update({ status: 'cancelled' }).eq('id', newOrder.id)
     return { success: false, error: `라인 저장 실패: ${linesErr.message}` }
@@ -292,7 +292,11 @@ export async function updateOrder(input: UpdateOrderInput): Promise<ActionResult
   const { data: order } = await supabase
     .from('orders')
     .select('id, status, order_date, created_at, total_supply_price, total_vat_amount, total_amount, memo')
-    .eq('id', input.order_id).eq('tenant_id', ctx.tenant_id).is('deleted_at', null).single()
+    .eq('id', input.order_id)
+    // 전환 기간: seller_tenant_id 우선 + legacy tenant_id 병행
+    .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
+    .is('deleted_at', null)
+    .single()
   if (!order)                       return { success: false, error: '주문을 찾을 수 없습니다.' }
   if (order.status === 'cancelled') return { success: false, error: '취소된 주문은 수정할 수 없습니다.' }
 
@@ -363,7 +367,11 @@ export async function updateOrder(input: UpdateOrderInput): Promise<ActionResult
   if (input.memo      !== undefined)  updatePayload.memo       = input.memo
 
   const { error: orderErr } = await supabase
-    .from('orders').update(updatePayload).eq('id', input.order_id).eq('tenant_id', ctx.tenant_id)
+    .from('orders')
+    .update(updatePayload)
+    .eq('id', input.order_id)
+    // 전환 기간: seller_tenant_id 우선 + legacy tenant_id 병행
+    .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
   if (orderErr) return { success: false, error: orderErr.message }
 
   // order_logs: update
@@ -393,14 +401,20 @@ export async function cancelOrder(order_id: string, reason?: string): Promise<Ac
 
   const { data: order } = await supabase
     .from('orders').select('id, status, order_number, total_amount, customer_id')
-    .eq('id', order_id).eq('tenant_id', ctx.tenant_id).is('deleted_at', null).single()
+    .eq('id', order_id)
+    // 전환 기간: seller_tenant_id 우선 + legacy tenant_id 병행
+    .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
+    .is('deleted_at', null)
+    .single()
   if (!order)                       return { success: false, error: '주문을 찾을 수 없습니다.' }
   if (order.status === 'cancelled') return { success: false, error: '이미 취소된 주문입니다.' }
 
   // status만 변경 — 데이터 삭제 금지
   const { error } = await supabase
     .from('orders').update({ status: 'cancelled' })
-    .eq('id', order_id).eq('tenant_id', ctx.tenant_id)
+    .eq('id', order_id)
+    // 전환 기간: seller_tenant_id 우선 + legacy tenant_id 병행
+    .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
   if (error) return { success: false, error: error.message }
 
   // order_logs: cancel (취소 사유 after_data에 포함)

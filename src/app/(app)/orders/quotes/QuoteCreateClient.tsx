@@ -48,6 +48,11 @@ export default function QuoteCreateClient({ initialCustomers }: { initialCustome
   const [error, setError]           = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
+  const [showProspect, setShowProspect]       = useState(false)
+  const [prospectName, setProspectName]       = useState('')
+  const [prospectPhone, setProspectPhone]     = useState('')
+  const [creatingProspect, setCreatingProspect] = useState(false)
+
   const productRef = useRef<HTMLInputElement>(null)
 
   const filteredCustomers = customers.filter((c) =>

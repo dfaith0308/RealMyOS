@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
+import { effectiveOrderAmount } from '@/lib/ledger-calc'
 import type { ActionResult } from '@/types/order'
 
 // ============================================================
@@ -42,14 +43,19 @@ async function getMonthlySales(
 
   const { data } = await supabase
     .from('orders')
-    .select('total_amount')
-    .eq('tenant_id', tenant_id)
+    .select('total_amount, final_amount')
+    // 전환: seller_tenant_id 우선 (legacy tenant_id 병행)
+    .or(`seller_tenant_id.eq.${tenant_id},tenant_id.eq.${tenant_id}`)
     .eq('status', 'confirmed')
     .is('deleted_at', null)
     .gte('order_date', from)
     .lte('order_date', to)
 
-  return (data ?? []).reduce((s: number, o: any) => s + o.total_amount, 0)
+  return (data ?? []).reduce(
+    (s: number, o: { total_amount: number; final_amount?: number | null }) =>
+      s + effectiveOrderAmount(o),
+    0,
+  )
 }
 
 // ============================================================
@@ -589,9 +595,11 @@ export async function getFundPreview(): Promise<ActionResult<FundPreviewResult>>
 
   for (const r of rulesRaw ?? []) {
     const daily = accountDailyMap.get(r.account_id) ?? 0
-    const bal   = r.accounts?.current_balance ?? 0
+    const acc   = Array.isArray((r as any).accounts) ? (r as any).accounts[0] : (r as any).accounts
+    const bal   = acc?.current_balance ?? 0
+    const accName = acc?.account_name ?? '-'
     if (daily > 0 && bal > 0 && daily > bal)
-      warnings.push(`[${r.accounts?.account_name}] 일 이체 합계(${daily.toLocaleString()}원)가 계좌 잔액(${bal.toLocaleString()}원)보다 큽니다.`)
+      warnings.push(`[${accName}] 일 이체 합계(${daily.toLocaleString()}원)가 계좌 잔액(${bal.toLocaleString()}원)보다 큽니다.`)
   }
 
   return {

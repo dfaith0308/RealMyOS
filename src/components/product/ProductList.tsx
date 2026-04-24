@@ -7,7 +7,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { updateProduct } from '@/actions/product'
+import { updateProduct, updateCostPrice } from '@/actions/product'
 
 interface Product {
   id: string
@@ -53,19 +53,29 @@ function ProductRow({ product }: { product: Product }) {
 
   function handleSave() {
     setError(null)
-    startTransition(async () => {
-      const result = await updateProduct({
-        id: product.id,
-        name,
-        tax_type: taxType,
-        cost_price: Number(costPrice) || undefined,
-        selling_price: Number(sellingPrice) || undefined,
-      })
-      if (result.success) {
-        setEditing(false)
-      } else {
-        setError(result.error ?? '저장 실패')
-      }
+    startTransition(() => {
+      void (async () => {
+        const costNum   = Number(costPrice) || 0
+        const sellNum   = Number(sellingPrice) || 0
+        const startDate = new Date().toISOString().slice(0, 10)
+        if (costNum !== product.cost_price) {
+          const cr = await updateCostPrice({
+            product_id: product.id, new_cost_price: costNum, start_date: startDate,
+          })
+          if (!cr.success) {
+            setError(cr.error ?? '매입가 저장 실패')
+            return
+          }
+        }
+        const result = await updateProduct({
+          id: product.id,
+          name,
+          tax_type: taxType,
+          selling_price: sellNum || undefined,
+        })
+        if (result.success) setEditing(false)
+        else setError(result.error ?? '저장 실패')
+      })()
     })
   }
 

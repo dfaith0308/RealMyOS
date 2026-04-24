@@ -42,7 +42,7 @@ export async function addAcquisitionChannel(name: string): Promise<ActionResult<
 
   const { data, error } = await supabase
     .from('acquisition_channels')
-    .insert({ tenant_id: ctx.tenant_id, name: trimmed, code, created_by: user.id })
+    .insert({ tenant_id: ctx.tenant_id, name: trimmed, code, created_by: ctx.user_id })
     .select('id, name, code, is_active')
     .single()
 

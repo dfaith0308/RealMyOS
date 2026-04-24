@@ -10,26 +10,34 @@
 
 import { useState, useTransition } from 'react'
 import { createContactLog } from '@/actions/contact'
-import type { CallOutcome } from '@/actions/contact'
+import type { ContactResult } from '@/actions/contact'
 
-const OUTCOMES: { value: CallOutcome; label: string; color: string; bg: string }[] = [
-  { value: 'connected',      label: '통화됨',   color: '#15803D', bg: '#F0FDF4' },
-  { value: 'no_answer',      label: '부재중',   color: '#B45309', bg: '#FFFBEB' },
-  { value: 'rejected',       label: '거절',     color: '#B91C1C', bg: '#FEF2F2' },
-  { value: 'callback_needed',label: '다시연락', color: '#6b7280', bg: '#F3F4F6' },
+function normalizeDbOutcome(raw: string | null | undefined): ContactResult | null {
+  if (!raw) return null
+  if (raw === 'callback_needed') return 'scheduled'
+  const allowed: ContactResult[] = ['connected', 'no_answer', 'interested', 'rejected', 'scheduled']
+  return (allowed as string[]).includes(raw) ? (raw as ContactResult) : null
+}
+
+const OUTCOMES: { value: ContactResult; label: string; color: string; bg: string }[] = [
+  { value: 'connected', label: '통화됨',   color: '#15803D', bg: '#F0FDF4' },
+  { value: 'no_answer', label: '부재중',   color: '#B45309', bg: '#FFFBEB' },
+  { value: 'rejected',  label: '거절',     color: '#B91C1C', bg: '#FEF2F2' },
+  { value: 'scheduled', label: '다시연락', color: '#6b7280', bg: '#F3F4F6' },
 ]
 
-const OUTCOME_LABEL: Record<CallOutcome, string> = {
-  connected:       '통화됨',
-  no_answer:       '부재중',
-  rejected:        '거절',
-  callback_needed: '다시연락',
+const OUTCOME_LABEL: Partial<Record<ContactResult, string>> = {
+  connected: '통화됨',
+  no_answer: '부재중',
+  rejected:  '거절',
+  scheduled: '다시연락',
 }
 
 interface Props {
   customerId: string
   actionLogId: string
-  existingOutcome: CallOutcome | null
+  /** DB contact_logs.outcome 원문 (레거시 값 포함) */
+  existingOutcome: string | null
 }
 
 export default function CallOutcomeButtons({
@@ -38,7 +46,7 @@ export default function CallOutcomeButtons({
   existingOutcome,
 }: Props) {
   const [isPending, startTransition] = useTransition()
-  const [saved, setSaved] = useState<CallOutcome | null>(existingOutcome)
+  const [saved, setSaved] = useState<ContactResult | null>(() => normalizeDbOutcome(existingOutcome))
 
   // 이미 결과 기록된 경우 뱃지만 표시
   if (saved) {
@@ -51,21 +59,23 @@ export default function CallOutcomeButtons({
           padding: '2px 8px', borderRadius: 10,
           color: opt.color, background: opt.bg,
         }}>
-          {OUTCOME_LABEL[saved]}
+          {OUTCOME_LABEL[saved] ?? saved}
         </span>
       </div>
     )
   }
 
-  function handleOutcome(outcome: CallOutcome) {
-    startTransition(async () => {
-      const result = await createContactLog({
-        customer_id:    customerId,
-        contact_method: 'call',
-        action_log_id:  actionLogId,
-        outcome,
-      })
-      if (result.success) setSaved(outcome)
+  function handleOutcome(outcome: ContactResult) {
+    startTransition(() => {
+      void (async () => {
+        const result = await createContactLog({
+          customer_id:    customerId,
+          contact_method: 'call',
+          action_log_id:  actionLogId,
+          result:           outcome,
+        })
+        if (result.success) setSaved(outcome)
+      })()
     })
   }
 

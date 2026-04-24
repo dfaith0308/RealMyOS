@@ -50,14 +50,17 @@ export async function getCustomerLedger(
     .from('customers')
     .select('id, name, opening_balance')
     .eq('id', customer_id)
+    .eq('tenant_id', ctx.tenant_id)
     .is('deleted_at', null)
     .single()
   if (!customer) return { success: false, error: '거래처를 찾을 수 없습니다.' }
 
   const { data: orders } = await supabase
     .from('orders')
-    .select('id, order_number, order_date, created_at, total_amount, total_supply_price, total_vat_amount, point_used, memo, order_lines(product_name, quantity)')
+    .select('id, order_number, order_date, created_at, total_amount, final_amount, total_supply_price, total_vat_amount, point_used, memo, order_lines(product_name, quantity)')
     .eq('customer_id', customer_id)
+    // 전환: seller_tenant_id 우선 (legacy tenant_id 병행)
+    .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
     .eq('status', 'confirmed')
     .is('deleted_at', null)
     .order('order_date', { ascending: true })
@@ -67,6 +70,9 @@ export async function getCustomerLedger(
     .from('payments')
     .select('id, payment_date, created_at, amount, payment_method, memo')
     .eq('customer_id', customer_id)
+    // 전환: payee_tenant_id 우선 (legacy tenant_id 병행)
+    .or(`payee_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
+    .eq('direction', 'inbound')
     .eq('status', 'confirmed')
     .order('payment_date', { ascending: true })
     .order('created_at', { ascending: true })
@@ -88,7 +94,8 @@ export async function getCustomerLedger(
   const rows: LedgerRow[] = merged.map((item) => {
     if (item.kind === 'order') {
       const o = item.data
-      running += o.total_amount
+      const orderAmt = effectiveOrderAmount(o as { final_amount?: number | null; total_amount: number })
+      running += orderAmt
       const lines = (o.order_lines ?? []) as Array<{ product_name: string; quantity: number }>
       const summary = lines.length === 0 ? '-'
         : lines.length === 1 ? `${lines[0].product_name} ${lines[0].quantity}개`
@@ -97,7 +104,7 @@ export async function getCustomerLedger(
         id: o.id, date: o.order_date, created_at: o.created_at, type: 'order',
         order_number: o.order_number, summary,
         total_supply_price: o.total_supply_price, total_vat_amount: o.total_vat_amount,
-        total_amount: o.total_amount, memo: o.memo ?? undefined, running_balance: running,
+        total_amount: orderAmt, memo: o.memo ?? undefined, running_balance: running,
       }
     } else {
       const p = item.data
@@ -110,7 +117,7 @@ export async function getCustomerLedger(
     }
   })
 
-  const totalOrders   = (orders ?? []).reduce((s, o) => s + o.total_amount, 0)
+  const totalOrders   = (orders ?? []).reduce((s, o) => s + effectiveOrderAmount(o as { final_amount?: number | null; total_amount: number }), 0)
   const totalPoints   = (orders ?? []).reduce((s, o) => s + ((o as any).point_used ?? 0), 0)
   const totalPayments = (payments ?? []).reduce((s, p) => s + p.amount, 0)
   // current_balance: opening + 주문합 - (수금 + 적립금)
@@ -144,9 +151,8 @@ export interface CustomerWithBalance {
   // ── 잔액 ───────────────────────────────────────────────────
   current_balance: number      // opening + confirmed주문 - 수금
   receivable_amount: number    // 미수금 = confirmed주문 - 수금 (opening 제외, min 0)
-  deposit_amount: number       // 예치금 = 수금 초과분 누적
+  deposit_amount: number       // 예치금 = 수금 초과분 / payments.deposit_amount 합계
   overdue_amount: number       // 연체금 = due_date 지난 미수금 (min 0)
-  deposit_amount: number       // 예치금 = payments.deposit_amount 합계
   // ── 주문 ───────────────────────────────────────────────────
   last_order_date: string | null
   last_order_amount: number | null
@@ -189,21 +195,29 @@ export async function getDailyCashflow(): Promise<ActionResult<DailyCashflow[]>>
 
   const [{ data: orders }, { data: payments }] = await Promise.all([
     supabase.from('orders')
-      .select('order_date, total_amount')
-      .eq('tenant_id', ctx.tenant_id)
+      .select('order_date, total_amount, final_amount')
+      // 전환: seller_tenant_id 우선 (legacy tenant_id 병행)
+      .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
       .eq('status', 'confirmed')
       .is('deleted_at', null)
       .gte('order_date', since7d),
     supabase.from('payments')
       .select('payment_date, amount')
-      .eq('tenant_id', ctx.tenant_id)
+      // 전환: payee_tenant_id 우선 (legacy tenant_id 병행)
+      .or(`payee_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
+      .eq('direction', 'inbound')
       .eq('status', 'confirmed')
       .gte('payment_date', since7d),
   ])
 
   const revenueByDate  = new Map<string, number>()
   const collectedByDate = new Map<string, number>()
-  for (const o of orders ?? [])   revenueByDate.set(o.order_date, (revenueByDate.get(o.order_date) ?? 0) + o.total_amount)
+  for (const o of orders ?? []) {
+    revenueByDate.set(
+      o.order_date,
+      (revenueByDate.get(o.order_date) ?? 0) + effectiveOrderAmount(o as { final_amount?: number | null; total_amount: number }),
+    )
+  }
   for (const p of payments ?? []) collectedByDate.set(p.payment_date, (collectedByDate.get(p.payment_date) ?? 0) + p.amount)
 
   const today = new Date()
@@ -230,6 +244,7 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
   const { data: customers } = await supabase
     .from('customers')
     .select('id, name, phone, opening_balance, payment_terms_days, target_monthly_revenue')
+    .eq('tenant_id', ctx.tenant_id)
     .eq('is_buyer', true)
     .is('deleted_at', null)
     .order('name')
@@ -249,6 +264,8 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
       supabase.from('orders')
         .select('customer_id, final_amount, total_amount, order_date')
         .in('customer_id', ids)
+        // 전환: seller_tenant_id 우선 (legacy tenant_id 병행)
+        .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
         .eq('status', 'confirmed')
         .is('deleted_at', null)
         .order('order_date', { ascending: false }),
@@ -256,6 +273,9 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
       supabase.from('payments')
         .select('customer_id, amount, deposit_amount')
         .in('customer_id', ids)
+        // 전환: payee_tenant_id 우선 (legacy tenant_id 병행)
+        .or(`payee_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
+        .eq('direction', 'inbound')
         .eq('status', 'confirmed'),
 
       supabase.from('contact_logs')
@@ -520,11 +540,16 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
       .select('customer_id, current_balance, total_sales, last_payment_date')
       .eq('tenant_id', ctx.tenant_id),
     supabase.from('orders')
-      .select('customer_id, final_amount')
-      .eq('tenant_id', ctx.tenant_id).eq('status', 'confirmed').is('deleted_at', null),
+      .select('customer_id, final_amount, total_amount')
+      // 전환: seller_tenant_id 우선 (legacy tenant_id 병행)
+      .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
+      .eq('status', 'confirmed').is('deleted_at', null),
     supabase.from('payments')
       .select('customer_id, amount')
-      .eq('tenant_id', ctx.tenant_id).eq('status', 'confirmed'),
+      // 전환: payee_tenant_id 우선 (legacy tenant_id 병행)
+      .or(`payee_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
+      .eq('direction', 'inbound')
+      .eq('status', 'confirmed'),
   ])
   const settingsRows: any[] = []   // customer_settings 테이블 없음
   console.error(`[PERF:DB] 4쿼리 병렬: ${Date.now() - _q0}ms | customers:${rows?.length ?? 0} stats:${statsRows?.length ?? 0}`)

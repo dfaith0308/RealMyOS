@@ -118,7 +118,7 @@ export function calcActionScore(p: {
   // 2. 미수금 (overdue 없는 일반 미수금 — /2000)
   const receivable = receivable_amount
   if (receivable > overdue_amount)
-    score += (receivable - p.overdue_amount) / 2000
+    score += (receivable - overdue_amount) / 2000
 
   // 3. 주문주기 초과 (0 나눗셈 방지)
   if (
