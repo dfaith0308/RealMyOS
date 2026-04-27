@@ -59,7 +59,16 @@ export default function OnboardingPage() {
         return
       }
 
-      // 완료 → 새로고침 후 /customers로
+      // user_metadata에 tenant_id 세팅 (getAuthCtx 성능 최적화)
+      // 실패해도 getAuthCtx fallback이 users 테이블에서 읽으므로 치명적이지 않음
+      const { error: metaErr } = await supabase.auth.updateUser({
+        data: { tenant_id: tenant.id }
+      })
+      if (metaErr) {
+        console.error('[onboarding] updateUser metadata 실패:', metaErr.message)
+      }
+
+      // 완료 → /customers로
       router.push('/customers')
       router.refresh()
     })
