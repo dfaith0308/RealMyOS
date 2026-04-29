@@ -75,7 +75,7 @@
 - [x] 메시지 템플릿 관리
 
 ### [ ] 발주요청(RFQ) 수신 ★ 플랫폼 핵심
-- [ ] 식당이 생성한 RFQ 수신 및 목록 조회
+- [] 식당이 생성한 RFQ 수신 및 목록 조회
 - [ ] RFQ 입찰 (가격/조건 제안)
 - [ ] 협상 기능 (counter_offer)
 - [ ] 입찰 상태 관리 (submitted → accepted/rejected)
