@@ -1,186 +1,417 @@
-# 식식이OS — tasks.md
-> 이 파일은 "지시서"가 아니라 "현재 상태판"이다.
-> PRODUCT.md 기반으로 기능을 정의하고, 완료/미완료 상태를 추적한다.
-> AI는 이 파일을 보고 미완료 항목만 순서대로 개발한다.
+# RealMyOS — tasks.md
+> 멀티테넌트 구조 전환 실행 단위 작업 목록
+> CONTEXT.md + rules.md 기반. 실제 코드 기준으로만 작성.
 > 최종 업데이트: 2026-04-27
 
 ---
 
-## 상태 범례
-- [x] 완료 — 코드 구현 확인됨
-- [~] 부분완료 — 기본 구현됨, 고도화 필요
-- [ ] 미완료 — 미구현
-- [!] 블로커 — 선행 작업 필요
+## 실행 원칙
+- 각 PHASE는 독립적으로 실행 가능하다
+- 각 Task는 한 번의 작업 세션에서 완료 가능한 수준으로 분해됨
+- DB 변경은 반드시 `IF NOT EXISTS` / `IF EXISTS` 조건으로 작성 (롤백 안전)
+- 기존 컬럼은 즉시 삭제하지 않고 deprecate 후 PHASE 5에서 제거
+- Task 완료 시 `progress.md`에 기록
 
 ---
 
-## 공급자OS (realmyos)
+## 전체 진행 현황 (2026-04-27 기준)
 
-### ✅ 대시보드
-- [x] KPI 카드 (총 미수금, 이번달 매출, 총 연체금, 총 예치금)
-- [x] 오늘 수금할 거래처 목록
-- [x] 수금 우선순위 TOP5
-- [x] 거래처 매출 TOP5
-- [x] 상품 매출 TOP5
-- [x] 오늘 할 일 (연체 거래처, 14일 미연락)
-- [x] 자금 흐름 요약
-- [x] AI 한마디 (Claude API)
-
-### ✅ 주문관리
-- [x] 주문 목록 조회
-- [x] 주문 등록 (거래처 선택, 상품 추가, 단가/수량)
-- [x] 주문 상세 보기
-- [x] 주문 수정
-- [x] 주문 상태 관리 (draft → confirmed → cancelled)
-- [x] 견적서 생성/관리
-
-### ✅ 거래처관리 (CRM)
-- [x] 거래처 목록 (액션 스코어 기반 우선순위)
-- [x] 거래처 등록/수정
-- [x] 거래처 상세 (원장, 주문이력, 연락이력)
-- [x] 액션 스코어 계산 (연체금, 주문주기, 미연락일)
-- [x] 전화/연락 액션 로그
-- [x] 수금 우선순위 대시보드
-
-### ✅ 수금관리
-- [x] 수금 등록
-- [x] 수금 일정 관리 (collection_schedules)
-- [x] 원장 조회 (거래처별 미수금/잔액)
-- [x] 수금 이력 조회
-
-### ✅ 상품관리
-- [x] 상품 목록 조회
-- [x] 상품 등록/수정
-- [x] 상품 단가 관리
-- [x] 상품 카테고리 관리
-- [x] 상품 대량 등록
-
-### ✅ 매출/원장
-- [x] 매출 집계 (기간별, 거래처별, 상품별)
-- [x] 원장 자동 생성
-- [x] 매출 분석 페이지
-
-### ✅ 결제/수금
-- [x] 수금 등록
-- [x] 수금 목록 조회
-- [x] 결제 내역 조회
-
-### ✅ 자금관리
-- [x] 자금 계획 등록
-- [x] 자금 현황 조회
-- [x] 자금 규칙 설정
-
-### ✅ 설정
-- [x] 테넌트 설정
-- [x] 메시지 템플릿 관리
-
-### [ ] 발주요청(RFQ) 수신 ★ 플랫폼 핵심
-- [] 식당이 생성한 RFQ 수신 및 목록 조회
-- [ ] RFQ 입찰 (가격/조건 제안)
-- [ ] 협상 기능 (counter_offer)
-- [ ] 입찰 상태 관리 (submitted → accepted/rejected)
-- [ ] RFQ 기반 자동 주문 생성
-
-### [ ] 자동화영업
-- [~] 영업 스크립트 관리 (sales/scripts 페이지 있음)
-- [~] 영업 히스토리 조회 (sales/history 페이지 있음)
-- [~] 영업 스케줄 관리 (sales/schedule 페이지 있음)
-- [ ] 트리거 7개 구현 (구매후N일, 미구매N일, 재구매타이밍, 가격변화, 신규고객, 주문감소, 이탈)
-- [ ] 문자/카카오/이메일 채널 연동
-- [ ] AI 메시지/타이밍/채널 추천
-- [ ] 발송 성과 분석
-
-### [ ] 매입관리
-- [ ] 자동 매입 처리 (재고 없음 → 주문 = 자동 매입)
-- [ ] 재고 차감 후 부족분만 매입 로직
-- [ ] 매입 내역 조회
-
-### [ ] 관리자OS
-- [ ] 통합 대시보드
-- [ ] 거래 관제
-- [ ] 수치/문구 제어 (코드 수정 없이)
-- [ ] 전체 자동화영업 실행
-- [ ] 정산 관리
+| PHASE | 내용 | 완료 | 전체 | 상태 |
+|-------|------|------|------|------|
+| PHASE 1 | DB 구조 전환 | 5/7 | 7 | 진행 중 |
+| PHASE 2 | Backend 로직 수정 | 0/7 | 7 | 대기 중 |
+| PHASE 3 | RLS 정책 전환 | 0/4 | 4 | 대기 중 |
+| PHASE 4 | 데이터 마이그레이션 | 0/3 | 3 | 대기 중 |
+| PHASE 5 | 레거시 제거 | 0/3 | 3 | 대기 중 |
 
 ---
 
-## 식당OS (resturant_os)
+## PHASE 1 — DB 구조 전환
 
-### ✅ 오늘 (Today)
-- [x] 당일 할 일 중심 대시보드
-- [x] 행동 유도 (AI 판단 기반)
-- [x] 이벤트 추적 (today_events)
-
-### ✅ 발주요청 (RFQ)
-- [x] 발주요청 생성
-- [x] 발주요청 목록 조회
-- [x] 발주요청 상세 (입찰 비교)
-- [~] 공급자 선택/협상 (기본 구현, 협상 흐름 고도화 필요)
-- [ ] 기존 거래처 우선 공개 → 시간 후 확장 공개 로직
-- [ ] RFQ 상태 전체 흐름 (draft→open→bidding→counter_offered→selected→ordered→completed)
-
-### ✅ 거래처 (공급자 관리)
-- [x] 공급자 목록 조회
-- [x] 공급자 등록/수정
-- [x] 공급자 상세
-
-### ✅ 돈 (지급관리)
-- [x] 지급 예정 목록
-- [x] 결제 현황
-
-### ✅ 설정
-- [x] 식당 정보 관리
-- [x] 식자재 관리
-- [x] 고정비 관리
-
-### [ ] 상품 (식자재 + 메뉴 연결)
-- [ ] 메뉴 관리
-- [ ] 식자재-메뉴 연결
-- [ ] 원가/마진 자동 계산
-- [ ] 사진 인식 입력
-- [ ] 바코드 인식 입력
-
-### [ ] 명세서 OCR
-- [~] OCR 파싱 로직 (import.ts 있음, 현재 mock)
-- [ ] 실제 OCR 연동 (OpenAI Vision 또는 외부 API)
-- [ ] 파싱 결과 → 식자재/가격 자동 등록
-
-### [ ] 가격 추적
-- [ ] 식자재별 가격 히스토리 시각화
-- [ ] 공급자별 가격 비교
-- [ ] 가격 변화 알림
+> 목표: orders / payments 단일화 컬럼 추가, restaurant_id 전환 준비
+> 롤백: 추가된 컬럼만 DROP하면 원복 가능 (기존 컬럼 삭제 없음)
 
 ---
 
-## 공통 (두 OS 연결)
+### ✅ [TASK-1-01] 완료 (2026-04-27)
+**orders 테이블에 buyer_tenant_id, seller_tenant_id 컬럼 추가**
 
-### [!] 발주요청 연동 ← 블로커: 식당OS RFQ → 공급자OS 연결
-- [ ] 식당이 RFQ 생성 → 공급자OS에서 수신
-- [ ] 공급자 입찰 → 식당OS에서 확인
-- [ ] 주문 확정 → 양쪽 동시 반영
-- [ ] 결제 → 수금 자동 연결
+- 목적: orders를 단일 테이블로 전환하기 위한 컬럼 추가
+- 완료 내용: buyer_tenant_id, seller_tenant_id 컬럼 및 인덱스 추가 완료
+- 작업 내용:
+  ```sql
+  ALTER TABLE orders
+    ADD COLUMN IF NOT EXISTS buyer_tenant_id uuid REFERENCES tenants(id),
+    ADD COLUMN IF NOT EXISTS seller_tenant_id uuid REFERENCES tenants(id);
 
-### [ ] 알림 시스템
-- [ ] RFQ 수신 알림 (공급자)
-- [ ] 입찰 도착 알림 (식당)
-- [ ] 주문 확정 알림
-- [ ] 수금 알림
+  CREATE INDEX IF NOT EXISTS idx_orders_buyer ON orders(buyer_tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_orders_seller ON orders(seller_tenant_id);
+  ```
+- DB 변경 여부: YES ✅
+- 검증 방법: `SELECT buyer_tenant_id, seller_tenant_id FROM orders LIMIT 1;` — 컬럼 존재 확인
 
 ---
 
-## 개발 우선순위
+### ✅ [TASK-1-02] 완료 (2026-04-27)
+**supplier-os orders 테이블의 기존 레코드에 seller_tenant_id 값 채우기**
 
-### 🔴 1순위 (지금 당장)
-1. 공급자OS — 발주요청(RFQ) 수신 및 입찰
-2. 식당OS — RFQ 상태 전체 흐름 완성
-3. 두 OS 연동 — RFQ 기반 거래 흐름
+- 목적: 기존 orders의 seller_tenant_id = 현재 tenant_id로 설정
+- 완료 내용: 기존 레코드 seller_tenant_id 백필 완료
+- 작업 내용:
+  ```sql
+  UPDATE orders
+  SET seller_tenant_id = tenant_id
+  WHERE seller_tenant_id IS NULL
+    AND tenant_id IS NOT NULL;
+  ```
+- DB 변경 여부: YES ✅
 
-### 🟡 2순위 (1순위 완료 후)
-4. 식당OS — 상품/메뉴 관리
-5. 공급자OS — 매입관리
-6. 식당OS — 명세서 OCR 실제 연동
+---
 
-### 🟢 3순위 (나중에)
-7. 공급자OS — 자동화영업 트리거/채널
-8. 관리자OS
-9. 알림 시스템
+### ⏳ [TASK-1-03] 대기 중 — TASK-4-01 선행 필수
+**restaurant-os orders 테이블의 기존 레코드에 buyer_tenant_id 값 채우기**
+
+- 목적: restaurant-os의 기존 orders에 buyer_tenant_id 매핑
+- ⚠️ 위험도: 높음 — restaurants ↔ tenants 연결 키 미확인 상태. TASK-4-01 완료 전 실행 금지
+- 작업 내용:
+  ```sql
+  -- TODO: restaurants.id ↔ tenants.id 연결 키 확인 후 실행
+  UPDATE orders
+  SET buyer_tenant_id = restaurant_id  -- 매핑 키 확정 후 수정
+  WHERE buyer_tenant_id IS NULL
+    AND restaurant_id IS NOT NULL;
+  ```
+- 검증 방법:
+  ```sql
+  SELECT COUNT(*) FROM orders WHERE buyer_tenant_id IS NULL AND restaurant_id IS NOT NULL;
+  -- 결과: 0 이어야 함
+  ```
+
+---
+
+### ✅ [TASK-1-04] 완료 (2026-04-27)
+**payments 테이블에 payer_tenant_id, payee_tenant_id, direction 컬럼 추가**
+
+- 목적: payments 단일화를 위한 컬럼 추가
+- 완료 내용: payments에 payer_tenant_id, payee_tenant_id, direction 컬럼 추가 완료
+- DB 변경 여부: YES ✅
+
+---
+
+### ✅ [TASK-1-05] 완료 (2026-04-27)
+**supplier-os payments 기존 레코드에 payee_tenant_id, direction 값 채우기**
+
+- 목적: 공급자 입장의 payments = inbound (수취)
+- 완료 내용: 기존 payments 레코드 payee_tenant_id, direction='inbound' 백필 완료
+- DB 변경 여부: YES ✅
+
+---
+
+### ⏳ [TASK-1-06] 대기 중 — TASK-4-01 선행 필수
+**restaurant-os payments_outgoing 기존 레코드에 payer_tenant_id, direction 값 채우기**
+
+- 목적: 식당 입장의 payments = outbound (지급)
+- ⚠️ 위험도: 높음 — restaurant_id → tenant_id 매핑 키 미확인. TASK-4-01 완료 전 실행 금지
+- 작업 내용:
+  ```sql
+  UPDATE payments_outgoing
+  SET
+    payer_tenant_id = restaurant_id,  -- 매핑 키 확정 후 수정
+    direction = 'outbound'
+  WHERE payer_tenant_id IS NULL
+    AND restaurant_id IS NOT NULL;
+  ```
+
+---
+
+### ✅ [TASK-1-07] 완료 (2026-04-27)
+**restaurant-os 핵심 테이블에 tenant_id 컬럼 추가 (restaurant_id 유지)**
+
+- 목적: restaurant_id → tenant_id 전환 준비
+- 완료 내용: ingredients, rfq_requests, fixed_costs, price_history, today_events, ai_decision_logs, savings_stats, notifications 8개 테이블 tenant_id 컬럼 추가 완료
+- DB 변경 여부: YES ✅
+
+---
+
+## PHASE 2 — Backend 로직 수정
+
+> 목표: actions 파일의 쿼리를 tenant 기준으로 전환
+> ⚠️ 전제: PHASE 1 완료 후 실행 (현재 TASK-1-03, 1-06 미완료 — 해당 항목 제외하고 진행 가능)
+> 롤백: git revert로 코드 복구 가능
+
+---
+
+### ⏸️ [TASK-2-01] 실행 가능 (PHASE 1 부분 완료)
+**supplier-os `actions/order.ts` — 주문 생성 시 seller_tenant_id 자동 설정**
+
+- 목적: 신규 주문 생성 시 seller_tenant_id = 현재 tenant_id로 저장
+- ⚠️ 선행 확인: realmyos `createOrder` 정상 동작 검증 필요 (현재 미확인)
+- 작업 내용:
+  ```typescript
+  // actions/order.ts — createOrder 함수 내
+  const orderData = {
+    tenant_id: tenantId,
+    seller_tenant_id: tenantId,                       // 추가
+    buyer_tenant_id: input.buyer_tenant_id ?? null,   // 추가
+    customer_id: input.customer_id,
+    // 기존 필드 유지
+  }
+  ```
+- 변경 파일: `src/actions/order.ts`
+- 위험도: 낮음
+- 검증 방법: 주문 생성 후 `SELECT seller_tenant_id FROM orders ORDER BY created_at DESC LIMIT 1;`
+
+---
+
+### ⏸️ [TASK-2-02] 실행 가능
+**supplier-os `actions/order-query.ts` — 조회 쿼리에 seller_tenant_id 조건 추가**
+
+- 목적: orders 조회 시 seller_tenant_id 기준으로도 필터링 (tenant_id와 병행)
+- 작업 내용:
+  ```typescript
+  // 기존
+  .eq('tenant_id', tenantId)
+
+  // 변경 (전환 기간 병행 사용)
+  .or(`tenant_id.eq.${tenantId},seller_tenant_id.eq.${tenantId}`)
+  ```
+- 변경 파일: `src/actions/order-query.ts`
+- 위험도: 중간 — 변경 전/후 조회 건수 동일한지 확인 필수
+
+---
+
+### ⏸️ [TASK-2-03] 실행 가능
+**supplier-os `actions/payment.ts` — 결제 생성 시 payee_tenant_id, direction 자동 설정**
+
+- 목적: 신규 payments 생성 시 payee_tenant_id = 현재 tenant_id, direction = 'inbound'
+- 작업 내용:
+  ```typescript
+  const paymentData = {
+    tenant_id: tenantId,
+    payee_tenant_id: tenantId,   // 추가
+    direction: 'inbound',         // 추가
+    // 기존 필드 유지
+  }
+  ```
+- 변경 파일: `src/actions/payment.ts`
+- 위험도: 낮음
+
+---
+
+### ⏸️ [TASK-2-04] 실행 가능 — restaurant-os 검증 후
+**restaurant-os `actions/rfq.ts` — tenant_id 기준으로 전환**
+
+- 목적: rfq_requests 생성·조회 시 tenant_id 사용
+- ⚠️ 선행 확인: restaurant-os `npm run dev` 정상 동작 검증 필요 (현재 미확인)
+- 작업 내용:
+  ```typescript
+  // 기존
+  .eq('restaurant_id', restaurantId)
+
+  // 변경
+  .eq('tenant_id', tenantId)
+  ```
+- 변경 파일: `src/actions/rfq.ts`
+- 위험도: 중간
+
+---
+
+### ⏸️ [TASK-2-05] 실행 가능 — restaurant-os 검증 후
+**restaurant-os `actions/money.ts` — payments 단일화 구조로 전환**
+
+- 목적: payments_outgoing → payments(direction=outbound) 전환
+- 작업 내용:
+  ```typescript
+  // .from('payments_outgoing') → .from('payments')
+  // + direction = 'outbound' 조건 추가
+  // + payer_tenant_id = tenantId 조건 추가
+  ```
+- 변경 파일: `src/actions/money.ts`
+- 위험도: 높음 — 기존 payments_outgoing 데이터 접근 영향 있음
+
+---
+
+### ⏸️ [TASK-2-06] 실행 가능 — restaurant-os 검증 후
+**restaurant-os `actions/suppliers.ts` — supplier_contacts 구조 병행 준비**
+
+- 목적: suppliers 테이블 쿼리에 tenant_id 조건 추가 (구조 전환 전 준비 단계)
+- 작업 내용: restaurant_id → tenant_id 조건으로 전환
+- 변경 파일: `src/actions/suppliers.ts`
+- 위험도: 중간
+
+---
+
+### ⏸️ [TASK-2-07] 실행 가능 — restaurant-os 검증 후
+**restaurant-os 나머지 actions — tenant_id 기준으로 전환**
+
+- 목적: today.ts, today-events.ts, import.ts, ai-logs.ts, settings.ts 전체 전환
+- 대상 파일:
+  - `src/actions/today.ts`
+  - `src/actions/today-events.ts`
+  - `src/actions/ai-logs.ts`
+  - `src/actions/settings.ts`
+- 작업 내용: 각 파일의 restaurant_id → tenant_id 전환
+- 위험도: 중간
+
+---
+
+## PHASE 3 — RLS 정책 전환
+
+> ⚠️ 전제: PHASE 2 전체 완료 후 실행 (특히 TASK-2-07 완료 필수)
+> 위험도: 높음 — tenant_id가 NULL인 레코드 접근 불가
+
+---
+
+### ⏳ [TASK-3-01] 대기 중
+**ingredients 테이블 RLS — tenant_id 기반으로 강화**
+
+```sql
+DROP POLICY IF EXISTS "auth_all" ON ingredients;
+CREATE POLICY "tenant_isolation" ON ingredients
+  FOR ALL USING (
+    tenant_id = (SELECT tenant_id FROM users WHERE id = auth.uid())
+  );
+```
+- 위험도: 높음 — TASK-2-07 완료 필수
+
+---
+
+### ⏳ [TASK-3-02] 대기 중
+**rfq_requests, fixed_costs, price_history RLS 강화**
+
+- TASK-3-01과 동일한 패턴 적용
+- 위험도: 높음
+
+---
+
+### ⏳ [TASK-3-03] 대기 중
+**orders 테이블 RLS — buyer/seller 양방향 접근 정책 적용**
+
+```sql
+DROP POLICY IF EXISTS "auth_all" ON orders;
+CREATE POLICY "order_access" ON orders
+  FOR ALL USING (
+    (SELECT tenant_id FROM users WHERE id = auth.uid())
+    IN (buyer_tenant_id, seller_tenant_id, tenant_id)
+  );
+```
+- 위험도: 높음 — TASK-1-01, 1-02, 2-01 완료 필수
+
+---
+
+### ⏳ [TASK-3-04] 대기 중
+**payments 테이블 RLS — payer/payee 양방향 접근 정책 적용**
+
+```sql
+DROP POLICY IF EXISTS "auth_all" ON payments;
+CREATE POLICY "payment_access" ON payments
+  FOR ALL USING (
+    (SELECT tenant_id FROM users WHERE id = auth.uid())
+    IN (payer_tenant_id, payee_tenant_id, tenant_id)
+  );
+```
+- 위험도: 높음 — TASK-1-04, 1-05 완료 필수
+
+---
+
+## PHASE 4 — 데이터 마이그레이션
+
+> ⚠️ 전제: TASK-4-01 선행 필수 — restaurants ↔ tenants 연결 키 미확인 상태
+
+---
+
+### ⏳ [TASK-4-01] 즉시 실행 가능 (조회 전용)
+**restaurants ↔ tenants 연결 키 확인 및 매핑 테이블 작성**
+
+- 목적: restaurant_id → tenant_id 변환 기준 확정
+- ⚠️ 이 Task가 완료되어야 TASK-1-03, 1-06, 4-02, 4-03 실행 가능
+- 작업 내용:
+  ```sql
+  SELECT r.id AS restaurant_id, r.name, t.id AS tenant_id
+  FROM restaurants r
+  LEFT JOIN tenants t ON t.name = r.name
+  LIMIT 20;
+  ```
+- 위험도: 없음 (조회 전용)
+
+---
+
+### ⏳ [TASK-4-02] 대기 중 — TASK-4-01 완료 후
+**ingredients 기존 레코드 tenant_id 일괄 채우기**
+
+---
+
+### ⏳ [TASK-4-03] 대기 중 — TASK-4-01 완료 후
+**나머지 테이블 tenant_id 일괄 채우기**
+- 대상: rfq_requests, fixed_costs, price_history, today_events, ai_decision_logs, savings_stats, notifications
+
+---
+
+## PHASE 5 — 레거시 제거
+
+> ⚠️ PHASE 1~4 전체 완료 + 전체 기능 정상 동작 확인 후 실행
+> ⚠️ 비가역적 작업 — 반드시 백업 후 실행
+
+---
+
+### ⏳ [TASK-5-01] 대기 중
+**restaurant-os 테이블에서 restaurant_id 컬럼 제거**
+
+---
+
+### ⏳ [TASK-5-02] 대기 중
+**restaurant-os `actions/suppliers.ts` → supplier_contacts 구조 전환**
+
+---
+
+### ⏳ [TASK-5-03] 대기 중
+**supplier-os `actions/customer.ts` → supplier_contacts 통합 방향 전환**
+- ⚠️ CRM 핵심 데이터 — 전환 시점 및 방식 별도 결정 필요
+
+---
+
+## 즉시 실행 가능한 다음 작업 (우선순위 순)
+
+1. **[검증] restaurant-os `npm run dev`** — 코드 전환 후 실제 동작 확인 (사람이 직접)
+2. **[검증] realmyos `createOrder`** — getAuthCtx fallback 적용 후 동작 확인 (사람이 직접)
+3. **[TASK-4-01]** — restaurants ↔ tenants 연결 키 조회 (조회 전용, 안전)
+4. **[TASK-2-01]** — supplier-os order.ts seller_tenant_id 추가 (2번 완료 후)
+5. **[TASK-2-02]** — supplier-os order-query.ts 조건 추가
+6. **[TASK-2-03]** — supplier-os payment.ts payee_tenant_id 추가
+
+---
+
+## 미해결 TODO (실행 전 해소 필요)
+
+| # | 내용 | 관련 Task | 우선순위 |
+|---|------|----------|---------|
+| 1 | restaurants ↔ tenants 실제 연결 키 확인 | TASK-4-01 | 높음 |
+| 2 | restaurant-os npm run dev 동작 검증 | PHASE 2 restaurant | 높음 |
+| 3 | realmyos createOrder 동작 검증 | TASK-2-01 | 높음 |
+| 4 | supplier-os schema.sql 전체 컬럼 확인 | TASK-1-03, 1-06 | 중간 |
+| 5 | restaurant-os user role 실제 값 확인 | PHASE 3 전체 | 중간 |
+| 6 | suppliers 참조 컴포넌트 목록 확인 | TASK-5-02 | 낮음 |
+| 7 | customers → supplier_contacts 전환 방식 결정 | TASK-5-03 | 낮음 |
+---
+
+## 원장관리 / 매출분석 페이지 신규 생성
+
+### [ ] 원장관리 페이지 (/ledger)
+- [ ] /ledger 페이지 및 라우트 생성
+- [ ] 거래처 선택 필터 (필수)
+- [ ] 기간 필터 (이번달/지난달/기간 직접 선택)
+- [ ] 거래 흐름 테이블 (날짜/유형/상품명/공급가액/부가세/합계/결제수단/잔액 누적)
+- [ ] 요약 영역 (총매출/총수금/현재 미수금)
+- [ ] 세금/계산서 기준 (과세/면세, 현금·무통장→포함/카드→제외)
+- [ ] Sidebar.tsx에서 원장관리 href: '/ledger' 연결
+
+### [ ] 매출분석 페이지 (/analytics)
+- [ ] /analytics 페이지 및 라우트 생성
+- [ ] 기간 필터 (이번달/지난달/최근3개월/1년/사용자지정)
+- [ ] 매출 요약 (총매출/총원가/총마진/마진율%)
+- [ ] 매출 추이 차트 (월별 매출/마진/수익)
+- [ ] 거래처별 분석 (매출/마진/마진율, TOP 거래처)
+- [ ] 상품별 분석 (매출/원가/마진)
+- [ ] 위험 신호 (매출감소 거래처/마진낮은 거래처/손해 상품)
+- [ ] 추가 지표 (평균결제기간/미수금비율/반복구매율)
+- [ ] Sidebar.tsx에서 매출분석 href: '/analytics' 연결
