@@ -415,3 +415,12 @@ CREATE POLICY "payment_access" ON payments
 - [ ] 위험 신호 (매출감소 거래처/마진낮은 거래처/손해 상품)
 - [ ] 추가 지표 (평균결제기간/미수금비율/반복구매율)
 - [ ] Sidebar.tsx에서 매출분석 href: '/analytics' 연결
+
+## 자동화영업
+- [ ] /automation 페이지 및 라우트 생성
+- [ ] 영업스케줄 캘린더 페이지 생성 (/automation/schedule)
+- [ ] 영업이력 페이지 생성 (/automation/history)
+- [ ] 스크립트관리 페이지 생성 (/automation/scripts)
+- [ ] Sidebar.tsx에서 자동화영업 href: '/automation' 연결
+- [ ] 영업이력 contact_logs 테이블 생성 (SQL)
+- [ ] 전화 버튼 클릭 시 contact_logs 자동 기록 (actions/contact.ts) 
