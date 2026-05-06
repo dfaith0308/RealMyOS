@@ -1,7 +1,8 @@
-import { fallbackMessage, getDashboardData, getTodayCollections } from '@/actions/dashboard'
+import { getDashboardData, getTodayCollections } from '@/actions/dashboard'
 import { Suspense } from 'react'
 import { formatKRW } from '@/lib/calc'
 import Link from 'next/link'
+import { fallbackMessage } from '@/lib/dashboard-utils'
 
 export const metadata = { title: '대시보드 — RealMyOS' }
 
