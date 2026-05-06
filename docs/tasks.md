@@ -245,9 +245,19 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 
 #### [SUP-PARTIAL-001] 대시보드가 PRODUCT 6-1 레이아웃·블록과 부분 일치
 - **위치**: `realmyos/src/app/(app)/dashboard/page.tsx`, `realmyos/src/actions/dashboard.ts`
-- **현재 동작**: AI 인사이트, 오늘 수금 대상(`getTodayCollections`), KPI 4종, 수금 우선 TOP5(`getCustomersWithScore`), 오늘 할 일 일부, 거래처/상품 매출 TOP5, 자금 계획 요약 로드.
+- **현재 동작 (코드 기준, 2026-05-07)**:
+  - 상단: AI 인사이트(`getAiInsight`, context=`d.ai_context`)
+  - 별도 박스: “오늘 수금할 거래처” (`getTodayCollections`) — /payments/new 및 /customers/[id]/ledger 링크
+  - KPI 4종: 총 미수금/이번달 매출/총 연체금/총 예치금 (현재 카드 자체 링크는 없음)
+  - 2열 섹션: 수금 우선순위 TOP 5(점수 배지), 오늘 할 일(연체 거래처/14일 이상 미연락/미처리 주문), 거래처 매출 TOP5, 상품 매출 TOP5(수량 컬럼 없음), 오늘 자금 계획(계획/이행/미이행 건수 요약)
 - **PRODUCT 정의**: 블록 순서·“오늘 행동/알림” 문구, 수금 TOP 지연일·우선순위 점수 컬럼, KPI의 `delivered` 포함 여부, 블록7 `fund_rules` 기반 분배 항목(매입비/부가세 등) 상세, RFQ 미응답 등.
-- **GAP**: `confirmed` 위주 집계(코드상 `status === 'confirmed'`); 지연일·TOP1-3 “오늘 수금 대상” 강조, `/ledger` 링크형 KPI 카드, 발주요청·RFQ 연계 블록 없음; 자금 블록은 계획/이행 요약 수준.
+- **GAP (PRODUCT §6-1 대비)**:
+  - 블록1 “오늘 행동/알림”(최상단 full width) 부재 — AI 인사이트가 상단을 차지
+  - 블록2 TOP5 표 컬럼 불일치(미수금/지연일/우선순위 점수) 및 TOP1~3 “오늘 수금 대상” 강조 UX 없음
+  - 블록3 KPI는 값은 있으나 **카드 클릭 이동(/ledger, /analytics)** 없음
+  - 블록4 “오늘 할 일 상세”는 일부만 존재(RFQ 미응답 open+24h 미포함 등)
+  - 블록6 상품 매출 TOP5에 **판매 수량 컬럼 없음**
+  - 블록7 “오늘 자금 배치 제안”이 fund_rules 분배 제안이 아니라 계획/이행 요약 수준
 - **완료 기준**: PRODUCT 6-1 각 블록의 데이터 정의·UX·네비게이션과 일치
 - **migration 필요**: 🔍 (RFQ·fund_rules 세부에 따라)
 - **세부 항목 분해 (Phase 5)**:
@@ -276,6 +286,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
     - migration: 🔍 (`fund_rules`, 잔액 스키마/정책에 따라)
 - **산출물 (대조표 캔버스)**: `phase5-sup-partial-001-002-006-gap.canvas.tsx`
 - **작업 이력 (2026-05-06)**: PRODUCT 6-1 정독 + 현행 대시보드 블록 대조표 작성 + 공백 항목 분해 등록 — worklog: `docs/worklogs/2026-05-06_phase5_sup-partial-001-002-006-gap.md`
+- **작업 이력 (2026-05-07)**: PRODUCT 6-1 재정독 + `dashboard/page.tsx` 블록 매핑(현행 구현/누락) 갱신 — worklog: `docs/worklogs/2026-05-07_sup-partial-001_dashboard-gap-audit.md`
 
 #### [SUP-PARTIAL-002] 견적이 독립 메뉴가 아니라 주문 하위 경로에 존재
 - **위치**: `realmyos/src/app/(app)/orders/quotes/` (목록·상세·생성)
@@ -333,13 +344,24 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **migration 필요**: 🔍 확인 필요
 - **메모**: Phase 7으로 이동 — 주문상태(운영 흐름) 컬럼 추가는 연체 시스템(SUP-DANGER-003)과 함께 설계 필요. 현재 거래상태(draft/confirmed/cancelled)는 DB CHECK와 코드 일치 확인. 임의 착수 금지.
 
-#### [SUP-PARTIAL-006] 자동화영업·매출 화면은 일부만 존재
+#### [SUP-PARTIAL-006] 자동화영업·매출 화면은 일부만 존재 — **완료 (2026-05-07, 문서 기준)**
 - **위치**: `realmyos/src/app/(app)/sales/` — `schedule`, `history`, `scripts`; `sales/page.tsx`는 `/sales/schedule`로 redirect
-- **현재 동작**: 스케줄·이력·스크립트 라우트 존재. PRODUCT의 실행센터·전체 메뉴와 대응 관계는 본 회차에서 actions 정독 범위 밖 부분 포함.
+- **현재 동작 (코드 확인 완료, 2026-05-07)**:
+  - 라우트: `/sales/schedule`, `/sales/history`, `/sales/scripts` 존재 (`/sales`는 schedule로 redirect)
+  - 스케줄: 캘린더 기반 날짜 선택 + 예약 추가 + 내일로(snooze) + 완료 처리 + 수정/삭제 (client에서 수행)
+  - 영업 실행: `QuickActionButton` 모달에서 `contact_logs` 기록 생성 (`createContactLog`) 후 스케줄 done 처리
+  - 스크립트: `sales_scripts` 기반 CRUD(기본 스크립트 보호, 타입 필터)
+  - 영업이력: `contact_logs` 기반 조회/필터/수정/삭제
+  - 대시보드 연결: `TodaySalesWidget`가 `/sales/schedule`로 유도(“오늘 해야 할 영업”)
 - **PRODUCT 정의**: 6-13 자동화영업(실행센터·알리고 등).
-- **GAP**: 실행센터 단일 행동 UX 등 미검증.
+- **GAP (PRODUCT 대비)**:
+  - 메뉴 구조의 4번째 항목인 **실행센터 라우트/UX 부재**
+  - 스케줄 화면의 **요약(오늘 해야 할 수/완료/미처리)** 및 **달력↔리스트 뷰 전환** 미구현
+  - 메시지 발송은 `message_logs`에 **simulated** 기록만 존재 (알리고 API 연동/성공·실패/재시도/승인 UX 미검증)
+  - “어디서든 실행 가능”(거래처목록/주문목록/거래처 상세/실행센터) 요구 중 일부만 구현/연결(대시보드 위젯/거래처 상세는 존재)
+  - 영업 성과 연결(영업→주문 전환) 로직/표시가 부분 구현(전환율 계산 함수는 있으나 UX/정의 정합 검증 필요)
 - **완료 기준**: PRODUCT 6-13 필수 화면·연동 충족 여부 점검 후 항목 분해
-- **migration 필요**: 🔍
+- **migration 필요**: 없음(문서/점검만) — 단, 향후 구현 시 `sales_*`/`message_logs`/`contact_logs` 스키마·RLS 실존 여부는 `DB-*` 절차로 재확인 필요
 - **세부 항목 분해 (Phase 5)**:
   - **[SUP-PARTIAL-006-A] 메뉴 구조 4번째 “실행센터” 화면 추가**
     - `/sales` 하위에 실행센터 라우트 신설(예: `/sales/exec`)
@@ -359,6 +381,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
     - migration: 🔍
 - **산출물 (대조표 캔버스)**: `phase5-sup-partial-001-002-006-gap.canvas.tsx`
 - **작업 이력 (2026-05-06)**: PRODUCT 6-13 정독 + `sales/` 라우트 확인 + 공백 항목 분해 등록 — worklog: `docs/worklogs/2026-05-06_phase5_sup-partial-001-002-006-gap.md`
+- **작업 이력 (2026-05-07)**: PRODUCT 6-13 정독 + `sales/` 라우트·`actions/sales.ts`·대시보드/거래처 연결 확인 + GAP 갱신(분해 유지) — worklog: `docs/worklogs/2026-05-07_sup-partial-006_sales-automation-audit.md`
 
 #### [SUP-PARTIAL-007] `console.error` / `console.warn` 및 TODO 주석 잔존 (rules.md RULE-13) — **종료 (2026-05-06)**
 - **위치**: 예) `realmyos/src/actions/order.ts`:167,212,235,241,515; `realmyos/src/actions/order.ts`:174 (`// TODO: buyer_tenant_id...`); `realmyos/src/actions/dashboard.ts`:267; `realmyos/src/actions/payment.ts`:83,117,139; `realmyos/src/actions/ledger.ts`:262,529,539,662,667; `realmyos/src/app/(app)/orders/page.tsx`:33; `realmyos/src/app/(app)/payments/page.tsx`:31; `realmyos/src/components/order/OrderCreateForm.tsx`:78
@@ -813,8 +836,8 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **`SUP-DANGER-003`**, **`SUP-PARTIAL-004`**, **`SUP-PARTIAL-005`**, **`RES-PARTIAL-003`**, **`SUP-FAKE-001`**, **`RES-FAKE-001`**
 
 **Phase 5 — 기능·IA 공백**  
-- **완료(✅)**: `SUP-PARTIAL-002`, `SUP-PARTIAL-003`, `SUP-PARTIAL-004`, `SUP-PARTIAL-007`, `RES-PARTIAL-001`, `RES-PARTIAL-002`, `RES-PARTIAL-004`, `RES-PARTIAL-007`
-- **분해 완료(🧩, 구현은 다음 세션)**: `RES-TODO-001`, `SUP-PARTIAL-001`, `SUP-PARTIAL-006`, `SUP-TODO-001~005`
+- **완료(✅)**: `SUP-PARTIAL-002`, `SUP-PARTIAL-003`, `SUP-PARTIAL-004`, `SUP-PARTIAL-006`, `SUP-PARTIAL-007`, `RES-PARTIAL-001`, `RES-PARTIAL-002`, `RES-PARTIAL-004`, `RES-PARTIAL-007`
+- **분해 완료(🧩, 구현은 다음 세션)**: `RES-TODO-001`, `SUP-PARTIAL-001`, `SUP-TODO-001~005`
 
 **Phase 6 — 관리자OS**  
 - **`ADM-TODO-001`** — 입력: **`ADM-CHECK-001`**, **`DB-TODO-002`**
