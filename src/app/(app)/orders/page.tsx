@@ -1,5 +1,6 @@
 import { Suspense } from 'react'
-import { createSupabaseServer } from '@/lib/supabase-server'
+import { notFound } from 'next/navigation'
+import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import { getOrderList } from '@/actions/order-query'
 import { formatKRW } from '@/lib/calc'
 import OrdersClient from '@/components/order/OrdersClient'
@@ -21,16 +22,22 @@ export default async function OrdersPage({
   const status = sp.status ?? ''
   const customerId = sp.customer_id ?? ''
 
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) notFound()
 
   const _t0 = Date.now()
   const [ordersResult, { data: customers }] = await Promise.all([
     getOrderList({ from, to, status: status || undefined, customer_id: customerId || undefined }),
-    createSupabaseServer().then((s) =>
-      s.from('customers').select('id, name').eq('is_buyer', true).is('deleted_at', null).order('name')
+    supabase
+      .from('customers')
+      .select('id, name')
+      .eq('tenant_id', ctx.tenant_id)
+      .eq('is_buyer', true)
+      .is('deleted_at', null)
+      .order('name')
     ),
   ])
-
-  console.error(`[PERF] /orders: ${Date.now() - _t0}ms`)
 
   return (
     <main style={{ maxWidth: 1000, margin: '0 auto', padding: '32px 24px 60px' }}>

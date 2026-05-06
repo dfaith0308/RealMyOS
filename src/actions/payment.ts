@@ -23,14 +23,13 @@ export interface CreatePaymentResult {
   applied_amount: number
   deposit_amount: number
   balance_before: number
-  mode:           'rpc' | 'fallback'   // 어떤 경로로 저장됐는지
+  mode:           'rpc'
   warning?:       string
 }
 
 // ============================================================
 // 수금 등록
-// 우선순위: create_payment_atomic RPC → direct insert fallback
-// RPC 실패 시에도 direct insert로 항상 저장 보장
+// 우선순위: create_payment_atomic RPC
 // ============================================================
 
 export async function createPayment(
@@ -77,79 +76,11 @@ export async function createPayment(
     p_order_id:                input.order_id ?? null,
   })
 
-  // RPC 성공 여부 판단 — 에러 없고 data 존재
-  const rpcOk = !rpcErr && rpcData != null
-  if (!rpcOk) {
-    console.error('[createPayment] RPC 결과:', {
-      error:   rpcErr?.message ?? 'none',
-      code:    rpcErr?.code ?? 'none',
-      hasData: !!rpcData,
-    })
+  if (rpcErr) {
+    return { success: false, error: rpcErr.message }
   }
-
-  if (rpcOk) {
-    // RPC 성공
-    await linkActionResult({
-      customer_id:        input.customer_id,
-      tenant_id:          ctx.tenant_id,
-      result_type:        'payment_completed',
-      result_amount:      input.amount,
-      related_payment_id: rpcData.id as string,
-    }).catch(() => {})  // action_log 실패는 수금 성공에 영향 없음
-
-    revalidatePath('/customers')
-    revalidatePath('/payments/new')
-
-    return {
-      success: true,
-      data: {
-        id:             rpcData.id             as string,
-        applied_amount: rpcData.applied_amount as number,
-        deposit_amount: rpcData.deposit_amount as number,
-        balance_before: rpcData.balance_before as number,
-        mode:           'rpc',
-        warning:        dupWarning,
-      },
-    }
-  }
-
-  // ── 2차 시도: direct insert fallback (RPC 미존재 또는 에러) ──
-  console.error('[createPayment] RPC 실패 — fallback insert 시도')
-
-  const { data: inserted, error: insertErr } = await supabase
-    .from('payments')
-    .insert({
-      tenant_id:      ctx.tenant_id,
-      payee_tenant_id: ctx.tenant_id,
-      direction:      'inbound',
-      customer_id:    input.customer_id,
-      amount:         input.amount,
-      deposit_amount: 0,               // fallback: deposit 계산 생략, 정합성은 ledger에서
-      payment_date:   input.payment_date,
-      payment_method: input.payment_method,
-      memo:           input.memo ?? null,
-      status:         'confirmed',     // 반드시 confirmed — ledger 집계 기준
-      created_by:     ctx.user_id,
-      order_id:       input.order_id ?? null,
-    })
-    .select('id')
-    .single()
-
-  if (insertErr || !inserted) {
-    console.error('[createPayment] fallback insert 실패:', insertErr?.message)
-    return {
-      success: false,
-      error:   `수금 저장 실패: ${insertErr?.message ?? rpcErr?.message ?? '알 수 없는 오류'}`,
-    }
-  }
-
-  // collection_schedule 완료 처리 (fallback에서도 처리)
-  if (input.collection_schedule_id) {
-    await supabase
-      .from('collection_schedules')
-      .update({ status: 'done' })
-      .eq('id', input.collection_schedule_id)
-      .eq('tenant_id', ctx.tenant_id)
+  if (rpcData == null) {
+    return { success: false, error: '수금 저장 실패: RPC 응답이 비어있습니다.' }
   }
 
   await linkActionResult({
@@ -157,8 +88,8 @@ export async function createPayment(
     tenant_id:          ctx.tenant_id,
     result_type:        'payment_completed',
     result_amount:      input.amount,
-    related_payment_id: inserted.id,
-  }).catch(() => {})
+    related_payment_id: rpcData.id as string,
+  }).catch(() => {})  // action_log 실패는 수금 성공에 영향 없음
 
   revalidatePath('/customers')
   revalidatePath('/payments/new')
@@ -166,11 +97,11 @@ export async function createPayment(
   return {
     success: true,
     data: {
-      id:             inserted.id,
-      applied_amount: input.amount,
-      deposit_amount: 0,
-      balance_before: 0,
-      mode:           'fallback',
+      id:             rpcData.id             as string,
+      applied_amount: rpcData.applied_amount as number,
+      deposit_amount: rpcData.deposit_amount as number,
+      balance_before: rpcData.balance_before as number,
+      mode:           'rpc',
       warning:        dupWarning,
     },
   }
@@ -196,12 +127,12 @@ export async function cancelPayment(payment_id: string): Promise<ActionResult> {
     .single()
 
   if (!payment)                       return { success: false, error: '수금 내역을 찾을 수 없습니다.' }
-  if (payment.status === 'cancelled') return { success: false, error: '이미 취소된 수금입니다.' }
+  if (payment.status === 'reversed') return { success: false, error: '이미 취소된 수금입니다.' }
 
-  // 2. status → cancelled (ledger 집계에서 자동 제외됨)
+  // 2. status → reversed (ledger 집계에서 자동 제외됨)
   const { error } = await supabase
     .from('payments')
-    .update({ status: 'cancelled' })
+    .update({ status: 'reversed' })
     .eq('id', payment_id)
     // 전환: payee_tenant_id 우선 (legacy tenant_id 병행)
     .or(`payee_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
@@ -304,7 +235,7 @@ export async function getPaymentList(filters?: {
   if (filters?.to)          query = query.lte('payment_date', filters.to)
   if (filters?.customer_id) query = query.eq('customer_id', filters.customer_id)
   if (filters?.status)      query = query.eq('status', filters.status)
-  else                      query = query.in('status', ['confirmed', 'cancelled'])
+  else                      query = query.in('status', ['confirmed', 'reversed'])
 
   const { data, error } = await query
   if (error) return { success: false, error: error.message }

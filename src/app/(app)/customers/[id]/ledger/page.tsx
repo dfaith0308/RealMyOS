@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getCustomerLedger } from '@/actions/ledger'
 import { formatKRW } from '@/lib/calc'
-import { createSupabaseServer } from '@/lib/supabase-server'
+import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import CallOutcomeButtons from '@/components/customer/CallOutcomeButtons'
 
 export const metadata = { title: '거래처 원장 — RealMyOS' }
@@ -28,10 +28,13 @@ export default async function CustomerLedgerPage({
 
   // 최근 행동 → 결과 로그 (7일 이내, 최대 5건)
   const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) notFound()
   const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
   const { data: actionLogs } = await supabase
     .from('action_logs')
     .select('id, action_type, triggered_message, result_type, result_amount, result_at, created_at, conversion_status')
+    .eq('tenant_id', ctx.tenant_id)
     .eq('customer_id', id)
     .gte('created_at', since7d)
     .order('created_at', { ascending: false })

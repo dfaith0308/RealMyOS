@@ -264,7 +264,6 @@ export async function getTodayCollections(): Promise<ActionResult<CollectionTarg
     let cid = o.customer_id
     if (!cid && o.customer_name) {
       if (nameDups.has(o.customer_name)) {
-        console.warn(`[getTodayCollections] 동명이인 제외: ${o.customer_name}`)
         continue
       }
       cid = nameToId.get(o.customer_name) ?? null

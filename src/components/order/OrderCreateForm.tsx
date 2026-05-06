@@ -75,7 +75,6 @@ function resolveLine(line: LineItem): ResolvedLine {
 
   // 세금 계산 검증 — supply + vat === line_total 보장
   if (supply_price + vat_amount !== line_total) {
-    console.error('[TAX-MISMATCH]', { line_total, supply_price, vat_amount, diff: line_total - supply_price - vat_amount })
     // 부가세 보정: line_total이 진실값이므로 vat를 맞춤
     vat_amount = line_total - supply_price
   }
@@ -384,13 +383,6 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
 
       // 세금 검증: supply + vat === line_total 강제
       if (r.supply_price + r.vat_amount !== r.line_total) {
-        console.error('[TAX MISMATCH]', {
-          product: l.product.name,
-          line_total: r.line_total,
-          supply: r.supply_price,
-          vat: r.vat_amount,
-          diff: r.line_total - r.supply_price - r.vat_amount,
-        })
         setError(`[${l.product.name}] 세금 계산 오류가 발생했습니다. 새로고침 후 다시 시도해주세요.`)
         return
       }
@@ -401,7 +393,6 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
 
     const verifyTotal = resolvedLines.reduce((sum, l) => sum + l.resolved.line_total, 0)
     if (verifyTotal !== totals.total) {
-      console.error('[TOTAL MISMATCH]', { verifyTotal, displayedTotal: totals.total })
       setError(`금액 불일치 오류: 계산값 ${verifyTotal} ≠ 표시값 ${totals.total}`)
       setIsSubmitting(false)
       return
@@ -457,10 +448,9 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
           })
           if (pr.success && pr.data) {
             const dep  = pr.data.deposit_amount
-            const mode = pr.data.mode === 'fallback' ? ' (직접저장)' : ''
             successMsg += dep > 0
-              ? ` | 수금 완료${mode} · 예치금 +${formatKRW(dep)}`
-              : ` | 수금 완료${mode}`
+              ? ` | 수금 완료 · 예치금 +${formatKRW(dep)}`
+              : ` | 수금 완료`
             setPaymentError(null); setPaymentFailed(null)
             setPaymentWarning(pr.data.warning ?? null)
           } else {

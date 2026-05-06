@@ -164,14 +164,12 @@ export async function createOrder(
   }
 
   // final_amount는 DB generated / default — insert 금지 (할인·포인트는 아래 컬럼으로 전달)
-  console.error('[ORDER-AMOUNT]', { total: totals.total_amount, discount: discount_amount, point: point_used })
 
   const { data: newOrder, error: orderErr } = await supabase
     .from('orders')
     .insert({
       tenant_id:          ctx.tenant_id,
       seller_tenant_id:   ctx.tenant_id,
-      // TODO: buyer_tenant_id는 restaurant-os 연동 확정 후 입력 (현재 supplier CRM customer_id 기반)
       customer_id:        input.customer_id,
       order_number:       orderNumber,
       order_date:         orderDate,
@@ -196,50 +194,27 @@ export async function createOrder(
     return { success: false, error: `라인 저장 실패: ${linesErr.message}` }
   }
 
-  // 거래처별 마지막 거래 캐시 — upsert 대신 명시적 update+insert로 컬럼 누락 방지
-  for (const [i, r] of lineRows.entries()) {
-    const origLine     = input.lines[i]
-    const pricing_mode = origLine.line_total_override !== undefined ? 'total' : 'unit'
-    const cacheRow = {
-      customer_id:       input.customer_id,
-      product_id:        r.product_id,
-      last_price:        r.unit_price,
-      last_line_total:   r.line_total,
-      last_qty:          r.quantity,
-      last_pricing_mode: pricing_mode,
-      updated_at:        new Date().toISOString(),
-    }
-    console.error('[SAVE-PRICE]', { product_id: r.product_id, pricing_mode, unit_price: r.unit_price, line_total: r.line_total, qty: r.quantity })
+  // 거래처별 마지막 거래 캐시 — batch upsert (N+1 제거)
+  const cacheRows = lineRows
+    .filter((r) => !!r.product_id && !!input.customer_id)
+    .map((r, idx) => {
+      const origLine = input.lines[idx]
+      const pricing_mode = origLine?.line_total_override !== undefined ? 'total' : 'unit'
+      return {
+        customer_id:       input.customer_id,
+        product_id:        r.product_id,
+        last_price:        r.unit_price,
+        last_qty:          r.quantity,
+        last_line_total:   r.line_total,
+        last_pricing_mode: pricing_mode,
+        updated_at:        new Date().toISOString(),
+      }
+    })
 
-    // 1. 기존 row 존재 여부 확인
-    const { data: existing } = await supabase
+  if (cacheRows.length > 0) {
+    const { error: upsertErr } = await supabase
       .from('customer_product_prices')
-      .select('customer_id')
-      .eq('customer_id', input.customer_id)
-      .eq('product_id', r.product_id)
-      .maybeSingle()
-
-    if (existing) {
-      // 2a. 존재하면 명시적 UPDATE — 컬럼 하나하나 지정
-      const { error: updateErr } = await supabase
-        .from('customer_product_prices')
-        .update({
-          last_price:        cacheRow.last_price,
-          last_line_total:   cacheRow.last_line_total,
-          last_qty:          cacheRow.last_qty,
-          last_pricing_mode: cacheRow.last_pricing_mode,
-          updated_at:        cacheRow.updated_at,
-        })
-        .eq('customer_id', input.customer_id)
-        .eq('product_id', r.product_id)
-      if (updateErr) console.error('[SAVE-PRICE-ERR] UPDATE 실패:', updateErr.message)
-    } else {
-      // 2b. 없으면 INSERT
-      const { error: insertErr } = await supabase
-        .from('customer_product_prices')
-        .insert(cacheRow)
-      if (insertErr) console.error('[SAVE-PRICE-ERR] INSERT 실패:', insertErr.message)
-    }
+      .upsert(cacheRows, { onConflict: 'customer_id,product_id' })
   }
 
   // order_logs: create
@@ -350,29 +325,13 @@ export async function updateOrder(input: UpdateOrderInput): Promise<ActionResult
   // p_line_rows: jsonb 타입이면 객체 직접 전달, text 타입이면 stringify
   // → 이중 인코딩 방지를 위해 객체 직접 전달 시도
   const { error: rpcErr } = await supabase.rpc('update_order_lines', {
-    p_order_id:  input.order_id,
-    p_tenant_id: ctx.tenant_id,
-    p_line_rows: lineRows,  // JSON.stringify 제거 — supabase-js가 자동 직렬화
+    p_order_id:   input.order_id,
+    p_tenant_id:  ctx.tenant_id,
+    p_line_rows:  lineRows,  // JSON.stringify 제거 — supabase-js가 자동 직렬화
+    p_order_date: input.order_date ?? null,
+    p_memo:       input.memo ?? null,
   })
   if (rpcErr) return { success: false, error: `라인 저장 실패: ${rpcErr.message}` }
-
-  const newTotals = lineRows.reduce(
-    (s, r) => ({ total_supply_price: s.total_supply_price + r.supply_price, total_vat_amount: s.total_vat_amount + r.vat_amount, total_amount: s.total_amount + r.line_total }),
-    { total_supply_price: 0, total_vat_amount: 0, total_amount: 0 }
-  )
-
-  // orders 헤더 업데이트
-  const updatePayload: Record<string, any> = { ...newTotals }
-  if (input.order_date !== undefined) updatePayload.order_date = input.order_date
-  if (input.memo      !== undefined)  updatePayload.memo       = input.memo
-
-  const { error: orderErr } = await supabase
-    .from('orders')
-    .update(updatePayload)
-    .eq('id', input.order_id)
-    // 전환 기간: seller_tenant_id 우선 + legacy tenant_id 병행
-    .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
-  if (orderErr) return { success: false, error: orderErr.message }
 
   // order_logs: update
   const { data: afterLines } = await supabase
@@ -383,7 +342,7 @@ export async function updateOrder(input: UpdateOrderInput): Promise<ActionResult
     user_type:   ctx.user_type,
     action:      'update',
     before_data: beforeData,
-    after_data:  { lines: afterLines ?? [], ...updatePayload },
+    after_data:  { lines: afterLines ?? [] },
   })
 
   revalidatePath('/orders')
@@ -427,6 +386,11 @@ export async function cancelOrder(order_id: string, reason?: string): Promise<Ac
     after_data:  { status: 'cancelled', reason: reason ?? null },
   })
 
+  // NOTE: customer_stats.current_balance는 RPC(update_customer_stats)에서
+  // delta 누적으로 갱신되는 캐시성 컬럼이며, RULE-02(원장 단일 소스) 위반으로
+  // deprecated 대상이다. 즉시 제거/DROP 금지.
+  // 원장 단일 소스 전환 완료 후 update_customer_stats 의존을 제거한다.
+  // [DB-DANGER-004] 참조
   // customer_stats 복구
   await supabase.rpc('update_customer_stats', {
     p_tenant_id:         ctx.tenant_id,
@@ -510,9 +474,6 @@ export async function getProductsForOrder(
         last_pricing_mode,
         last_line_total,
         last_qty,
-      }
-      if (has_purchase_history) {
-        console.error('[LOAD-PRICE]', { name: p.name, last_pricing_mode, last_unit_price, last_line_total, last_qty })
       }
       return productData
     }),

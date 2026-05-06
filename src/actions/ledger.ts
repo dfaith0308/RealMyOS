@@ -259,7 +259,6 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
 
   const collectionResult = await getPendingCollectionMap(ctx.tenant_id, supabase).catch(e => {
     const msg = e instanceof Error ? e.message : 'unknown error'
-    console.error('[getCustomersWithBalance] getPendingCollectionMap error:', msg)
     return { enabled: false, data: {} as Record<string, import('@/actions/collection').CollectionSchedule | null>, error: msg }
   })
   const collectionMap = collectionResult.data ?? {}
@@ -526,7 +525,6 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
 
   const ctx = await getAuthCtx(supabase)
   if (!ctx) return { success: false, error: '로그인 필요' }
-  console.error(`[PERF:A] auth 완료: ${Date.now() - _fn0}ms`)
 
   const nowKST   = new Date(Date.now() + 9 * 3600000)
   const todayStr = nowKST.toISOString().slice(0, 10)
@@ -556,7 +554,6 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
       .eq('tenant_id', ctx.tenant_id),
   ])
   const settingsRows: any[] = []   // customer_settings 테이블 없음
-  console.error(`[PERF:DB] 5쿼리 병렬: ${Date.now() - _q0}ms | customers:${rows?.length ?? 0} stats:${statsRows?.length ?? 0}`)
 
   if (error) return { success: false, error: error.message }
 
@@ -659,12 +656,9 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
     }
   })
 
-  console.error(`[PERF:MAP] JS 병합: ${Date.now() - _m0}ms`)
-  console.error(`[PERF:STATS] getCustomersWithStats 총: ${Date.now() - _fn0}ms | rows:${result.length}`)
   return serializeSafe({ success: true as const, data: result })
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'unknown error'
-    console.error('[getCustomersWithStats] unexpected error:', msg)
-    return { success: true as const, data: [] }
+    return { success: false as const, error: msg }
   }
 }
