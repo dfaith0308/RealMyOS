@@ -102,6 +102,15 @@ export default async function DashboardPage() {
                     {c.primary_reason && (
                       <span style={{ fontSize: 11, color: '#B45309', marginLeft: 6 }}>{c.primary_reason}</span>
                     )}
+                    {(() => {
+                      const delayDays = c.days_since_order - (c.payment_terms_days ?? 30)
+                      if (delayDays <= 0) return null
+                      return (
+                        <span style={{ fontSize: 11, color: '#B91C1C', marginLeft: 6, fontWeight: 700 }}>
+                          D+{delayDays}
+                        </span>
+                      )
+                    })()}
                   </div>
                 </div>
                 <span style={{

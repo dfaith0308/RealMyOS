@@ -272,11 +272,12 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
     - migration: 없음
     - **작업 이력 (2026-05-07)**: KPI 4종을 링크형 카드로 변경 — worklog: `docs/worklogs/2026-05-07_sup-partial-001b_dashboard-kpi-links.md`
 
-  - **[SUP-PARTIAL-001-C] 블록2 TOP5 표 컬럼/강조 UX 정합**
+  - **[SUP-PARTIAL-001-C] 블록2 TOP5 표 컬럼/강조 UX 정합** — **종료 (2026-05-07, MVP)**
     - 컬럼(미수금/지연일/우선순위 점수) 및 TOP1~3 강조 표시
     - 정렬 기준(우선순위 점수) 고정
     - 버튼: [수금하기]/[원장]
     - migration: 🔍 (지연일/점수 집계가 DB/RPC에 의존할 수 있음)
+    - **작업 이력 (2026-05-07)**: TOP5에 근사치 지연일(D+N) 표시 추가 (`days_since_order - payment_terms_days`, \(>0\)만 표시) — worklog: `docs/worklogs/2026-05-07_sup-partial-001c_dashboard-delay-days.md`
   - **[SUP-PARTIAL-001-D] 블록4 “오늘 할 일 상세” 항목 확장**
     - RFQ 미응답(open+24h) 등 PRODUCT 기준 항목 추가 및 UX 정합
     - migration: 🔍 (RFQ/알림 데이터 존재/연동에 따라)

@@ -29,6 +29,8 @@ export interface DashboardData {
   total_overdue:      number
   top_customers: Array<{
     id: string; name: string; score: number; primary_reason: string; status: string
+    days_since_order: number
+    payment_terms_days: number
   }>
   top_customer_sales: Array<{ name: string; amount: number }>
   top_product_sales:  Array<{ name: string; amount: number }>
@@ -117,7 +119,15 @@ export async function getDashboardData(): Promise<ActionResult<DashboardData>> {
       primary_reason = '주문주기 초과'
     else if (c.receivable_amount > 0)
       primary_reason = `미수금 ${Math.round(c.receivable_amount / 10000)}만원`
-    return { id: c.id, name: c.name, score: c.action_score, primary_reason, status: c.status }
+    return {
+      id: c.id,
+      name: c.name,
+      score: c.action_score,
+      primary_reason,
+      status: c.status,
+      days_since_order: c.days_since_order ?? 0,
+      payment_terms_days: c.payment_terms_days ?? 30,
+    }
   })
 
   // 거래처 매출 TOP5 — customer_name snapshot 우선, purchase 제외
