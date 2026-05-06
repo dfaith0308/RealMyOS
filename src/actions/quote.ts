@@ -93,6 +93,7 @@ export async function createQuote(input: CreateQuoteInput): Promise<ActionResult
     action: 'create', before_data: null, after_data: { total_amount, items: input.items },
   })
 
+  revalidatePath('/quotes')
   revalidatePath('/orders/quotes')
   return { success: true, data: { quote_id: quote.id } }
 }
@@ -148,6 +149,7 @@ export async function updateQuote(
     action: 'update', after_data: updatePayload,
   })
 
+  revalidatePath('/quotes')
   revalidatePath('/orders/quotes')
   return { success: true }
 }
@@ -172,6 +174,7 @@ export async function deleteQuote(quote_id: string): Promise<ActionResult> {
     quote_id, user_id: ctx.user_id, user_type: ctx.user_type, action: 'delete',
   })
 
+  revalidatePath('/quotes')
   revalidatePath('/orders/quotes')
   return { success: true }
 }
@@ -396,6 +399,7 @@ export async function convertQuoteToOrder(input: ConvertQuoteInput): Promise<Act
     after_data: { order_id: orderResult.data.order_id, conversions: input.conversions },
   })
 
+  revalidatePath('/quotes')
   revalidatePath('/orders/quotes')
   revalidatePath('/orders')
   return { success: true, data: { order_id: orderResult.data.order_id, order_number: orderResult.data.order_number } }

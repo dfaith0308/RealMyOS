@@ -32,7 +32,13 @@ const MENU: MenuGroup[] = [
     items: [
       { label: '주문 목록', href: '/orders' },
       { label: '주문 등록', href: '/orders/new' },
-      { label: '견적관리',  href: '/orders/quotes' },
+    ],
+  },
+  {
+    label: '견적관리', icon: '🧾', href: '/quotes',
+    items: [
+      { label: '견적목록', href: '/quotes' },
+      { label: '견적등록', href: '/quotes/new' },
     ],
   },
   {

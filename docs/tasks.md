@@ -303,6 +303,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
     - migration: 🔍 (quote_items 구조/로그 테이블 필요 가능)
 - **산출물 (대조표 캔버스)**: `phase5-sup-partial-001-002-006-gap.canvas.tsx`
 - **작업 이력 (2026-05-06)**: PRODUCT 6-5 정독 + 현행 `/orders/quotes` 구조 대조 + 공백 항목 분해 등록 — worklog: `docs/worklogs/2026-05-06_phase5_sup-partial-001-002-006-gap.md`
+- **작업 이력 (2026-05-06)**: `/quotes/*` 독립 라우트 신설 + 구경로(`/orders/quotes/*`) redirect 유지 + 사이드바 독립 메뉴 이동 + revalidatePath 호환 처리 — worklog: `docs/worklogs/2026-05-06_sup-partial-002_quotes-ia.md`
 
 #### [SUP-PARTIAL-003] 설정 저장 시 `settings_logs` 미연동 (PRODUCT 6-14) — **종료 (2026-05-06)**
 - **위치**: `realmyos/src/actions/settings.ts`:55-99 (`saveSettings`)
@@ -812,8 +813,8 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **`SUP-DANGER-003`**, **`SUP-PARTIAL-004`**, **`SUP-PARTIAL-005`**, **`RES-PARTIAL-003`**, **`SUP-FAKE-001`**, **`RES-FAKE-001`**
 
 **Phase 5 — 기능·IA 공백**  
-- **완료(✅)**: `SUP-PARTIAL-003`, `SUP-PARTIAL-004`, `SUP-PARTIAL-007`, `RES-PARTIAL-001`, `RES-PARTIAL-002`, `RES-PARTIAL-004`, `RES-PARTIAL-007`
-- **분해 완료(🧩, 구현은 다음 세션)**: `RES-TODO-001`, `SUP-PARTIAL-001`, `SUP-PARTIAL-002`, `SUP-PARTIAL-006`, `SUP-TODO-001~005`
+- **완료(✅)**: `SUP-PARTIAL-002`, `SUP-PARTIAL-003`, `SUP-PARTIAL-004`, `SUP-PARTIAL-007`, `RES-PARTIAL-001`, `RES-PARTIAL-002`, `RES-PARTIAL-004`, `RES-PARTIAL-007`
+- **분해 완료(🧩, 구현은 다음 세션)**: `RES-TODO-001`, `SUP-PARTIAL-001`, `SUP-PARTIAL-006`, `SUP-TODO-001~005`
 
 **Phase 6 — 관리자OS**  
 - **`ADM-TODO-001`** — 입력: **`ADM-CHECK-001`**, **`DB-TODO-002`**

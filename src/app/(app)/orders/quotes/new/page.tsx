@@ -1,7 +1,5 @@
-import { getCustomersForOrder, getProductsForOrder } from '@/actions/order'
-import QuoteCreateClient from '../QuoteCreateClient'
+import { redirect } from 'next/navigation'
 
-export default async function NewQuotePage() {
-  const customers = await getCustomersForOrder()
-  return <QuoteCreateClient initialCustomers={customers.data ?? []} />
+export default function NewQuoteLegacyRedirectPage() {
+  redirect('/quotes/new')
 }

@@ -71,7 +71,7 @@ export default function QuoteDetailClient({ quote }: { quote: QuoteDetail }) {
   async function handleDelete() {
     if (!confirm('이 견적을 삭제하시겠습니까?')) return
     await deleteQuote(quote.id)
-    router.push('/orders/quotes')
+    router.push('/quotes')
   }
 
   return (

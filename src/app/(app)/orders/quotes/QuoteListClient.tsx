@@ -40,7 +40,7 @@ export default function QuoteListClient({ initialQuotes }: { initialQuotes: Quot
     <div style={{ maxWidth: 960, margin: '0 auto', padding: '28px 24px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <h1 style={{ fontSize: 20, fontWeight: 600, margin: 0 }}>견적 관리</h1>
-        <Link href="/orders/quotes/new" style={{
+        <Link href="/quotes/new" style={{
           padding: '9px 18px', background: '#111827', color: '#fff',
           borderRadius: 8, fontSize: 14, textDecoration: 'none', fontWeight: 500,
         }}>+ 견적 등록</Link>
@@ -97,7 +97,7 @@ export default function QuoteListClient({ initialQuotes }: { initialQuotes: Quot
                     </td>
                     <td style={{ padding: '10px 14px' }}>
                       <div style={{ display: 'flex', gap: 8 }}>
-                        <Link href={`/orders/quotes/${q.id}`}
+                        <Link href={`/quotes/${q.id}`}
                           style={{ fontSize: 12, color: '#2563EB', textDecoration: 'none' }}>상세</Link>
                         {q.status !== 'converted' && (
                           <button

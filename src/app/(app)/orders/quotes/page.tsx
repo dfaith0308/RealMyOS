@@ -1,7 +1,5 @@
-import { getQuotes } from '@/actions/quote'
-import QuoteListClient from './QuoteListClient'
+import { redirect } from 'next/navigation'
 
-export default async function QuotesPage() {
-  const result = await getQuotes()
-  return <QuoteListClient initialQuotes={result.data ?? []} />
+export default function QuotesLegacyRedirectPage() {
+  redirect('/quotes')
 }
