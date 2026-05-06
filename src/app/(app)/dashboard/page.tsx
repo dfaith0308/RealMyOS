@@ -1,4 +1,4 @@
-import { getDashboardData, getTodayCollections } from '@/actions/dashboard'
+import { fallbackMessage, getDashboardData, getTodayCollections } from '@/actions/dashboard'
 import { Suspense } from 'react'
 import { formatKRW } from '@/lib/calc'
 import Link from 'next/link'
@@ -18,6 +18,27 @@ export default async function DashboardPage() {
 
   return (
     <main style={s.page}>
+
+      {/* 블록1 — 지금 해야 할 행동 (PRODUCT §6-1) */}
+      <Link href="/customers" style={{ textDecoration: 'none' }}>
+        <div style={ds.actionBox}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={ds.actionTitle}>⚡ 지금 해야 할 행동</div>
+              <div style={ds.actionMsg}>
+                {d.total_receivable > 0
+                  ? fallbackMessage(d.ai_context)
+                  : '오늘 처리할 수금이 없습니다'}
+              </div>
+            </div>
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+              <div style={ds.actionKpiLabel}>미수금 총액</div>
+              <div style={ds.actionKpiVal}>{formatKRW(d.total_receivable)}</div>
+              <div style={ds.actionCta}>거래처로 이동 →</div>
+            </div>
+          </div>
+        </div>
+      </Link>
 
       {/* AI 한마디 — Suspense로 분리 (페이지 블로킹 없음) */}
       <Suspense fallback={
@@ -217,6 +238,12 @@ async function AiInsightBox({ context }: { context: Parameters<typeof getAiInsig
 }
 
 const ds: Record<string, React.CSSProperties> = {
+  actionBox:     { background: '#FFFBEB', border: '2px solid #FCD34D', borderRadius: 12, padding: '16px 20px' },
+  actionTitle:   { fontSize: 14, fontWeight: 800, color: '#92400E', marginBottom: 6 },
+  actionMsg:     { fontSize: 14, fontWeight: 600, color: '#111827', lineHeight: 1.5 },
+  actionKpiLabel:{ fontSize: 11, color: '#6b7280', marginBottom: 2 },
+  actionKpiVal:  { fontSize: 16, fontWeight: 900, color: '#B91C1C', fontVariantNumeric: 'tabular-nums' },
+  actionCta:     { fontSize: 12, color: '#92400E', marginTop: 6, fontWeight: 700 },
   collectBox:    { background: '#fff', border: '2px solid #FCA5A5', borderRadius: 12, padding: '16px 20px' },
   collectHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   collectTitle:  { fontSize: 14, fontWeight: 700, color: '#B91C1C' },

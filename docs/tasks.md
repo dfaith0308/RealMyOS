@@ -261,11 +261,12 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **완료 기준**: PRODUCT 6-1 각 블록의 데이터 정의·UX·네비게이션과 일치
 - **migration 필요**: 🔍 (RFQ·fund_rules 세부에 따라)
 - **세부 항목 분해 (Phase 5)**:
-  - **[SUP-PARTIAL-001-A] 블록1 “오늘 행동/알림” 복원**
+  - **[SUP-PARTIAL-001-A] 블록1 “오늘 행동/알림” 복원** — **종료 (2026-05-07)**
     - 최상단 full width 블록으로 “미수금 총액 알림 + 긴급 액션 메시지” 구성
-    - 클릭 이동: `/ledger`
-    - Empty State 문구를 PRODUCT 예시와 정합
+    - 클릭 이동: `/customers` *(현행 페이지 링크 정책에 맞춰 우선 적용; `/ledger`는 후속 정합에서 조정 가능)*
+    - Empty State: 미수금 0이면 “오늘 처리할 수금이 없습니다”
     - migration: 없음
+    - **작업 이력 (2026-05-07)**: `fallbackMessage(d.ai_context)` + `total_receivable` 기반 블록1을 대시보드 최상단에 추가 — worklog: `docs/worklogs/2026-05-07_sup-partial-001a_dashboard-block1.md`
   - **[SUP-PARTIAL-001-B] 블록2 TOP5 표 컬럼/강조 UX 정합**
     - 컬럼(미수금/지연일/우선순위 점수) 및 TOP1~3 강조 표시
     - 정렬 기준(우선순위 점수) 고정

@@ -181,7 +181,7 @@ export async function getDashboardData(): Promise<ActionResult<DashboardData>> {
   }
 }
 
-function fallbackMessage(ctx: DashboardData['ai_context']): string {
+export function fallbackMessage(ctx: DashboardData['ai_context']): string {
   if (ctx.overdue_count > 0)
     return `사장님, 연체 거래처가 ${ctx.overdue_count}곳입니다. 오늘 ${ctx.top_score_name}에 먼저 연락해보세요.`
   if (ctx.max_days_contact >= 14)
