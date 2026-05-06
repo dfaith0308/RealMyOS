@@ -147,15 +147,16 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
                       fontSize: 12,
                       color: o.current_balance === null ? '#d1d5db'
                            : o.current_balance > 0    ? '#B91C1C'
-                           : (o.current_balance < 0 && Math.abs(o.current_balance) >= 100) ? '#1D4ED8'
+                           : (o.deposit_amount ?? 0) >= 100 ? '#1D4ED8'
                            : '#6b7280',
-                      fontWeight: (o.current_balance && Math.abs(o.current_balance) >= 100) ? 600 : 400,
+                      fontWeight: ((o.current_balance ?? 0) > 0 || (o.deposit_amount ?? 0) >= 100) ? 600 : 400,
                     }}>
                       {(() => {
                         const b = o.current_balance ?? 0
+                        const dep = o.deposit_amount ?? 0
                         if (o.current_balance === null) return '-'
-                        if (b < 0 && Math.abs(b) >= 100) return `예치 ${formatKRW(Math.abs(b))}`
-                        if (b < 0 && Math.abs(b) < 100)  return '0원'   // 예치 1원 노이즈 제거
+                        if (b > 0) return formatKRW(b)
+                        if (dep >= 100) return `예치 ${formatKRW(dep)}`
                         return formatKRW(b)
                       })()}
                     </td>

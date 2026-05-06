@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { Suspense } from 'react'
-import { getCustomersWithStats } from '@/actions/ledger'
+import { getCustomersWithScore } from '@/actions/ledger'
 import { formatKRW } from '@/lib/calc'
 import type { CustomerStatus, CustomerWithScore } from '@/actions/ledger'
 import CallButton from '@/components/customer/CallButton'
@@ -46,8 +46,8 @@ export default async function CustomersPage({
 
   // ── 3개 병렬 fetch — 각각 독립 fallback, 절대 throw 없음 ──
   const [customersResult, salesResult, collectionResult] = await Promise.all([
-    getCustomersWithStats().catch(e => {
-      console.error('[customers/page] getCustomersWithStats error:', e)
+    getCustomersWithScore().catch(e => {
+      console.error('[customers/page] getCustomersWithScore error:', e)
       return { success: true as const, data: [] }
     }),
     getTodaySalesWork().catch(e => {

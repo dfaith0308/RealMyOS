@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import type { ActionResult } from '@/types/order'
+import { getOverdueReceivable } from '@/lib/ledger-calc'
 import type { ContactResult, NextActionType } from '@/actions/contact'
 
 // ============================================================
@@ -117,7 +118,7 @@ export async function getSalesTargets(): Promise<ActionResult<SalesTarget[]>> {
       .eq('tenant_id', ctx.tenant_id).eq('is_buyer', true).is('deleted_at', null),
 
     supabase.from('orders')
-      .select('customer_id, total_amount, point_used, order_date')
+      .select('customer_id, total_amount, final_amount, order_date')
       // 전환: seller_tenant_id 우선 (legacy tenant_id 병행)
       .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
       .eq('status', 'confirmed').is('deleted_at', null)
@@ -148,7 +149,7 @@ export async function getSalesTargets(): Promise<ActionResult<SalesTarget[]>> {
   // ── 집계 맵 ──────────────────────────────────────────────
 
   // per-order (overdue 계산용)
-  const orderRowsMap = new Map<string, Array<{ order_date: string; total_amount: number; point_used: number }>>()
+  const orderRowsMap = new Map<string, Array<{ order_date: string; final_amount?: number | null; total_amount: number }>>()
   // summary (lastDate)
   const orderMap     = new Map<string, { lastDate: string }>()
   const payMap       = new Map<string, number>()
@@ -158,7 +159,7 @@ export async function getSalesTargets(): Promise<ActionResult<SalesTarget[]>> {
 
   for (const o of orders ?? []) {
     const rows = orderRowsMap.get(o.customer_id) ?? []
-    rows.push({ order_date: o.order_date, total_amount: o.total_amount ?? 0, point_used: o.point_used ?? 0 })
+    rows.push({ order_date: o.order_date, final_amount: o.final_amount, total_amount: o.total_amount ?? 0 })
     orderRowsMap.set(o.customer_id, rows)
     if (!orderMap.has(o.customer_id)) orderMap.set(o.customer_id, { lastDate: o.order_date })
   }
@@ -197,18 +198,9 @@ export async function getSalesTargets(): Promise<ActionResult<SalesTarget[]>> {
     return Math.round(gaps.reduce((s, g) => s + g, 0) / gaps.length)
   }
 
-  // ── overdue_amount 계산 ───────────────────────────────────
   function calcOverdue(customerId: string, terms: number, paid: number): number {
     const rows = orderRowsMap.get(customerId) ?? []
-    let overdueOrders = 0
-    for (const row of rows) {
-      const dueDate = new Date(row.order_date + 'T00:00:00Z')
-      dueDate.setUTCDate(dueDate.getUTCDate() + terms)
-      if (dueDate <= today) {
-        overdueOrders += row.total_amount - (row.point_used ?? 0)
-      }
-    }
-    return Math.max(0, overdueOrders - paid)
+    return getOverdueReceivable(rows, terms, paid, todayStr)
   }
 
   // ── 최종 목표 목록 ─────────────────────────────────────────

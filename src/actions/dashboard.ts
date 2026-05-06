@@ -8,6 +8,7 @@ import {
   isSalesOrder,
   buildCustomerKey,
   resolveCustomerName,
+  getAccountsReceivable,
 } from '@/lib/ledger-calc'
 import type { ActionResult } from '@/types/order'
 
@@ -65,21 +66,21 @@ export async function getDashboardData(): Promise<ActionResult<DashboardData>> {
     supabase.from('orders')
       .select('total_amount, final_amount, order_type')
       .or(`seller_tenant_id.eq.${tid},tenant_id.eq.${tid}`)
-      .in('status', ['confirmed', 'delivered'])
+      .eq('status', 'confirmed')
       .is('deleted_at', null)
       .gte('order_date', monthStart).lte('order_date', today),
 
     supabase.from('orders')
       .select('customer_id, customer_name, total_amount, final_amount, order_type, customers(name)')
       .or(`seller_tenant_id.eq.${tid},tenant_id.eq.${tid}`)
-      .in('status', ['confirmed', 'delivered'])
+      .eq('status', 'confirmed')
       .is('deleted_at', null)
       .gte('order_date', monthStart).lte('order_date', today),
 
     supabase.from('orders')
       .select('order_lines(product_name, line_total), order_type')
       .or(`seller_tenant_id.eq.${tid},tenant_id.eq.${tid}`)
-      .in('status', ['confirmed', 'delivered'])
+      .eq('status', 'confirmed')
       .is('deleted_at', null)
       .gte('order_date', monthStart).lte('order_date', today),
 
@@ -94,7 +95,7 @@ export async function getDashboardData(): Promise<ActionResult<DashboardData>> {
 
   // KPI
   const total_receivable = customers.reduce((s, c) => s + Math.max(0, c.receivable_amount), 0)
-  const total_deposit    = 0  // 예치금 기능 미완성 — 항상 0
+  const total_deposit    = customers.reduce((s, c) => s + (c.deposit_amount ?? 0), 0)
   const total_overdue    = customers.reduce((s, c) => s + c.overdue_amount, 0)
   const monthly_sales    = (monthlySalesRaw ?? [])
     .filter((o) => isSalesOrder(o))
@@ -126,7 +127,14 @@ export async function getDashboardData(): Promise<ActionResult<DashboardData>> {
     const name = resolveCustomerName(o as { customer_name?: string | null; customers?: { name?: string | null } | null })
     const amt  = effectiveOrderAmount(o)
     const cur  = custSalesMap.get(key) ?? { name, amount: 0 }
-    custSalesMap.set(key, { name, amount: cur.amount + amt })
+    const prev = cur.name
+    const merged =
+      name.trim() !== '' && name !== '알 수 없음'
+        ? name
+        : prev.trim() !== '' && prev !== '알 수 없음'
+          ? prev
+          : name || prev || '알 수 없음'
+    custSalesMap.set(key, { name: merged, amount: cur.amount + amt })
   }
   const top_customer_sales = [...custSalesMap.values()]
     .sort((a, b) => b.amount - a.amount).slice(0, 5)
@@ -212,7 +220,9 @@ export async function getAiInsight(ctx: DashboardData['ai_context']): Promise<st
 }
 
 export interface CollectionTarget {
-  id: string; name: string; current_balance: number
+  id: string; name: string
+  /** 미수금(AR). 레거시 필드명 유지 */
+  current_balance: number
   last_payment_date: string | null; days_since_payment: number | null
 }
 
@@ -230,7 +240,7 @@ export async function getTodayCollections(): Promise<ActionResult<CollectionTarg
     supabase.from('orders')
       .select('customer_id, customer_name, final_amount, total_amount, order_type')
       .or(`seller_tenant_id.eq.${tid},tenant_id.eq.${tid}`)
-      .in('status', ['confirmed', 'delivered'])
+      .eq('status', 'confirmed')
       .is('deleted_at', null),
     supabase.from('payments').select('customer_id, amount, payment_date')
       .or(`payee_tenant_id.eq.${tid},tenant_id.eq.${tid}`)
@@ -272,7 +282,12 @@ export async function getTodayCollections(): Promise<ActionResult<CollectionTarg
 
   const result: CollectionTarget[] = []
   for (const c of customers ?? []) {
-    const balance = (c.opening_balance ?? 0) + (finalMap.get(c.id) ?? 0) - (payMap.get(c.id) ?? 0)
+    const balance = getAccountsReceivable(
+      c.opening_balance ?? 0,
+      finalMap.get(c.id) ?? 0,
+      payMap.get(c.id) ?? 0,
+      0,
+    )
     if (balance <= 0) continue
     const lastPay   = lastPayMap.get(c.id) ?? null
     const daysSince = lastPay

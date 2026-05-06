@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { linkActionResult } from '@/actions/action-log'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import type { ActionResult } from '@/types/order'
+import { effectiveOrderAmount, getAccountsReceivable, getCustomerDeposit } from '@/lib/ledger-calc'
 
 export type PaymentMethod = 'transfer' | 'cash' | 'card' | 'platform'
 
@@ -214,7 +215,7 @@ export async function cancelPayment(payment_id: string): Promise<ActionResult> {
 
 // ============================================================
 // 잔액 + 예치금 조회 (UI 표시용)
-// 공식: opening_balance + confirmed주문 - confirmed수금
+// 미수: getAccountsReceivable / 예치: customer_deposits.balance
 // ============================================================
 
 export async function getCustomerBalance(
@@ -233,7 +234,7 @@ export async function getCustomerBalance(
     .single()
   if (!customer) return { success: false, error: '거래처 없음' }
 
-  const [{ data: orderRows }, { data: paymentRows }] = await Promise.all([
+  const [{ data: orderRows }, { data: paymentRows }, { data: depRow }] = await Promise.all([
     supabase.from('orders')
       .select('final_amount, total_amount')
       .eq('customer_id', customer_id)
@@ -241,20 +242,25 @@ export async function getCustomerBalance(
       .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
       .eq('status', 'confirmed').is('deleted_at', null),
     supabase.from('payments')
-      .select('amount, deposit_amount')
+      .select('amount')
       .eq('customer_id', customer_id)
       // 전환: payee_tenant_id 우선 (legacy tenant_id 병행)
       .or(`payee_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
       .eq('direction', 'inbound')
       .eq('status', 'confirmed'),
+    supabase.from('customer_deposits')
+      .select('balance')
+      .eq('tenant_id', ctx.tenant_id)
+      .eq('customer_id', customer_id)
+      .maybeSingle(),
   ])
 
-  const totalOrders   = (orderRows   ?? []).reduce((s, o) => s + (o.final_amount ?? o.total_amount), 0)
-  const totalPayments = (paymentRows ?? []).reduce((s, p) => s + p.amount,                           0)
-  const totalDeposit  = (paymentRows ?? []).reduce((s, p) => s + (p.deposit_amount ?? 0),            0)
-  const balance       = (customer.opening_balance ?? 0) + totalOrders - totalPayments
+  const totalOrders   = (orderRows   ?? []).reduce((s, o) => s + effectiveOrderAmount(o as { final_amount?: number | null; total_amount: number }), 0)
+  const totalPayments = (paymentRows ?? []).reduce((s, p) => s + p.amount, 0)
+  const balance       = getAccountsReceivable(customer.opening_balance ?? 0, totalOrders, totalPayments, 0)
+  const deposit       = getCustomerDeposit((depRow as { balance?: number | null } | null)?.balance)
 
-  return { success: true, data: { balance, deposit: totalDeposit, customer_name: customer.name } }
+  return { success: true, data: { balance, deposit, customer_name: customer.name } }
 }
 
 // ============================================================
