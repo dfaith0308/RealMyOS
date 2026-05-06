@@ -28,6 +28,12 @@ export interface DashboardData {
   monthly_sales:      number
   total_overdue:      number
   rfq_unanswered_count: number
+  fund_items: Array<{
+    rule_name:      string
+    planned_amount: number
+    actual_amount:  number
+    status:         string
+  }>
   top_customers: Array<{
     id: string; name: string; score: number; primary_reason: string; status: string
     days_since_order: number
@@ -179,6 +185,12 @@ export async function getDashboardData(): Promise<ActionResult<DashboardData>> {
   const fund_total_actual  = fundPlan.filter((f) => f.actual_amount !== null)
     .reduce((s, f) => s + (f.actual_amount ?? 0), 0)
   const fund_pending_count = fundPlan.filter((f) => f.status === 'pending').length
+  const fund_items = fundPlan.slice(0, 5).map((f) => ({
+    rule_name:      f.rule_name ?? '-',
+    planned_amount: f.planned_amount ?? 0,
+    actual_amount:  f.actual_amount ?? 0,
+    status:         f.status ?? 'pending',
+  }))
 
   const top1 = customers[0]
   const ai_context = {
@@ -197,6 +209,7 @@ export async function getDashboardData(): Promise<ActionResult<DashboardData>> {
       top_customers, top_customer_sales, top_product_sales,
       overdue_count, uncontacted_count, draft_order_count,
       fund_total_planned, fund_total_actual, fund_pending_count,
+      fund_items,
       ai_context,
     },
   }

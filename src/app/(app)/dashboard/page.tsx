@@ -186,6 +186,43 @@ export default async function DashboardPage() {
               </span>
             </div>
           </div>
+
+          {d.fund_items.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              {d.fund_items.map((it, i) => {
+                const isDone = it.status === 'completed'
+                const badge = isDone
+                  ? { text: '완료', bg: '#ECFDF5', fg: '#059669' }
+                  : it.status === 'partial'
+                    ? { text: '부분', bg: '#FEF3C7', fg: '#92400E' }
+                    : it.status === 'overdue'
+                      ? { text: '지연', bg: '#FEE2E2', fg: '#B91C1C' }
+                      : { text: '대기', bg: '#F3F4F6', fg: '#6b7280' }
+
+                return (
+                  <div key={`${it.rule_name}-${i}`} style={s.listRow}>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 0 }}>
+                      <span style={{
+                        fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 8,
+                        background: badge.bg, color: badge.fg, flexShrink: 0,
+                      }}>
+                        {badge.text}
+                      </span>
+                      <span style={{
+                        fontSize: 13, color: '#374151',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
+                        {it.rule_name}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                      {formatKRW(it.planned_amount)}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </Section>
       </div>
     </main>

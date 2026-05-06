@@ -282,13 +282,14 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
     - RFQ 미응답(open+24h) 등 PRODUCT 기준 항목 추가 및 UX 정합
     - migration: 없음
     - **작업 이력 (2026-05-07)**: 대시보드 “오늘 할 일”에 RFQ 미응답(24h 초과, status=open) 카운트/링크(`/rfq`) 추가 — worklog: `docs/worklogs/2026-05-07_sup-partial-001d_dashboard-rfq.md`
-  - **[SUP-PARTIAL-001-E] 블록6 상품 TOP5 판매수량 컬럼 추가**
-    - “판매 수량” 컬럼을 포함해 PRODUCT 정의와 정합
-    - migration: 없음
-  - **[SUP-PARTIAL-001-F] 블록7 “오늘 자금 배치 제안” 정합**
+  - **[SUP-PARTIAL-001-E] 블록7 “오늘 자금 배치 제안” 정합**
     - 총 가용 자금(잔액+TOP3 수금예정) 및 `fund_rules` 기반 분배 항목 노출
     - 잔액 업데이트 상태/버튼 UX 포함
-    - migration: 🔍 (`fund_rules`, 잔액 스키마/정책에 따라)
+    - migration: 없음
+    - **작업 이력 (2026-05-07)**: 대시보드 “오늘 자금 계획”에 fund_transfers(규칙 rule_name 조인) 기반 항목 상세(최대 5개) 표시 추가 — worklog: `docs/worklogs/2026-05-07_sup-partial-001e_dashboard-fund.md`
+  - **[SUP-PARTIAL-001-F] 블록6 상품 TOP5 판매수량 컬럼 추가**
+    - “판매 수량” 컬럼을 포함해 PRODUCT 정의와 정합
+    - migration: 없음
 - **산출물 (대조표 캔버스)**: `phase5-sup-partial-001-002-006-gap.canvas.tsx`
 - **작업 이력 (2026-05-06)**: PRODUCT 6-1 정독 + 현행 대시보드 블록 대조표 작성 + 공백 항목 분해 등록 — worklog: `docs/worklogs/2026-05-06_phase5_sup-partial-001-002-006-gap.md`
 - **작업 이력 (2026-05-07)**: PRODUCT 6-1 재정독 + `dashboard/page.tsx` 블록 매핑(현행 구현/누락) 갱신 — worklog: `docs/worklogs/2026-05-07_sup-partial-001_dashboard-gap-audit.md`
