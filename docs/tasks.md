@@ -248,13 +248,13 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **현재 동작 (코드 기준, 2026-05-07)**:
   - 상단: AI 인사이트(`getAiInsight`, context=`d.ai_context`)
   - 별도 박스: “오늘 수금할 거래처” (`getTodayCollections`) — /payments/new 및 /customers/[id]/ledger 링크
-  - KPI 4종: 총 미수금/이번달 매출/총 연체금/총 예치금 (현재 카드 자체 링크는 없음)
+  - KPI 4종: 총 미수금/이번달 매출/총 연체금/총 예치금 (카드 클릭 → `/customers`)
   - 2열 섹션: 수금 우선순위 TOP 5(점수 배지), 오늘 할 일(연체 거래처/14일 이상 미연락/미처리 주문), 거래처 매출 TOP5, 상품 매출 TOP5(수량 컬럼 없음), 오늘 자금 계획(계획/이행/미이행 건수 요약)
 - **PRODUCT 정의**: 블록 순서·“오늘 행동/알림” 문구, 수금 TOP 지연일·우선순위 점수 컬럼, KPI의 `delivered` 포함 여부, 블록7 `fund_rules` 기반 분배 항목(매입비/부가세 등) 상세, RFQ 미응답 등.
 - **GAP (PRODUCT §6-1 대비)**:
   - 블록1 “오늘 행동/알림”(최상단 full width) 부재 — AI 인사이트가 상단을 차지
   - 블록2 TOP5 표 컬럼 불일치(미수금/지연일/우선순위 점수) 및 TOP1~3 “오늘 수금 대상” 강조 UX 없음
-  - 블록3 KPI는 값은 있으나 **카드 클릭 이동(/ledger, /analytics)** 없음
+  - 블록3 KPI는 PRODUCT의 목적지(`/ledger`, `/analytics`)와 다름 — 현행은 `/customers`로 연결(MVP)
   - 블록4 “오늘 할 일 상세”는 일부만 존재(RFQ 미응답 open+24h 미포함 등)
   - 블록6 상품 매출 TOP5에 **판매 수량 컬럼 없음**
   - 블록7 “오늘 자금 배치 제안”이 fund_rules 분배 제안이 아니라 계획/이행 요약 수준
@@ -267,14 +267,16 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
     - Empty State: 미수금 0이면 “오늘 처리할 수금이 없습니다”
     - migration: 없음
     - **작업 이력 (2026-05-07)**: `fallbackMessage(d.ai_context)` + `total_receivable` 기반 블록1을 대시보드 최상단에 추가 — worklog: `docs/worklogs/2026-05-07_sup-partial-001a_dashboard-block1.md`
-  - **[SUP-PARTIAL-001-B] 블록2 TOP5 표 컬럼/강조 UX 정합**
+  - **[SUP-PARTIAL-001-B] 블록3 KPI 카드 링크 정합** — **종료 (2026-05-07)**
+    - KPI 카드 클릭 이동(`/customers`)을 카드 단위로 제공 (MVP)
+    - migration: 없음
+    - **작업 이력 (2026-05-07)**: KPI 4종을 링크형 카드로 변경 — worklog: `docs/worklogs/2026-05-07_sup-partial-001b_dashboard-kpi-links.md`
+
+  - **[SUP-PARTIAL-001-C] 블록2 TOP5 표 컬럼/강조 UX 정합**
     - 컬럼(미수금/지연일/우선순위 점수) 및 TOP1~3 강조 표시
     - 정렬 기준(우선순위 점수) 고정
     - 버튼: [수금하기]/[원장]
     - migration: 🔍 (지연일/점수 집계가 DB/RPC에 의존할 수 있음)
-  - **[SUP-PARTIAL-001-C] 블록3 KPI 카드 링크 정합**
-    - KPI 클릭 이동(`/ledger`, `/analytics`)을 카드 단위로 제공
-    - migration: 없음
   - **[SUP-PARTIAL-001-D] 블록4 “오늘 할 일 상세” 항목 확장**
     - RFQ 미응답(open+24h) 등 PRODUCT 기준 항목 추가 및 UX 정합
     - migration: 🔍 (RFQ/알림 데이터 존재/연동에 따라)

@@ -81,10 +81,10 @@ export default async function DashboardPage() {
 
       {/* KPI */}
       <div style={s.grid4}>
-        <KpiCard label="총 미수금"    value={formatKRW(d.total_receivable)} color={d.total_receivable > 0 ? '#B91C1C' : undefined} />
-        <KpiCard label="이번달 매출"  value={formatKRW(d.monthly_sales)} />
-        <KpiCard label="총 연체금"    value={formatKRW(d.total_overdue)} color={d.total_overdue > 0 ? '#B91C1C' : undefined} />
-        <KpiCard label="총 예치금"    value={formatKRW(d.total_deposit)} color={d.total_deposit > 0 ? '#1D4ED8' : undefined} />
+        <KpiCard label="총 미수금"    value={formatKRW(d.total_receivable)} href="/customers" color={d.total_receivable > 0 ? '#B91C1C' : undefined} />
+        <KpiCard label="이번달 매출"  value={formatKRW(d.monthly_sales)} href="/customers" />
+        <KpiCard label="총 연체금"    value={formatKRW(d.total_overdue)} href="/customers" color={d.total_overdue > 0 ? '#B91C1C' : undefined} />
+        <KpiCard label="총 예치금"    value={formatKRW(d.total_deposit)} href="/customers" color={d.total_deposit > 0 ? '#1D4ED8' : undefined} />
       </div>
 
       <div style={s.grid2}>
@@ -181,13 +181,23 @@ export default async function DashboardPage() {
 
 // ── 서브 컴포넌트 ────────────────────────────────────────────
 
-function KpiCard({ label, value, color }: { label: string; value: string; color?: string }) {
-  return (
-    <div style={s.kpiCard}>
+function KpiCard({ label, value, href, color }: { label: string; value: string; href?: string; color?: string }) {
+  const content = (
+    <div style={{ ...s.kpiCard, cursor: href ? 'pointer' : undefined }}>
       <span style={s.kpiLabel}>{label}</span>
       <span style={{ ...s.kpiVal, color: color ?? '#111827' }}>{value}</span>
     </div>
   )
+
+  if (href) {
+    return (
+      <Link href={href} style={{ textDecoration: 'none' }}>
+        {content}
+      </Link>
+    )
+  }
+
+  return content
 }
 
 function Section({ title, children, href }: { title: string; children: React.ReactNode; href?: string }) {
