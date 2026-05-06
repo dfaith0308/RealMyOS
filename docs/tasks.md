@@ -280,7 +280,8 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
     - **작업 이력 (2026-05-07)**: TOP5에 근사치 지연일(D+N) 표시 추가 (`days_since_order - payment_terms_days`, \(>0\)만 표시) — worklog: `docs/worklogs/2026-05-07_sup-partial-001c_dashboard-delay-days.md`
   - **[SUP-PARTIAL-001-D] 블록4 “오늘 할 일 상세” 항목 확장**
     - RFQ 미응답(open+24h) 등 PRODUCT 기준 항목 추가 및 UX 정합
-    - migration: 🔍 (RFQ/알림 데이터 존재/연동에 따라)
+    - migration: 없음
+    - **작업 이력 (2026-05-07)**: 대시보드 “오늘 할 일”에 RFQ 미응답(24h 초과, status=open) 카운트/링크(`/rfq`) 추가 — worklog: `docs/worklogs/2026-05-07_sup-partial-001d_dashboard-rfq.md`
   - **[SUP-PARTIAL-001-E] 블록6 상품 TOP5 판매수량 컬럼 추가**
     - “판매 수량” 컬럼을 포함해 PRODUCT 정의와 정합
     - migration: 없음

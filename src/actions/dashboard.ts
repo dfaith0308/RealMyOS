@@ -27,6 +27,7 @@ export interface DashboardData {
   total_deposit:      number
   monthly_sales:      number
   total_overdue:      number
+  rfq_unanswered_count: number
   top_customers: Array<{
     id: string; name: string; score: number; primary_reason: string; status: string
     days_since_order: number
@@ -62,6 +63,7 @@ export async function getDashboardData(): Promise<ActionResult<DashboardData>> {
     { data: customerSalesRaw },
     { data: ordersForProductSales },
     { data: draftOrders },
+    { count: rfq_unanswered_count },
   ] = await Promise.all([
     getCustomersWithScore(),
     getDailyFundPlan(today),
@@ -92,6 +94,13 @@ export async function getDashboardData(): Promise<ActionResult<DashboardData>> {
       .or(`seller_tenant_id.eq.${tid},tenant_id.eq.${tid}`)
       .eq('status', 'draft')
       .is('deleted_at', null),
+
+    supabase
+      .from('rfq_requests')
+      .select('id', { count: 'exact', head: true })
+      .eq('tenant_id', ctx.tenant_id)
+      .eq('status', 'open')
+      .lt('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()),
   ])
 
   const customers = scoreResult.data ?? []
@@ -184,6 +193,7 @@ export async function getDashboardData(): Promise<ActionResult<DashboardData>> {
     success: true,
     data: {
       total_receivable, total_deposit, monthly_sales, total_overdue,
+      rfq_unanswered_count: rfq_unanswered_count ?? 0,
       top_customers, top_customer_sales, top_product_sales,
       overdue_count, uncontacted_count, draft_order_count,
       fund_total_planned, fund_total_actual, fund_pending_count,

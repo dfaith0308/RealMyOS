@@ -126,6 +126,9 @@ export default async function DashboardPage() {
         <Section title="✅ 오늘 할 일">
           <TodoRow icon="💸" label="연체 거래처" count={d.overdue_count} href="/customers" color="#B91C1C" />
           <TodoRow icon="📵" label="14일 이상 미연락" count={d.uncontacted_count} href="/customers" color="#B45309" />
+          {d.rfq_unanswered_count > 0 && (
+            <TodoRow icon="📬" label="RFQ 미응답(24h 초과)" count={d.rfq_unanswered_count} href="/rfq" color="#7C3AED" />
+          )}
           {d.draft_order_count > 0 && (
             <TodoRow icon="📋" label="미처리 주문(draft)" count={d.draft_order_count} href="/orders" color="#6b7280" />
           )}
