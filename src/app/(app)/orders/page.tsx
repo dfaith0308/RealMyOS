@@ -35,8 +35,7 @@ export default async function OrdersPage({
       .eq('tenant_id', ctx.tenant_id)
       .eq('is_buyer', true)
       .is('deleted_at', null)
-      .order('name')
-    ),
+      .order('name'),
   ])
 
   return (

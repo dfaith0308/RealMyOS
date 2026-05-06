@@ -116,11 +116,13 @@ export async function saveSettings(input: Partial<TenantSettings>): Promise<Acti
     .filter((r) => r.old_value !== r.new_value)
 
   if (logRows.length > 0) {
-    await supabase
-      .from('settings_logs')
-      .insert(logRows)
-      .then(() => {})
-      .catch(() => {})
+    try {
+      await supabase
+        .from('settings_logs')
+        .insert(logRows)
+    } catch {
+      // best-effort: settings 저장은 성공, logs 실패는 무시
+    }
   }
 
   revalidatePath('/settings')
