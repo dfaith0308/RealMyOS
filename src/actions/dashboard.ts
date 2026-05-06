@@ -39,7 +39,7 @@ export interface DashboardData {
     days_since_order: number
     payment_terms_days: number
   }>
-  top_customer_sales: Array<{ name: string; amount: number }>
+  top_customer_sales: Array<{ name: string; amount: number; quantity: number }>
   top_product_sales:  Array<{ name: string; amount: number }>
   overdue_count:      number
   uncontacted_count:  number
@@ -82,7 +82,7 @@ export async function getDashboardData(): Promise<ActionResult<DashboardData>> {
       .gte('order_date', monthStart).lte('order_date', today),
 
     supabase.from('orders')
-      .select('customer_id, customer_name, total_amount, final_amount, order_type, customers(name)')
+      .select('customer_id, customer_name, total_amount, final_amount, order_type, customers(name), order_lines(quantity)')
       .or(`seller_tenant_id.eq.${tid},tenant_id.eq.${tid}`)
       .eq('status', 'confirmed')
       .is('deleted_at', null)
@@ -146,13 +146,17 @@ export async function getDashboardData(): Promise<ActionResult<DashboardData>> {
   })
 
   // 거래처 매출 TOP5 — customer_name snapshot 우선, purchase 제외
-  const custSalesMap = new Map<string, { name: string; amount: number }>()
+  const custSalesMap = new Map<string, { name: string; amount: number; quantity: number }>()
   for (const o of customerSalesRaw ?? []) {
     if (!isSalesOrder(o)) continue
     const key  = buildCustomerKey(o)
     const name = resolveCustomerName(o as { customer_name?: string | null; customers?: { name?: string | null } | null })
     const amt  = effectiveOrderAmount(o)
-    const cur  = custSalesMap.get(key) ?? { name, amount: 0 }
+    const qty = ((o as any).order_lines ?? []).reduce(
+      (s: number, l: { quantity?: number | null }) => s + (l.quantity ?? 0),
+      0,
+    )
+    const cur  = custSalesMap.get(key) ?? { name, amount: 0, quantity: 0 }
     const prev = cur.name
     const merged =
       name.trim() !== '' && name !== '알 수 없음'
@@ -160,7 +164,7 @@ export async function getDashboardData(): Promise<ActionResult<DashboardData>> {
         : prev.trim() !== '' && prev !== '알 수 없음'
           ? prev
           : name || prev || '알 수 없음'
-    custSalesMap.set(key, { name: merged, amount: cur.amount + amt })
+    custSalesMap.set(key, { name: merged, amount: cur.amount + amt, quantity: cur.quantity + qty })
   }
   const top_customer_sales = [...custSalesMap.values()]
     .sort((a, b) => b.amount - a.amount).slice(0, 5)

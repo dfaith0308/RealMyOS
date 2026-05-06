@@ -144,9 +144,14 @@ export default async function DashboardPage() {
                   <span style={{ fontSize: 11, fontWeight: 700, color: '#111827', minWidth: 28 }}>{i + 1}위</span>
                   <span style={{ fontSize: 13 }}>{c.name}</span>
                 </div>
-                <span style={{ fontSize: 13, fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
-                  {formatKRW(c.amount)}
-                </span>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                    {formatKRW(c.amount)}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#9ca3af', fontVariantNumeric: 'tabular-nums' }}>
+                    {c.quantity.toLocaleString()}개
+                  </div>
+                </div>
               </div>
             ))}
         </Section>
