@@ -90,7 +90,7 @@ const MENU: MenuGroup[] = [
       { label: '스크립트관리', href: '/sales/scripts' },
     ],
   },
-  { label: '매출분석',   icon: '📈', href: '/sales' },
+  { label: '매출분석',   icon: '📈', href: '/analytics' },
 
 ]
 

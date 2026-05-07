@@ -534,13 +534,31 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
     - 세금 요약 영역: 기간 내 공급가/부가세/합계 + 카드 제외 후 세금계산서 발행 대상 합계 별도 표시
     - 매입원장 전용 페이지: 현재 `/ledger?kind=purchases&supplier=...`는 SUP-TODO-004-A의 허브 수준만 제공 → `/suppliers/[name]/ledger` 또는 동등 라우트로 매입+지급 분배 상세 표 신설(SUP-TODO-003-D와 정합)
     - migration: 🔍 (세금계산서/매입처 도메인 모델 따라)
-  - **[SUP-TODO-004-C] `/analytics`(매출분석) 라우트 신설**
-    - 현재 `realmyos/src/app/(app)/`에 analytics 라우트가 없음 → 신규 라우트 필요
-    - 탭: 매출현황/마진분석/거래처분석/위험신호, 기간 필터 공통
-    - migration: NO (우선 order_lines 스냅샷 기반 집계)
+  - **[SUP-TODO-004-C] `/analytics`(매출분석) 라우트 신설** — **완료 (2026-05-07)**
+    - `/analytics` 라우트 신설: 4개 탭(매출현황·마진분석·거래처분석·위험신호) + 공통 기간 필터(URL `from`/`to`/`preset`) + 정렬(URL `sort`)
+    - **데이터 SSOT**: `order_lines` 스냅샷만 사용(`product` 테이블 미참조) — `lineMargin`·`aggregateByDate/Product/Customer` 메모리 집계(RULE-02·RULE-03)
+    - **탭 1 매출현황**: 총매출/원가/마진/마진율 + 전기간(동일 길이) 대비 변화율 + 일자별 표·CSS 막대(Recharts 미도입)
+    - **탭 2 마진분석**: 상품별 매출/원가/마진/마진율/**마진 기여도(=상품마진/전체마진)** + 정렬(마진/기여도/수량) + 상위 5개 매출 비중
+    - **탭 3 거래처분석**: 거래처별 매출/원가/마진/마진율/비중/순위/**성장률(전기간 대비)** + 정렬(매출/마진/성장률) + KPI 4종(상위3 비중·평균결제기간 근사·미수금 비율·반복구매율)
+    - **탭 4 위험신호**: 5종 — ① 매출 감소(-20%↑) ② 낮은 마진(`< settings.margin_warning_threshold`) ③ 손해 상품(<0) ④ 매출 TOP10 ∩ 마진율 하위 50% ⑤ 반품/매출 ≥ 5%
+    - **사이드바**: `매출분석` 링크 `/sales` → `/analytics`
+    - 차트 라이브러리/출력/평균결제기간 정확 정의는 아래 분리 ID
+    - migration: NO
+  - **[SUP-TODO-004-C-2] 차트 라이브러리(라인차트) 도입** — **신규 (2026-05-07, 보류)**
+    - PRODUCT §6-11 라인차트(매출/원가/마진, 전월 대비) 정식 구현 — recharts/chart.js 후보, 번들/SSR 영향 평가 후 도입
+    - 본 PR(SUP-TODO-004-C)은 표 + CSS 막대까지로 한정
+    - migration: NO
+  - **[SUP-TODO-004-C-3] 분석 결과 출력(엑셀/PDF/JPG)** — **신규 (2026-05-07, 보류)**
+    - PRODUCT §6-11 출력 기능 — 라이브러리 도입(엑셀: SheetJS/PDF: pdf-lib/JPG: html2canvas) 별도
+    - migration: NO
+  - **[SUP-TODO-004-C-4] 평균 결제기간 정확 정의** — **신규 (2026-05-07, 보류)**
+    - 본 PR은 **거래처별 (마지막 수금일 - 마지막 주문일) 평균** 근사 사용
+    - 정확 정의 필요: 주문 단위 매핑(`payment_allocations` 활용)인지, 거래처 평균인지, 단위(영업일/달력일)인지 합의 후 재구현
+    - migration: 🔍 (`payment_allocations`로 결제 매핑 확장 시 검토)
 - **작업 이력 (2026-05-06)**: PRODUCT 6-10/6-11 정독 + `/ledger`/`/analytics` 라우트 부재 확인 + 세부 분해 등록 — worklog: `docs/worklogs/2026-05-06_phase5_sup-todo-001-005-gap.md`
 - **작업 이력 (2026-05-07)**: SUP-TODO-004-A `/ledger` 진입점·매출/매입 탭·기간 필터·Sidebar 교체 — worklog: `docs/worklogs/2026-05-07_sup-todo-004a_ledger-hub.md`
 - **작업 이력 (2026-05-07)**: SUP-TODO-004-B(B-1) 컬럼 정합·기초잔액 항상 표시·기간/결제수단 필터; B-2 신규 분리 — worklog: `docs/worklogs/2026-05-07_sup-todo-004b_ledger-columns.md`
+- **작업 이력 (2026-05-07)**: SUP-TODO-004-C `/analytics` 4탭 신설(`order_lines` 스냅샷 SSOT, RULE-02·03 준수); 차트(C-2)·출력(C-3)·평균결제기간 정확 정의(C-4) 신규 분리 — worklog: `docs/worklogs/2026-05-07_sup-todo-004c_analytics.md`
 
 #### [SUP-TODO-005] 플랫폼 결제·정산(식당↔공급자 단일 payments) 완성
 - **PRODUCT 정의 위치**: §3 돈 흐름, §9 payments
