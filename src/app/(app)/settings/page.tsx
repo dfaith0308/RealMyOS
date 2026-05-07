@@ -1,12 +1,15 @@
 import { getSettings } from '@/actions/settings'
 import { DEFAULT_SETTINGS } from '@/constants/settings'
 import SettingsForm from '@/components/settings/SettingsForm'
+import { getAligoSettings } from '@/actions/message'
+import AligoSettingsForm from '@/components/settings/AligoSettingsForm'
 
 export const metadata = { title: '설정 — RealMyOS' }
 
 export default async function SettingsPage() {
   const result = await getSettings()
   const settings = result.success && result.data ? result.data : DEFAULT_SETTINGS
+  const aligo = await getAligoSettings()
 
   return (
     <main style={{ minHeight: '100vh', background: '#f8f9fa', paddingTop: 40 }}>
@@ -18,6 +21,8 @@ export default async function SettingsPage() {
           </p>
         </div>
         <SettingsForm initial={settings} />
+        <div style={{ height: 24 }} />
+        <AligoSettingsForm initial={aligo.data ?? {}} />
       </div>
     </main>
   )

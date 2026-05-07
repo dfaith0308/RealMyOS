@@ -4,7 +4,8 @@ import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createContactLog } from '@/actions/contact'
-import { executeMessage, updateScheduleStatus, type ExecCenterTarget, type SalesScript } from '@/actions/sales'
+import { updateScheduleStatus, type ExecCenterTarget, type SalesScript } from '@/actions/sales'
+import { sendAligo, smsByteLength } from '@/actions/message'
 
 function kstDateOnly(iso: string | null) {
   if (!iso) return '-'
@@ -70,12 +71,73 @@ function ScriptPickerModal(props: {
   )
 }
 
+function SendConfirmModal(props: {
+  open: boolean
+  receiver: string
+  content: string
+  byteLen: number
+  smsType: 'SMS' | 'LMS'
+  safeOnlySms: boolean
+  onConfirm: () => void
+  onClose: () => void
+  isPending: boolean
+}) {
+  if (!props.open) return null
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 260 }}>
+      <div style={{ background: '#fff', borderRadius: 14, padding: 18, width: 520, maxWidth: '95vw' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
+          <div style={{ fontSize: 15, fontWeight: 900 }}>발송 확인</div>
+          <button onClick={props.onClose} style={{ background: 'transparent', border: 'none', fontSize: 20, cursor: 'pointer', color: '#9ca3af' }}>✕</button>
+        </div>
+
+        <div style={{ marginTop: 12, fontSize: 13, color: '#111827', fontWeight: 800 }}>
+          수신번호: {props.receiver}
+        </div>
+        <div style={{ marginTop: 8, fontSize: 12, color: '#6b7280' }}>
+          길이: {props.byteLen} bytes · 분류: {props.smsType}{props.safeOnlySms ? ' (안심번호: SMS만 허용)' : ''}
+        </div>
+
+        <div style={{ marginTop: 12, background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12, whiteSpace: 'pre-wrap', fontSize: 13, lineHeight: 1.5 }}>
+          {props.content}
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 14 }}>
+          <button
+            onClick={props.onClose}
+            disabled={props.isPending}
+            style={{ padding: '10px 14px', background: '#fff', color: '#111827', border: '1px solid #e5e7eb', borderRadius: 10, fontSize: 13, fontWeight: 800, cursor: 'pointer' }}
+          >
+            취소
+          </button>
+          <button
+            onClick={props.onConfirm}
+            disabled={props.isPending}
+            style={{ padding: '10px 14px', background: '#111827', color: '#fff', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 900, cursor: 'pointer' }}
+          >
+            {props.isPending ? '발송 중…' : '발송'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function SalesExecClient(props: { top: ExecCenterTarget[]; scripts: SalesScript[] }) {
   const router = useRouter()
   const [isPending, startTr] = useTransition()
 
   const [open, setOpen] = useState(false)
   const [picked, setPicked] = useState<{ target: ExecCenterTarget; action: 'call' | 'message' | 'visit' } | null>(null)
+  const [confirm, setConfirm] = useState<{
+    target: ExecCenterTarget
+    script: SalesScript
+    receiver: string
+    content: string
+    byteLen: number
+    smsType: 'SMS' | 'LMS'
+    safeOnlySms: boolean
+  } | null>(null)
 
   const scriptsByType = useMemo(() => {
     const map = new Map<'call' | 'message' | 'visit', SalesScript[]>()
@@ -106,17 +168,18 @@ export default function SalesExecClient(props: { top: ExecCenterTarget[]; script
       try {
         // 자동 발송 금지: message는 clipboard 기록만
         if (action === 'message') {
-          const execRes = await executeMessage({
-            customer_id: t.customer_id,
-            script_id: script.id,
-            content: script.content.replace(/\{\{customer_name\}\}/g, t.customer_name),
-            channel: 'clipboard',
-            contact_method: 'message',
-          })
-          if (!execRes.success) {
-            alert(execRes.error ?? '실행 실패')
+          const receiver = t.phone ?? ''
+          if (!receiver.trim()) {
+            alert('수신번호가 없습니다.')
             return
           }
+          const content = script.content.replace(/\{\{customer_name\}\}/g, t.customer_name)
+          const byteLen = smsByteLength(content)
+          const smsType: 'SMS' | 'LMS' = byteLen <= 90 ? 'SMS' : 'LMS'
+          const safeOnlySms = receiver.replace(/[^0-9]/g, '').startsWith('050')
+          setConfirm({ target: t, script, receiver, content, byteLen, smsType, safeOnlySms })
+          setOpen(false)
+          return
         } else {
           const logRes = await createContactLog({
             customer_id: t.customer_id,
@@ -131,13 +194,9 @@ export default function SalesExecClient(props: { top: ExecCenterTarget[]; script
           }
         }
 
-        // 스케줄 완료 처리 (있을 때만)
-        if (t.schedule_id) {
-          await updateScheduleStatus(t.schedule_id, 'done')
-        }
-
-        setOpen(false)
-        setPicked(null)
+        // call/visit는 즉시 완료 처리
+        if (t.schedule_id) await updateScheduleStatus(t.schedule_id, 'done')
+        setOpen(false); setPicked(null)
         router.refresh()
       } finally {
         // no-op
@@ -228,6 +287,37 @@ export default function SalesExecClient(props: { top: ExecCenterTarget[]; script
         scripts={picked ? (scriptsByType.get(picked.action) ?? []) : []}
         onPick={executeWithScript}
         onClose={() => { setOpen(false); setPicked(null) }}
+      />
+
+      <SendConfirmModal
+        open={!!confirm}
+        receiver={confirm?.receiver ?? ''}
+        content={confirm?.content ?? ''}
+        byteLen={confirm?.byteLen ?? 0}
+        smsType={confirm?.smsType ?? 'SMS'}
+        safeOnlySms={confirm?.safeOnlySms ?? false}
+        isPending={isPending}
+        onClose={() => setConfirm(null)}
+        onConfirm={() => {
+          const c = confirm
+          if (!c) return
+          startTr(async () => {
+            const res = await sendAligo({
+              receiver: c.receiver,
+              msg: c.content,
+              customer_id: c.target.customer_id,
+            })
+            if (res.success) {
+              if (c.target.schedule_id) await updateScheduleStatus(c.target.schedule_id, 'done')
+              alert('문자 발송 완료')
+              setConfirm(null)
+              setPicked(null)
+              router.refresh()
+            } else {
+              alert(`발송 실패: ${res.error ?? 'UNKNOWN'}`)
+            }
+          })
+        }}
       />
     </main>
   )

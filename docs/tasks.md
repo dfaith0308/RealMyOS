@@ -392,6 +392,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
     - message_logs 생성 → API 호출 → sent/failed → contact_logs 자동 기록
     - 사용자 승인 없는 자동 발송 금지 준수
     - migration: 🔍 (로그 테이블/필드 필요 가능)
+    - **작업 이력 (2026-05-07)**: 알리고 실제 연동 구현(`sendAligo` Server Action) + SMS/LMS 자동 분기(90바이트) + 설정 화면 알리고 설정/테스트 발송 + 실행센터 실제 발송(확인 모달)로 교체 + D-015 결정 추가 — worklog: `docs/worklogs/2026-05-07_sup-partial-006c_aligo-api.md`
   - **[SUP-PARTIAL-006-D] 영업이력 컬럼/필터/성과 연결 검증**
     - contact_logs 확장(결과코드/다음행동일/주문발생 여부) 및 필터 정합
     - “이 영업 → 주문 발생 여부 연결” 구현 여부 점검 후 분해
