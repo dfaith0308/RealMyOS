@@ -1,6 +1,6 @@
 import { getAdminDashboard } from '@/actions/admin'
 
-export default async function AdminDashboardPage() {
+export default async function AdminOverviewPage() {
   const d = await getAdminDashboard()
 
   if (!d.success) {
