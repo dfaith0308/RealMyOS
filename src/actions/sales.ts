@@ -621,17 +621,10 @@ export async function deleteSchedule(id: string): Promise<ActionResult> {
   const ctx = await getAuthCtx(supabase)
   if (!ctx) return { success: false, error: '로그인 필요' }
 
-  // 1. 연결된 영업이력 schedule_id 해제 (이력 자체는 보존)
-  await supabase
-    .from('contact_logs')
-    .update({ schedule_id: null })
-    .eq('schedule_id', id)
-    .eq('tenant_id', ctx.tenant_id)
-
-  // 2. 스케줄 삭제
+  // RULE-10: 물리 삭제 금지 → cancelled로 상태 변경
   const { error } = await supabase
     .from('sales_schedules')
-    .delete()
+    .update({ status: 'cancelled' })
     .eq('id', id)
     .eq('tenant_id', ctx.tenant_id)
 

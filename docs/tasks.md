@@ -389,6 +389,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
     - snooze(내일로) 삭제 금지 검증 필요
     - 중복 방지(customer_id+date unique) 검증 필요
     - migration: 🔍
+    - **작업 이력 (2026-05-07)**: 영업스케줄 상단 요약(오늘할일/완료/미처리) 추가 + 달력↔리스트 뷰 토글 + 리스트 컬럼/즉시 실행/내일로 구현 + 스케줄 취소는 cancelled 처리(물리 삭제 금지) + unique index 소급 migration 추가 — worklog: `docs/worklogs/2026-05-07_sup-partial-006b_schedule-ux.md`
   - **[SUP-PARTIAL-006-C] 메시지 발송(알리고) 경로/로그 정합 점검**
     - message_logs 생성 → API 호출 → sent/failed → contact_logs 자동 기록
     - 사용자 승인 없는 자동 발송 금지 준수
