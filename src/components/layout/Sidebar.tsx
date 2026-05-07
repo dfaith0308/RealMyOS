@@ -81,7 +81,7 @@ const MENU: MenuGroup[] = [
   },
   { label: '설정', icon: '⚙️', href: '/settings' },
 
-  { label: '원장관리',   icon: '📒', href: '/sales/history' },
+  { label: '원장관리',   icon: '📒', href: '/ledger' },
   {
     label: '자동화영업', icon: '🎯', href: '/sales/schedule',
     items: [

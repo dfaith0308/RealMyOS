@@ -16,6 +16,57 @@ import {
 } from '@/lib/ledger-calc'
 
 // ============================================================
+// 원장 허브용 셀렉트 데이터 (RULE-01)
+// ============================================================
+
+export interface LedgerCustomerOption {
+  id:   string
+  name: string
+}
+
+export async function getLedgerCustomers(): Promise<ActionResult<LedgerCustomerOption[]>> {
+  const supabase = await createSupabaseServer()
+  const ctx      = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const { data, error } = await supabase
+    .from('customers')
+    .select('id, name')
+    .eq('tenant_id', ctx.tenant_id)
+    .eq('is_buyer', true)
+    .is('deleted_at', null)
+    .order('name')
+    .limit(1000)
+
+  if (error) return { success: false, error: error.message }
+  return { success: true, data: (data ?? []).map((c) => ({ id: c.id, name: c.name })) }
+}
+
+export async function getLedgerSuppliers(): Promise<ActionResult<string[]>> {
+  const supabase = await createSupabaseServer()
+  const ctx      = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const { data, error } = await supabase
+    .from('purchases')
+    .select('counterparty_name')
+    .eq('tenant_id', ctx.tenant_id)
+    .order('counterparty_name', { ascending: true })
+    .limit(2000)
+
+  if (error) return { success: false, error: error.message }
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const row of data ?? []) {
+    const name = (row.counterparty_name ?? '').trim()
+    if (!name || seen.has(name)) continue
+    seen.add(name)
+    out.push(name)
+  }
+  return { success: true, data: out }
+}
+
+// ============================================================
 // 거래처별 원장
 // ============================================================
 

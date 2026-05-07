@@ -516,10 +516,11 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **선행 조건**: 집계 쿼리·`order_lines` 스냅샷 기준 통일
 - **migration 필요**: NO (우선 화면·쿼리)
 - **분해 (Phase 5, 문서화)**:
-  - **[SUP-TODO-004-A] `/ledger` 진입점(원장관리 메뉴) 신설**
-    - PRODUCT 6-10은 “매출원장/매입원장” 2메뉴 구조. 현재는 `/customers/[id]/ledger`만 존재
-    - `/ledger`에서 거래처/매입처 선택 + 기간 필터(이번달/지난달/직접) 제공
-    - migration: NO (우선 화면/조회)
+  - **[SUP-TODO-004-A] `/ledger` 진입점(원장관리 메뉴) 신설** — **완료 (2026-05-07)**
+    - `/ledger` 신설: 매출원장·매입원장 탭, 기간 필터(URL `from`/`to`), 거래처 선택 → `/customers/[id]/ledger` 이동, 매입처 셀렉트(`purchases.counterparty_name DISTINCT`)
+    - Sidebar 원장관리 링크 `/sales/history` → `/ledger` 교체
+    - 매입원장 상세 표·세금/누적 로직은 SUP-TODO-004-B
+    - migration: NO (조회/화면만)
   - **[SUP-TODO-004-B] 원장 컬럼/색상/기초잔액/세금 로직 정합**
     - 컬럼: 날짜/유형/상품/공급가액/부가세/합계/결제수단/누적잔액
     - 기초잔액 표시 필수, 카드 결제 세금계산서 제외/혼합 결제 분리 계산
@@ -529,6 +530,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
     - 탭: 매출현황/마진분석/거래처분석/위험신호, 기간 필터 공통
     - migration: NO (우선 order_lines 스냅샷 기반 집계)
 - **작업 이력 (2026-05-06)**: PRODUCT 6-10/6-11 정독 + `/ledger`/`/analytics` 라우트 부재 확인 + 세부 분해 등록 — worklog: `docs/worklogs/2026-05-06_phase5_sup-todo-001-005-gap.md`
+- **작업 이력 (2026-05-07)**: SUP-TODO-004-A `/ledger` 진입점·매출/매입 탭·기간 필터·Sidebar 교체 — worklog: `docs/worklogs/2026-05-07_sup-todo-004a_ledger-hub.md`
 
 #### [SUP-TODO-005] 플랫폼 결제·정산(식당↔공급자 단일 payments) 완성
 - **PRODUCT 정의 위치**: §3 돈 흐름, §9 payments
