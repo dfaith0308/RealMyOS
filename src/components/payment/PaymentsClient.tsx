@@ -105,6 +105,7 @@ export default function PaymentsClient({ payments, customers, filters }: Props) 
                 <th style={th}>방식</th>
                 <th style={th}>메모</th>
                 <th style={th}>상태</th>
+                <th style={th}>분배</th>
                 <th style={th}></th>
               </tr>
             </thead>
@@ -145,6 +146,14 @@ export default function PaymentsClient({ payments, customers, filters }: Props) 
                         fontWeight: 600, color: cfg.color, background: cfg.bg }}>
                         {cfg.label}
                       </span>
+                    </td>
+                    <td style={td}>
+                      <Link
+                        href={`/payments/${p.id}`}
+                        style={{ fontSize: 11, fontWeight: 600, color: '#2563EB', textDecoration: 'none' }}
+                      >
+                        상세/분배 →
+                      </Link>
                     </td>
                     <td style={td}>
                       {p.status === 'confirmed' && (

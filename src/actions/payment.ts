@@ -203,6 +203,333 @@ export async function getCustomerBalance(
 }
 
 // ============================================================
+// 수금 상세 + 배분 (SUP-MISSING-006)
+// ============================================================
+
+export interface PaymentDetail {
+  id: string
+  payment_date: string
+  customer_id: string
+  customer_name: string
+  amount: number
+  deposit_amount: number
+  payment_method: string
+  memo: string | null
+  status: string
+  created_at: string
+}
+
+export async function getPaymentDetail(payment_id: string): Promise<ActionResult<PaymentDetail>> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const { data, error } = await supabase
+    .from('payments')
+    .select('id, payment_date, customer_id, amount, deposit_amount, payment_method, memo, status, created_at, customers(name)')
+    .eq('id', payment_id)
+    .eq('direction', 'inbound')
+    .or(`payee_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
+    .maybeSingle()
+
+  if (error) return { success: false, error: error.message }
+  if (!data) return { success: false, error: '수금 내역을 찾을 수 없습니다.' }
+
+  return {
+    success: true,
+    data: {
+      id: data.id,
+      payment_date: data.payment_date,
+      customer_id: data.customer_id,
+      customer_name: (data.customers as any)?.name ?? '-',
+      amount: data.amount,
+      deposit_amount: data.deposit_amount ?? 0,
+      payment_method: data.payment_method,
+      memo: data.memo,
+      status: data.status,
+      created_at: data.created_at,
+    },
+  }
+}
+
+export interface PaymentAllocationRow {
+  id: string
+  order_id: string
+  order_date: string
+  order_amount: number
+  allocated_amount: number
+  status: 'active' | 'voided'
+  created_at: string
+  voided_at: string | null
+  voided_reason: string | null
+}
+
+export async function getPaymentAllocations(
+  payment_id: string,
+): Promise<ActionResult<PaymentAllocationRow[]>> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  // payment scope check (존재/tenant 보호)
+  const payment = await getPaymentDetail(payment_id)
+  if (!payment.success || !payment.data) return payment as any
+
+  const { data, error } = await supabase
+    .from('collection_allocations')
+    .select(`
+      id,
+      order_id,
+      allocated_amount,
+      status,
+      created_at,
+      voided_at,
+      voided_reason,
+      orders!inner(order_date, total_amount, final_amount)
+    `)
+    .eq('tenant_id', ctx.tenant_id)
+    .eq('payment_id', payment_id)
+    .order('created_at', { ascending: false })
+
+  if (error) return { success: false, error: error.message }
+
+  return {
+    success: true,
+    data: (data ?? []).map((r: any) => ({
+      id: r.id,
+      order_id: r.order_id,
+      order_date: (r.orders as any)?.order_date ?? '-',
+      order_amount: effectiveOrderAmount(r.orders as any),
+      allocated_amount: r.allocated_amount,
+      status: (r.status ?? 'active') as 'active' | 'voided',
+      created_at: r.created_at,
+      voided_at: r.voided_at ?? null,
+      voided_reason: r.voided_reason ?? null,
+    })),
+  }
+}
+
+export interface OpenOrderForAllocation {
+  order_id: string
+  order_date: string
+  order_amount: number
+  already_allocated: number
+  remaining: number
+}
+
+export async function getCustomerOpenOrdersForAllocation(
+  customer_id: string,
+): Promise<ActionResult<OpenOrderForAllocation[]>> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const { data: orders, error: oErr } = await supabase
+    .from('orders')
+    .select('id, order_date, total_amount, final_amount')
+    .eq('customer_id', customer_id)
+    .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
+    .eq('status', 'confirmed')
+    .is('deleted_at', null)
+    .order('order_date', { ascending: true })
+    .limit(500)
+
+  if (oErr) return { success: false, error: oErr.message }
+
+  const orderRows = (orders ?? []).map((o: any) => ({
+    order_id: o.id as string,
+    order_date: o.order_date as string,
+    order_amount: effectiveOrderAmount(o),
+  }))
+
+  const ids = orderRows.map((o) => o.order_id)
+  const allocByOrder = new Map<string, number>()
+
+  if (ids.length > 0) {
+    const { data: allocs, error: aErr } = await supabase
+      .from('collection_allocations')
+      .select('order_id, allocated_amount, status')
+      .eq('tenant_id', ctx.tenant_id)
+      .in('order_id', ids)
+      .eq('status', 'active')
+
+    if (aErr) return { success: false, error: aErr.message }
+
+    for (const a of allocs ?? []) {
+      allocByOrder.set(a.order_id, (allocByOrder.get(a.order_id) ?? 0) + a.allocated_amount)
+    }
+  }
+
+  const out: OpenOrderForAllocation[] = []
+  for (const o of orderRows) {
+    const already_allocated = allocByOrder.get(o.order_id) ?? 0
+    const remaining = o.order_amount - already_allocated
+    if (remaining > 0) {
+      out.push({ ...o, already_allocated, remaining })
+    }
+  }
+
+  return { success: true, data: out }
+}
+
+export async function allocatePaymentFifo(payment_id: string): Promise<ActionResult<{ status: string }>> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const { data, error } = await supabase.rpc('allocate_payment_fifo', {
+    p_tenant_id: ctx.tenant_id,
+    p_payment_id: payment_id,
+  })
+
+  if (error) return { success: false, error: error.message }
+
+  revalidatePath(`/payments/${payment_id}`)
+  revalidatePath('/payments')
+  return { success: true, data: { status: (data as any)?.status ?? 'ok' } }
+}
+
+export async function addPaymentAllocation(input: {
+  payment_id: string
+  order_id: string
+  allocated_amount: number
+}): Promise<ActionResult> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  if (!input.allocated_amount || input.allocated_amount <= 0 || !Number.isInteger(input.allocated_amount)) {
+    return { success: false, error: '배분 금액은 양의 정수여야 합니다.' }
+  }
+
+  // payment scope + customer_id 확보
+  const payRes = await getPaymentDetail(input.payment_id)
+  if (!payRes.success || !payRes.data) return payRes as any
+  if (payRes.data.status !== 'confirmed') {
+    return { success: false, error: '정상(confirmed) 수금만 배분할 수 있습니다.' }
+  }
+
+  // order scope + 동일 customer 검증
+  const { data: order, error: oErr } = await supabase
+    .from('orders')
+    .select('id, customer_id, final_amount, total_amount, status, deleted_at')
+    .eq('id', input.order_id)
+    .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
+    .maybeSingle()
+
+  if (oErr) return { success: false, error: oErr.message }
+  if (!order || order.deleted_at) return { success: false, error: '주문을 찾을 수 없습니다.' }
+  if (order.status !== 'confirmed') return { success: false, error: '확정(confirmed) 주문만 배분할 수 있습니다.' }
+  if (order.customer_id !== payRes.data.customer_id) {
+    return { success: false, error: '수금 거래처와 주문 거래처가 일치하지 않습니다.' }
+  }
+
+  // 남은 배분 가능 금액 검증 (현재 payment 기준)
+  const [{ data: allocSum }, { data: orderAllocSum }] = await Promise.all([
+    supabase
+      .from('collection_allocations')
+      .select('allocated_amount')
+      .eq('tenant_id', ctx.tenant_id)
+      .eq('payment_id', input.payment_id)
+      .eq('status', 'active'),
+    supabase
+      .from('collection_allocations')
+      .select('allocated_amount')
+      .eq('tenant_id', ctx.tenant_id)
+      .eq('order_id', input.order_id)
+      .eq('status', 'active'),
+  ])
+
+  const paymentAllocated = (allocSum ?? []).reduce((s: number, r: any) => s + r.allocated_amount, 0)
+  const paymentRemaining = payRes.data.amount - paymentAllocated
+  if (paymentRemaining <= 0) return { success: false, error: '이미 전액 배분되었습니다.' }
+  if (input.allocated_amount > paymentRemaining) return { success: false, error: '배분 금액이 미배분 금액을 초과합니다.' }
+
+  const orderAllocated = (orderAllocSum ?? []).reduce((s: number, r: any) => s + r.allocated_amount, 0)
+  const orderAmount = effectiveOrderAmount(order as any)
+  const orderRemaining = orderAmount - orderAllocated
+  if (orderRemaining <= 0) return { success: false, error: '해당 주문은 이미 전액 수금 처리되었습니다.' }
+  if (input.allocated_amount > orderRemaining) return { success: false, error: '배분 금액이 주문 미수금을 초과합니다.' }
+
+  // 기존 allocation 존재 시 update(+=), 없으면 insert. (1 write)
+  const { data: existing } = await supabase
+    .from('collection_allocations')
+    .select('id, allocated_amount, status')
+    .eq('tenant_id', ctx.tenant_id)
+    .eq('payment_id', input.payment_id)
+    .eq('order_id', input.order_id)
+    .maybeSingle()
+
+  if (!existing) {
+    const { error: insErr } = await supabase
+      .from('collection_allocations')
+      .insert({
+        tenant_id: ctx.tenant_id,
+        payment_id: input.payment_id,
+        order_id: input.order_id,
+        allocated_amount: input.allocated_amount,
+        status: 'active',
+      })
+    if (insErr) return { success: false, error: insErr.message }
+  } else {
+    const nextAmount = (existing.allocated_amount ?? 0) + input.allocated_amount
+    const { error: upErr } = await supabase
+      .from('collection_allocations')
+      .update({
+        allocated_amount: nextAmount,
+        status: 'active',
+        voided_at: null,
+        voided_reason: null,
+      })
+      .eq('id', existing.id)
+      .eq('tenant_id', ctx.tenant_id)
+    if (upErr) return { success: false, error: upErr.message }
+  }
+
+  revalidatePath(`/payments/${input.payment_id}`)
+  revalidatePath('/payments')
+  return { success: true }
+}
+
+export async function voidPaymentAllocation(input: {
+  allocation_id: string
+  reason?: string
+}): Promise<ActionResult> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const reason = (input.reason ?? 'manual_void').slice(0, 120)
+
+  const { data: row, error: exErr } = await supabase
+    .from('collection_allocations')
+    .select('id, payment_id, status')
+    .eq('tenant_id', ctx.tenant_id)
+    .eq('id', input.allocation_id)
+    .maybeSingle()
+
+  if (exErr) return { success: false, error: exErr.message }
+  if (!row) return { success: false, error: '배분 내역을 찾을 수 없습니다.' }
+  if (row.status === 'voided') return { success: true }
+
+  const { error: upErr } = await supabase
+    .from('collection_allocations')
+    .update({
+      status: 'voided',
+      voided_at: new Date().toISOString(),
+      voided_reason: reason,
+    })
+    .eq('tenant_id', ctx.tenant_id)
+    .eq('id', input.allocation_id)
+
+  if (upErr) return { success: false, error: upErr.message }
+
+  revalidatePath(`/payments/${row.payment_id}`)
+  revalidatePath('/payments')
+  return { success: true }
+}
+
+// ============================================================
 // 수금 목록 조회
 // ============================================================
 

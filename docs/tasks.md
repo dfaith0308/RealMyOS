@@ -694,6 +694,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
   - `payment_allocations` 수동 분배 UI 없음
   - `collection_allocations`(FIFO/RPC) 구현은 있으나 **UI 연결 없음**
 - **migration 필요**: NO (UI 구현만)
+- **작업 이력 (2026-05-07)**: 수금 상세(`/payments/[id]`) 신설 + FIFO 배분 버튼 + 주문별 수동 “추가 배분” UI + 배분 내역/미배분 표시 + `collection_allocations`(active/voided) 연동 — worklog: `docs/worklogs/2026-05-07_sup-missing-006_payment-allocation-ui.md`
 
 #### [SUP-MISSING-007] 예치금 시스템 미구현 (PRODUCT §6-8)
 - **PRODUCT 정의 위치**: PRODUCT §6-8 수금관리
