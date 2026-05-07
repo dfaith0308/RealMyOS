@@ -413,9 +413,12 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
     - **완료 내용**: `/rfq` 라우트 + 발주요청(오픈 RFQ)·내 입찰 탭 목록, `getSupplierRfqs`·`getMyBids`, Sidebar `발주요청` 메뉴 (상세·입찰 UI는 SUP-TODO-001-C 등 후속)
     - migration: 없음 (운영 `rfq_*`·RLS 확인 후 앱만 반영)
     - **작업 이력 (2026-05-07)**: RFQ 허브 페이지·액션·사이드바 — worklog: `docs/worklogs/2026-05-07_sup-todo-001a_rfq-route.md`
-  - **[SUP-TODO-001-B] RFQ 노출 로직(1~3단계) 구현**
+  - **[SUP-TODO-001-B] RFQ 노출 로직(1~3단계) 구현** — **완료 (2026-05-07)**
     - “기존 거래처 → 지역 확장 → 전체 공개” 단계 노출 및 시간 규칙(MVP 고정값)
-    - migration: 🔍 (노출 단계/스케줄 필드 필요 가능)
+    - **완료 내용**: 운영 `get_supplier_rfqs` RPC + `getSupplierRfqs()` 연동, `/rfq` 목록에 `expose_level` 배지. 2단계 지역 필터는 미포함(MVP: T2 이후 비거래처 동일 풀).
+    - **작업 이력 (2026-05-07)**: RPC migration 초안 — worklog: `docs/worklogs/2026-05-07_sup-todo-001b_rfq-expose-rpc.md`
+    - **작업 이력 (2026-05-07)**: 앱 RPC 연동·노출 배지 — worklog: `docs/worklogs/2026-05-07_sup-todo-001b_rfq-expose-logic.md`
+    - migration: `20260507010000_create_get_supplier_rfqs.sql` (저장소 기록; 운영 적용은 별도 확인)
   - **[SUP-TODO-001-C] 입찰(공급자 액션) 기본 기능**
     - 입력: 가격/납품 가능일(+선택 메모/대체상품)
     - 상태 전이: open→bidding→counter_offered→selected 등
@@ -429,6 +432,8 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
     - migration: 🔍
 - **작업 이력 (2026-05-06)**: PRODUCT 6-2 정독 + 공급자OS 라우트 부재 확인 + RFQ 핵심 흐름 분해 등록 — worklog: `docs/worklogs/2026-05-06_phase5_sup-todo-001-005-gap.md`
 - **작업 이력 (2026-05-07)**: SUP-TODO-001-A 구현(`/rfq`, 액션, Sidebar) — worklog: `docs/worklogs/2026-05-07_sup-todo-001a_rfq-route.md`
+- **작업 이력 (2026-05-07)**: SUP-TODO-001-B RPC migration 초안(`get_supplier_rfqs`) — worklog: `docs/worklogs/2026-05-07_sup-todo-001b_rfq-expose-rpc.md`
+- **작업 이력 (2026-05-07)**: SUP-TODO-001-B 앱 연동·노출 배지 — worklog: `docs/worklogs/2026-05-07_sup-todo-001b_rfq-expose-logic.md`
 
 #### [SUP-TODO-002] 지급관리(매입처 지급)
 - **PRODUCT 정의 위치**: PRODUCT.md §6-9 지급관리

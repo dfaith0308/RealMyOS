@@ -12,6 +12,8 @@ export type SupplierRfqRow = {
   region: string | null
   status: string
   created_at: string
+  /** 1 기존 거래처 / 2 지역 확장 / 3 전체 공개 — RPC `get_supplier_rfqs` */
+  expose_level: number | null
 }
 
 export type MyBidRow = {
@@ -29,20 +31,45 @@ export type MyBidRow = {
   } | null
 }
 
-/** 공급자가 입찰할 수 있는 오픈 RFQ (단일 쿼리). RLS·노출 단계에 따라 행이 제한될 수 있음. */
+/** 공급자가 입찰할 수 있는 오픈 RFQ (`get_supplier_rfqs` RPC — RLS 우회 + 노출 단계). */
 export async function getSupplierRfqs(): Promise<{ data: SupplierRfqRow[] | null; error: string | null }> {
   const supabase = await createSupabaseServer()
   const ctx = await getAuthCtx(supabase)
   if (!ctx) return { data: null, error: '로그인 필요' }
 
-  const { data, error } = await supabase
-    .from('rfq_requests')
-    .select('id, product_name, quantity, unit, target_price, deadline, region, status, created_at')
-    .eq('status', 'open')
-    .order('created_at', { ascending: false })
+  const { data, error } = await supabase.rpc('get_supplier_rfqs', {
+    p_supplier_tenant_id: ctx.tenant_id,
+  })
 
   if (error) return { data: null, error: error.message }
-  return { data: data as SupplierRfqRow[], error: null }
+
+  const rows = (data ?? []) as Array<{
+    id: string
+    product_name: string
+    quantity: number
+    unit: string | null
+    target_price: number | null
+    deadline: string | null
+    region: string | null
+    status: string
+    created_at: string
+    expose_level: number | null
+  }>
+
+  const normalized: SupplierRfqRow[] = rows.map((row) => ({
+    id: row.id,
+    product_name: row.product_name,
+    quantity: row.quantity,
+    unit: row.unit ?? null,
+    target_price: row.target_price ?? null,
+    deadline: row.deadline ?? null,
+    region: row.region ?? null,
+    status: row.status,
+    created_at: row.created_at,
+    expose_level: row.expose_level ?? null,
+  }))
+
+  return { data: normalized, error: null }
 }
 
 /** 내 테넌트가 제출한 입찰 + RFQ 요약(조인 단일 쿼리). */

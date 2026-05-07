@@ -18,6 +18,32 @@ function fmtDate(iso: string | null) {
   return d.toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' })
 }
 
+function ExposeBadge({ level }: { level: number | null }) {
+  if (level == null) return null
+  const map = {
+    1: { label: '기존 거래처', bg: '#ecfdf5', color: '#047857', border: '#a7f3d0' },
+    2: { label: '지역 확장', bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
+    3: { label: '전체 공개', bg: '#f3f4f6', color: '#374151', border: '#e5e7eb' },
+  } as const
+  const s = map[level as 1 | 2 | 3]
+  if (!s) return null
+  return (
+    <span
+      style={{
+        display: 'inline-block',
+        fontSize: 11,
+        fontWeight: 600,
+        padding: '2px 8px',
+        borderRadius: 6,
+        background: s.bg,
+        color: s.color,
+        border: `1px solid ${s.border}`,
+      }}>
+      {s.label}
+    </span>
+  )
+}
+
 export default function RfqHubClient({ supplierRfqs, myBids, rfqError, bidsError }: Props) {
   const [tab, setTab] = useState<'open' | 'bids'>('open')
 
@@ -60,6 +86,7 @@ export default function RfqHubClient({ supplierRfqs, myBids, rfqError, bidsError
                 <thead>
                   <tr>
                     <th style={th}>품목</th>
+                    <th style={th}>노출</th>
                     <th style={th}>수량</th>
                     <th style={th}>목표가</th>
                     <th style={th}>마감</th>
@@ -72,6 +99,7 @@ export default function RfqHubClient({ supplierRfqs, myBids, rfqError, bidsError
                   {supplierRfqs.map((r) => (
                     <tr key={r.id}>
                       <td style={td}>{r.product_name}</td>
+                      <td style={td}><ExposeBadge level={r.expose_level ?? null} /></td>
                       <td style={td}>{r.quantity}{r.unit ? ` ${r.unit}` : ''}</td>
                       <td style={td}>{r.target_price != null ? formatKRW(r.target_price) : '—'}</td>
                       <td style={td}>{fmtDate(r.deadline)}</td>
