@@ -57,9 +57,11 @@ export interface SalesHistory {
   memo:             string | null
   next_action_date: string | null
   next_action_type: string | null
+  contacted_by:     string | null
   contacted_at:     string
   created_at:       string
   schedule_id:      string | null
+  converted_order_id: string | null
 }
 
 export interface SalesSchedule {
@@ -376,7 +378,7 @@ export async function getSalesHistory(customerId?: string): Promise<ActionResult
   if (!ctx) return { success: false, error: '로그인 필요' }
 
   let q = supabase.from('contact_logs')
-    .select('id, customer_id, contact_method, methods, result, outcome_type, customer_status, memo, next_action_date, next_action_type, contacted_at, created_at, schedule_id, customers(name)')
+    .select('id, customer_id, contact_method, methods, result, outcome_type, customer_status, memo, next_action_date, next_action_type, contacted_by, contacted_at, created_at, schedule_id, converted_order_id, customers(name)')
     .eq('tenant_id', ctx.tenant_id)
     .in('contact_method', ['call', 'visit', 'message'])
     .not('contact_method', 'is', null)
@@ -398,8 +400,10 @@ export async function getSalesHistory(customerId?: string): Promise<ActionResult
       customer_status: r.customer_status ?? null,
       memo: r.memo, next_action_date: r.next_action_date,
       next_action_type: r.next_action_type,
+      contacted_by: r.contacted_by ?? null,
       contacted_at: r.contacted_at, created_at: r.created_at,
       schedule_id: r.schedule_id ?? null,
+      converted_order_id: r.converted_order_id ?? null,
     })),
   }
 }
@@ -799,7 +803,7 @@ export async function getCustomerSalesProfile(
   // 2. 영업이력 (최근 20건)
   const { data: logs } = await supabase
     .from('contact_logs')
-    .select('id, customer_id, contact_method, methods, result, outcome_type, customer_status, memo, next_action_date, next_action_type, contacted_at, created_at, schedule_id, customers(name)')
+    .select('id, customer_id, contact_method, methods, result, outcome_type, customer_status, memo, next_action_date, next_action_type, contacted_by, contacted_at, created_at, schedule_id, converted_order_id, customers(name)')
     .eq('customer_id', customerId)
     .eq('tenant_id', ctx.tenant_id)
     .in('contact_method', ['call', 'visit', 'message'])
@@ -819,9 +823,11 @@ export async function getCustomerSalesProfile(
     memo:             r.memo,
     next_action_date: r.next_action_date,
     next_action_type: r.next_action_type,
+    contacted_by:     r.contacted_by ?? null,
     contacted_at:     r.contacted_at,
     created_at:       r.created_at,
     schedule_id:      r.schedule_id ?? null,
+    converted_order_id: r.converted_order_id ?? null,
   }))
 
   // 3. 다음 행동 (가장 가까운 미래 날짜)

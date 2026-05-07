@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import Link from 'next/link'
 import { deleteContactLog, updateContactLog } from '@/actions/sales'
 import type { SalesHistory } from '@/actions/sales'
 
@@ -112,14 +113,29 @@ export default function SalesHistoryClient({ initialHistory }: { initialHistory:
   const [history,       setHistory]       = useState(initialHistory)
   const [search,        setSearch]        = useState('')
   const [filterOutcome, setFilterOutcome] = useState('')
+  const [dateFrom,      setDateFrom]      = useState('')
+  const [dateTo,        setDateTo]        = useState('')
+  const [converted,     setConverted]     = useState<'all' | 'yes' | 'no'>('all')
   const [editTarget,    setEditTarget]    = useState<SalesHistory | null>(null)
   const [deletingId,    setDeletingId]    = useState<string | null>(null)
 
-  const filtered = history.filter(h => {
-    const matchSearch  = !search || h.customer_name.includes(search)
-    const matchOutcome = !filterOutcome || h.outcome_type === filterOutcome
-    return matchSearch && matchOutcome
-  })
+  const filtered = useMemo(() => {
+    return history.filter((h) => {
+      const day = (h.next_action_date ?? h.contacted_at ?? h.created_at ?? '').slice(0, 10)
+      const matchSearch  = !search || h.customer_name.includes(search)
+      const matchOutcome = !filterOutcome || h.outcome_type === filterOutcome
+      const matchFrom    = !dateFrom || day >= dateFrom
+      const matchTo      = !dateTo || day <= dateTo
+      const hasOrder     = !!h.converted_order_id
+      const matchConv =
+        converted === 'all'
+          ? true
+          : converted === 'yes'
+            ? hasOrder
+            : !hasOrder
+      return matchSearch && matchOutcome && matchFrom && matchTo && matchConv
+    })
+  }, [history, search, filterOutcome, dateFrom, dateTo, converted])
 
   async function handleDelete(id: string) {
     if (!confirm('이 영업 기록을 삭제하시겠습니까?')) return
@@ -137,7 +153,7 @@ export default function SalesHistoryClient({ initialHistory }: { initialHistory:
     <div style={{ maxWidth: 1000, margin: '0 auto', padding: '28px 24px', fontFamily: '-apple-system, "Noto Sans KR", sans-serif' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <h1 style={{ fontSize: 20, fontWeight: 600, margin: 0 }}>영업 이력</h1>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           <input style={{ padding: '7px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, width: 180 }}
             placeholder="거래처명 검색..." value={search} onChange={e => setSearch(e.target.value)} />
           <select style={{ padding: '7px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13 }}
@@ -145,87 +161,74 @@ export default function SalesHistoryClient({ initialHistory }: { initialHistory:
             <option value="">전체 결과</option>
             {Object.entries(OUTCOME_LABEL).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
           </select>
+          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+            style={{ padding: '7px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13 }} />
+          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+            style={{ padding: '7px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13 }} />
+          <select value={converted} onChange={(e) => setConverted(e.target.value as any)}
+            style={{ padding: '7px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13 }}>
+            <option value="all">주문발생 전체</option>
+            <option value="yes">발생</option>
+            <option value="no">미발생</option>
+          </select>
         </div>
       </div>
 
+      {/* 테이블 헤더 */}
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, overflow: 'hidden', background: '#fff' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '110px 1.2fr 90px 120px 110px 90px 120px', background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+          {['날짜', '거래처', '행동', '결과코드', '다음행동일', '담당자', '주문발생여부'].map((h) => (
+            <div key={h} style={{ padding: '10px 10px', fontSize: 11, fontWeight: 900, color: '#6b7280' }}>{h}</div>
+          ))}
+        </div>
+
       {filtered.length === 0 ? (
-        <div style={{ textAlign: 'center', color: '#9ca3af', padding: '60px 0', fontSize: 14, border: '1px dashed #e5e7eb', borderRadius: 10 }}>
+        <div style={{ textAlign: 'center', color: '#9ca3af', padding: '60px 0', fontSize: 14 }}>
           영업 기록이 없습니다.
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {filtered.map(h => {
-            const outcomeInfo = h.outcome_type ? OUTCOME_LABEL[h.outcome_type] : null
-            const isDeleting  = deletingId === h.id
-            return (
-              <div key={h.id} style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: '14px 16px', background: '#fff', opacity: isDeleting ? 0.4 : 1 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: h.memo ? 10 : 0 }}>
-                  {/* 왼쪽 */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <span style={{ fontWeight: 700, fontSize: 15 }}>{h.customer_name}</span>
-
-                    {/* 행동 아이콘 */}
-                    <div style={{ display: 'flex', gap: 3 }}>
-                      {h.methods && h.methods.length > 0
-                        ? h.methods.map((m, i) => <span key={i} style={{ fontSize: 15 }}>{METHOD_ICON[m] ?? m}</span>)
-                        : <span style={{ fontSize: 15 }}>{METHOD_ICON[h.contact_method] ?? h.contact_method}</span>
-                      }
-                    </div>
-
-                    {/* outcome */}
-                    {outcomeInfo && (
-                      <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: outcomeInfo.color + '20', color: outcomeInfo.color, fontWeight: 600 }}>
-                        {outcomeInfo.label}
-                      </span>
-                    )}
-
-                    {/* 고객 상태 */}
-                    {h.customer_status && (
-                      <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 10, background: '#f3f4f6', color: '#374151' }}>
-                        {CUSTOMER_STATUS_LABEL[h.customer_status] ?? h.customer_status}
-                      </span>
-                    )}
-                    {/* 출처 뱃지 */}
-                    <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 10, fontWeight: 500, background: h.schedule_id ? '#ECFDF5' : '#F5F3FF', color: h.schedule_id ? '#059669' : '#7C3AED' }}>
-                      {h.schedule_id ? '📅 스케줄' : '✍️ 수동'}
-                    </span>
-                  </div>
-
-                  {/* 오른쪽: 날짜 + 버튼 */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                    <span style={{ fontSize: 11, color: '#9ca3af' }}>
-                      {(h.created_at || h.contacted_at).slice(0, 16).replace('T', ' ')}
-                    </span>
-                    <button onClick={() => setEditTarget(h)}
-                      style={{ padding: '3px 9px', border: '1px solid #e5e7eb', borderRadius: 5, background: '#fff', fontSize: 11, cursor: 'pointer', color: '#2563EB' }}>
-                      ✏️ 수정
-                    </button>
-                    <button onClick={() => handleDelete(h.id)} disabled={isDeleting}
-                      style={{ padding: '3px 9px', border: '1px solid #FECACA', borderRadius: 5, background: '#fff', fontSize: 11, cursor: 'pointer', color: '#DC2626' }}>
-                      🗑 삭제
-                    </button>
-                  </div>
-                </div>
-
-                {/* 메모 */}
-                {h.memo && (
-                  <div style={{ fontSize: 13, color: '#374151', background: '#f9fafb', borderRadius: 7, padding: '8px 10px', lineHeight: 1.6 }}>
-                    {h.memo}
-                  </div>
-                )}
-
-                {/* 다음 행동 */}
-                {h.next_action_date && (
-                  <div style={{ fontSize: 11, color: '#D97706', marginTop: 8 }}>
-                    📅 다음: {h.next_action_date}
-                    {h.next_action_type && ` (${METHOD_ICON[h.next_action_type] ?? h.next_action_type})`}
-                  </div>
+        filtered.map((h) => {
+          const outcomeInfo = h.outcome_type ? OUTCOME_LABEL[h.outcome_type] : null
+          const isDeleting  = deletingId === h.id
+          const day = (h.contacted_at || h.created_at).slice(0, 10)
+          const method = h.contact_method
+          const methodLabel = method === 'call' ? '전화' : method === 'message' ? '문자' : method === 'visit' ? '방문' : method
+          const owner = h.contacted_by ? h.contacted_by.slice(0, 8) : '-'
+          return (
+            <div key={h.id} style={{ display: 'grid', gridTemplateColumns: '110px 1.2fr 90px 120px 110px 90px 120px', borderBottom: '1px solid #f3f4f6', alignItems: 'center', opacity: isDeleting ? 0.4 : 1 }}>
+              <div style={{ padding: '10px 10px', fontSize: 12, color: '#6b7280' }}>{day}</div>
+              <div style={{ padding: '10px 10px' }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>{h.customer_name}</div>
+                {h.memo && <div style={{ marginTop: 4, fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{h.memo}</div>}
+              </div>
+              <div style={{ padding: '10px 10px', fontSize: 12, color: '#111827' }}>
+                {METHOD_ICON[method] ?? ''} {methodLabel}
+              </div>
+              <div style={{ padding: '10px 10px' }}>
+                {outcomeInfo ? (
+                  <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: outcomeInfo.color + '20', color: outcomeInfo.color, fontWeight: 800 }}>
+                    {outcomeInfo.label}
+                  </span>
+                ) : (
+                  <span style={{ fontSize: 12, color: '#9ca3af' }}>-</span>
                 )}
               </div>
-            )
-          })}
-        </div>
+              <div style={{ padding: '10px 10px', fontSize: 12, color: '#D97706' }}>{h.next_action_date ?? '-'}</div>
+              <div style={{ padding: '10px 10px', fontSize: 12, color: '#6b7280' }}>{owner}</div>
+              <div style={{ padding: '10px 10px', fontSize: 12 }}>
+                {h.converted_order_id ? (
+                  <Link href={`/orders/${encodeURIComponent(h.converted_order_id)}`} style={{ color: '#16A34A', fontWeight: 900, textDecoration: 'none' }}>
+                    주문발생 ✅
+                  </Link>
+                ) : (
+                  <span style={{ color: '#9ca3af' }}>-</span>
+                )}
+              </div>
+            </div>
+          )
+        })
       )}
+      </div>
 
       {/* 수정 모달 */}
       {editTarget && (

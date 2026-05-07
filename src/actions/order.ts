@@ -281,6 +281,34 @@ export async function createOrder(
     }
   }
 
+  // SUP-PARTIAL-006-D: 영업이력 성과 연결 (best-effort)
+  // confirmed 주문 생성 시, 최근 7일 내 contact_log(미전환)에 converted_order_id 연결
+  if (orderStatus === 'confirmed') {
+    try {
+      const since = new Date(Date.now() - 7 * 86400000).toISOString()
+      const { data: lastLog } = await supabase
+        .from('contact_logs')
+        .select('id')
+        .eq('tenant_id', ctx.tenant_id)
+        .eq('customer_id', input.customer_id)
+        .is('converted_order_id', null)
+        .gte('contacted_at', since)
+        .order('contacted_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (lastLog?.id) {
+        await supabase
+          .from('contact_logs')
+          .update({ converted_order_id: newOrder.id })
+          .eq('id', lastLog.id)
+          .eq('tenant_id', ctx.tenant_id)
+      }
+    } catch {
+      // ignore: 전환 추적은 best-effort
+    }
+  }
+
   // order_logs: create
   await logOrder(supabase, {
     order_id:   newOrder.id,

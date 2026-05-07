@@ -396,10 +396,12 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
     - migration: 🔍 (로그 테이블/필드 필요 가능)
     - **작업 이력 (2026-05-07)**: 알리고 실제 연동 구현(`sendAligo` Server Action) + SMS/LMS 자동 분기(90바이트) + 설정 화면 알리고 설정/테스트 발송 + 실행센터 실제 발송(확인 모달)로 교체 + D-015 결정 추가 — worklog: `docs/worklogs/2026-05-07_sup-partial-006c_aligo-api.md`
   - **[SUP-PARTIAL-006-D] 영업이력 컬럼/필터/성과 연결 검증**
-    - contact_logs에 주문 발생 여부 연결 미구현
-    - “이 영업 → 주문 발생” 추적 없음
-    - 다음 행동 날짜(주문주기 기반) 자동 계산 미구현
-    - migration: 🔍
+    - converted_order_id 기반 “영업→주문 전환” 표시/링크
+    - outcome_type 기반 next_action_date 자동 계산(서버에서 저장)
+    - 주문 confirmed 시 최근 contact_log(7일, 미전환)에 converted_order_id 자동 연결
+    - 결과코드/기간/거래처/주문발생 여부 필터 정합
+    - migration: YES (소급)
+    - **작업 이력 (2026-05-07)**: 영업이력 테이블 컬럼 정합 + 필터(결과/기간/거래처/주문발생) + converted_order_id 링크(/orders/[id]) + next_action_date 서버 자동 계산 + 주문 confirmed 시 영업이력 자동 연결 + converted_order_id 소급 migration 추가 — worklog: `docs/worklogs/2026-05-07_sup-partial-006d_sales-history.md`
 - **산출물 (대조표 캔버스)**: `phase5-sup-partial-001-002-006-gap.canvas.tsx`
 - **작업 이력 (2026-05-06)**: PRODUCT 6-13 정독 + `sales/` 라우트 확인 + 공백 항목 분해 등록 — worklog: `docs/worklogs/2026-05-06_phase5_sup-partial-001-002-006-gap.md`
 - **작업 이력 (2026-05-07)**: PRODUCT 6-13 정독 + `sales/` 라우트·`actions/sales.ts`·대시보드/거래처 연결 확인 + GAP 갱신(분해 유지) — worklog: `docs/worklogs/2026-05-07_sup-partial-006_sales-automation-audit.md`
