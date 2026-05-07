@@ -58,6 +58,14 @@ const MENU: MenuGroup[] = [
     ],
   },
   {
+    label: '지급관리', icon: '💸', href: '/disbursements',
+    items: [
+      { label: '지급 목록', href: '/disbursements' },
+      { label: '지급 등록', soon: true },
+      { label: '지급 상세', soon: true },
+    ],
+  },
+  {
     label: '자금관리', icon: '🏦', href: '/funds',
     items: [
       { label: '자금 현황', href: '/funds' },

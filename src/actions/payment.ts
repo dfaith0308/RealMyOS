@@ -256,3 +256,56 @@ export async function getPaymentList(filters?: {
     })),
   }
 }
+
+// ============================================================
+// 지급 목록 조회 (outbound, RULE-01)
+// ============================================================
+
+export interface DisbursementListItem {
+  id:                 string
+  counterparty_name:  string | null
+  amount:             number
+  due_date:           string | null
+  status:             string
+  payment_method:     string
+  order_id:           string | null
+  memo:               string | null
+  created_at:         string
+}
+
+export async function getDisbursementList(filters?: {
+  status?: string
+}): Promise<ActionResult<DisbursementListItem[]>> {
+  const supabase = await createSupabaseServer()
+  const ctx      = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  let query = supabase
+    .from('payments')
+    .select('id, counterparty_name, amount, due_date, status, payment_method, order_id, memo, created_at')
+    .eq('direction', 'outbound')
+    .or(`payer_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
+    .order('due_date', { ascending: true, nullsFirst: false })
+    .order('created_at', { ascending: true })
+    .limit(50)
+
+  if (filters?.status) query = query.eq('status', filters.status)
+
+  const { data, error } = await query
+  if (error) return { success: false, error: error.message }
+
+  return {
+    success: true,
+    data: (data ?? []).map((p) => ({
+      id:                p.id,
+      counterparty_name: p.counterparty_name,
+      amount:            p.amount,
+      due_date:          p.due_date,
+      status:            p.status,
+      payment_method:    p.payment_method,
+      order_id:          p.order_id,
+      memo:              p.memo,
+      created_at:        p.created_at,
+    })),
+  }
+}

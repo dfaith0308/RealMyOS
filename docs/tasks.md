@@ -453,10 +453,11 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **선행 조건**: payments 모델 정렬(CONTEXT Phase 1~3)
 - **migration 필요**: 🔍
 - **분해 (Phase 5, 문서화)**:
-  - **[SUP-TODO-002-A] 지급 IA/라우트 신설**
+  - **[SUP-TODO-002-A] 지급 IA/라우트 신설** — **완료 (2026-05-07)**
     - PRODUCT 6-9: 지급목록/지급등록/지급상세(`/disbursements/[id]`) 화면 구조 반영
-    - 현재 `realmyos/src/app/(app)/`에 purchase/disbursement 라우트가 없음 → 신규 라우트 필요
-    - migration: 🔍 (payments(outbound)/allocations/purchase 연동 필요)
+    - `/disbursements` 목록 + `getDisbursementList`(outbound, `payer_tenant_id` 또는 레거시 `tenant_id`, RULE-01) + Sidebar 지급관리
+    - 지급 등록·상세·분배는 SUP-TODO-002-B~D
+    - migration: 없음 (조회만)
   - **[SUP-TODO-002-B] 지급 데이터 모델 정합(SSOT payments)**
     - payments: direction='outbound', status pending/confirmed/reversed, reference_id=purchase_id(nullable)
     - payment_allocations: purchase_id nullable(선지급)
@@ -469,6 +470,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
     - 물리 삭제 금지, reversed 처리 + 재계산
     - migration: 🔍 (로그 테이블 필요 가능)
 - **작업 이력 (2026-05-06)**: PRODUCT 6-9 정독 + 지급 라우트 부재 확인 + 세부 분해 등록 — worklog: `docs/worklogs/2026-05-06_phase5_sup-todo-001-005-gap.md`
+- **작업 이력 (2026-05-07)**: SUP-TODO-002-A `/disbursements` 목록·액션·Sidebar — worklog: `docs/worklogs/2026-05-07_sup-todo-002a_disbursements-route.md`
 
 #### [SUP-TODO-003] 매입관리 메뉴·흐름
 - **PRODUCT 정의 위치**: PRODUCT.md §6-7 매입관리
