@@ -634,6 +634,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **선행 조건**: 없음 (코드 레벨에서 `/admin/*` 보호 + `getAuthCtx.role` 확장으로 달성)
 - **migration 필요**: NO
 - **작업 이력 (2026-05-07)**: 관리자OS `(admin)` route group 신설 + `/admin/*` admin role 보호 + 관리자 대시보드 기본 화면 추가 — worklog: `docs/worklogs/2026-05-07_adm-todo-001_admin-os-route.md`
+- **작업 이력 (2026-05-07)**: `/admin/tenants` 테넌트 관리(승인/정지) + `/admin/logs` 로그 화면 + admin action 로깅 추가 — worklog: `docs/worklogs/2026-05-07_adm-todo-001_admin-tenant-management.md`
 
 ### 🔍 확인 필요
 

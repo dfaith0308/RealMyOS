@@ -12,8 +12,8 @@ type MenuItem = {
 
 const MENU: MenuItem[] = [
   { label: '대시보드', icon: '🧭', href: '/admin/dashboard' },
-  { label: '테넌트관리', icon: '🏢', href: '/admin/tenants', soon: true },
-  { label: '로그', icon: '🧾', href: '/admin/logs', soon: true },
+  { label: '테넌트관리', icon: '🏢', href: '/admin/tenants' },
+  { label: '로그', icon: '🧾', href: '/admin/logs' },
 ]
 
 export default function AdminSidebar() {
