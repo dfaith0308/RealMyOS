@@ -29,6 +29,7 @@
 - **규칙 파일**: `.cursor/rules/worklog-completion.mdc` (항상 적용).
 - **작업 이력 (2026-05-06)**: 종료 의무·`tasks.md` 연계·`docs/worklogs/README.md` 갱신 — worklog: [`docs/worklogs/2026-05-06_docs_worklog-completion-mandatory.md`](./worklogs/2026-05-06_docs_worklog-completion-mandatory.md)
 - **작업 이력 (2026-05-06)**: 오늘 세션 전체 요약 + Phase 5 진행 상태 업데이트 — worklog: [`docs/worklogs/2026-05-06_session-summary.md`](./worklogs/2026-05-06_session-summary.md)
+- **작업 이력 (2026-05-07)**: Phase 5 SUP 트랙 종료 — SUP-PARTIAL-001/006, SUP-TODO-001~004(본체), 005-D 완료 처리; B-2/C-2/C-3/C-4 신규 분리; 005-A/B/C Phase 6+ 이월 — worklog: [`docs/worklogs/2026-05-07_session-summary.md`](./worklogs/2026-05-07_session-summary.md)
 
 ---
 
@@ -566,21 +567,30 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **선행 조건**: CONTEXT [ARCH-08] Phase 0~5
 - **migration 필요**: YES
 - **분해 (Phase 5, 문서화)**:
-  - **[SUP-TODO-005-A] SSOT payments 모델(§9) 기준 재정렬**
+  - **[SUP-TODO-005-A] SSOT payments 모델(§9) 기준 재정렬** — **Phase 6+ 보류 (선행 조건 미충족)**
     - 필드: buyer_tenant_id/seller_tenant_id/direction/status/type/payment_method/due_date/reference_id 등
     - 상태: pending/confirmed/reversed, 물리 삭제 금지 원칙
+    - **착수 금지 사유**: CONTEXT [ARCH-08] Phase 0~5 완료(특히 관리자OS·트러스트 모델 정합) 전에는 SSOT 재정렬 시도가 양 OS에 호환 깨짐 위험
     - migration: 🔍 (현 운영 DDL/제약과의 diff 필요)
-  - **[SUP-TODO-005-B] 플랫폼 정산(settlement) 타입 정의 및 흐름**
+  - **[SUP-TODO-005-B] 플랫폼 정산(settlement) 타입 정의 및 흐름** — **Phase 6+ 보류 (선행 조건 미충족)**
     - payments.type='settlement'을 포함한 정산 흐름(식당↔공급자↔플랫폼) 정의를 CONTEXT와 함께 구체화
+    - **착수 금지 사유**: 관리자OS(`ADM-TODO-001`)·`relationships`/`trust_scores`(Phase 6 migration) 미존재 상태에서는 정산 주체/대상 정의가 불완전
     - migration: 🔍
-  - **[SUP-TODO-005-C] 시스템간 상태 이벤트 전달(트랜잭션 결과 기반)**
+  - **[SUP-TODO-005-C] 시스템간 상태 이벤트 전달(트랜잭션 결과 기반)** — **Phase 6+ 보류 (선행 조건 미충족)**
     - 상태 변화(pending→confirmed, confirmed→reversed)가 “이벤트의 원인”이 되도록 정렬
     - 식당OS(outbound) ↔ 공급자OS(inbound) 관점 일치
+    - **착수 금지 사유**: trigger/webhook/realtime 설계는 SSOT(005-A) 완료 후 진행. 현재 두 OS는 `or(seller_tenant_id, tenant_id)`·`or(payee_tenant_id, tenant_id)` 병행 패턴으로 단방향 동작 중
     - migration: 🔍 (trigger/webhook/realtime 설계 필요)
-  - **[SUP-TODO-005-D] 선행 조건 명시(구현 착수 금지)**
-    - CONTEXT [ARCH-08] Phase 0~5 완료 전에는 구현 착수 금지
-    - Phase 5에서는 문서/분해까지만 유지
+  - **[SUP-TODO-005-D] 선행 조건 명시(구현 착수 금지)** — **완료 (2026-05-07, 문서)**
+    - CONTEXT [ARCH-08] Phase 0~5 완료 전에는 구현 착수 금지 — **재확인**
+    - Phase 5에서는 문서/분해까지만 유지 — **본 항목으로 005 분해 종료, A/B/C는 Phase 6+로 이월**
+    - 진입 게이트 명시 (Phase 6 시작 전 재검):
+      1) 관리자OS(`ADM-TODO-001`) 라우트·접근 제어 존재
+      2) `relationships`·`trust_scores` migration 적용
+      3) 운영 `payments` DDL과 PRODUCT §9 SSOT diff 결과 정리(`SUP-TODO-005-A` 사전 산출)
+    - migration: 없음
 - **작업 이력 (2026-05-06)**: PRODUCT §9 SSOT payments 정의 확인 + 현행 라우트/모델 단편화 전제 정리 + 세부 분해 등록 — worklog: `docs/worklogs/2026-05-06_phase5_sup-todo-001-005-gap.md`
+- **작업 이력 (2026-05-07)**: SUP-TODO-005-D 선행 조건 게이트 명시 + A/B/C Phase 6+ 보류 처리 — worklog: `docs/worklogs/2026-05-07_session-summary.md`
 
 ### 🔍 확인 필요
 
@@ -910,9 +920,20 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 **Phase 4 — 도메인 정합**  
 - **`SUP-DANGER-003`**, **`SUP-PARTIAL-004`**, **`SUP-PARTIAL-005`**, **`RES-PARTIAL-003`**, **`SUP-FAKE-001`**, **`RES-FAKE-001`**
 
-**Phase 5 — 기능·IA 공백**  
+**Phase 5 — 기능·IA 공백** — **완료 (2026-05-07, SUP 트랙)**
 - **완료(✅)**: `SUP-PARTIAL-002`, `SUP-PARTIAL-003`, `SUP-PARTIAL-004`, `SUP-PARTIAL-006`, `SUP-PARTIAL-007`, `RES-PARTIAL-001`, `RES-PARTIAL-002`, `RES-PARTIAL-004`, `RES-PARTIAL-007`
-- **분해 완료(🧩, 구현은 다음 세션)**: `RES-TODO-001`, `SUP-PARTIAL-001`, `SUP-TODO-001~005`
+- **2026-05-07 본 세션 완료(✅, 분해 항목 종결)**:
+  - `SUP-PARTIAL-001` 대시보드 KPI/위험 거래처/지연/RFQ/자금/거래처매출 6분해 — partial-001a~f, partial-001 종합 감사
+  - `SUP-PARTIAL-006` 자동화영업 감사 (관계형 단일·휴면 회복 일관)
+  - `SUP-TODO-001` (A~E): RFQ 라우트·노출 RPC·입찰·낙찰/탈락 알림·계약 후속 흐름 문서화
+  - `SUP-TODO-002` (A~D): `/disbursements` 라우트·payments 모델 정합·지급 분배 + 매입 연동 RPC·지급 취소 RPC
+  - `SUP-TODO-003` (A~D): `/purchases` 라우트·`default_supplier_id`/procurement_type 감사·매입원장 연동 분해 (자동 매입 Phase 7+)
+  - `SUP-TODO-004` (A·B-1·C): `/ledger` 진입점·거래처 원장 컬럼 정합 + 필터·`/analytics` 4탭 신설
+  - `SUP-TODO-005-D` 선행 조건 게이트 명시 (A/B/C는 Phase 6+ 이월)
+- **분리/이월(다음 세션)**:
+  - **B-2/C-2/C-3/C-4** (오늘 신규 분리): 원장 세금계산서 로직·매입원장 별도 페이지 / 차트 라이브러리 / 출력 / 평균결제기간 정확 정의
+  - **`RES-TODO-001`**: 식당OS 트랙 — 본 세션 미터치
+  - **`SUP-TODO-005-A/B/C`**: Phase 6+ 보류 (관리자OS + `relationships`/`trust_scores` 선행)
 
 **Phase 6 — 관리자OS**  
 - **`ADM-TODO-001`** — 입력: **`ADM-CHECK-001`**, **`DB-TODO-002`**
