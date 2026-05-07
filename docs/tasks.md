@@ -680,6 +680,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **선행 조건**: **`SUP-MISSING-001` 완료 후**(분류 시스템 SSOT 확정/저장 가능해야 함)
 - **현행 상태(코드 기준)**: 분류 기반 자동 트리거/스케줄러가 시스템적으로 구현되어 있지 않음
 - **migration 필요**: 🔍 (트리거 로그/스케줄/템플릿/발송 이력 테이블 필요 가능)
+- **작업 이력 (2026-05-07)**: 분류 기반 트리거 체크 액션 추가 + 영업스케줄(sales_schedules) 자동 생성(중복 방지) + /sales/schedule에서 트리거 사유 표시 및 수동 실행 버튼 제공(자동 발송 금지) — worklog: `docs/worklogs/2026-05-07_sup-missing-004_sales-trigger.md`
 
 #### [SUP-MISSING-005] `getCustomersWithScore`에 `last_payment_date` 누락 (우선순위 높음)
 - **문제**: Customers 운영 row list에서 “마지막 수금 D+N” 표시 불가 (현재는 대체값으로 표시 중)

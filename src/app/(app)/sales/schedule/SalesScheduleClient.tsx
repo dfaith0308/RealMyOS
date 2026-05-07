@@ -1,11 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { snoozeSchedule, updateScheduleStatus, createSalesSchedule, deleteSchedule, updateSchedule, getScheduleById } from '@/actions/sales'
 import QuickActionButton from '@/components/sales/QuickActionButton'
 import { createContactLog } from '@/actions/contact'
 import type { SalesTarget, SalesScript, SalesSchedule } from '@/actions/sales'
 import type { ContactResult, NextActionType } from '@/actions/contact'
+import { checkAndCreateSalesTriggers } from '@/actions/sales-trigger'
 
 // ============================================================
 // 유틸
@@ -155,6 +157,8 @@ export default function SalesScheduleClient({ initialTargets, initialScripts, in
   initialScripts:   SalesScript[]
   initialSchedules: SalesSchedule[]
 }) {
+  const router = useRouter()
+  const [isTriggering, startTrigger] = useTransition()
   const [schedules,    setSchedules]    = useState(initialSchedules)
   const [selectedDate, setSelectedDate] = useState(todayKST())
   const [snoozingId,   setSnoozingId]   = useState<string | null>(null)
@@ -261,7 +265,24 @@ export default function SalesScheduleClient({ initialTargets, initialScripts, in
   return (
     <>
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '28px 24px', fontFamily: '-apple-system, "Noto Sans KR", sans-serif' }}>
-      <h1 style={{ fontSize: 20, fontWeight: 600, margin: '0 0 20px' }}>영업 스케쥴</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, marginBottom: 20 }}>
+        <h1 style={{ fontSize: 20, fontWeight: 600, margin: 0 }}>영업 스케쥴</h1>
+        <button
+          type="button"
+          disabled={isTriggering}
+          onClick={() => {
+            startTrigger(async () => {
+              const res = await checkAndCreateSalesTriggers()
+              if (!res.success) alert(res.error ?? '트리거 실행 실패')
+              router.refresh()
+            })
+          }}
+          style={{ padding: '7px 12px', background: isTriggering ? '#9ca3af' : '#111827', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, cursor: isTriggering ? 'not-allowed' : 'pointer' }}
+          title="분류 기반 트리거를 확인하고 오늘 스케줄을 생성합니다"
+        >
+          {isTriggering ? '트리거 실행 중…' : '분류 트리거 체크'}
+        </button>
+      </div>
 
       <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
 
@@ -343,6 +364,11 @@ export default function SalesScheduleClient({ initialTargets, initialScripts, in
                   <div>
                     <span style={{ fontWeight: 600 }}>{sch.customer_name}</span>
                     <span style={{ marginLeft: 10, fontSize: 12, color: '#6b7280' }}>{METHOD_LABEL[sch.action_type]}</span>
+                    {sch.memo ? (
+                      <div style={{ marginTop: 6, fontSize: 12, color: '#2563EB', fontWeight: 600 }}>
+                        {sch.memo}
+                      </div>
+                    ) : null}
                   </div>
                   {isSnoozed && (
                     <div style={{ fontSize: 11, color: '#D97706', textAlign: 'right' }}>
