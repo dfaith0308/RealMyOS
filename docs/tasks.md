@@ -33,6 +33,7 @@
 - **작업 이력 (2026-05-07)**: UI/UX 전면 개선 1단계(브랜드 컬러 토큰 정리 + Sidebar 차콜/딥그린 테마 + (app) 레이아웃 여백/폭 정리) — worklog: [`docs/worklogs/2026-05-07_design-uiux-phase1.md`](./worklogs/2026-05-07_design-uiux-phase1.md)
 - **작업 이력 (2026-05-07)**: Sidebar 중메뉴 구조 복원 + 대시보드 색상 토큰 적용(하드코딩 제거) + analytics build 이슈 수정(OverviewTab client) — worklog: [`docs/worklogs/2026-05-07_fix-sidebar-submenu-and-colors.md`](./worklogs/2026-05-07_fix-sidebar-submenu-and-colors.md)
 - **작업 이력 (2026-05-07)**: UI/UX Design System Phase 1(SSOT: tokens/state/density/semantic + `--ds-*` 매핑 + 핵심 프리미티브 4종 + UI audit 문서) — worklog: [`docs/worklogs/2026-05-07_uiux-design-system-phase1.md`](./worklogs/2026-05-07_uiux-design-system-phase1.md)
+- **작업 이력 (2026-05-07)**: Dashboard 운영 콘솔 구조(2열, Queue 중심) 적용 + CommandStrip/QueueSection 신설 + 인라인 스타일 제거(CSS Module + `--ds-*`) — worklog: [`docs/worklogs/2026-05-07_dashboard-ops-console-layout.md`](./worklogs/2026-05-07_dashboard-ops-console-layout.md)
 
 ---
 

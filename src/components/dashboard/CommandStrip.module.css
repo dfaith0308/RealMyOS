@@ -1,0 +1,78 @@
+.root {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.left {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.kicker {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--ds-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.headline {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--ds-text-primary);
+  line-height: 1.4;
+}
+
+.sub {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ds-text-muted);
+  line-height: 1.4;
+}
+
+.right {
+  flex-shrink: 0;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--ds-border-default);
+  background: var(--ds-surface-panel);
+  color: var(--ds-text-primary);
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.btnPrimary {
+  background: var(--ds-brand-primary);
+  border-color: color-mix(in srgb, var(--ds-brand-primary) 30%, white);
+  color: var(--ds-text-inverse);
+}
+
+.btn:hover {
+  background: color-mix(in srgb, var(--ds-neutral-50) 70%, white);
+}
+
+.btnPrimary:hover {
+  background: color-mix(in srgb, var(--ds-brand-primary) 85%, black);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--ds-focus-ring);
+  outline-offset: 2px;
+}
+

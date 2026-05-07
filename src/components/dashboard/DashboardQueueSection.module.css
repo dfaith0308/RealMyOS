@@ -1,0 +1,95 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.title {
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--ds-text-primary);
+  letter-spacing: -0.01em;
+}
+
+.meta {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ds-text-muted);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.groupTitle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.groupLabel {
+  font-size: 11px;
+  font-weight: 900;
+  color: var(--ds-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.rows {
+  border-top: 1px solid var(--ds-border-subtle);
+}
+
+.rowMain {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.min0 {
+  min-width: 0;
+}
+
+.rowTitle {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--ds-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowHint {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ds-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.action {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--ds-brand-primary);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.empty {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ds-text-muted);
+  padding: 10px 0;
+}
+
