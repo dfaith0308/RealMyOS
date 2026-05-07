@@ -1039,7 +1039,8 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **요구사항(요약)**:
   - `/settings/ingredients` 화면에서 식자재 수기 입력 + 사진 인식(= `SUP-MISSING-011` 연계)
   - `ingredients` 테이블(현 운영/SSOT) 확인 필요
-- **migration 필요**: 🔍 (DB 확인 필요)
+- **migration 필요**: NO (UI 구현만)
+- **작업 이력 (2026-05-07)**: 식당OS `resturant_os`에 `/settings/ingredients` 화면 구현(카테고리 그룹/검색/필터) + 식자재 CRUD(soft delete) + 현재가/목표가/가격차이 표시 — worklog: `docs/worklogs/2026-05-07_res-missing-001_ingredients.md`
 
 #### [RES-MISSING-002] 메뉴(menus) + 원가 계산 미구현 (PRODUCT §8-7)
 - **PRODUCT 정의 위치**: PRODUCT §8-7 식당OS 설정
