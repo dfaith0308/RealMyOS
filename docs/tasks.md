@@ -419,10 +419,12 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
     - **작업 이력 (2026-05-07)**: RPC migration 초안 — worklog: `docs/worklogs/2026-05-07_sup-todo-001b_rfq-expose-rpc.md`
     - **작업 이력 (2026-05-07)**: 앱 RPC 연동·노출 배지 — worklog: `docs/worklogs/2026-05-07_sup-todo-001b_rfq-expose-logic.md`
     - migration: `20260507010000_create_get_supplier_rfqs.sql` (저장소 기록; 운영 적용은 별도 확인)
-  - **[SUP-TODO-001-C] 입찰(공급자 액션) 기본 기능**
+  - **[SUP-TODO-001-C] 입찰(공급자 액션) 기본 기능** — **완료 (2026-05-07)**
     - 입력: 가격/납품 가능일(+선택 메모/대체상품)
-    - 상태 전이: open→bidding→counter_offered→selected 등
-    - migration: 🔍 (`rfq_bids`/상태 모델 정합 확인)
+    - **완료 내용**: `/rfq/[id]` 상세·입찰 폼, `getRfqDetail`·`submitRfqBid`·`getMyBidForRfq`, `tenants.name`→`supplier_name`, RPC로 open·노출 검증, 재입찰 방지(선조회+UNIQUE migration 파일). counter_offer 등 상태 전이는 후속.
+    - **작업 이력 (2026-05-07)**: 입찰 UI·액션·제약 migration — worklog: `docs/worklogs/2026-05-07_sup-todo-001c_rfq-bid.md`
+    - **작업 이력 (2026-05-07)**: `rfq_bids_rfq_supplier_unique` 운영 DB 적용 완료 — worklog: `docs/worklogs/2026-05-07_sup-todo-001c_rfq-bid.md`
+    - migration: `20260507020000_rfq_bids_unique_supplier.sql` (**운영 적용 완료** — `rfq_bids_rfq_supplier_unique`)
   - **[SUP-TODO-001-D] 알림/이벤트(상태 변화 기반) 최소 구현**
     - 신규/마감임박/낙찰/탈락/계약/결제/주소공개/납품/정산 알림
     - supplier_bid_viewed 이벤트 정의 및 기록
@@ -434,6 +436,8 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **작업 이력 (2026-05-07)**: SUP-TODO-001-A 구현(`/rfq`, 액션, Sidebar) — worklog: `docs/worklogs/2026-05-07_sup-todo-001a_rfq-route.md`
 - **작업 이력 (2026-05-07)**: SUP-TODO-001-B RPC migration 초안(`get_supplier_rfqs`) — worklog: `docs/worklogs/2026-05-07_sup-todo-001b_rfq-expose-rpc.md`
 - **작업 이력 (2026-05-07)**: SUP-TODO-001-B 앱 연동·노출 배지 — worklog: `docs/worklogs/2026-05-07_sup-todo-001b_rfq-expose-logic.md`
+- **작업 이력 (2026-05-07)**: SUP-TODO-001-C RFQ 입찰·상세·UNIQUE migration — worklog: `docs/worklogs/2026-05-07_sup-todo-001c_rfq-bid.md`
+- **작업 이력 (2026-05-07)**: SUP-TODO-001-C `rfq_bids_rfq_supplier_unique` 운영 적용 — worklog: `docs/worklogs/2026-05-07_sup-todo-001c_rfq-bid.md`
 
 #### [SUP-TODO-002] 지급관리(매입처 지급)
 - **PRODUCT 정의 위치**: PRODUCT.md §6-9 지급관리

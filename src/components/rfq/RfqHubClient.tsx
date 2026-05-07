@@ -1,5 +1,6 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { formatKRW } from '@/lib/calc'
 import type { MyBidRow, SupplierRfqRow } from '@/actions/rfq'
@@ -45,6 +46,7 @@ function ExposeBadge({ level }: { level: number | null }) {
 }
 
 export default function RfqHubClient({ supplierRfqs, myBids, rfqError, bidsError }: Props) {
+  const router = useRouter()
   const [tab, setTab] = useState<'open' | 'bids'>('open')
 
   const tabBtn = (active: boolean) => ({
@@ -97,7 +99,12 @@ export default function RfqHubClient({ supplierRfqs, myBids, rfqError, bidsError
                 </thead>
                 <tbody>
                   {supplierRfqs.map((r) => (
-                    <tr key={r.id}>
+                    <tr
+                      key={r.id}
+                      onClick={() => router.push(`/rfq/${r.id}`)}
+                      style={{ cursor: 'pointer' }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = '#f9fafb' }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = '' }}>
                       <td style={td}>{r.product_name}</td>
                       <td style={td}><ExposeBadge level={r.expose_level ?? null} /></td>
                       <td style={td}>{r.quantity}{r.unit ? ` ${r.unit}` : ''}</td>
