@@ -1,0 +1,475 @@
+'use server'
+
+import { revalidatePath } from 'next/cache'
+import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
+
+type ActionResult<T = void> = { success: boolean; data?: T; error?: string }
+
+const ADMIN_SETTING_DEFAULT_ROWS: Array<{ key: string; value: string; description: string }> = [
+  {
+    key: 'platform_fee_rate',
+    value: '3',
+    description: '플랫폼 수수료율 (%)',
+  },
+  {
+    key: 'settlement_cycle_days',
+    value: '30',
+    description: '정산 주기 (일)',
+  },
+]
+
+async function requireAdmin(supabase: any) {
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { ok: false as const, error: '로그인 필요' }
+  if (ctx.role !== 'admin') return { ok: false as const, error: '권한 없음' }
+  return { ok: true as const, ctx }
+}
+
+async function insertAdminLog(
+  supabase: any,
+  input: {
+    admin_id: string
+    action_type: string
+    tenant_id?: string | null
+    reason?: string | null
+    target_table?: string | null
+    target_id?: string | null
+    old_value?: any
+    new_value?: any
+  },
+) {
+  const { error } = await supabase.from('admin_logs').insert({
+    admin_id: input.admin_id,
+    tenant_id: input.tenant_id ?? null,
+    action_type: input.action_type,
+    reason: input.reason ?? null,
+    target_table: input.target_table ?? null,
+    target_id: input.target_id ?? null,
+    old_value: input.old_value ?? null,
+    new_value: input.new_value ?? null,
+  })
+  if (error) return { ok: false as const, error: error.message }
+  return { ok: true as const }
+}
+
+/** 키가 없을 때만 INSERT — 수수료율은 여기서 정의된 문자열만 시드한다 */
+export async function ensureAdminSettingsDefaultsForSettlement(): Promise<ActionResult> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const nowIso = new Date().toISOString()
+  let insertedAny = false
+  for (const row of ADMIN_SETTING_DEFAULT_ROWS) {
+    const { data: ex } = await supabase.from('admin_settings').select('id').eq('key', row.key).maybeSingle()
+    if (ex) continue
+    const { error } = await supabase.from('admin_settings').insert({
+      ...row,
+      updated_at: nowIso,
+    })
+    if (error) return { success: false, error: error.message }
+    insertedAny = true
+  }
+
+  if (insertedAny) {
+    const logRes = await insertAdminLog(supabase, {
+      admin_id: auth.ctx.user_id,
+      action_type: 'admin_settings_seed',
+      reason: 'ensure settlement-related admin_settings defaults',
+      target_table: 'admin_settings',
+      new_value: { keys: ADMIN_SETTING_DEFAULT_ROWS.map((r) => r.key) },
+    })
+    if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
+  }
+
+  return { success: true }
+}
+
+async function loadFeePercentNumerator(supabase: any): Promise<ActionResult<number>> {
+  const seed = await ensureAdminSettingsDefaultsForSettlement()
+  if (!seed.success) return { success: false, error: seed.error }
+
+  const { data, error } = await supabase.from('admin_settings').select('value').eq('key', 'platform_fee_rate').maybeSingle()
+
+  if (error) return { success: false, error: error.message }
+  const n = Number((data as any)?.value)
+  if (!Number.isFinite(n) || n < 0) return { success: false, error: 'platform_fee_rate 설정값이 유효하지 않습니다.' }
+  return { success: true, data: n }
+}
+
+async function loadSettlementCycleDays(supabase: any): Promise<ActionResult<number>> {
+  const seed = await ensureAdminSettingsDefaultsForSettlement()
+  if (!seed.success) return { success: false, error: seed.error }
+
+  const { data, error } = await supabase.from('admin_settings').select('value').eq('key', 'settlement_cycle_days').maybeSingle()
+
+  if (error) return { success: false, error: error.message }
+  const n = Number((data as any)?.value)
+  if (!Number.isFinite(n) || n <= 0) return { success: false, error: 'settlement_cycle_days 설정값이 유효하지 않습니다.' }
+  return { success: true, data: Math.floor(n) }
+}
+
+function orderAmount(o: { final_amount?: number | null; total_amount?: number | null }) {
+  const f = o.final_amount
+  const t = o.total_amount
+  if (typeof f === 'number' && Number.isFinite(f)) return f
+  if (typeof t === 'number' && Number.isFinite(t)) return t
+  return 0
+}
+
+function kstTodayDateString() {
+  return new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10)
+}
+
+function monthRangeUtcNow() {
+  const k = new Date(Date.now() + 9 * 3600000)
+  const y = k.getUTCFullYear()
+  const m = k.getUTCMonth()
+  const start = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10)
+  const end = new Date(Date.UTC(y, m + 1, 0)).toISOString().slice(0, 10)
+  return { start, end }
+}
+
+export interface PlatformRevenue {
+  month_gmv: number
+  month_fee_amount: number
+  pending_settlement_amount: number
+  month_settled_amount: number
+  fee_percent_label: string
+}
+
+export interface PendingSettlementRow {
+  order_id: string
+  order_number: string
+  order_date: string
+  seller_tenant_id: string
+  customer_id: string
+  customer_name: string
+  amount: number
+  days_pending: number
+  overdue_risk: boolean
+}
+
+export interface PendingSettlementSummary {
+  cycle_days: number
+  rows: PendingSettlementRow[]
+  by_customer: Array<{ customer_id: string; customer_name: string; seller_tenant_id: string; total_pending: number; order_count: number }>
+}
+
+export interface SettlementHistoryRow {
+  id: string
+  created_at: string
+  order_id: string | null
+  amount: number
+  status: string
+  memo: string | null
+}
+
+export async function getPlatformRevenue(): Promise<ActionResult<PlatformRevenue>> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const feeRes = await loadFeePercentNumerator(supabase)
+  if (!feeRes.success || feeRes.data == null) return { success: false, error: feeRes.error ?? '수수료율 조회 실패' }
+  const feePct = feeRes.data
+
+  const { start, end } = monthRangeUtcNow()
+
+  const [{ data: monthOrders, error: moErr }, { data: pendingOrders, error: poErr }, { data: settledPay, error: spErr }] =
+    await Promise.all([
+      supabase
+        .from('orders')
+        .select('id, order_date, final_amount, total_amount')
+        .eq('status', 'confirmed')
+        .is('deleted_at', null)
+        .gte('order_date', start)
+        .lte('order_date', end)
+        .limit(25000),
+      supabase
+        .from('orders')
+        .select('id, final_amount, total_amount')
+        .eq('status', 'confirmed')
+        .is('deleted_at', null)
+        .limit(25000),
+      supabase
+        .from('payments')
+        .select('amount, status, created_at, type')
+        .eq('type', 'settlement')
+        .eq('status', 'confirmed')
+        .gte('created_at', `${start}T00:00:00.000Z`)
+        .lte('created_at', `${end}T23:59:59.999Z`)
+        .limit(25000),
+    ])
+
+  if (moErr) return { success: false, error: moErr.message }
+  if (poErr) return { success: false, error: poErr.message }
+  if (spErr) return { success: false, error: spErr.message }
+
+  const month_gmv = (monthOrders ?? []).reduce((s: number, o: any) => s + orderAmount(o), 0)
+  const month_fee_amount = Math.round((month_gmv * feePct) / 100)
+
+  const { data: settledOrderIdsRows } = await supabase
+    .from('payments')
+    .select('order_id')
+    .eq('type', 'settlement')
+    .eq('status', 'confirmed')
+    .not('order_id', 'is', null)
+    .limit(25000)
+
+  const settledIds = new Set((settledOrderIdsRows ?? []).map((r: any) => r.order_id).filter(Boolean))
+
+  const pending_settlement_amount = (pendingOrders ?? [])
+    .filter((o: any) => !settledIds.has(o.id))
+    .reduce((s: number, o: any) => s + orderAmount(o), 0)
+
+  const month_settled_amount = (settledPay ?? []).reduce((s: number, p: any) => s + (typeof p.amount === 'number' ? p.amount : 0), 0)
+
+  await insertAdminLog(supabase, {
+    admin_id: auth.ctx.user_id,
+    action_type: 'settlement_revenue_view',
+    target_table: 'settlements',
+    new_value: { month_start: start, month_end: end },
+  }).catch(() => {})
+
+  return {
+    success: true,
+    data: {
+      month_gmv,
+      month_fee_amount,
+      pending_settlement_amount,
+      month_settled_amount,
+      fee_percent_label: String(feePct),
+    },
+  }
+}
+
+export async function getPendingSettlements(): Promise<ActionResult<PendingSettlementSummary>> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const cycRes = await loadSettlementCycleDays(supabase)
+  if (!cycRes.success || cycRes.data == null) return { success: false, error: cycRes.error ?? '정산 주기 조회 실패' }
+  const cycle_days = cycRes.data
+
+  const { data: settledRows } = await supabase
+    .from('payments')
+    .select('order_id')
+    .eq('type', 'settlement')
+    .eq('status', 'confirmed')
+    .not('order_id', 'is', null)
+    .limit(25000)
+
+  const settled = new Set((settledRows ?? []).map((r: any) => r.order_id).filter(Boolean))
+
+  const { data: orders, error: oErr } = await supabase
+    .from('orders')
+    .select('id, order_number, order_date, customer_id, tenant_id, seller_tenant_id, final_amount, total_amount')
+    .eq('status', 'confirmed')
+    .is('deleted_at', null)
+    .order('order_date', { ascending: false })
+    .limit(800)
+
+  if (oErr) return { success: false, error: oErr.message }
+
+  const today = kstTodayDateString()
+  const rows: PendingSettlementRow[] = []
+
+  const pendingOrders = (orders ?? []).filter((o: any) => !settled.has(o.id))
+  const custIds = [...new Set(pendingOrders.map((o: any) => o.customer_id).filter(Boolean))]
+  const nameMap = new Map<string, string>()
+  if (custIds.length) {
+    const { data: cn } = await supabase.from('customers').select('id, name').in('id', custIds).limit(2000)
+    for (const c of (cn ?? []) as any[]) nameMap.set(c.id, c.name ?? '-')
+  }
+
+  const custAgg = new Map<string, { customer_name: string; seller_tenant_id: string; total_pending: number; order_count: number }>()
+
+  for (const o of pendingOrders) {
+    const seller = String((o as any).seller_tenant_id ?? (o as any).tenant_id ?? '')
+    const amt = orderAmount(o as any)
+    const od = String((o as any).order_date).slice(0, 10)
+    let days_pending = Math.floor((new Date(today).getTime() - new Date(od).getTime()) / 86400000)
+    if (!Number.isFinite(days_pending) || days_pending < 0) days_pending = 0
+
+    const cid = (o as any).customer_id as string
+    rows.push({
+      order_id: (o as any).id,
+      order_number: (o as any).order_number,
+      order_date: od,
+      seller_tenant_id: seller,
+      customer_id: cid,
+      customer_name: nameMap.get(cid) ?? '-',
+      amount: amt,
+      days_pending,
+      overdue_risk: days_pending > cycle_days,
+    })
+
+    const ck = `${seller}:${cid}`
+    const prev = custAgg.get(ck)
+    if (!prev) {
+      custAgg.set(ck, {
+        customer_name: nameMap.get(cid) ?? '-',
+        seller_tenant_id: seller,
+        total_pending: amt,
+        order_count: 1,
+      })
+    } else {
+      prev.total_pending += amt
+      prev.order_count += 1
+    }
+  }
+
+  await insertAdminLog(supabase, {
+    admin_id: auth.ctx.user_id,
+    action_type: 'settlement_pending_view',
+    target_table: 'orders',
+    new_value: { pending_count: rows.length, cycle_days },
+  }).catch(() => {})
+
+  return {
+    success: true,
+    data: {
+      cycle_days,
+      rows,
+      by_customer: [...custAgg.entries()].map(([key, v]) => ({
+        customer_id: key.split(':')[1] ?? '',
+        customer_name: v.customer_name,
+        seller_tenant_id: v.seller_tenant_id,
+        total_pending: v.total_pending,
+        order_count: v.order_count,
+      })),
+    },
+  }
+}
+
+export async function getSettlementHistory(): Promise<ActionResult<SettlementHistoryRow[]>> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const { data, error } = await supabase
+    .from('payments')
+    .select('id, created_at, order_id, amount, status, memo')
+    .eq('type', 'settlement')
+    .order('created_at', { ascending: false })
+    .limit(50)
+
+  if (error) return { success: false, error: error.message }
+
+  await insertAdminLog(supabase, {
+    admin_id: auth.ctx.user_id,
+    action_type: 'settlement_history_view',
+    target_table: 'payments',
+  }).catch(() => {})
+
+  return {
+    success: true,
+    data: (data ?? []) as SettlementHistoryRow[],
+  }
+}
+
+async function completeRelatedActionQueue(supabase: any, adminId: string, orderId: string) {
+  const nowIso = new Date().toISOString()
+  const { data: aq } = await supabase
+    .from('action_queue')
+    .select('id, action_options')
+    .in('status', ['pending', 'in_progress'])
+    .limit(600)
+
+  const ids = (aq ?? [])
+    .filter((r: any) => r.action_options?.order_id === orderId)
+    .map((r: any) => r.id)
+
+  if (!ids.length) return
+
+  const { error } = await supabase
+    .from('action_queue')
+    .update({
+      status: 'completed',
+      resolved_at: nowIso,
+      resolved_by: adminId,
+    })
+    .in('id', ids)
+
+  if (error) throw new Error(error.message)
+}
+
+export async function processSettlement(order_id: string): Promise<ActionResult<{ payment_id: string }>> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+  if (!order_id?.trim()) return { success: false, error: 'order_id가 올바르지 않습니다.' }
+
+  const feeRes = await loadFeePercentNumerator(supabase)
+  if (!feeRes.success || feeRes.data == null) return { success: false, error: feeRes.error ?? '수수료율 조회 실패' }
+  const feePct = feeRes.data
+
+  const { data: order, error: oErr } = await supabase
+    .from('orders')
+    .select('id, order_number, status, tenant_id, seller_tenant_id, final_amount, total_amount')
+    .eq('id', order_id)
+    .maybeSingle()
+
+  if (oErr) return { success: false, error: oErr.message }
+  if (!order || (order as any).status !== 'confirmed') return { success: false, error: '확정 주문만 정산할 수 있습니다.' }
+
+  const { data: existing } = await supabase
+    .from('payments')
+    .select('id')
+    .eq('type', 'settlement')
+    .eq('status', 'confirmed')
+    .eq('order_id', order_id)
+    .maybeSingle()
+
+  if (existing?.id) return { success: false, error: '이미 정산 완료된 주문입니다.' }
+
+  const sellerTenantId = String((order as any).seller_tenant_id ?? (order as any).tenant_id ?? '')
+  if (!sellerTenantId) return { success: false, error: '주문에 공급자 테넌트가 없습니다.' }
+
+  const base = orderAmount(order as any)
+  const feeAmount = Math.round((base * feePct) / 100)
+  if (feeAmount <= 0) return { success: false, error: '정산 수수료 금액이 0 이하입니다.' }
+
+  const today = kstTodayDateString()
+
+  const payload: Record<string, unknown> = {
+    tenant_id: sellerTenantId,
+    payer_tenant_id: sellerTenantId,
+    payee_tenant_id: null,
+    counterparty_name: '플랫폼 정산(수수료)',
+    amount: feeAmount,
+    payment_date: today,
+    due_date: today,
+    payment_method: 'platform',
+    memo: `플랫폼 수수료 정산 — 주문 ${(order as any).order_number ?? order_id}`,
+    status: 'confirmed',
+    direction: 'inbound',
+    deposit_amount: 0,
+    order_id,
+    created_by: auth.ctx.user_id,
+    type: 'settlement',
+  }
+
+  const { data: inserted, error: pErr } = await supabase.from('payments').insert(payload).select('id').single()
+
+  if (pErr) return { success: false, error: pErr.message }
+
+  await completeRelatedActionQueue(supabase, auth.ctx.user_id, order_id)
+
+  const logRes = await insertAdminLog(supabase, {
+    admin_id: auth.ctx.user_id,
+    action_type: 'settlement_process',
+    tenant_id: null,
+    reason: 'manual settlement button',
+    target_table: 'payments',
+    target_id: inserted?.id ?? null,
+    old_value: { order_id },
+    new_value: { payment_id: inserted?.id, fee_percent_used: feePct, fee_amount: feeAmount },
+  })
+  if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
+
+  revalidatePath('/admin/settlements')
+  return { success: true, data: { payment_id: inserted!.id as string } }
+}

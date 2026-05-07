@@ -38,6 +38,7 @@
 - **작업 이력 (2026-05-07)**: Customers 채권 운영 콘솔 row list 적용(즉시 필터링 + 행 클릭 원장 + 수금 액션 1개) — worklog: [`docs/worklogs/2026-05-07_customers-ops-row-list.md`](./worklogs/2026-05-07_customers-ops-row-list.md)
 - **작업 이력 (2026-05-07)**: Ledger 돈 흐름 콘솔 재설계(테이블 제거 + 날짜 그룹 sticky/subtotal + 즉시 필터 + KPI hierarchy) — worklog: [`docs/worklogs/2026-05-07_ledger-money-flow-console.md`](./worklogs/2026-05-07_ledger-money-flow-console.md)
 - **작업 이력 (2026-05-07)**: Orders 운영 Queue 콘솔 재설계(테이블 제거 + Queue/sticky 날짜 그룹 + 즉시 필터 + CommandStrip/KPI 스트립) — worklog: [`docs/worklogs/2026-05-07_orders-ops-queue-console.md`](./worklogs/2026-05-07_orders-ops-queue-console.md)
+- **작업 이력 (2026-05-08)**: 관리자OS 성장/영업 엔진 + 수익/정산 통제(ADM-MISSING-005/006) — worklog: [`docs/worklogs/2026-05-07_adm-missing-005-006_growth-settlement.md`](./worklogs/2026-05-07_adm-missing-005-006_growth-settlement.md)
 
 ---
 
@@ -877,6 +878,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **요구사항(요약)**:
   - 이탈 위험/휴면 참여자 자동 영업
 - **migration 필요**: NO (로직 구현)
+- **작업 이력 (2026-05-08)**: `growth-engine.ts`(이탈·휴면 감지·지표)·`/admin/growth` 화면(Action Queue 규칙 적재 버튼) — worklog: [`docs/worklogs/2026-05-07_adm-missing-005-006_growth-settlement.md`](./worklogs/2026-05-07_adm-missing-005-006_growth-settlement.md)
 
 #### [ADM-MISSING-006] 수익/정산 통제 미구현 (PRODUCT §10-9)
 - **PRODUCT 정의 위치**: PRODUCT §10-9
@@ -884,7 +886,8 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
   - 자동 정산 조건 처리
   - 선지급(Credit Line) 시스템
   - 수수료 구조
-- **migration 필요**: YES — settlements 관련 테이블
+- **migration 필요**: NO (UI/로직만 — `payments.type='settlement'`·기존 주문 기준 MVP)
+- **작업 이력 (2026-05-08)**: `settlement-control.ts`(수익 KPI·미정산·수동 정산·admin_settings 시드)·`/admin/settlements` — worklog: [`docs/worklogs/2026-05-07_adm-missing-005-006_growth-settlement.md`](./worklogs/2026-05-07_adm-missing-005-006_growth-settlement.md)
 
 #### [ADM-MISSING-007] 정책/실험 콘솔 미구현 (PRODUCT §10-10)
 - **PRODUCT 정의 위치**: PRODUCT §10-10
