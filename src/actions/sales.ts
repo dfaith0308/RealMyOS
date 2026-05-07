@@ -5,6 +5,7 @@ import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import type { ActionResult } from '@/types/order'
 import { getOverdueReceivable } from '@/lib/ledger-calc'
 import type { ContactResult, NextActionType } from '@/actions/contact'
+import { getAdminSettingNumber } from '@/actions/admin/policy-console'
 
 // ============================================================
 // 타입
@@ -116,6 +117,8 @@ export async function getSalesTargets(): Promise<ActionResult<SalesTarget[]>> {
   const ctx = await getAuthCtx(supabase)
   if (!ctx) return { success: false, error: '로그인 필요' }
 
+  const orderCycleCount = await getAdminSettingNumber('order_cycle_calculation_count', { min: 2, max: 90 })
+
   const todayStr = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10)
   const today    = new Date(todayStr + 'T00:00:00Z')
   const d90ago   = new Date(today.getTime() - 90 * 86400000).toISOString().slice(0, 10)
@@ -201,11 +204,12 @@ export async function getSalesTargets(): Promise<ActionResult<SalesTarget[]>> {
 
   // ── 고객별 avg_order_cycle 계산 ──────────────────────────
   function calcAvgCycle(dates: string[]): number {
-    if (dates.length < 3) return 14  // 주문 3건 미만이면 기본 14일
+    if (dates.length < orderCycleCount) return 14
+    const slice = dates.slice(-orderCycleCount)
     const gaps: number[] = []
-    for (let i = 1; i < dates.length; i++) {
-      const diff = (new Date(dates[i] + 'T00:00:00Z').getTime() -
-                    new Date(dates[i-1] + 'T00:00:00Z').getTime()) / 86400000
+    for (let i = 1; i < slice.length; i++) {
+      const diff = (new Date(slice[i] + 'T00:00:00Z').getTime() -
+                    new Date(slice[i - 1] + 'T00:00:00Z').getTime()) / 86400000
       if (diff > 0) gaps.push(diff)
     }
     if (!gaps.length) return 14

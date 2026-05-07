@@ -40,7 +40,7 @@
 - **작업 이력 (2026-05-07)**: Orders 운영 Queue 콘솔 재설계(테이블 제거 + Queue/sticky 날짜 그룹 + 즉시 필터 + CommandStrip/KPI 스트립) — worklog: [`docs/worklogs/2026-05-07_orders-ops-queue-console.md`](./worklogs/2026-05-07_orders-ops-queue-console.md)
 - **작업 이력 (2026-05-08)**: 관리자OS 성장/영업 엔진 + 수익/정산 통제(ADM-MISSING-005/006) — worklog: [`docs/worklogs/2026-05-07_adm-missing-005-006_growth-settlement.md`](./worklogs/2026-05-07_adm-missing-005-006_growth-settlement.md)
 - **작업 이력 (2026-05-08)**: 정책/실험 콘솔(ADM-MISSING-007) — worklog: [`docs/worklogs/2026-05-07_adm-missing-007_policy-console.md`](./worklogs/2026-05-07_adm-missing-007_policy-console.md)
-- **작업 이력 (2026-05-08)**: `docs/FORENSIC.md` §3 알리고 — 이원화 아닌 **역할 분리 확정** (`settings` 테넌트 실발송 / `admin_settings` 플랫폼·테스트) — worklog: [`docs/worklogs/2026-05-08_docs_forensic-aligo-role-split.md`](./worklogs/2026-05-08_docs_forensic-aligo-role-split.md)
+- **작업 이력 (2026-05-08)**: FORENSIC §4 정책키 5종 엔진 연결 + `DECISIONS.md` D-018 — worklog: [`docs/worklogs/2026-05-08_forensic-policy-keys-engine.md`](./worklogs/2026-05-08_forensic-policy-keys-engine.md)
 
 ---
 

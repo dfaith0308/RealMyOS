@@ -1,6 +1,7 @@
 'use server'
 
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
+import { getAdminSettingNumber } from '@/actions/admin/policy-console'
 
 type ActionResult<T = void> = { success: boolean; data?: T; error?: string }
 
@@ -58,8 +59,10 @@ export async function detectTradeAnomalies(): Promise<ActionResult<{ anomalies: 
   if (!auth.ok) return { success: false, error: auth.error }
 
   const now = Date.now()
-  const rfqThresholdIso = new Date(now - 24 * 60 * 60 * 1000).toISOString()
-  const dueThresholdIso = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  const rfqOpenHours = await getAdminSettingNumber('rfq_open_duration_hours', { min: 1, max: 720 })
+  const deliveryWindowDays = await getAdminSettingNumber('delivery_signal_window', { min: 1, max: 365 })
+  const rfqThresholdIso = new Date(now - rfqOpenHours * 60 * 60 * 1000).toISOString()
+  const dueThresholdIso = new Date(now - deliveryWindowDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
   const [{ data: staleRfqs, error: rfqErr }, { data: overdueOutbound, error: payErr }] = await Promise.all([
     supabase
@@ -98,8 +101,8 @@ export async function detectTradeAnomalies(): Promise<ActionResult<{ anomalies: 
     if (bidSet.has((r as any).id)) continue
     anomalies.push({
       kind: 'rfq_no_bids_24h',
-      title: 'RFQ 24시간 무입찰',
-      description: `RFQ 「${(r as any).product_name ?? '품목'}」 — 24시간 내 입찰 없음`,
+      title: `RFQ ${rfqOpenHours}시간 무입찰`,
+      description: `RFQ 「${(r as any).product_name ?? '품목'}」 — ${rfqOpenHours}시간 내 입찰 없음`,
       priority: 'today',
       category: 'trade',
       target_tenant_id: (r as any).tenant_id ?? null,
@@ -110,7 +113,7 @@ export async function detectTradeAnomalies(): Promise<ActionResult<{ anomalies: 
   for (const p of overdueOutbound ?? []) {
     anomalies.push({
       kind: 'outbound_due_over_30d',
-      title: '30일 초과 미정산(지급)',
+      title: `${deliveryWindowDays}일 초과 미정산(지급)`,
       description: `지급 due_date ${(p as any).due_date} — ${(p as any).counterparty_name ?? '매입처'} ${(p as any).amount?.toLocaleString?.() ?? (p as any).amount}원`,
       priority: 'high',
       category: 'settlement',

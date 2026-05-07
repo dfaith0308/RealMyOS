@@ -2,7 +2,7 @@
 
 > 수정 전 현실 고정용 문서  
 > 운영 DB vs migration vs 앱 코드 불일치 기록  
-> 작성일: 2026-05-07 · **갱신: 2026-05-08** (`admin_logs`·RLS `WITH CHECK` 완료 · §3 알리고 **역할 분리 확정**)
+> 작성일: 2026-05-07 · **갱신: 2026-05-08** (`admin_logs`·RLS `WITH CHECK` · §3 알리고 역할 분리 · §4 **정책키 엔진 연결**)
 
 ---
 
@@ -97,19 +97,18 @@
 |---|---|---|---|
 | platform_fee_rate | admin_settings | ✅ `settlement-control.ts` | 수수료·정산 로직 |
 | settlement_cycle_days | admin_settings | ✅ `settlement-control.ts` | 미정산 경과일 위험(`cycle_days`) |
-| order_cycle_calculation_count | admin_settings | ❌ 미연결 | 정책 콘솔·시드만 |
-| signal_suppression_days | admin_settings | ❌ 미연결 | 정책 콘솔·시드만 |
-| rfq_repeat_limit | admin_settings | ❌ 미연결 | 정책 콘솔·시드만 |
-| delivery_signal_window | admin_settings | ❌ 미연결 | 정책 콘솔·시드만 |
-| rfq_open_duration_hours | admin_settings | ❌ 미연결 | 정책 콘솔·시드만 |
+| order_cycle_calculation_count | admin_settings | ✅ `ledger.ts`, `sales.ts` (`getAdminSettingNumber`) | 최근 N건 주문일로 주기 계산 |
+| signal_suppression_days | admin_settings | ✅ `sales-trigger.ts` | 관리등급=정기관리 재연락 간격 |
+| rfq_repeat_limit | admin_settings | ✅ `resturant_os` `rfq.ts` `createRfqRequest` | 동일 품목 반복 생성 한도 |
+| delivery_signal_window | admin_settings | ✅ `trade-monitor.ts` | 지급 outbound 미정산 감지 일수 |
+| rfq_open_duration_hours | admin_settings | ✅ `trade-monitor.ts`, `resturant_os` `rfq.ts` | 무입찰 RFQ 경과 시간·기본 마감·반복 윈도우 |
 | trust_supplier_level1/2/3 | admin_settings | ✅ `trust-engine.ts` (경유 `policy-console.ts`) | Level 경계 |
 | trust_restaurant_level1/2/3 | admin_settings | ✅ `trust-engine.ts` (경유 `policy-console.ts`) | Level 경계 |
 | aligo_user_id / aligo_api_key / aligo_sender | admin_settings | ✅ §3 역할 분리 | 플랫폼·정책 콘솔 **테스트 발송** 전용; 실발송은 `settings`(테넌트) |
 
 ### 판정
 
-**HIGH** — 영업·발주·신호 관련 **5개 정책키**는 저장·편집만 되고 런타임 엔진 미연결 가능성 높음  
-→ 값을 바꿔도 RFQ/납기/반복 제한 등 **실동작이 안 바뀔 수 있음** (“가짜 레버” 위험)
+**✅ 완료 (2026-05-08)** — 위 5키는 `getAdminSettingNumber`(실패 시 `POLICY_SETTING_DEFAULTS` 폴백)로 엔진에 연결됨 (D-018). 신규 엔진·키 추가 시에도 동일 패턴 준수.
 
 ---
 
@@ -146,5 +145,5 @@
 2. ✅ RLS WITH CHECK 검증·수정 (2026-05-08)
 3. ✅ admin_logs 스키마 확장 — migration 소급 파일·운영 반영 (2026-05-08)
 4. ✅ 알리고 역할 분리 확정 — `docs/FORENSIC.md` §3 (2026-05-08)
-5. ⏳ 정책키 소비 코드 연결
+5. ✅ 정책키 소비 코드 연결 — D-018, 본 표 및 코드 참조 (2026-05-08)
 6. ⏳ CONTEXT.md·tasks.md 재수집

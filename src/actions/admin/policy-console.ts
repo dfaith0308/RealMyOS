@@ -408,3 +408,27 @@ export async function sendPolicyConsoleAligoTest(): Promise<ActionResult<{ detai
 
   return { success: true, data: { detail: '테스트 발송 요청이 접수되었습니다.' } }
 }
+
+/** 플랫폼 정책 숫자 — 테넌트 등 일반 세션에서도 `admin_settings` SELECT만 시도. 실패·무효·미존재 시 `POLICY_SETTING_DEFAULTS` 폴백 (D-018). */
+export async function getAdminSettingNumber(
+  key: keyof typeof POLICY_SETTING_DEFAULTS | string,
+  bounds?: { min: number; max: number },
+): Promise<number> {
+  const meta = POLICY_SETTING_DEFAULTS[key as string]
+  let fallback = meta ? Math.floor(Number(meta.value)) : 0
+  if (!Number.isFinite(fallback)) fallback = 0
+
+  const clamp = (n: number) =>
+    bounds ? Math.max(bounds.min, Math.min(bounds.max, n)) : n
+
+  try {
+    const supabase = await createSupabaseServer()
+    const { data, error } = await supabase.from('admin_settings').select('value').eq('key', key).maybeSingle()
+    if (error || data == null) return clamp(fallback)
+    const n = Math.floor(Number((data as { value?: string }).value))
+    if (!Number.isFinite(n)) return clamp(fallback)
+    return clamp(n)
+  } catch {
+    return clamp(fallback)
+  }
+}

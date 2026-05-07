@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
+import { getAdminSettingNumber } from '@/actions/admin/policy-console'
 
 type ActionResult<T = void> = { success: boolean; data?: T; error?: string }
 
@@ -38,6 +39,8 @@ export async function checkAndCreateSalesTriggers(
   if (tenant_id && tenant_id !== ctx.tenant_id) return { success: false, error: 'tenant_id 불일치' }
 
   const todayStr = kstTodayStr()
+
+  const suppressionDays = await getAdminSettingNumber('signal_suppression_days', { min: 1, max: 365 })
 
   // 1) 대상 거래처 + 분류 태그 + 마지막 연락일 + 오늘 스케줄(중복 방지) 한 번에 준비
   const [
@@ -135,10 +138,10 @@ export async function checkAndCreateSalesTriggers(
     // 중복 스케줄 생성 금지(같은 customer_id + 날짜)
     if (hasScheduleToday.has(id)) { skipped_duplicates += 1; continue }
 
-    // 관리등급=정기관리 → 7일마다
+    // 관리등급=정기관리 → 신호 억제 기간(signal_suppression_days) 경과 시
     if (mgmt === '정기관리') {
       const days = since ?? 999
-      if (days > 7) {
+      if (days > suppressionDays) {
         enqueue(
           id,
           '관리등급:정기관리',

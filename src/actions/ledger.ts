@@ -8,6 +8,7 @@ import { getPendingCollectionMap } from '@/actions/collection'
 import type { ActionMessage } from '@/lib/customer-logic'
 import type { ActionResult } from '@/types/order'
 import { serializeSafe } from '@/lib/serialize-safe'
+import { getAdminSettingNumber } from '@/actions/admin/policy-console'
 import {
   effectiveOrderAmount,
   getAccountsReceivable,
@@ -342,6 +343,8 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
   const settingsResult = await getSettings()
   const cfg = settingsResult.success && settingsResult.data ? settingsResult.data : DEFAULT_SETTINGS
 
+  const orderCycleCount = await getAdminSettingNumber('order_cycle_calculation_count', { min: 2, max: 90 })
+
   const { data: customers } = await supabase
     .from('customers')
     .select('id, name, phone, opening_balance, payment_terms_days, target_monthly_revenue')
@@ -469,7 +472,7 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
       ? Math.floor((today.getTime() - new Date(last_order_date).getTime()) / 86400000)
       : null
 
-    const recentDates      = orders.slice(0, 5).map((o) => o.order_date)
+    const recentDates      = orders.slice(0, orderCycleCount).map((o) => o.order_date)
     const order_cycle_days = calcOrderCycle(recentDates)
 
     const monthly_revenue = orders
