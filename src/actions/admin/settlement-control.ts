@@ -1,22 +1,10 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { ensurePolicyDefaults } from '@/actions/admin/policy-console'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 
 type ActionResult<T = void> = { success: boolean; data?: T; error?: string }
-
-const ADMIN_SETTING_DEFAULT_ROWS: Array<{ key: string; value: string; description: string }> = [
-  {
-    key: 'platform_fee_rate',
-    value: '3',
-    description: '플랫폼 수수료율 (%)',
-  },
-  {
-    key: 'settlement_cycle_days',
-    value: '30',
-    description: '정산 주기 (일)',
-  },
-]
 
 async function requireAdmin(supabase: any) {
   const ctx = await getAuthCtx(supabase)
@@ -52,35 +40,14 @@ async function insertAdminLog(
   return { ok: true as const }
 }
 
-/** 키가 없을 때만 INSERT — 수수료율은 여기서 정의된 문자열만 시드한다 */
+/** 정책 콘솔 SSOT 시드로 수수료·정산 주기 키 포함 */
 export async function ensureAdminSettingsDefaultsForSettlement(): Promise<ActionResult> {
   const supabase = await createSupabaseServer()
   const auth = await requireAdmin(supabase)
   if (!auth.ok) return { success: false, error: auth.error }
 
-  const nowIso = new Date().toISOString()
-  let insertedAny = false
-  for (const row of ADMIN_SETTING_DEFAULT_ROWS) {
-    const { data: ex } = await supabase.from('admin_settings').select('id').eq('key', row.key).maybeSingle()
-    if (ex) continue
-    const { error } = await supabase.from('admin_settings').insert({
-      ...row,
-      updated_at: nowIso,
-    })
-    if (error) return { success: false, error: error.message }
-    insertedAny = true
-  }
-
-  if (insertedAny) {
-    const logRes = await insertAdminLog(supabase, {
-      admin_id: auth.ctx.user_id,
-      action_type: 'admin_settings_seed',
-      reason: 'ensure settlement-related admin_settings defaults',
-      target_table: 'admin_settings',
-      new_value: { keys: ADMIN_SETTING_DEFAULT_ROWS.map((r) => r.key) },
-    })
-    if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
-  }
+  const res = await ensurePolicyDefaults(supabase, { adminUserId: auth.ctx.user_id })
+  if (!res.success) return { success: false, error: res.error ?? '시드 실패' }
 
   return { success: true }
 }

@@ -1,5 +1,6 @@
 'use server'
 
+import { getTrustLevelThresholds, resolveTrustLevel } from '@/actions/admin/policy-console'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 
 type ActionResult<T = void> = { success: boolean; data?: T; error?: string }
@@ -73,21 +74,6 @@ async function insertAdminLog(supabase: any, input: {
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n))
-}
-
-function resolveLevel(role: TrustRole, score: number) {
-  // PRODUCT §10-5 (현재는 하드코딩, 추후 admin_settings 정책화)
-  if (role === 'supplier') {
-    if (score <= 50) return 3
-    if (score <= 60) return 2
-    if (score <= 70) return 1
-    return 0
-  }
-  // restaurant
-  if (score <= 40) return 3
-  if (score <= 50) return 2
-  if (score <= 60) return 1
-  return 0
 }
 
 function calcScoreFromRow(row: Partial<TrustScoreRow>): number {
@@ -172,7 +158,8 @@ export async function calculateTrustScore(
   if (error) return { success: false, error: error.message }
 
   const computedScore = calcScoreFromRow(row ?? { role } as any)
-  const level = resolveLevel(role, computedScore)
+  const thresholds = await getTrustLevelThresholds(supabase, auth.ctx.user_id)
+  const level = resolveTrustLevel(role, computedScore, thresholds)
 
   // 조회 로그 best-effort
   await insertAdminLog(supabase, {
@@ -206,7 +193,8 @@ export async function updateTrustScore(
   if (bErr) return { success: false, error: bErr.message }
 
   const computedScore = calcScoreFromRow(before ?? { role } as any)
-  const level = resolveLevel(role, computedScore)
+  const thresholds = await getTrustLevelThresholds(supabase, auth.ctx.user_id)
+  const level = resolveTrustLevel(role, computedScore, thresholds)
 
   const payload: any = {
     tenant_id,
@@ -298,12 +286,14 @@ export async function getParticipants(filters?: {
 
   const nameMap = new Map((tenants ?? []).map((t: any) => [t.id, t.name ?? null]))
 
+  const thresholds = await getTrustLevelThresholds(supabase, auth.ctx.user_id)
+
   const out: ParticipantRow[] = rows.map((r) => ({
     tenant_id: r.tenant_id,
     tenant_name: nameMap.get(r.tenant_id) ?? null,
     role: r.role,
     score: r.score ?? 0,
-    level: r.level ?? resolveLevel(r.role, r.score ?? 0),
+    level: r.level ?? resolveTrustLevel(r.role, r.score ?? 0, thresholds),
     cooldown_until: r.cooldown_until ?? null,
     updated_at: r.updated_at ?? null,
     components: {

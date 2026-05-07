@@ -18,6 +18,7 @@ const MENU: MenuItem[] = [
   { label: '분석엔진', icon: '🧷', href: '/admin/engine' },
   { label: '성장/영업 엔진', icon: '🚀', href: '/admin/growth' },
   { label: '수익/정산 통제', icon: '💹', href: '/admin/settlements' },
+  { label: '정책/실험 콘솔', icon: '⚙️', href: '/admin/policy' },
   { label: '테넌트관리', icon: '🏢', href: '/admin/tenants' },
   { label: '로그', icon: '🧾', href: '/admin/logs' },
 ]

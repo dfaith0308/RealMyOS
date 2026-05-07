@@ -39,6 +39,7 @@
 - **작업 이력 (2026-05-07)**: Ledger 돈 흐름 콘솔 재설계(테이블 제거 + 날짜 그룹 sticky/subtotal + 즉시 필터 + KPI hierarchy) — worklog: [`docs/worklogs/2026-05-07_ledger-money-flow-console.md`](./worklogs/2026-05-07_ledger-money-flow-console.md)
 - **작업 이력 (2026-05-07)**: Orders 운영 Queue 콘솔 재설계(테이블 제거 + Queue/sticky 날짜 그룹 + 즉시 필터 + CommandStrip/KPI 스트립) — worklog: [`docs/worklogs/2026-05-07_orders-ops-queue-console.md`](./worklogs/2026-05-07_orders-ops-queue-console.md)
 - **작업 이력 (2026-05-08)**: 관리자OS 성장/영업 엔진 + 수익/정산 통제(ADM-MISSING-005/006) — worklog: [`docs/worklogs/2026-05-07_adm-missing-005-006_growth-settlement.md`](./worklogs/2026-05-07_adm-missing-005-006_growth-settlement.md)
+- **작업 이력 (2026-05-08)**: 정책/실험 콘솔(ADM-MISSING-007) — worklog: [`docs/worklogs/2026-05-07_adm-missing-007_policy-console.md`](./worklogs/2026-05-07_adm-missing-007_policy-console.md)
 
 ---
 
@@ -895,7 +896,8 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
   - 코드 없이 정책 생성/수정
   - A/B 테스트 지원
   - 정책 충돌 감지
-- **migration 필요**: YES — `admin_settings_logs` 테이블
+- **migration 필요**: NO (MVP — `admin_settings` + `admin_logs` 변경 이력; `admin_settings_logs`는 후속)
+- **작업 이력 (2026-05-08)**: `policy-console.ts`(조회·수정·이력·시드·알리고 테스트)·`/admin/policy` + 신뢰도 Level 경계 admin_settings 연동(`trust-engine`) + 정산 시드 SSOT 통합 — worklog: [`docs/worklogs/2026-05-07_adm-missing-007_policy-console.md`](./worklogs/2026-05-07_adm-missing-007_policy-console.md)
 
 #### [ADM-MISSING-008] Action Queue 시스템 미구현 (PRODUCT §10-3)
 - **PRODUCT 정의 위치**: PRODUCT §10-3 중앙 대시보드
