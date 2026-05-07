@@ -521,16 +521,26 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
     - Sidebar 원장관리 링크 `/sales/history` → `/ledger` 교체
     - 매입원장 상세 표·세금/누적 로직은 SUP-TODO-004-B
     - migration: NO (조회/화면만)
-  - **[SUP-TODO-004-B] 원장 컬럼/색상/기초잔액/세금 로직 정합**
-    - 컬럼: 날짜/유형/상품/공급가액/부가세/합계/결제수단/누적잔액
-    - 기초잔액 표시 필수, 카드 결제 세금계산서 제외/혼합 결제 분리 계산
-    - migration: 🔍 (세금/결제수단 데이터 구조에 따라)
+  - **[SUP-TODO-004-B] 원장 컬럼/색상/기초잔액/세금 로직 정합** — **완료 (2026-05-07, B-1 범위)**
+    - 컬럼 정합: `날짜 / 유형 / 상품명 / 공급가 / 부가세 / 합계 / 결제수단 / 잔액` — 기존 `주문금액`·`수금액` 분리 → `합계` 단일 컬럼으로 통합(수금은 음수 표기, 결제수단은 별도 컬럼)
+    - **기초잔액 항상 표시**(0원 포함) — `summary.opening_balance !== 0` 조건 제거
+    - **기간 필터** 추가: URL `from`/`to` 파라미터(기본: 이번달 1일 ~ 오늘) — `getCustomerLedger(customer_id, { from, to, payment_method })` 시그니처 확장으로 `orders.order_date`·`payments.payment_date`에 `gte`/`lte` 적용
+    - **결제수단 필터** 추가: URL `payment_method`(transfer/cash/card/platform) — `payments` 단계에 `eq` 적용(orders는 미적용)
+    - 호출부 점검: 호출처 1곳(`/customers/[id]/ledger/page.tsx`)뿐, 옵셔널 인자라 타입 호환 — `npx tsc --noEmit` 통과
+    - **B-2 별도 분리**(아래 [SUP-TODO-004-B-2]): 카드 제외/혼합 결제 분리 세금계산서 로직, 세금 요약 영역, 매입원장 별도 페이지
+    - migration: NO (조회·UI만)
+  - **[SUP-TODO-004-B-2] 세금계산서/세금 요약/매입원장 별도 페이지** — **신규 (2026-05-07, 보류)**
+    - 카드 결제는 세금계산서 대상 제외(`payment_method = 'card'` 분리), 혼합 결제 시 행 분할 또는 결제수단별 합계 분리
+    - 세금 요약 영역: 기간 내 공급가/부가세/합계 + 카드 제외 후 세금계산서 발행 대상 합계 별도 표시
+    - 매입원장 전용 페이지: 현재 `/ledger?kind=purchases&supplier=...`는 SUP-TODO-004-A의 허브 수준만 제공 → `/suppliers/[name]/ledger` 또는 동등 라우트로 매입+지급 분배 상세 표 신설(SUP-TODO-003-D와 정합)
+    - migration: 🔍 (세금계산서/매입처 도메인 모델 따라)
   - **[SUP-TODO-004-C] `/analytics`(매출분석) 라우트 신설**
     - 현재 `realmyos/src/app/(app)/`에 analytics 라우트가 없음 → 신규 라우트 필요
     - 탭: 매출현황/마진분석/거래처분석/위험신호, 기간 필터 공통
     - migration: NO (우선 order_lines 스냅샷 기반 집계)
 - **작업 이력 (2026-05-06)**: PRODUCT 6-10/6-11 정독 + `/ledger`/`/analytics` 라우트 부재 확인 + 세부 분해 등록 — worklog: `docs/worklogs/2026-05-06_phase5_sup-todo-001-005-gap.md`
 - **작업 이력 (2026-05-07)**: SUP-TODO-004-A `/ledger` 진입점·매출/매입 탭·기간 필터·Sidebar 교체 — worklog: `docs/worklogs/2026-05-07_sup-todo-004a_ledger-hub.md`
+- **작업 이력 (2026-05-07)**: SUP-TODO-004-B(B-1) 컬럼 정합·기초잔액 항상 표시·기간/결제수단 필터; B-2 신규 분리 — worklog: `docs/worklogs/2026-05-07_sup-todo-004b_ledger-columns.md`
 
 #### [SUP-TODO-005] 플랫폼 결제·정산(식당↔공급자 단일 payments) 완성
 - **PRODUCT 정의 위치**: §3 돈 흐름, §9 payments

@@ -16,17 +16,31 @@ const METHOD_LABEL: Record<string, string> = {
 
 export default async function CustomerLedgerPage({
   params,
+  searchParams,
 }: {
   params: { id: string }
+  searchParams: { from?: string; to?: string; payment_method?: string }
 }) {
   const { id } = params
-  const result = await getCustomerLedger(id)
+
+  const now        = new Date(Date.now() + 9 * 3600000)
+  const today      = now.toISOString().slice(0, 10)
+  const monthStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01`
+
+  const from           = searchParams.from           ?? monthStart
+  const to             = searchParams.to             ?? today
+  const payment_method = searchParams.payment_method ?? ''
+
+  const result = await getCustomerLedger(id, {
+    from,
+    to,
+    payment_method: payment_method || undefined,
+  })
 
   if (!result.success || !result.data) notFound()
 
   const { rows, summary } = result.data
 
-  // 최근 행동 → 결과 로그 (7일 이내, 최대 5건)
   const supabase = await createSupabaseServer()
   const ctx = await getAuthCtx(supabase)
   if (!ctx) notFound()
@@ -40,7 +54,6 @@ export default async function CustomerLedgerPage({
     .order('created_at', { ascending: false })
     .limit(5)
 
-  // 각 action_log에 연결된 통화 결과(outcome) 조회
   const actionLogIds = (actionLogs ?? []).map((l: any) => l.id)
   const { data: outcomeMap } = actionLogIds.length > 0
     ? await supabase
@@ -56,7 +69,6 @@ export default async function CustomerLedgerPage({
 
   return (
     <main style={s.page}>
-      {/* 헤더 */}
       <div style={s.header}>
         <div>
           <Link href="/customers" style={s.back}>← 거래처 목록</Link>
@@ -69,14 +81,30 @@ export default async function CustomerLedgerPage({
         </div>
       </div>
 
-      {/* 요약 카드 */}
+      <form method="get" style={s.filterForm}>
+        <label style={s.lb}>기간</label>
+        <input type="date" name="from" defaultValue={from} style={s.input} />
+        <span style={{ fontSize: 12, color: '#9ca3af' }}>~</span>
+        <input type="date" name="to" defaultValue={to} style={s.input} />
+        <label style={{ ...s.lb, marginLeft: 8 }}>결제수단</label>
+        <select name="payment_method" defaultValue={payment_method} style={s.select}>
+          <option value="">전체</option>
+          <option value="transfer">무통장</option>
+          <option value="cash">현금</option>
+          <option value="card">카드</option>
+          <option value="platform">플랫폼</option>
+        </select>
+        <button type="submit" style={s.searchBtn}>검색</button>
+        <Link href={`/customers/${id}/ledger`} style={s.resetBtn}>초기화</Link>
+      </form>
+
       <div style={s.summaryRow}>
         <div style={s.card}>
-          <span style={s.cardLabel}>총 매출</span>
+          <span style={s.cardLabel}>총 매출 (기간)</span>
           <span style={s.cardVal}>{formatKRW(summary.total_orders)}</span>
         </div>
         <div style={s.card}>
-          <span style={s.cardLabel}>총 수금</span>
+          <span style={s.cardLabel}>총 수금 (기간)</span>
           <span style={s.cardVal}>{formatKRW(summary.total_payments)}</span>
         </div>
         <div style={{ ...s.card, ...s.cardHighlight }}>
@@ -91,7 +119,6 @@ export default async function CustomerLedgerPage({
         </div>
       </div>
 
-      {/* 최근 행동 → 결과 */}
       {actionLogs && actionLogs.length > 0 && (
         <div style={s.actionSection}>
           <div style={s.actionTitle}>최근 행동 기록 (7일)</div>
@@ -115,7 +142,6 @@ export default async function CustomerLedgerPage({
                     {new Date(log.created_at).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}
                   </span>
                 </div>
-                {/* 전화 시도에만 통화 결과 버튼 표시 */}
                 {log.action_type === 'call' && (
                   <CallOutcomeButtons
                     customerId={id}
@@ -129,57 +155,59 @@ export default async function CustomerLedgerPage({
         </div>
       )}
 
-      {/* 원장 테이블 */}
-      {rows.length === 0 ? (
-        <div style={s.empty}>거래 내역이 없습니다.</div>
-      ) : (
-        <div style={s.tableWrap}>
-          <table style={s.table}>
-            <thead>
-              <tr>
-                <th style={s.th}>날짜</th>
-                <th style={s.th}>구분</th>
-                <th style={s.th}>내역</th>
-                <th style={{ ...s.th, textAlign: 'right' }}>공급가</th>
-                <th style={{ ...s.th, textAlign: 'right' }}>부가세</th>
-                <th style={{ ...s.th, textAlign: 'right' }}>주문금액</th>
-                <th style={{ ...s.th, textAlign: 'right' }}>수금액</th>
-                <th style={{ ...s.th, textAlign: 'right' }}>잔액</th>
-              </tr>
-            </thead>
-            <tbody>
-              {/* 기초잔액 행 */}
-              {summary.opening_balance !== 0 && (
-                <tr style={s.openingRow}>
-                  <td style={s.td} colSpan={7}>
-                    <span style={s.typeBadgeGray}>기초잔액</span>
-                  </td>
-                  <td style={{ ...s.td, textAlign: 'right' }}>
-                    <span style={s.balNum}>{formatKRW(summary.opening_balance)}</span>
-                  </td>
-                </tr>
-              )}
+      <div style={s.tableWrap}>
+        <table style={s.table}>
+          <thead>
+            <tr>
+              <th style={s.th}>날짜</th>
+              <th style={s.th}>유형</th>
+              <th style={s.th}>상품명</th>
+              <th style={{ ...s.th, textAlign: 'right' }}>공급가</th>
+              <th style={{ ...s.th, textAlign: 'right' }}>부가세</th>
+              <th style={{ ...s.th, textAlign: 'right' }}>합계</th>
+              <th style={s.th}>결제수단</th>
+              <th style={{ ...s.th, textAlign: 'right' }}>잔액</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style={s.openingRow}>
+              <td style={s.td} colSpan={7}>
+                <span style={s.typeBadgeGray}>기초잔액</span>
+              </td>
+              <td style={{ ...s.td, textAlign: 'right' }}>
+                <span style={{ ...s.balNum, color: summary.opening_balance > 0 ? '#DC2626' : '#16A34A' }}>
+                  {formatKRW(summary.opening_balance)}
+                </span>
+              </td>
+            </tr>
 
-              {rows.map((row) => (
+            {rows.length === 0 ? (
+              <tr>
+                <td style={s.td} colSpan={8}>
+                  <div style={s.empty}>해당 기간 거래 내역이 없습니다.</div>
+                </td>
+              </tr>
+            ) : rows.map((row) => {
+              const isOrder = row.type === 'order'
+              const totalAmount = isOrder ? (row.total_amount ?? 0) : -(row.payment_amount ?? 0)
+              return (
                 <tr
                   key={row.id}
-                  style={row.type === 'payment' ? s.paymentRow : s.orderRow}
+                  style={isOrder ? s.orderRow : s.paymentRow}
                 >
                   <td style={s.td}>
                     <span style={s.date}>{row.date}</span>
                   </td>
                   <td style={s.td}>
-                    {row.type === 'order' ? (
+                    {isOrder ? (
                       <span style={s.typeBadgeBlue}>판매</span>
                     ) : (
-                      <span style={s.typeBadgeGreen}>
-                        수금 · {METHOD_LABEL[row.payment_method ?? ''] ?? row.payment_method}
-                      </span>
+                      <span style={s.typeBadgeGreen}>수금</span>
                     )}
                   </td>
                   <td style={s.td}>
                     <div>
-                      {row.type === 'order' ? (
+                      {isOrder ? (
                         <>
                           <span style={s.summary}>{row.summary}</span>
                           {row.order_number && (
@@ -187,44 +215,42 @@ export default async function CustomerLedgerPage({
                           )}
                         </>
                       ) : (
-                        <span style={s.summary}>-</span>
+                        <span style={{ ...s.summary, color: '#9ca3af' }}>—</span>
                       )}
                       {row.memo && <div style={s.memo}>{row.memo}</div>}
                     </div>
                   </td>
-                  {/* 공급가 */}
                   <td style={{ ...s.td, textAlign: 'right' }}>
-                    {row.type === 'order' && (
-                      <span style={s.num}>
-                        {row.total_supply_price?.toLocaleString()}
+                    {isOrder ? (
+                      <span style={s.num}>{(row.total_supply_price ?? 0).toLocaleString()}</span>
+                    ) : (
+                      <span style={{ color: '#d1d5db' }}>—</span>
+                    )}
+                  </td>
+                  <td style={{ ...s.td, textAlign: 'right' }}>
+                    {isOrder ? (
+                      <span style={s.num}>{(row.total_vat_amount ?? 0).toLocaleString()}</span>
+                    ) : (
+                      <span style={{ color: '#d1d5db' }}>—</span>
+                    )}
+                  </td>
+                  <td style={{ ...s.td, textAlign: 'right' }}>
+                    <span style={{
+                      ...s.numBold,
+                      color: isOrder ? '#111827' : '#15803D',
+                    }}>
+                      {isOrder ? formatKRW(totalAmount) : `−${formatKRW(Math.abs(totalAmount))}`}
+                    </span>
+                  </td>
+                  <td style={s.td}>
+                    {isOrder ? (
+                      <span style={{ color: '#d1d5db' }}>—</span>
+                    ) : (
+                      <span style={{ color: '#374151', fontSize: 12 }}>
+                        {METHOD_LABEL[row.payment_method ?? ''] ?? row.payment_method ?? '—'}
                       </span>
                     )}
                   </td>
-                  {/* 부가세 */}
-                  <td style={{ ...s.td, textAlign: 'right' }}>
-                    {row.type === 'order' && (
-                      <span style={s.num}>
-                        {row.total_vat_amount?.toLocaleString()}
-                      </span>
-                    )}
-                  </td>
-                  {/* 주문금액 */}
-                  <td style={{ ...s.td, textAlign: 'right' }}>
-                    {row.type === 'order' && (
-                      <span style={s.numBold}>
-                        {formatKRW(row.total_amount ?? 0)}
-                      </span>
-                    )}
-                  </td>
-                  {/* 수금액 */}
-                  <td style={{ ...s.td, textAlign: 'right' }}>
-                    {row.type === 'payment' && (
-                      <span style={{ ...s.numBold, color: '#16A34A' }}>
-                        {formatKRW(row.payment_amount ?? 0)}
-                      </span>
-                    )}
-                  </td>
-                  {/* 누적잔액 */}
                   <td style={{ ...s.td, textAlign: 'right' }}>
                     <span style={{
                       ...s.balNum,
@@ -234,20 +260,20 @@ export default async function CustomerLedgerPage({
                     </span>
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
     </main>
   )
 }
 
 const s: Record<string, React.CSSProperties> = {
-  page: { maxWidth: 1000, margin: '0 auto', padding: '32px 24px 60px' },
+  page: { maxWidth: 1100, margin: '0 auto', padding: '32px 24px 60px' },
   header: {
     display: 'flex', alignItems: 'flex-start',
-    justifyContent: 'space-between', marginBottom: 24,
+    justifyContent: 'space-between', marginBottom: 16,
   },
   back: { fontSize: 13, color: '#6b7280', textDecoration: 'none', display: 'block', marginBottom: 6 },
   title: { fontSize: 20, fontWeight: 600, margin: 0 },
@@ -262,6 +288,12 @@ const s: Record<string, React.CSSProperties> = {
     color: '#fff', borderRadius: 8,
     fontSize: 13, fontWeight: 500, textDecoration: 'none',
   },
+  filterForm:  { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', margin: '8px 0 20px 0' },
+  lb:          { fontSize: 12, color: '#6b7280' },
+  input:       { padding: '7px 10px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13, outline: 'none' },
+  select:      { padding: '7px 10px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13, background: '#fff' },
+  searchBtn:   { padding: '7px 14px', background: '#111827', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, cursor: 'pointer' },
+  resetBtn:    { padding: '7px 14px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, color: '#6b7280', textDecoration: 'none' },
   summaryRow: { display: 'flex', gap: 12, marginBottom: 24 },
   card: {
     flex: 1, padding: '16px 20px',
@@ -272,7 +304,7 @@ const s: Record<string, React.CSSProperties> = {
   cardHighlight: { border: '1px solid #fca5a5', background: '#FFF5F5' },
   cardLabel: { fontSize: 11, color: '#6b7280', fontWeight: 500 },
   cardVal: { fontSize: 18, fontWeight: 700, fontVariantNumeric: 'tabular-nums' },
-  empty: { textAlign: 'center', padding: '60px 0', color: '#9ca3af', fontSize: 14 },
+  empty: { textAlign: 'center', padding: '40px 0', color: '#9ca3af', fontSize: 14 },
   tableWrap: { border: '1px solid #e5e7eb', borderRadius: 10, overflowX: 'auto' },
   table: { width: '100%', borderCollapse: 'collapse', fontSize: 13 },
   th: {
@@ -307,4 +339,12 @@ const s: Record<string, React.CSSProperties> = {
   num: { color: '#374151', fontVariantNumeric: 'tabular-nums' },
   numBold: { fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: '#111827' },
   balNum: { fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: 14 },
+  actionSection: { background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 10, padding: 12, marginBottom: 16 },
+  actionTitle:   { fontSize: 12, color: '#6b7280', marginBottom: 8 },
+  actionRow:     { display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', borderBottom: '1px dashed #e5e7eb' },
+  actionType:    { fontSize: 12, color: '#374151', fontWeight: 500 },
+  actionMsg:     { fontSize: 12, color: '#6b7280' },
+  actionDate:    { fontSize: 11, color: '#9ca3af', marginLeft: 'auto' },
+  resultBadge:   { fontSize: 11, color: '#15803D', background: '#F0FDF4', padding: '2px 8px', borderRadius: 999 },
+  noResult:      { fontSize: 11, color: '#9ca3af' },
 }

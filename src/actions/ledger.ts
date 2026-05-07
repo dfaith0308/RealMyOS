@@ -96,8 +96,15 @@ export interface LedgerSummary {
   current_balance: number
 }
 
+export interface CustomerLedgerOptions {
+  from?:           string
+  to?:             string
+  payment_method?: string
+}
+
 export async function getCustomerLedger(
   customer_id: string,
+  options?: CustomerLedgerOptions,
 ): Promise<ActionResult<{ rows: LedgerRow[]; summary: LedgerSummary }>> {
   const supabase = await createSupabaseServer()
   const ctx = await getAuthCtx(supabase)
@@ -112,7 +119,7 @@ export async function getCustomerLedger(
     .single()
   if (!customer) return { success: false, error: '거래처를 찾을 수 없습니다.' }
 
-  const { data: orders } = await supabase
+  let ordersQuery = supabase
     .from('orders')
     .select('id, order_number, order_date, created_at, total_amount, final_amount, total_supply_price, total_vat_amount, memo, order_lines(product_name, quantity)')
     .eq('customer_id', customer_id)
@@ -123,7 +130,10 @@ export async function getCustomerLedger(
     .order('order_date', { ascending: true })
     .order('created_at', { ascending: true })
 
-  const { data: payments } = await supabase
+  if (options?.from) ordersQuery = ordersQuery.gte('order_date', options.from)
+  if (options?.to)   ordersQuery = ordersQuery.lte('order_date', options.to)
+
+  let paymentsQuery = supabase
     .from('payments')
     .select('id, payment_date, created_at, amount, payment_method, memo')
     .eq('customer_id', customer_id)
@@ -133,6 +143,12 @@ export async function getCustomerLedger(
     .eq('status', 'confirmed')
     .order('payment_date', { ascending: true })
     .order('created_at', { ascending: true })
+
+  if (options?.from)           paymentsQuery = paymentsQuery.gte('payment_date', options.from)
+  if (options?.to)             paymentsQuery = paymentsQuery.lte('payment_date', options.to)
+  if (options?.payment_method) paymentsQuery = paymentsQuery.eq('payment_method', options.payment_method)
+
+  const [{ data: orders }, { data: payments }] = await Promise.all([ordersQuery, paymentsQuery])
 
   type RawOrder   = NonNullable<typeof orders>[number]
   type RawPayment = NonNullable<typeof payments>[number]
