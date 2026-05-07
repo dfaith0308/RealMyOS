@@ -150,9 +150,10 @@ interface OrderCreateFormProps {
     product_id: string; product_name: string; product_code: string
     quantity: number; unit_price: number; tax_type?: string
   }>
+  quoteContext?: { quote_id: string; conversions: Array<{ item_id: string; qty: number }> }
 }
 
-export default function OrderCreateForm({ initialCustomerId, reorderLines }: OrderCreateFormProps = {}) {
+export default function OrderCreateForm({ initialCustomerId, reorderLines, quoteContext }: OrderCreateFormProps = {}) {
   const [isPending, startTransition] = useTransition()
 
   const [customers,       setCustomers]       = useState<CustomerForOrder[]>([])
@@ -466,6 +467,8 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
         lines:           lineInputs,
         discount_amount: discountNum,
         point_used:      pointNum,
+        source_quote_id:   quoteContext?.quote_id,
+        quote_conversions: quoteContext?.conversions,
       })
       if (!res.success || !res.data) {
         setError(res.error ?? '저장 실패'); setIsSubmitting(false); return

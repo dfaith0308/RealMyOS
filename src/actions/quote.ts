@@ -31,6 +31,19 @@ async function logQuote(supabase: any, opts: {
   })
 }
 
+async function issueQuoteNumber(supabase: any, tenant_id: string, quote_date: string): Promise<string> {
+  // QUO-YYYYMMDD-NNNN (일 단위 순번)
+  const yyyymmdd = quote_date.replace(/-/g, '')
+  const { count } = await supabase
+    .from('quotes')
+    .select('id', { count: 'exact', head: true })
+    .eq('tenant_id', tenant_id)
+    .eq('quote_date', quote_date)
+    .is('deleted_at', null)
+  const seq = String((count ?? 0) + 1).padStart(4, '0')
+  return `QUO-${yyyymmdd}-${seq}`
+}
+
 // ============================================================
 // 견적 생성
 // ============================================================
@@ -50,6 +63,8 @@ export async function createQuote(input: CreateQuoteInput): Promise<ActionResult
   }
 
   const total_amount = input.items.reduce((s, i) => s + i.line_total, 0)
+  const quote_date = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10)
+  const quote_number = await issueQuoteNumber(supabase, ctx.tenant_id, quote_date)
 
   const { data: quote, error: quoteErr } = await supabase
     .from('quotes')
@@ -57,6 +72,8 @@ export async function createQuote(input: CreateQuoteInput): Promise<ActionResult
       tenant_id:    ctx.tenant_id,
       customer_id:  input.customer_id,
       status:       input.status ?? 'draft',
+      quote_date,
+      quote_number,
       total_amount,
       expires_at:   input.expires_at ?? null,
       memo:         input.memo ?? null,
@@ -69,6 +86,7 @@ export async function createQuote(input: CreateQuoteInput): Promise<ActionResult
 
   const { error: itemsErr } = await supabase.from('quote_items').insert(
     input.items.map((i) => ({
+      tenant_id:    ctx.tenant_id,
       quote_id:     quote.id,
       product_id:   i.product_id,
       product_code: i.product_code,
@@ -128,6 +146,7 @@ export async function updateQuote(
     await supabase.from('quote_items').delete().eq('quote_id', quote_id)
     await supabase.from('quote_items').insert(
       input.items.map((i) => ({
+        tenant_id: ctx.tenant_id,
         quote_id: quote_id,
         product_id: i.product_id,
         product_code: i.product_code,
@@ -254,7 +273,7 @@ export async function getQuotes(filters?: {
 
   let q = supabase
     .from('quotes')
-    .select('id, tenant_id, customer_id, status, total_amount, expires_at, memo, created_at, updated_at, customers(name)')
+    .select('id, tenant_id, customer_id, quote_number, quote_date, created_by, status, total_amount, expires_at, memo, created_at, updated_at, customers(name)')
     .eq('tenant_id', ctx.tenant_id)
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
@@ -264,23 +283,48 @@ export async function getQuotes(filters?: {
   const { data, error } = await q
   if (error) return { success: false, error: error.message }
 
+  const rows = (data ?? []) as any[]
+  const ids = rows.map((r) => r.id).filter(Boolean)
+  const { data: itemRows } = ids.length
+    ? await supabase
+        .from('quote_items')
+        .select('quote_id, quantity, converted_quantity')
+        .in('quote_id', ids)
+    : { data: [] as any[] }
+
+  const qtyMap = new Map<string, { total: number; converted: number }>()
+  for (const r of (itemRows ?? []) as any[]) {
+    const cur = qtyMap.get(r.quote_id) ?? { total: 0, converted: 0 }
+    cur.total += r.quantity ?? 0
+    cur.converted += r.converted_quantity ?? 0
+    qtyMap.set(r.quote_id, cur)
+  }
+
   const today = new Date().toISOString().slice(0, 10)
   return {
     success: true,
-    data: (data ?? []).map((r: any) => ({
-      id: r.id,
-      tenant_id: r.tenant_id,
-      customer_id: r.customer_id,
-      customer_name: r.customers?.name ?? '',
-      status: r.expires_at && r.expires_at < today && r.status !== 'converted'
-        ? 'expired'
-        : r.status,
-      total_amount: r.total_amount,
-      expires_at: r.expires_at,
-      memo: r.memo,
-      created_at: r.created_at,
-      updated_at: r.updated_at,
-    })),
+    data: rows.map((r: any) => {
+      const qx = qtyMap.get(r.id) ?? { total: 0, converted: 0 }
+      return ({
+        id: r.id,
+        tenant_id: r.tenant_id,
+        customer_id: r.customer_id,
+        customer_name: r.customers?.name ?? '',
+        quote_number: r.quote_number ?? null,
+        quote_date: r.quote_date ?? null,
+        status: r.expires_at && r.expires_at < today && r.status !== 'converted'
+          ? 'expired'
+          : r.status,
+        total_amount: r.total_amount,
+        expires_at: r.expires_at,
+        memo: r.memo,
+        created_by: r.created_by ?? null,
+        created_at: r.created_at,
+        updated_at: r.updated_at,
+        total_quantity: qx.total,
+        converted_quantity: qx.converted,
+      }) as Quote
+    }),
   }
 }
 
@@ -314,10 +358,64 @@ export async function getQuoteDetail(quote_id: string): Promise<ActionResult<Quo
     data: {
       id: quote.id, tenant_id: quote.tenant_id, customer_id: quote.customer_id,
       customer_name: (quote as any).customers?.name ?? '',
+      quote_number: (quote as any).quote_number ?? null,
+      quote_date: (quote as any).quote_date ?? null,
+      created_by: (quote as any).created_by ?? null,
       status, total_amount: quote.total_amount, expires_at: quote.expires_at,
       memo: quote.memo, created_at: quote.created_at, updated_at: quote.updated_at,
       items: items ?? [],
     },
+  }
+}
+
+export async function logQuoteSent(
+  quote_id: string,
+  method: 'pdf' | 'kakao' | 'sms',
+): Promise<ActionResult> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+  await logQuote(supabase, {
+    quote_id,
+    user_id: ctx.user_id,
+    user_type: ctx.user_type,
+    action: 'sent',
+    before_data: null,
+    after_data: { method, sent_by: ctx.user_id },
+  })
+  revalidatePath(`/quotes/${quote_id}`)
+  return { success: true }
+}
+
+export interface QuoteSentLogItem {
+  id: string
+  created_at: string
+  method: 'pdf' | 'kakao' | 'sms' | string
+  user_id: string | null
+}
+
+export async function getQuoteSentLogs(quote_id: string): Promise<ActionResult<QuoteSentLogItem[]>> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요', data: [] }
+
+  const { data, error } = await supabase
+    .from('quote_logs')
+    .select('id, created_at, user_id, action, after_data')
+    .eq('quote_id', quote_id)
+    .eq('action', 'sent')
+    .order('created_at', { ascending: false })
+
+  if (error) return { success: false, error: error.message, data: [] }
+
+  return {
+    success: true,
+    data: (data ?? []).map((r: any) => ({
+      id: r.id,
+      created_at: r.created_at,
+      method: (r.after_data as any)?.method ?? '-',
+      user_id: r.user_id ?? null,
+    })),
   }
 }
 

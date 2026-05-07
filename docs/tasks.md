@@ -320,18 +320,19 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
   - **[SUP-PARTIAL-002-B] “견적현황” 화면(탭/필터) 구현**
     - 탭: 전체/전환 필요/유효기간 임박/부분 전환/만료
     - 리스트 컬럼/정렬(만료임박순 등) 정합
-    - migration: 🔍 (quote 상태/전환율/유효기간 데이터 구조에 따라)
+    - migration: 파일 추가(미적용) — `supabase/migrations/20260507230000_add_quotes_fields.sql`
   - **[SUP-PARTIAL-002-C] 견적 전달(다운로드/공유) + 전송 이력**
     - PDF/JPG 다운로드 및 링크 공유 UX
     - 전송 이력 기록(방식/담당자/시간)
-    - migration: 🔍 (전송 이력 테이블/필드 필요 가능)
+    - migration: 없음 (기존 `quote_logs` 사용)
   - **[SUP-PARTIAL-002-D] 견적→주문 전환 UX 및 상태 전이 정합**
     - 부분 전환(converted_quantity), quote/quote_items 상태 전이
     - 전환율 계산/표시 정합
-    - migration: 🔍 (quote_items 구조/로그 테이블 필요 가능)
+    - migration: 파일 추가(미적용) — `supabase/migrations/20260507230000_add_quotes_fields.sql`
 - **산출물 (대조표 캔버스)**: `phase5-sup-partial-001-002-006-gap.canvas.tsx`
 - **작업 이력 (2026-05-06)**: PRODUCT 6-5 정독 + 현행 `/orders/quotes` 구조 대조 + 공백 항목 분해 등록 — worklog: `docs/worklogs/2026-05-06_phase5_sup-partial-001-002-006-gap.md`
 - **작업 이력 (2026-05-06)**: `/quotes/*` 독립 라우트 신설 + 구경로(`/orders/quotes/*`) redirect 유지 + 사이드바 독립 메뉴 이동 + revalidatePath 호환 처리 — worklog: `docs/worklogs/2026-05-06_sup-partial-002_quotes-ia.md`
+- **작업 이력 (2026-05-08)**: SUP-PARTIAL-002-B/C/D 구현(견적현황 5탭 + 전달/전송이력 + 견적→주문 전환 UX) — worklog: `docs/worklogs/2026-05-07_sup-partial-002bcd_quotes.md`
 
 #### [SUP-PARTIAL-003] 설정 저장 시 `settings_logs` 미연동 (PRODUCT 6-14) — **종료 (2026-05-06)**
 - **위치**: `realmyos/src/actions/settings.ts`:55-99 (`saveSettings`)

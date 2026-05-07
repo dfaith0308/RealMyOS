@@ -24,6 +24,10 @@ export interface CreateOrderInput {
   status?:         OrderStatus
   discount_amount?: number   // 기간할인 (orders 레벨, 상품 무관)
   point_used?:      number   // 적립금 사용 (orders 레벨, 상품 무관)
+
+  // SUP-PARTIAL-002-D: 견적→주문 전환 컨텍스트
+  source_quote_id?: string
+  quote_conversions?: Array<{ item_id: string; qty: number }>
 }
 
 export interface LineCalculation {

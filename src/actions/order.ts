@@ -254,6 +254,22 @@ export async function createOrder(
     return { success: false, error: `라인 저장 실패: ${linesErr.message}` }
   }
 
+  // SUP-PARTIAL-002-D: 견적→주문 전환 처리 (best-effort, 동시성은 RPC가 담당)
+  if (orderStatus === 'confirmed' && input.source_quote_id && input.quote_conversions?.length) {
+    try {
+      const { data: rpcResult } = await supabase.rpc('convert_quote_items', {
+        p_quote_id:    input.source_quote_id,
+        p_tenant_id:   ctx.tenant_id,
+        p_conversions: JSON.stringify(input.quote_conversions.map((c) => ({ item_id: c.item_id, qty: c.qty }))),
+      })
+      if (!rpcResult?.success) {
+        // ignore: 주문 생성은 성공, 견적 전환은 보조
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   // 거래처별 마지막 거래 단가 캐시 — confirmed 주문만 갱신 (N+1 금지 → batch upsert)
   if (orderStatus === 'confirmed') {
     const cacheRows = lineRows

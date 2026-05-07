@@ -25,12 +25,19 @@ export interface Quote {
   tenant_id:    string
   customer_id:  string
   customer_name?: string
+  quote_number?: string | null
+  quote_date?:   string | null
   status:       QuoteStatus
   total_amount: number
   expires_at:   string | null
   memo:         string | null
+  created_by?:  string | null
   created_at:   string
   updated_at:   string
+
+  // list-only derived fields (RULE-02: DB 저장 금지)
+  total_quantity?: number
+  converted_quantity?: number
 }
 
 export interface QuoteDetail extends Quote {

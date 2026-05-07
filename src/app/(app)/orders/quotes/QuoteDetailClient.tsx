@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { convertQuoteToOrder, deleteQuote } from '@/actions/quote'
+import { deleteQuote, logQuoteSent } from '@/actions/quote'
 import type { QuoteDetail } from '@/types/quote'
 import QuoteExportButton from '@/components/quote/QuoteExportButton'
 
@@ -24,7 +24,7 @@ function formatKRW(n: number) { return n.toLocaleString() + '원' }
 
 interface ConversionState { checked: boolean; qty: number; price: number }
 
-export default function QuoteDetailClient({ quote }: { quote: QuoteDetail }) {
+export default function QuoteDetailClient({ quote, sentLogs = [] }: { quote: QuoteDetail; sentLogs?: Array<{ id: string; created_at: string; method: string; user_id: string | null }> }) {
   const router = useRouter()
   const [showConvert, setShowConvert] = useState(false)
   const [converting, setConverting]   = useState(false)
@@ -46,27 +46,35 @@ export default function QuoteDetailClient({ quote }: { quote: QuoteDetail }) {
   async function handleConvert() {
     const selected = quote.items.filter((item) => convState[item.id]?.checked && convState[item.id]?.qty > 0)
     if (!selected.length) { setError('전환할 항목을 선택해주세요.'); return }
-    setConverting(true); setError(null)
-    const res = await convertQuoteToOrder({
-      quote_id: quote.id,
-      conversions: selected.map((item) => ({
-        item_id:      item.id,
-        qty:          convState[item.id].qty,
-        quoted_price: convState[item.id].price,
-        tax_type:     item.tax_type,
-        product_id:   item.product_id ?? '',
-        product_code: item.product_code,
-        product_name: item.product_name,
-      })),
-    })
-    if (res.success) {
-      setSuccess(`주문 ${res.data!.order_number} 생성 완료`)
-      setShowConvert(false)
+    setError(null)
+
+    // 주문 등록 화면으로 이동 (선택 품목 자동 입력)
+    const conv = selected.map((item) => ({
+      item_id: item.id,
+      qty: convState[item.id].qty,
+    }))
+    router.push(`/orders/new?quote_id=${encodeURIComponent(quote.id)}&conv=${encodeURIComponent(JSON.stringify(conv))}`)
+  }
+
+  async function copyShare(method: 'kakao' | 'sms') {
+    const url = `${window.location.origin}/quotes/${quote.id}`
+    try {
+      await navigator.clipboard.writeText(url)
+      await logQuoteSent(quote.id, method)
+      setSuccess(method === 'kakao' ? '카카오 공유 링크를 복사했습니다' : '문자 공유 링크를 복사했습니다')
       router.refresh()
-    } else {
-      setError(res.error ?? '전환 실패')
+    } catch (e: any) {
+      setError(e?.message ?? '복사 실패')
     }
-    setConverting(false)
+  }
+
+  async function logPdfSent() {
+    try {
+      await logQuoteSent(quote.id, 'pdf')
+      router.refresh()
+    } catch {
+      // ignore
+    }
   }
 
   async function handleDelete() {
@@ -97,7 +105,21 @@ export default function QuoteDetailClient({ quote }: { quote: QuoteDetail }) {
           <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 12, background: st.color + '20', color: st.color, fontWeight: 600 }}>
             {st.label}
           </span>
-          <QuoteExportButton quoteId={quote.id} />
+          <div onClickCapture={logPdfSent}>
+            <QuoteExportButton quoteId={quote.id} />
+          </div>
+          <button
+            onClick={() => copyShare('kakao')}
+            style={{ padding: '8px 14px', border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', fontSize: 13, cursor: 'pointer' }}
+          >
+            카카오 공유
+          </button>
+          <button
+            onClick={() => copyShare('sms')}
+            style={{ padding: '8px 14px', border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', fontSize: 13, cursor: 'pointer' }}
+          >
+            문자 공유
+          </button>
           <button onClick={() => window.print()}
             style={{ padding: '8px 14px', border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', fontSize: 13, cursor: 'pointer' }}>
             🖨️ 인쇄/PDF
@@ -241,6 +263,29 @@ export default function QuoteDetailClient({ quote }: { quote: QuoteDetail }) {
           <span style={{ fontWeight: 500 }}>메모:</span> {quote.memo}
         </div>
       )}
+
+      {/* 전송 이력 */}
+      <div className="no-print" style={{ marginTop: 18 }}>
+        <div style={{ fontSize: 12, fontWeight: 800, color: '#111827', marginBottom: 10 }}>전송 이력</div>
+        {sentLogs.length === 0 ? (
+          <div style={{ color: '#9ca3af', fontSize: 13 }}>전송 이력이 없습니다.</div>
+        ) : (
+          <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '180px 120px 1fr', background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+              {['전송일시', '방식', '담당자'].map((h) => (
+                <div key={h} style={{ padding: '10px 10px', fontSize: 11, fontWeight: 900, color: '#6b7280' }}>{h}</div>
+              ))}
+            </div>
+            {sentLogs.map((l) => (
+              <div key={l.id} style={{ display: 'grid', gridTemplateColumns: '180px 120px 1fr', borderBottom: '1px solid #f3f4f6' }}>
+                <div style={{ padding: '10px 10px', fontSize: 12, color: '#6b7280' }}>{String(l.created_at).slice(0, 16).replace('T', ' ')}</div>
+                <div style={{ padding: '10px 10px', fontSize: 12, color: '#111827' }}>{l.method}</div>
+                <div style={{ padding: '10px 10px', fontSize: 12, color: '#6b7280' }}>{l.user_id ? l.user_id.slice(0, 8) : '-'}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
