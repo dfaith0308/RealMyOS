@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { convertQuoteToOrder, deleteQuote } from '@/actions/quote'
 import type { QuoteDetail } from '@/types/quote'
+import QuoteExportButton from '@/components/quote/QuoteExportButton'
 
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
   draft:               { label: '초안',     color: '#6b7280' },
@@ -96,6 +97,7 @@ export default function QuoteDetailClient({ quote }: { quote: QuoteDetail }) {
           <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 12, background: st.color + '20', color: st.color, fontWeight: 600 }}>
             {st.label}
           </span>
+          <QuoteExportButton quoteId={quote.id} />
           <button onClick={() => window.print()}
             style={{ padding: '8px 14px', border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', fontSize: 13, cursor: 'pointer' }}>
             🖨️ 인쇄/PDF

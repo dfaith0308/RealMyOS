@@ -754,6 +754,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
   - 도장 이미지 포함(설정에서 업로드/선택)
   - 카카오/문자 공유 링크 생성
 - **migration 필요**: NO (라이브러리/렌더링 구현)
+- **작업 이력 (2026-05-07)**: 견적서 PDF/JPG 다운로드 버튼 추가 + export 데이터 조회 액션 + 다운로드 이력(quote_logs) 기록 — worklog: `docs/worklogs/2026-05-07_sup-missing-012_quote-export.md`
 
 #### [SUP-MISSING-013] 거래처별 단가 시스템 미구현 (PRODUCT §6-6)
 - **PRODUCT 정의 위치**: PRODUCT §6-6 상품관리
