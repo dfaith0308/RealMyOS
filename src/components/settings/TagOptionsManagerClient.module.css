@@ -1,0 +1,130 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.topBar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.btn {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--ds-border-default);
+  background: var(--ds-surface-panel);
+  color: var(--ds-text-primary);
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.btnPrimary {
+  background: var(--ds-brand-primary);
+  border-color: color-mix(in srgb, var(--ds-brand-primary) 30%, white);
+  color: var(--ds-text-inverse);
+}
+
+.btnDanger {
+  border-color: color-mix(in srgb, var(--ds-status-danger) 25%, white);
+  background: color-mix(in srgb, var(--ds-status-danger) 8%, white);
+  color: color-mix(in srgb, var(--ds-status-danger) 80%, black);
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.input {
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid var(--ds-border-default);
+  background: var(--ds-surface-panel);
+  color: var(--ds-text-primary);
+  font-size: 12px;
+  font-weight: 900;
+  min-width: 240px;
+}
+
+.cardHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--ds-border-default);
+}
+
+.title {
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--ds-text-primary);
+}
+
+.meta {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ds-text-muted);
+}
+
+.categoryBlock {
+  border-top: 1px solid var(--ds-border-subtle);
+}
+
+.categoryHead {
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: color-mix(in srgb, var(--ds-neutral-50) 70%, white);
+  border-bottom: 1px solid var(--ds-border-default);
+}
+
+.catName {
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--ds-text-secondary);
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--ds-border-subtle);
+}
+
+.rowLeft {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.opt {
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--ds-text-primary);
+}
+
+.muted {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ds-text-muted);
+}
+
+.err {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--ds-status-danger);
+}
+

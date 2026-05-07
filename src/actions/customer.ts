@@ -8,8 +8,9 @@ import type { PaymentTermsType } from '@/lib/payment-terms'
 export interface CustomerInput {
   customer_type?: 'business' | 'individual' | 'prospect'
   name: string
-  phone?: string
+  phone: string
   address?: string
+  email?: string
   biz_number?: string
   representative_name?: string
   business_type?: string
@@ -19,11 +20,7 @@ export interface CustomerInput {
   payment_terms_days?: number
   payment_day?: number
   payment_terms?: string
-  role?: 'buyer' | 'supplier' | 'both'
-  contact_status?: 'unknown' | 'safe_number' | 'connected' | 'converted'
-  target_monthly_revenue?: number
   target_per_order?: number
-  acquisition_channel_id?: string
   is_buyer?: boolean
   is_supplier?: boolean
   trade_status?: 'active' | 'inactive' | 'lead'
@@ -40,10 +37,26 @@ export async function createCustomer(
 
   const name = input.name.trim()
   if (!name) return { success: false, error: '거래처명을 입력해주세요.' }
+  const phone = input.phone?.trim()
+  if (!phone) return { success: false, error: '연락처를 입력해주세요.' }
 
   const today = new Date().toISOString().slice(0, 10)
   const openingBalance = input.opening_balance ?? 0
-  const contact_status = input.contact_status ?? 'unknown'
+  const bizNum = input.biz_number?.replace(/-/g, '').replace(/\D/g, '').trim()
+  const email = input.email?.trim() || null
+
+  if (bizNum && bizNum.length >= 10) {
+    const { data: existing } = await supabase
+      .from('customers')
+      .select('id, name')
+      .eq('tenant_id', ctx.tenant_id)
+      .eq('biz_number', bizNum)
+      .is('deleted_at', null)
+      .maybeSingle()
+    if (existing) {
+      return { success: false, error: `이미 등록된 사업자번호입니다: ${existing.name}` }
+    }
+  }
 
   const { data, error } = await supabase
     .from('customers')
@@ -51,9 +64,10 @@ export async function createCustomer(
       tenant_id:              ctx.tenant_id,
       customer_type:          input.customer_type ?? 'business',
       name,
-      phone:                  input.phone?.trim() || null,
+      phone,
       address:                input.address?.trim() || null,
-      biz_number:             input.biz_number?.replace(/-/g, '').trim() || null,
+      email,
+      biz_number:             bizNum || null,
       representative_name:    input.representative_name?.trim() || null,
       business_type:          input.business_type?.trim() || null,
       opening_balance:        openingBalance,
@@ -62,11 +76,7 @@ export async function createCustomer(
       payment_terms_days:     input.payment_terms_days ?? 0,
       payment_day:            input.payment_day ?? null,
       payment_terms:          input.payment_terms?.trim() || null,
-      role:                   input.role ?? null,
-      contact_status,
-      target_monthly_revenue: input.target_monthly_revenue || null,
       target_per_order:       input.target_per_order || null,
-      acquisition_channel_id: input.acquisition_channel_id || null,
       is_buyer:               input.is_buyer ?? true,
       is_supplier:            input.is_supplier ?? false,
       trade_status:           input.trade_status ?? 'active',
@@ -115,7 +125,8 @@ export async function updateCustomer(
   if (input.name)                                 payload.name = input.name.trim()
   if (input.phone !== undefined)                  payload.phone = input.phone?.trim() || null
   if (input.address !== undefined)                payload.address = input.address?.trim() || null
-  if (input.biz_number !== undefined)             payload.biz_number = input.biz_number?.replace(/-/g, '') || null
+  if (input.email !== undefined)                  payload.email = input.email?.trim() || null
+  if (input.biz_number !== undefined)             payload.biz_number = input.biz_number?.replace(/-/g, '').replace(/\D/g, '') || null
   if (input.representative_name !== undefined)    payload.representative_name = input.representative_name?.trim() || null
   if (input.business_type !== undefined)          payload.business_type = input.business_type?.trim() || null
   if (input.customer_type)                        payload.customer_type = input.customer_type
@@ -123,10 +134,6 @@ export async function updateCustomer(
   if (input.payment_terms_days !== undefined)     payload.payment_terms_days = input.payment_terms_days
   if (input.payment_day !== undefined)            payload.payment_day = input.payment_day ?? null
   if (input.payment_terms !== undefined)          payload.payment_terms = input.payment_terms?.trim() || null
-  if (input.role !== undefined)                   payload.role = input.role ?? null
-  if (input.contact_status !== undefined)         payload.contact_status = input.contact_status ?? 'unknown'
-  if (input.target_monthly_revenue !== undefined) payload.target_monthly_revenue = input.target_monthly_revenue || null
-  if (input.acquisition_channel_id !== undefined) payload.acquisition_channel_id = input.acquisition_channel_id || null
   if (input.is_buyer !== undefined)               payload.is_buyer = input.is_buyer
   if (input.is_supplier !== undefined)            payload.is_supplier = input.is_supplier
   if (input.trade_status)                         payload.trade_status = input.trade_status
