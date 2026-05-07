@@ -730,6 +730,15 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **연계**: `SUP-PARTIAL-005`
 - **migration 필요**: YES — `order_status` 컬럼 추가
 
+#### [SUP-MISSING-011] 상품 사진 인식 기반 자동 등록 미구현
+- **PRODUCT 정의 위치**: PRODUCT §8-7 식당OS + §6-6 공급자OS
+- **요구사항(요약)**:
+  - 상품 뒷면 촬영 → OCR 추출 → 확인 후 저장
+  - MVP: 제품명/용량/가격 텍스트 추출
+  - 구현 방식: Claude Vision API 또는 Google Vision
+  - 대상 화면: 공급자OS `/products/new` + 식당OS `/settings/ingredients`
+- **migration 필요**: NO (외부 API 연동 + UI만)
+
 ### 🔍 확인 필요
 
 #### [SUP-CHECK-001] (이관 — 공통 DB)
