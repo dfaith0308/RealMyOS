@@ -622,6 +622,64 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **작업 이력 (2026-05-06)**: PRODUCT §9 SSOT payments 정의 확인 + 현행 라우트/모델 단편화 전제 정리 + 세부 분해 등록 — worklog: `docs/worklogs/2026-05-06_phase5_sup-todo-001-005-gap.md`
 - **작업 이력 (2026-05-07)**: SUP-TODO-005-D 선행 조건 게이트 명시 + A/B/C Phase 6+ 보류 처리 — worklog: `docs/worklogs/2026-05-07_session-summary.md`
 
+---
+
+### ❌ PRODUCT 정의 대비 미반영 (SUP-MISSING)
+
+#### [SUP-MISSING-001] 거래처 분류 시스템 미구현
+- **PRODUCT 정의 위치**: PRODUCT §6-3 거래처관리 — **분류 시스템**
+- **요구사항(요약)**:
+  - Category/Value 구조의 분류 시스템
+  - 기본 분류 예시:
+    - 고객유형 / 식식이회원여부 / 식식이OS / 관리등급 / 유입경로 / 업종 / 역할
+  - 분류는 **자동화영업 트리거 조건**으로 연결됨  
+    (예: 관리등급=정기관리 → 7일마다 메시지 등)
+  - **분류 변경 이력 기록 필수**
+  - **물리 삭제 금지**: `is_active=false` 등 소프트 비활성화
+- **현행 상태(코드 기준)**: 거래처 분류 Category/Value 구조 및 변경 이력 시스템이 앱/DB에 명시적으로 구현되어 있지 않음
+- **migration 필요**: YES  
+  - `customers` 테이블에 분류 관련 컬럼 추가 **또는**
+  - `customer_tags`(또는 동등) 테이블 신설 + 이력 테이블/로그 연동
+
+#### [SUP-MISSING-002] 거래처 등록 필드 누락 (PRODUCT §6-3 확정 필드)
+- **PRODUCT 정의 위치**: PRODUCT §6-3 거래처등록 — 확정 필드
+- **누락/불충분 가능성이 있는 필드(요약)**:
+  - 고객유형(사업자/개인/예비)
+  - 최초미수금 `opening_balance` + 기준일
+  - 결제조건(즉시/말일/매월N일/N일후)
+  - 목표월매출 / 목표 객단가
+  - 역할(매출처/매입처/둘다)
+  - 업종 / 관리등급 / 유입경로
+  - `contact_status` (예: `unknown/safe_number/connected/converte...` — 원문 요구사항에 따라 상태 정의 확정 필요)
+- **현행 상태(코드 기준)**: `createCustomer`/거래처 입력 UI가 PRODUCT §6-3 확정 필드를 전부 강제/수집/저장/표시하는 구조로 정리되어 있지 않음
+- **migration 필요**: 🔍 (정본 스키마/필드 정의 확정 후)  
+  - `customers` 컬럼 확장 또는 정규화 테이블 신설 + 이력/감사 로그 포함
+
+#### [SUP-MISSING-003] 상품 등록 필드 누락 (PRODUCT §6-6 확정 필드)
+- **PRODUCT 정의 위치**: PRODUCT §6-6 상품관리 — 확정 필드
+- **현재 누락(요약)**:
+  - 원재료명 및 함량 (선택 입력)
+  - 품목보고번호 (선택 입력)
+- **중요성**: 상품 인텔리전스 기반 학습(제품 속성/규제/원재료) 데이터로 필요
+- **migration 필요**: YES — `products` 테이블 컬럼 추가
+
+#### [SUP-MISSING-004] 자동화영업 분류 기반 트리거 미구현 (PRODUCT §6-13)
+- **PRODUCT 정의 위치**: PRODUCT §6-13 자동화영업
+- **요구사항(요약)**: 분류 기반 자동 트리거(예시)
+  - 관리등급=정기관리 → 7일마다 메시지
+  - 관리등급=방치 → 30일마다 메시지
+  - 유입경로=쿠팡 + `contact_status=safe_number` → 24시간 내 응답 유도
+- **선행 조건**: **`SUP-MISSING-001` 완료 후**(분류 시스템 SSOT 확정/저장 가능해야 함)
+- **현행 상태(코드 기준)**: 분류 기반 자동 트리거/스케줄러가 시스템적으로 구현되어 있지 않음
+- **migration 필요**: 🔍 (트리거 로그/스케줄/템플릿/발송 이력 테이블 필요 가능)
+
+#### [SUP-MISSING-005] `getCustomersWithScore`에 `last_payment_date` 누락 (우선순위 높음)
+- **문제**: Customers 운영 row list에서 “마지막 수금 D+N” 표시 불가 (현재는 대체값으로 표시 중)
+- **요구사항**: `getCustomersWithScore` 반환에 아래 중 하나 추가
+  - `last_payment_date` **또는**
+  - `days_since_payment`
+- **migration 필요**: NO — 쿼리/집계 수정으로 해결 가능
+
 ### 🔍 확인 필요
 
 #### [SUP-CHECK-001] (이관 — 공통 DB)
