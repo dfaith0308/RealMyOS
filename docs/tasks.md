@@ -399,6 +399,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **산출물 (대조표 캔버스)**: `phase5-sup-partial-001-002-006-gap.canvas.tsx`
 - **작업 이력 (2026-05-06)**: PRODUCT 6-13 정독 + `sales/` 라우트 확인 + 공백 항목 분해 등록 — worklog: `docs/worklogs/2026-05-06_phase5_sup-partial-001-002-006-gap.md`
 - **작업 이력 (2026-05-07)**: PRODUCT 6-13 정독 + `sales/` 라우트·`actions/sales.ts`·대시보드/거래처 연결 확인 + GAP 갱신(분해 유지) — worklog: `docs/worklogs/2026-05-07_sup-partial-006_sales-automation-audit.md`
+- **작업 이력 (2026-05-07)**: **[SUP-PARTIAL-006-A]** 실행센터(`/sales/exec`) 구현 + TOP3 점수 기반 추천/실행(스크립트 선택→contact_logs 기록→schedule done) + 사이드바/대시보드 진입점 연결 — worklog: `docs/worklogs/2026-05-07_sup-partial-006a_exec-center.md`
 
 #### [SUP-PARTIAL-007] `console.error` / `console.warn` 및 TODO 주석 잔존 (rules.md RULE-13) — **종료 (2026-05-06)**
 - **위치**: 예) `realmyos/src/actions/order.ts`:167,212,235,241,515; `realmyos/src/actions/order.ts`:174 (`// TODO: buyer_tenant_id...`); `realmyos/src/actions/dashboard.ts`:267; `realmyos/src/actions/payment.ts`:83,117,139; `realmyos/src/actions/ledger.ts`:262,529,539,662,667; `realmyos/src/app/(app)/orders/page.tsx`:33; `realmyos/src/app/(app)/payments/page.tsx`:31; `realmyos/src/components/order/OrderCreateForm.tsx`:78

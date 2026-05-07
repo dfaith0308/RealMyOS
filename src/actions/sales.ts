@@ -24,6 +24,18 @@ export interface SalesTarget {
   last_contact_result:     string | null
 }
 
+export interface ExecCenterTarget {
+  customer_id: string
+  customer_name: string
+  phone: string | null
+  score: number
+  recommended_action: 'call' | 'message' | 'visit'
+  last_contacted_at: string | null
+  days_since_last_order: number
+  days_since_last_contact: number | null
+  schedule_id: string | null
+}
+
 export interface SalesScript {
   id:         string
   type:       'call' | 'message' | 'visit'
@@ -236,6 +248,73 @@ export async function getSalesTargets(): Promise<ActionResult<SalesTarget[]>> {
     .sort((a, b) => b.score - a.score)
 
   return { success: true, data: sorted }
+}
+
+// ============================================================
+// 실행센터 TOP3 — 점수 기반 즉시 실행
+// ============================================================
+
+export async function getTopCustomersForContact(limit = 3): Promise<ActionResult<ExecCenterTarget[]>> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요', data: [] }
+
+  const targetsRes = await getSalesTargets()
+  if (!targetsRes.success) return { success: false, error: targetsRes.error ?? '조회 실패', data: [] }
+
+  const top = (targetsRes.data ?? []).slice(0, Math.max(1, Math.min(10, limit)))
+  if (top.length === 0) return { success: true, data: [] }
+
+  const ids = top.map((t) => t.customer_id)
+  const todayStr = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10)
+
+  // last_contacted_at (contact_logs)
+  const { data: contactsRaw } = await supabase
+    .from('contact_logs')
+    .select('customer_id, contacted_at')
+    .eq('tenant_id', ctx.tenant_id)
+    .in('customer_id', ids)
+    .order('contacted_at', { ascending: false })
+
+  const lastContactMap = new Map<string, string>()
+  for (const c of (contactsRaw ?? []) as any[]) {
+    if (!lastContactMap.has(c.customer_id) && c.contacted_at) lastContactMap.set(c.customer_id, c.contacted_at)
+  }
+
+  // today schedule id (sales_schedules)
+  const { data: schRaw } = await supabase
+    .from('sales_schedules')
+    .select('id, customer_id')
+    .eq('tenant_id', ctx.tenant_id)
+    .eq('scheduled_date', todayStr)
+    .eq('status', 'pending')
+    .in('customer_id', ids)
+
+  const scheduleMap = new Map<string, string>()
+  for (const s of (schRaw ?? []) as any[]) scheduleMap.set(s.customer_id, s.id)
+
+  const result: ExecCenterTarget[] = top.map((t) => {
+    const recommended_action: ExecCenterTarget['recommended_action'] =
+      t.overdue_amount > 0
+        ? 'call'
+        : (t.days_since_last_contact ?? 999) >= 14
+          ? 'message'
+          : 'visit'
+
+    return {
+      customer_id: t.customer_id,
+      customer_name: t.customer_name,
+      phone: t.phone ?? null,
+      score: t.score,
+      recommended_action,
+      last_contacted_at: lastContactMap.get(t.customer_id) ?? null,
+      days_since_last_order: t.days_since_last_order,
+      days_since_last_contact: t.days_since_last_contact,
+      schedule_id: scheduleMap.get(t.customer_id) ?? null,
+    }
+  })
+
+  return { success: true, data: result }
 }
 
 // ============================================================

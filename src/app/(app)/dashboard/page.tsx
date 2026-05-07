@@ -88,6 +88,10 @@ export default async function DashboardPage() {
                   <span>수금 등록</span>
                   <span className={styles.qaHint}>바로 입력</span>
                 </Link>
+                <Link href="/sales/exec" className={styles.qaBtn}>
+                  <span>지금 영업하기 →</span>
+                  <span className={styles.qaHint}>실행센터</span>
+                </Link>
                 <Link href="/orders" className={styles.qaBtn}>
                   <span>주문 처리</span>
                   <span className={styles.qaHint}>draft 정리</span>

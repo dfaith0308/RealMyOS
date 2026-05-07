@@ -87,6 +87,7 @@ const MENU: MenuGroup[] = [
     label: '자동화영업', href: '/sales/schedule',
     items: [
       { label: '영업스케쥴', href: '/sales/schedule' },
+      { label: '실행센터', href: '/sales/exec' },
       { label: '영업이력', href: '/sales/history' },
       { label: '스크립트관리', href: '/sales/scripts' },
     ],
