@@ -554,9 +554,12 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
     - `OverviewTab`의 “일자별 매출/원가/마진”을 `LineChart`(3개 라인)로 교체하고, 기존 CSS 막대 시각화는 제거
     - migration: NO
     - **작업 이력 (2026-05-07)**: `recharts` 설치 + `OverviewTab` 라인차트 적용 — worklog: `docs/worklogs/2026-05-07_sup-todo-004c2_recharts.md`
-  - **[SUP-TODO-004-C-3] 분석 결과 출력(엑셀/PDF/JPG)** — **신규 (2026-05-07, 보류)**
-    - PRODUCT §6-11 출력 기능 — 라이브러리 도입(엑셀: SheetJS/PDF: pdf-lib/JPG: html2canvas) 별도
+  - **[SUP-TODO-004-C-3] 분석 결과 출력(엑셀/PDF/JPG)** — **완료 (2026-05-07, 엑셀만)**
+    - analytics 화면 상단에 “엑셀 다운로드” 버튼 추가(클라이언트 다운로드)
+    - 탭별 Server Action 재조회 후, 탭별 시트 구성으로 `.xlsx` 생성
+    - 범위 제외: PDF/JPG (복잡도 높아 후속 분리)
     - migration: NO
+    - **작업 이력 (2026-05-07)**: `xlsx` 도입 + 탭별 엑셀 다운로드 구현 — worklog: `docs/worklogs/2026-05-07_sup-todo-004c3_excel-export.md`
   - **[SUP-TODO-004-C-4] 평균 결제기간 정확 정의** — **완료 (2026-05-07)**
     - `collection_allocations`(inbound payment ↔ orders 매핑) 기반으로 평균결제기간을 계산하도록 교체
     - 데이터가 없으면 기존 근사치(마지막 수금일 - 마지막 주문일)로 fallback 유지

@@ -1,6 +1,20 @@
 'use client'
 
 import Link from 'next/link'
+import { useTransition } from 'react'
+
+import {
+  getAnalyticsOverview,
+  getMarginByCustomer,
+  getMarginByProduct,
+  getRiskSignals,
+} from '@/actions/analytics'
+import {
+  exportCustomerToExcel,
+  exportMarginToExcel,
+  exportOverviewToExcel,
+  exportRiskToExcel,
+} from '@/lib/analytics-export'
 
 type Tab  = 'overview' | 'margin' | 'customer' | 'risk'
 
@@ -28,6 +42,8 @@ export default function AnalyticsShell({
   sort:    string
   children: React.ReactNode
 }) {
+  const [isPending, startTransition] = useTransition()
+
   function buildHref(opts: { tab?: Tab; from?: string; to?: string; preset?: string; sort?: string }) {
     const sp = new URLSearchParams()
     sp.set('tab', opts.tab ?? tab)
@@ -84,15 +100,58 @@ export default function AnalyticsShell({
           ))}
         </div>
 
-        <form method="get" style={s.dateForm}>
-          <input type="hidden" name="tab"  value={tab} />
-          <input type="hidden" name="sort" value={sort} />
-          <label style={s.lb}>기간</label>
-          <input type="date" name="from" defaultValue={from} style={s.input} />
-          <span style={{ fontSize: 12, color: '#9ca3af' }}>~</span>
-          <input type="date" name="to"   defaultValue={to}   style={s.input} />
-          <button type="submit" style={s.searchBtn}>적용</button>
-        </form>
+        <div style={s.rightTools}>
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={() => {
+              startTransition(async () => {
+                try {
+                  if (tab === 'overview') {
+                    const r = await getAnalyticsOverview(from, to)
+                    if (!r.success || !r.data) throw new Error(r.error ?? '데이터 없음')
+                    exportOverviewToExcel(r.data, from, to)
+                    return
+                  }
+                  if (tab === 'margin') {
+                    const r = await getMarginByProduct(from, to)
+                    if (!r.success || !r.data) throw new Error(r.error ?? '데이터 없음')
+                    exportMarginToExcel(r.data, from, to)
+                    return
+                  }
+                  if (tab === 'customer') {
+                    const r = await getMarginByCustomer(from, to)
+                    if (!r.success || !r.data) throw new Error(r.error ?? '데이터 없음')
+                    exportCustomerToExcel(r.data, from, to)
+                    return
+                  }
+                  const r = await getRiskSignals(from, to)
+                  if (!r.success || !r.data) throw new Error(r.error ?? '데이터 없음')
+                  exportRiskToExcel(r.data, from, to)
+                } catch (e) {
+                  alert(e instanceof Error ? e.message : '엑셀 생성에 실패했어요')
+                }
+              })
+            }}
+            style={{
+              ...s.excelBtn,
+              opacity: isPending ? 0.65 : 1,
+              cursor: isPending ? 'not-allowed' : 'pointer',
+            }}
+          >
+            엑셀 다운로드
+          </button>
+
+          <form method="get" style={s.dateForm}>
+            <input type="hidden" name="tab"  value={tab} />
+            <input type="hidden" name="sort" value={sort} />
+            <label style={s.lb}>기간</label>
+            <input type="date" name="from" defaultValue={from} style={s.input} />
+            <span style={{ fontSize: 12, color: '#9ca3af' }}>~</span>
+            <input type="date" name="to"   defaultValue={to}   style={s.input} />
+            <button type="submit" style={s.searchBtn}>적용</button>
+          </form>
+        </div>
       </div>
 
       <div style={s.rangeNote}>
@@ -116,6 +175,8 @@ const s: Record<string, React.CSSProperties> = {
   filterRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 8 },
   presetRow: { display: 'flex', gap: 6 },
   presetBtn: { padding: '6px 12px', borderRadius: 999, border: '1px solid', fontSize: 12, textDecoration: 'none' },
+  rightTools:{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' },
+  excelBtn:  { padding: '6px 12px', borderRadius: 10, border: '1px solid #e5e7eb', background: '#fff', color: '#111827', fontSize: 12, fontWeight: 700 },
   dateForm:  { display: 'flex', gap: 6, alignItems: 'center' },
   lb:        { fontSize: 12, color: '#6b7280' },
   input:     { padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13, outline: 'none' },
