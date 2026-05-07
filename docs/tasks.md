@@ -456,12 +456,14 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
   - **[SUP-TODO-002-A] 지급 IA/라우트 신설** — **완료 (2026-05-07)**
     - PRODUCT 6-9: 지급목록/지급등록/지급상세(`/disbursements/[id]`) 화면 구조 반영
     - `/disbursements` 목록 + `getDisbursementList`(outbound, `payer_tenant_id` 또는 레거시 `tenant_id`, RULE-01) + Sidebar 지급관리
-    - 지급 등록·상세·분배는 SUP-TODO-002-B~D
+    - 지급 등록·상세·분배는 SUP-TODO-002-C~D (002-B는 SSOT 확인만)
     - migration: 없음 (조회만)
-  - **[SUP-TODO-002-B] 지급 데이터 모델 정합(SSOT payments)**
-    - payments: direction='outbound', status pending/confirmed/reversed, reference_id=purchase_id(nullable)
-    - payment_allocations: purchase_id nullable(선지급)
-    - migration: 🔍 (테이블/제약/RLS 정합 확인)
+  - **[SUP-TODO-002-B] 지급 데이터 모델 정합(SSOT payments)** — **완료 (2026-05-07, 문서만)**
+    - PRODUCT §9 status(`pending`/`confirmed`/`reversed`)와 **운영 DB `payments_status_check` 일치** 확인
+    - 운영 `pg_get_constraintdef`: `deposit_amount >= 0`, `payment_method` enum, `status IN (pending, confirmed, reversed)`
+    - 샘플 분포: inbound `confirmed`만 관측, **outbound 행 없음** → status 백필·migration **불필요**(본 작업 범위)
+    - `payment_allocations`·`reference_id`·§9 컬럼명(`buyer_tenant_id` 등) 전면 정합은 SUP-TODO-005·후속 과제
+    - migration: 없음 (본 ID)
   - **[SUP-TODO-002-C] 지급 분배(allocations) UX/로직**
     - “미지급 매입 목록 표시 → 분배 저장” 흐름
     - 미지급금=총매입-총지급(계산) 원칙 준수
@@ -471,6 +473,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
     - migration: 🔍 (로그 테이블 필요 가능)
 - **작업 이력 (2026-05-06)**: PRODUCT 6-9 정독 + 지급 라우트 부재 확인 + 세부 분해 등록 — worklog: `docs/worklogs/2026-05-06_phase5_sup-todo-001-005-gap.md`
 - **작업 이력 (2026-05-07)**: SUP-TODO-002-A `/disbursements` 목록·액션·Sidebar — worklog: `docs/worklogs/2026-05-07_sup-todo-002a_disbursements-route.md`
+- **작업 이력 (2026-05-07)**: SUP-TODO-002-B payments 모델·CHECK·데이터 분포 확인(문서) — worklog: `docs/worklogs/2026-05-07_sup-todo-002b_payments-model-check.md`
 
 #### [SUP-TODO-003] 매입관리 메뉴·흐름
 - **PRODUCT 정의 위치**: PRODUCT.md §6-7 매입관리
