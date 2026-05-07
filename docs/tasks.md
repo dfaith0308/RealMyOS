@@ -32,6 +32,7 @@
 - **작업 이력 (2026-05-07)**: Phase 5 SUP 트랙 종료 — SUP-PARTIAL-001/006, SUP-TODO-001~004(본체), 005-D 완료 처리; B-2/C-2/C-3/C-4 신규 분리; 005-A/B/C Phase 6+ 이월 — worklog: [`docs/worklogs/2026-05-07_session-summary.md`](./worklogs/2026-05-07_session-summary.md)
 - **작업 이력 (2026-05-07)**: UI/UX 전면 개선 1단계(브랜드 컬러 토큰 정리 + Sidebar 차콜/딥그린 테마 + (app) 레이아웃 여백/폭 정리) — worklog: [`docs/worklogs/2026-05-07_design-uiux-phase1.md`](./worklogs/2026-05-07_design-uiux-phase1.md)
 - **작업 이력 (2026-05-07)**: Sidebar 중메뉴 구조 복원 + 대시보드 색상 토큰 적용(하드코딩 제거) + analytics build 이슈 수정(OverviewTab client) — worklog: [`docs/worklogs/2026-05-07_fix-sidebar-submenu-and-colors.md`](./worklogs/2026-05-07_fix-sidebar-submenu-and-colors.md)
+- **작업 이력 (2026-05-07)**: UI/UX Design System Phase 1(SSOT: tokens/state/density/semantic + `--ds-*` 매핑 + 핵심 프리미티브 4종 + UI audit 문서) — worklog: [`docs/worklogs/2026-05-07_uiux-design-system-phase1.md`](./worklogs/2026-05-07_uiux-design-system-phase1.md)
 
 ---
 

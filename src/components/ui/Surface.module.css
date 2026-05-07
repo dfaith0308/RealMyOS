@@ -1,0 +1,40 @@
+.root {
+  color: var(--ds-text-primary);
+}
+
+.variantCanvas {
+  background: var(--ds-surface-canvas);
+  border: 1px solid transparent;
+  border-radius: 0;
+}
+
+.variantPanel {
+  background: var(--ds-surface-panel);
+  border: 1px solid var(--ds-border-default);
+  border-radius: 12px;
+}
+
+.variantCard {
+  background: var(--ds-surface-card);
+  border: 1px solid var(--ds-border-default);
+  border-radius: 12px;
+}
+
+.variantRaised {
+  background: var(--ds-surface-raised);
+  border: 1px solid var(--ds-border-default);
+  border-radius: 12px;
+}
+
+.densityCompact {
+  padding: 12px;
+}
+
+.densityComfortable {
+  padding: 16px;
+}
+
+.inset {
+  box-shadow: var(--ds-shadow-subtle);
+}
+

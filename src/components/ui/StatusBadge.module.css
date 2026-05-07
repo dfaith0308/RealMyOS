@@ -1,0 +1,61 @@
+.root {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  white-space: nowrap;
+  letter-spacing: -0.01em;
+  border-width: 1px;
+  border-style: solid;
+}
+
+.sizeSm {
+  height: 20px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+.sizeMd {
+  height: 22px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.emphasisStrong {
+  border-style: solid;
+  font-weight: 600;
+}
+
+.emphasisNormal {
+  border-style: dashed;
+  font-weight: 500;
+}
+
+.toneNeutral {
+  border-color: var(--ds-border-default);
+  background: var(--ds-neutral-50);
+  color: var(--ds-text-secondary);
+}
+
+.toneSuccess {
+  border-color: color-mix(in srgb, var(--ds-status-success) 25%, white);
+  background: color-mix(in srgb, var(--ds-status-success) 10%, white);
+  color: color-mix(in srgb, var(--ds-status-success) 75%, black);
+}
+
+.toneWarning {
+  border-color: color-mix(in srgb, var(--ds-status-warning) 25%, white);
+  background: color-mix(in srgb, var(--ds-status-warning) 12%, white);
+  color: color-mix(in srgb, var(--ds-status-warning) 78%, black);
+}
+
+.toneDanger {
+  border-color: color-mix(in srgb, var(--ds-status-danger) 25%, white);
+  background: color-mix(in srgb, var(--ds-status-danger) 10%, white);
+  color: color-mix(in srgb, var(--ds-status-danger) 78%, black);
+}
+
+.prefix {
+  margin-right: 6px;
+  color: var(--ds-text-muted);
+}
+

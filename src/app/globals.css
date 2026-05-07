@@ -24,6 +24,43 @@
   --radius-md:  8px;
   --radius-lg:  10px;
   --radius-xl:  12px;
+
+  /* ── Design System (SSOT -> CSS vars) ───────────────────── */
+  --ds-brand-primary:    #1f5d3a;
+  --ds-brand-background: #f7f6f2;
+  --ds-brand-text:       #2b2b2b;
+
+  --ds-neutral-0:   #ffffff;
+  --ds-neutral-50:  #faf9f6;
+  --ds-neutral-100: #f3f1eb;
+  --ds-neutral-200: #e8e6e1;
+  --ds-neutral-300: #d6d2c9;
+  --ds-neutral-600: #6b6b6b;
+  --ds-neutral-900: #2b2b2b;
+
+  --ds-surface-canvas: var(--ds-brand-background);
+  --ds-surface-panel:  var(--ds-neutral-0);
+  --ds-surface-card:   var(--ds-neutral-0);
+  --ds-surface-raised: var(--ds-neutral-0);
+
+  --ds-text-primary:   var(--ds-brand-text);
+  --ds-text-secondary: var(--ds-neutral-600);
+  --ds-text-muted:     color-mix(in srgb, var(--ds-neutral-600) 65%, white);
+  --ds-text-inverse:   var(--ds-neutral-0);
+
+  --ds-border-default: var(--ds-neutral-200);
+  --ds-border-subtle:  color-mix(in srgb, var(--ds-neutral-200) 55%, white);
+  --ds-border-strong:  color-mix(in srgb, var(--ds-neutral-200) 85%, black);
+
+  --ds-status-success: #1f5d3a;
+  --ds-status-warning: #b7791f;
+  --ds-status-danger:  #c0392b;
+  --ds-status-neutral: var(--ds-neutral-600);
+
+  --ds-focus-ring: color-mix(in srgb, var(--ds-brand-primary) 40%, white);
+
+  /* shadow (minimal) */
+  --ds-shadow-subtle: 0 1px 0 rgba(0,0,0,0.04);
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
