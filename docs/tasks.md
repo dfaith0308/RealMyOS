@@ -845,6 +845,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
   - Level 1~3 자동 개입 시스템(정상 체류 시간 기준, 이상 감지)
   - 이상 감지 → Action Queue 연결
 - **migration 필요**: YES — `action_queue` 테이블 신설(ADM-MISSING-008과 공통)
+- **작업 이력 (2026-05-08)**: 거래 흐름 관제 화면(`/admin/trades`) + 이상 감지(최소 규칙) → Action Queue 연결 구현 — worklog: `docs/worklogs/2026-05-07_adm-missing-001-008_action-queue.md`
 
 #### [ADM-MISSING-002] 참여자/관계 네트워크 미구현 (PRODUCT §10-5)
 - **PRODUCT 정의 위치**: PRODUCT §10-5
@@ -893,8 +894,9 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 #### [ADM-MISSING-008] Action Queue 시스템 미구현 (PRODUCT §10-3)
 - **PRODUCT 정의 위치**: PRODUCT §10-3 중앙 대시보드
 - **CONTEXT**: [ARCH-08C] `action_queue` 테이블 정의 존재
-- **현행 상태**: `action_queue` 테이블 없음
-- **migration 필요**: YES — `action_queue` 테이블 신설
+- **현행 상태**: `action_queue` 테이블 생성 완료 ✅ (DB 기준)
+- **migration 필요**: 파일 추가(미적용) — `supabase/migrations/20260507240000_create_action_queue_admin_settings.sql`
+- **작업 이력 (2026-05-08)**: Action Queue 조회/만료/완료 처리 + 중앙 대시보드 섹션(`/admin/dashboard`) 연결 — worklog: `docs/worklogs/2026-05-07_adm-missing-001-008_action-queue.md`
 
 ### 🔍 확인 필요
 
