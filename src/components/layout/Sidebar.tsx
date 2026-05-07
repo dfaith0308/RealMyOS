@@ -6,67 +6,130 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { createSupabaseBrowser } from '@/lib/supabase-browser'
 
-type NavItem = { label: string; href: string }
-type NavSection = { label: string; items: NavItem[] }
-
-const SECTIONS: NavSection[] = [
-  {
-    label: 'Overview',
-    items: [
-      { label: '대시보드', href: '/dashboard' },
-      { label: '매출분석', href: '/analytics' },
-      { label: '원장관리', href: '/ledger' },
-    ],
-  },
-  {
-    label: 'Sales',
-    items: [
-      { label: '거래처', href: '/customers' },
-      { label: '주문', href: '/orders' },
-      { label: '견적', href: '/quotes' },
-      { label: '발주요청', href: '/rfq' },
-      { label: '상품', href: '/products' },
-    ],
-  },
-  {
-    label: 'Money',
-    items: [
-      { label: '수금', href: '/payments' },
-      { label: '수금 등록', href: '/payments/new' },
-      { label: '지급', href: '/disbursements' },
-      { label: '지급 등록', href: '/disbursements/new' },
-      { label: '매입', href: '/purchases' },
-      { label: '자금', href: '/funds' },
-    ],
-  },
-  {
-    label: 'Settings',
-    items: [{ label: '설정', href: '/settings' }],
-  },
-]
-
-function isActivePath(pathname: string, href: string): boolean {
-  if (pathname === href) return true
-  if (pathname.startsWith(href + '/')) return true
-  return false
+interface MenuItem {
+  label: string
+  href?: string
+  soon?: boolean
 }
 
-function SidebarInner({
-  onNavigate,
-}: {
-  onNavigate?: () => void
-}) {
+interface MenuGroup {
+  label: string
+  href?: string
+  items?: MenuItem[]
+  soon?: boolean
+}
+
+// 메뉴 구조는 이전 버전과 동일하게 유지 (그룹/서브메뉴 복원)
+const MENU: MenuGroup[] = [
+  { label: '대시보드', href: '/dashboard' },
+  {
+    label: '거래처관리', href: '/customers',
+    items: [
+      { label: '거래처 목록', href: '/customers' },
+      { label: '거래처 등록', href: '/customers/new' },
+    ],
+  },
+  {
+    label: '주문관리', href: '/orders',
+    items: [
+      { label: '주문 목록', href: '/orders' },
+      { label: '주문 등록', href: '/orders/new' },
+    ],
+  },
+  {
+    label: '견적관리', href: '/quotes',
+    items: [
+      { label: '견적목록', href: '/quotes' },
+      { label: '견적등록', href: '/quotes/new' },
+    ],
+  },
+  { label: '발주요청', href: '/rfq' },
+  {
+    label: '상품관리', href: '/products',
+    items: [
+      { label: '상품 목록', href: '/products' },
+      { label: '상품 등록', href: '/products/new' },
+      { label: '대량 등록', href: '/products/bulk' },
+    ],
+  },
+  {
+    label: '수금관리', href: '/payments/new',
+    items: [
+      { label: '수금 등록', href: '/payments/new' },
+      { label: '수금 목록', href: '/payments' },
+    ],
+  },
+  {
+    label: '지급관리', href: '/disbursements',
+    items: [
+      { label: '지급 목록', href: '/disbursements' },
+      { label: '지급 등록', href: '/disbursements/new' },
+      { label: '지급 상세', soon: true },
+    ],
+  },
+  {
+    label: '매입관리', href: '/purchases',
+    items: [
+      { label: '매입 목록', href: '/purchases' },
+      { label: '매입 등록', href: '/purchases/new' },
+    ],
+  },
+  {
+    label: '자금관리', href: '/funds',
+    items: [
+      { label: '자금 현황', href: '/funds' },
+      { label: '자금 설정', href: '/funds/settings' },
+    ],
+  },
+  { label: '설정', href: '/settings' },
+  { label: '원장관리', href: '/ledger' },
+  {
+    label: '자동화영업', href: '/sales/schedule',
+    items: [
+      { label: '영업스케쥴', href: '/sales/schedule' },
+      { label: '영업이력', href: '/sales/history' },
+      { label: '스크립트관리', href: '/sales/scripts' },
+    ],
+  },
+  { label: '매출분석', href: '/analytics' },
+]
+
+function SidebarInner({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname()
   const router = useRouter()
-  const [hoverHref, setHoverHref] = useState<string | null>(null)
 
-  const flat = useMemo(() => SECTIONS.flatMap((s) => s.items), [])
-  const activeHref = useMemo(() => {
-    const exact = flat.find((i) => i.href === pathname)?.href
-    if (exact) return exact
-    const prefix = flat.find((i) => pathname.startsWith(i.href + '/'))?.href
-    return prefix ?? null
-  }, [flat, pathname])
+  const [hoverKey, setHoverKey] = useState<string | null>(null)
+  const [hoverSubKey, setHoverSubKey] = useState<string | null>(null)
+
+  const [openGroups, setOpenGroups] = useState<Set<string>>(() => {
+    const open = new Set<string>()
+    for (const g of MENU) {
+      if (g.items?.some((i) => i.href && pathname.startsWith(i.href))) open.add(g.label)
+    }
+    return open
+  })
+
+  // 그룹 내 중메뉴 href 전체 목록 — 정확 매칭에서 제외할 경로
+  const allItemHrefs = useMemo(() => new Set(
+    MENU.flatMap((g) => g.items?.map((i) => i.href).filter(Boolean) ?? []),
+  ), [])
+
+  function toggleGroup(label: string) {
+    setOpenGroups((prev) => {
+      const next = new Set(prev)
+      next.has(label) ? next.delete(label) : next.add(label)
+      return next
+    })
+  }
+
+  function isActive(href: string) {
+    if (pathname === href) return true
+    if (pathname.startsWith(href + '/')) {
+      if (allItemHrefs.has(pathname)) return false
+      return true
+    }
+    return false
+  }
 
   async function logout() {
     try {
@@ -85,38 +148,107 @@ function SidebarInner({
         <div style={s.brandText}>식식이OS</div>
       </div>
 
-      <div style={s.nav}>
-        {SECTIONS.map((sec) => (
-          <div key={sec.label} style={s.section}>
-            <div style={s.sectionLabel}>{sec.label}</div>
-            <div style={s.sectionItems}>
-              {sec.items.map((it) => {
-                const active = activeHref ? activeHref === it.href || isActivePath(pathname, it.href) : false
-                const hovered = hoverHref === it.href
-                return (
-                  <Link
-                    key={it.href}
-                    href={it.href}
-                    onClick={() => onNavigate?.()}
-                    onMouseEnter={() => setHoverHref(it.href)}
-                    onMouseLeave={() => setHoverHref((prev) => (prev === it.href ? null : prev))}
-                    style={{
-                      ...s.item,
-                      background: active
-                        ? 'var(--color-primary)'
-                        : hovered
-                          ? 'rgba(255,255,255,0.08)'
-                          : 'transparent',
-                      color: active ? '#ffffff' : 'var(--color-bg)',
-                    }}
-                  >
-                    {it.label}
-                  </Link>
-                )
-              })}
+      <div style={s.menuList}>
+        {MENU.map((group) => {
+          const hasItems = !!group.items?.length
+          const isOpen = openGroups.has(group.label)
+          const groupActive = group.href
+            ? isActive(group.href)
+            : group.items?.some((i) => i.href && isActive(i.href))
+          const hovered = hoverKey === group.label
+
+          if (group.soon) {
+            return (
+              <div key={group.label} style={s.soonGroup} title="곧 제공됩니다">
+                <span style={{ flex: 1 }}>{group.label}</span>
+                <span style={s.soonBadge}>준비중</span>
+              </div>
+            )
+          }
+
+          return (
+            <div key={group.label}>
+              <div
+                style={{
+                  ...s.groupRow,
+                  background: groupActive && !hasItems
+                    ? 'var(--color-primary)'
+                    : hovered
+                      ? 'rgba(255,255,255,0.08)'
+                      : 'transparent',
+                  color: groupActive && !hasItems ? '#ffffff' : 'var(--color-bg)',
+                }}
+                onMouseEnter={() => setHoverKey(group.label)}
+                onMouseLeave={() => setHoverKey((p) => (p === group.label ? null : p))}
+                onClick={() => { if (hasItems) toggleGroup(group.label) }}
+              >
+                <Link
+                  href={group.href ?? '#'}
+                  style={{
+                    ...s.groupLink,
+                    color: 'inherit',
+                    fontWeight: groupActive && !hasItems ? 700 : 600,
+                  }}
+                  onClick={(e) => {
+                    if (hasItems && group.href !== '/sales/schedule') {
+                      e.preventDefault()
+                    } else {
+                      onNavigate?.()
+                    }
+                  }}
+                >
+                  {group.label}
+                </Link>
+                {hasItems && (
+                  <span style={s.caret}>
+                    {isOpen ? '▾' : '▸'}
+                  </span>
+                )}
+              </div>
+
+              {hasItems && isOpen && (
+                <div style={s.subList}>
+                  {group.items!.map((item) => {
+                    if (item.soon) {
+                      return (
+                        <div key={item.label} style={s.soonItem} title="곧 제공됩니다">
+                          {item.label}
+                          <span style={s.soonBadge}>준비중</span>
+                        </div>
+                      )
+                    }
+
+                    const href = item.href!
+                    const active = isActive(href)
+                    const subHovered = hoverSubKey === href
+
+                    return (
+                      <Link
+                        key={href}
+                        href={href}
+                        onClick={() => onNavigate?.()}
+                        onMouseEnter={() => setHoverSubKey(href)}
+                        onMouseLeave={() => setHoverSubKey((p) => (p === href ? null : p))}
+                        style={{
+                          ...s.subItem,
+                          background: active
+                            ? 'var(--color-primary)'
+                            : subHovered
+                              ? 'rgba(255,255,255,0.08)'
+                              : 'transparent',
+                          color: active ? '#ffffff' : 'rgba(247,246,242,0.82)',
+                          fontWeight: active ? 700 : 600,
+                        }}
+                      >
+                        {item.label}
+                      </Link>
+                    )
+                  })}
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       <div style={s.footer}>
@@ -143,9 +275,22 @@ export default function Sidebar() {
     return () => mq.removeEventListener('change', onChange)
   }, [])
 
+  // 라우트 변경 시 모바일 사이드바 닫기
+  const pathname = usePathname()
+  useEffect(() => { setMobileOpen(false) }, [pathname])
+
   useEffect(() => {
     document.body.style.overflow = mobileOpen ? 'hidden' : ''
     return () => { document.body.style.overflow = '' }
+  }, [mobileOpen])
+
+  // ESC 키로 닫기
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape' && mobileOpen) setMobileOpen(false)
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
   }, [mobileOpen])
 
   return (
@@ -236,24 +381,74 @@ const s: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     gap: 12,
   },
-  section: { display: 'flex', flexDirection: 'column', gap: 6 },
-  sectionLabel: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.55)',
-    fontWeight: 700,
-    letterSpacing: '0.2px',
-    padding: '0 6px',
-    textTransform: 'uppercase',
+  menuList: {
+    flex: 1,
+    overflowY: 'auto',
+    padding: '12px 10px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 2,
   },
-  sectionItems: { display: 'flex', flexDirection: 'column', gap: 2 },
-  item: {
+  groupRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
     padding: '8px 10px',
     borderRadius: 10,
+  },
+  groupLink: {
+    flex: 1,
     fontSize: 13,
     fontWeight: 600,
-    color: 'var(--color-bg)',
     textDecoration: 'none',
-    transition: 'background 120ms ease',
+  },
+  caret: {
+    fontSize: 12,
+    color: 'rgba(247,246,242,0.62)',
+    flexShrink: 0,
+  },
+  subList: {
+    marginTop: 2,
+    marginBottom: 8,
+    paddingLeft: 10,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 2,
+  },
+  subItem: {
+    display: 'block',
+    padding: '7px 10px',
+    borderRadius: 10,
+    fontSize: 12,
+    textDecoration: 'none',
+  },
+  soonGroup: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '8px 10px',
+    borderRadius: 10,
+    cursor: 'not-allowed',
+    opacity: 0.55,
+    fontSize: 13,
+    color: 'rgba(247,246,242,0.62)',
+  },
+  soonItem: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '7px 10px',
+    borderRadius: 10,
+    fontSize: 12,
+    cursor: 'not-allowed',
+    color: 'rgba(247,246,242,0.62)',
+  },
+  soonBadge: {
+    fontSize: 9,
+    padding: '1px 6px',
+    borderRadius: 999,
+    border: '1px solid rgba(255,255,255,0.14)',
+    color: 'rgba(247,246,242,0.72)',
   },
   footer: {
     padding: 10,

@@ -12,7 +12,7 @@ export default async function DashboardPage() {
     getTodayCollections(),
   ])
   if (!result.success || !result.data) {
-    return <main style={s.page}><p style={{ color: '#9ca3af' }}>데이터를 불러올 수 없습니다.</p></main>
+    return <main style={s.page}><p style={{ color: 'var(--color-text-secondary)' }}>데이터를 불러올 수 없습니다.</p></main>
   }
   const d           = result.data
   const collections = collectionsResult.data ?? []
@@ -45,7 +45,7 @@ export default async function DashboardPage() {
       <Suspense fallback={
         <div style={{ ...s.aiBox, opacity: 0.5 }}>
           <span style={s.aiIcon}>💡</span>
-          <span style={{ ...s.aiText, color: '#9ca3af' }}>AI 분석 중...</span>
+          <span style={{ ...s.aiText, color: 'var(--color-text-secondary)' }}>AI 분석 중...</span>
         </div>
       }>
         <AiInsightBox context={d.ai_context} />
@@ -82,10 +82,10 @@ export default async function DashboardPage() {
 
       {/* KPI */}
       <div style={s.grid4}>
-        <KpiCard label="총 미수금"    value={formatKRW(d.total_receivable)} href="/customers" color={d.total_receivable > 0 ? '#B91C1C' : undefined} />
+        <KpiCard label="총 미수금"    value={formatKRW(d.total_receivable)} href="/customers" color={d.total_receivable > 0 ? 'var(--color-danger)' : undefined} />
         <KpiCard label="이번달 매출"  value={formatKRW(d.monthly_sales)} href="/customers" />
-        <KpiCard label="총 연체금"    value={formatKRW(d.total_overdue)} href="/customers" color={d.total_overdue > 0 ? '#B91C1C' : undefined} />
-        <KpiCard label="총 예치금"    value={formatKRW(d.total_deposit)} href="/customers" color={d.total_deposit > 0 ? '#1D4ED8' : undefined} />
+        <KpiCard label="총 연체금"    value={formatKRW(d.total_overdue)} href="/customers" color={d.total_overdue > 0 ? 'var(--color-danger)' : undefined} />
+        <KpiCard label="총 예치금"    value={formatKRW(d.total_deposit)} href="/customers" color={d.total_deposit > 0 ? 'var(--color-primary)' : undefined} />
       </div>
 
       <div style={s.grid2}>
@@ -96,17 +96,17 @@ export default async function DashboardPage() {
             : d.top_customers.map((c, i) => (
               <div key={c.id} style={s.listRow}>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: i === 0 ? 'var(--color-primary)' : '#111827', minWidth: 36 }}>{i + 1}순위</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: i === 0 ? 'var(--color-primary)' : 'var(--color-text)', minWidth: 36 }}>{i + 1}순위</span>
                   <div>
                     <span style={{ fontSize: 13, fontWeight: 600 }}>{c.name}</span>
                     {c.primary_reason && (
-                      <span style={{ fontSize: 11, color: '#B45309', marginLeft: 6 }}>{c.primary_reason}</span>
+                      <span style={{ fontSize: 11, color: 'var(--color-warning)', marginLeft: 6 }}>{c.primary_reason}</span>
                     )}
                     {(() => {
                       const delayDays = c.days_since_order - (c.payment_terms_days ?? 30)
                       if (delayDays <= 0) return null
                       return (
-                        <span style={{ fontSize: 11, color: '#B91C1C', marginLeft: 6, fontWeight: 700 }}>
+                        <span style={{ fontSize: 11, color: 'var(--color-danger)', marginLeft: 6, fontWeight: 700 }}>
                           D+{delayDays}
                         </span>
                       )
@@ -115,8 +115,12 @@ export default async function DashboardPage() {
                 </div>
                 <span style={{
                   fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 8,
-                  background: c.score >= 300 ? '#FEE2E2' : c.score >= 100 ? '#FEF3C7' : '#F3F4F6',
-                  color: c.score >= 300 ? '#B91C1C' : c.score >= 100 ? '#92400E' : '#6b7280',
+                  background: c.score >= 300 ? 'color-mix(in srgb, var(--color-danger) 18%, white)'
+                           : c.score >= 100 ? 'color-mix(in srgb, var(--color-warning) 20%, white)'
+                           : 'color-mix(in srgb, var(--color-border) 40%, white)',
+                  color: c.score >= 300 ? 'var(--color-danger)'
+                       : c.score >= 100 ? 'var(--color-warning)'
+                       : 'var(--color-text-secondary)',
                 }}>{c.score}점</span>
               </div>
             ))}
@@ -124,13 +128,13 @@ export default async function DashboardPage() {
 
         {/* 오늘 할 일 */}
         <Section title="✅ 오늘 할 일">
-          <TodoRow icon="💸" label="연체 거래처" count={d.overdue_count} href="/customers" color="#B91C1C" />
-          <TodoRow icon="📵" label="14일 이상 미연락" count={d.uncontacted_count} href="/customers" color="#B45309" />
+          <TodoRow icon="💸" label="연체 거래처" count={d.overdue_count} href="/customers" color="var(--color-danger)" />
+          <TodoRow icon="📵" label="14일 이상 미연락" count={d.uncontacted_count} href="/customers" color="var(--color-warning)" />
           {d.rfq_unanswered_count > 0 && (
-            <TodoRow icon="📬" label="RFQ 미응답(24h 초과)" count={d.rfq_unanswered_count} href="/rfq" color="#7C3AED" />
+            <TodoRow icon="📬" label="RFQ 미응답(24h 초과)" count={d.rfq_unanswered_count} href="/rfq" color="var(--color-text)" />
           )}
           {d.draft_order_count > 0 && (
-            <TodoRow icon="📋" label="미처리 주문(draft)" count={d.draft_order_count} href="/orders" color="#6b7280" />
+            <TodoRow icon="📋" label="미처리 주문(draft)" count={d.draft_order_count} href="/orders" color="var(--color-text-secondary)" />
           )}
         </Section>
 
@@ -141,14 +145,14 @@ export default async function DashboardPage() {
             : d.top_customer_sales.map((c, i) => (
               <div key={i} style={s.listRow}>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#111827', minWidth: 28 }}>{i + 1}위</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-text)', minWidth: 28 }}>{i + 1}위</span>
                   <span style={{ fontSize: 13 }}>{c.name}</span>
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <div style={{ fontSize: 13, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
                     {formatKRW(c.amount)}
                   </div>
-                  <div style={{ fontSize: 11, color: '#9ca3af', fontVariantNumeric: 'tabular-nums' }}>
+                  <div style={{ fontSize: 11, color: 'var(--color-text-secondary)', fontVariantNumeric: 'tabular-nums' }}>
                     {c.quantity.toLocaleString()}개
                   </div>
                 </div>
@@ -163,7 +167,7 @@ export default async function DashboardPage() {
             : d.top_product_sales.map((p, i) => (
               <div key={i} style={s.listRow}>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#111827', minWidth: 28 }}>{i + 1}위</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-text)', minWidth: 28 }}>{i + 1}위</span>
                   <span style={{ fontSize: 13 }}>{p.name}</span>
                 </div>
                 <span style={{ fontSize: 13, fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
@@ -182,11 +186,11 @@ export default async function DashboardPage() {
             </div>
             <div style={s.fundKpi}>
               <span style={s.fundLabel}>이행</span>
-              <span style={{ ...s.fundVal, color: '#15803D' }}>{formatKRW(d.fund_total_actual)}</span>
+              <span style={{ ...s.fundVal, color: 'var(--color-success)' }}>{formatKRW(d.fund_total_actual)}</span>
             </div>
             <div style={s.fundKpi}>
               <span style={s.fundLabel}>미이행</span>
-              <span style={{ ...s.fundVal, color: d.fund_pending_count > 0 ? '#B91C1C' : '#6b7280' }}>
+              <span style={{ ...s.fundVal, color: d.fund_pending_count > 0 ? 'var(--color-danger)' : 'var(--color-text-secondary)' }}>
                 {d.fund_pending_count}건
               </span>
             </div>
@@ -240,7 +244,7 @@ function KpiCard({ label, value, href, color }: { label: string; value: string; 
   const content = (
     <div style={{ ...s.kpiCard, cursor: href ? 'pointer' : undefined }}>
       <span style={s.kpiLabel}>{label}</span>
-      <span style={{ ...s.kpiVal, color: color ?? '#111827' }}>{value}</span>
+      <span style={{ ...s.kpiVal, color: color ?? 'var(--color-text)' }}>{value}</span>
     </div>
   )
 
@@ -272,19 +276,19 @@ function TodoRow({ icon, label, count, href, color }: { icon: string; label: str
     <Link href={href} style={{ ...s.listRow, textDecoration: 'none' }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <span style={{ fontSize: 14 }}>{icon}</span>
-        <span style={{ fontSize: 13, color: '#374151' }}>{label}</span>
+        <span style={{ fontSize: 13, color: 'var(--color-text)' }}>{label}</span>
       </div>
       <span style={{
         fontSize: 13, fontWeight: 700, padding: '2px 10px', borderRadius: 8,
-        background: count > 0 ? '#FEF2F2' : '#F3F4F6',
-        color: count > 0 ? color : '#9ca3af',
+        background: count > 0 ? 'color-mix(in srgb, var(--color-danger) 12%, white)' : 'color-mix(in srgb, var(--color-border) 40%, white)',
+        color: count > 0 ? color : 'var(--color-text-secondary)',
       }}>{count}건</span>
     </Link>
   )
 }
 
 function Empty({ text }: { text: string }) {
-  return <p style={{ fontSize: 13, color: '#9ca3af', margin: 0 }}>{text}</p>
+  return <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', margin: 0 }}>{text}</p>
 }
 
 // ── 스타일 ───────────────────────────────────────────────────
@@ -294,49 +298,49 @@ import { getAiInsight } from '@/actions/dashboard'
 async function AiInsightBox({ context }: { context: Parameters<typeof getAiInsight>[0] }) {
   const msg = await getAiInsight(context)
   return (
-    <div style={{ background: '#F0FDF4', border: '1px solid #86EFAC', borderRadius: 10,
+    <div style={{ background: 'color-mix(in srgb, var(--color-success) 10%, white)', border: `1px solid var(--color-border)`, borderRadius: 10,
       padding: '12px 16px', display: 'flex', gap: 10, alignItems: 'center' }}>
       <span style={{ fontSize: 18, flexShrink: 0 }}>💡</span>
-      <span style={{ fontSize: 14, fontWeight: 500, color: '#15803D', lineHeight: 1.5 }}>{msg}</span>
+      <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)', lineHeight: 1.5 }}>{msg}</span>
     </div>
   )
 }
 
 const ds: Record<string, React.CSSProperties> = {
-  actionBox:     { background: '#FFFBEB', border: '2px solid #FCD34D', borderRadius: 12, padding: '16px 20px' },
-  actionTitle:   { fontSize: 14, fontWeight: 800, color: '#92400E', marginBottom: 6 },
-  actionMsg:     { fontSize: 14, fontWeight: 600, color: '#111827', lineHeight: 1.5 },
-  actionKpiLabel:{ fontSize: 11, color: '#6b7280', marginBottom: 2 },
-  actionKpiVal:  { fontSize: 16, fontWeight: 900, color: '#B91C1C', fontVariantNumeric: 'tabular-nums' },
-  actionCta:     { fontSize: 12, color: '#92400E', marginTop: 6, fontWeight: 700 },
-  collectBox:    { background: '#fff', border: '2px solid #FCA5A5', borderRadius: 12, padding: '16px 20px' },
+  actionBox:     { background: 'var(--color-bg-card)', border: `1px solid var(--color-border)`, borderRadius: 12, padding: '16px 20px' },
+  actionTitle:   { fontSize: 14, fontWeight: 800, color: 'var(--color-text)', marginBottom: 6 },
+  actionMsg:     { fontSize: 14, fontWeight: 600, color: 'var(--color-text)', lineHeight: 1.5 },
+  actionKpiLabel:{ fontSize: 11, color: 'var(--color-text-secondary)', marginBottom: 2 },
+  actionKpiVal:  { fontSize: 16, fontWeight: 900, color: 'var(--color-danger)', fontVariantNumeric: 'tabular-nums' },
+  actionCta:     { fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 6, fontWeight: 700 },
+  collectBox:    { background: 'var(--color-bg-card)', border: `1px solid var(--color-border)`, borderRadius: 12, padding: '16px 20px' },
   collectHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  collectTitle:  { fontSize: 14, fontWeight: 700, color: '#B91C1C' },
-  collectSub:    { fontSize: 11, color: '#9ca3af' },
-  collectRow:    { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #f3f4f6' },
-  collectName:   { fontSize: 14, fontWeight: 600, color: '#111827', marginRight: 8 },
-  collectMeta:   { fontSize: 11, color: '#9ca3af' },
-  collectBal:    { fontSize: 14, fontWeight: 700, color: '#B91C1C', fontVariantNumeric: 'tabular-nums', minWidth: 80, textAlign: 'right' as const },
-  payBtn:        { padding: '6px 12px', background: '#B91C1C', color: '#fff', borderRadius: 6, fontSize: 12, fontWeight: 600, textDecoration: 'none' },
-  ledBtn:        { padding: '6px 10px', background: '#f3f4f6', color: '#374151', borderRadius: 6, fontSize: 12, textDecoration: 'none' },
+  collectTitle:  { fontSize: 14, fontWeight: 800, color: 'var(--color-text)' },
+  collectSub:    { fontSize: 11, color: 'var(--color-text-secondary)' },
+  collectRow:    { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: `1px solid var(--color-border)` },
+  collectName:   { fontSize: 14, fontWeight: 700, color: 'var(--color-text)', marginRight: 8 },
+  collectMeta:   { fontSize: 11, color: 'var(--color-text-secondary)' },
+  collectBal:    { fontSize: 14, fontWeight: 800, color: 'var(--color-danger)', fontVariantNumeric: 'tabular-nums', minWidth: 80, textAlign: 'right' as const },
+  payBtn:        { padding: '6px 12px', background: 'var(--color-primary)', color: '#fff', borderRadius: 10, fontSize: 12, fontWeight: 800, textDecoration: 'none' },
+  ledBtn:        { padding: '6px 10px', background: 'rgba(43,43,43,0.06)', color: 'var(--color-text)', borderRadius: 10, fontSize: 12, fontWeight: 700, textDecoration: 'none', border: `1px solid var(--color-border)` },
 }
 
 const s: Record<string, React.CSSProperties> = {
   page:        { maxWidth: 960, margin: '0 auto', padding: '28px 24px 60px', display: 'flex', flexDirection: 'column', gap: 20 },
-  aiBox:       { background: '#F0FDF4', border: '1px solid #86EFAC', borderRadius: 10, padding: '12px 16px', display: 'flex', gap: 10, alignItems: 'center' },
+  aiBox:       { background: 'var(--color-bg-card)', border: `1px solid var(--color-border)`, borderRadius: 10, padding: '12px 16px', display: 'flex', gap: 10, alignItems: 'center' },
   aiIcon:      { fontSize: 18, flexShrink: 0 },
-  aiText:      { fontSize: 14, fontWeight: 500, color: '#15803D', lineHeight: 1.5 },
+  aiText:      { fontSize: 14, fontWeight: 600, color: 'var(--color-text)', lineHeight: 1.5 },
   grid4:       { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 },
   grid2:       { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 },
-  kpiCard:     { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 6 },
-  kpiLabel:    { fontSize: 11, color: '#9ca3af', fontWeight: 500 },
+  kpiCard:     { background: 'var(--color-bg-card)', border: `1px solid var(--color-border)`, borderRadius: 10, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 6 },
+  kpiLabel:    { fontSize: 11, color: 'var(--color-text-secondary)', fontWeight: 700 },
   kpiVal:      { fontSize: 18, fontWeight: 700, fontVariantNumeric: 'tabular-nums' },
-  section:     { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '16px' },
+  section:     { background: 'var(--color-bg-card)', border: `1px solid var(--color-border)`, borderRadius: 10, padding: '16px' },
   sectionHead: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  sectionTitle:{ fontSize: 13, fontWeight: 600, color: '#111827' },
-  seeAll:      { fontSize: 11, color: '#6b7280', textDecoration: 'none' },
-  listRow:     { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid #f9fafb' },
-  fundKpi:     { flex: 1, display: 'flex', flexDirection: 'column', gap: 4, padding: '10px', background: '#f9fafb', borderRadius: 8 },
-  fundLabel:   { fontSize: 11, color: '#9ca3af' },
+  sectionTitle:{ fontSize: 13, fontWeight: 800, color: 'var(--color-text)' },
+  seeAll:      { fontSize: 11, color: 'var(--color-text-secondary)', textDecoration: 'none' },
+  listRow:     { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: `1px solid color-mix(in srgb, var(--color-border) 55%, white)` },
+  fundKpi:     { flex: 1, display: 'flex', flexDirection: 'column', gap: 4, padding: '10px', background: 'color-mix(in srgb, var(--color-border) 30%, white)', borderRadius: 10, border: `1px solid var(--color-border)` },
+  fundLabel:   { fontSize: 11, color: 'var(--color-text-secondary)', fontWeight: 700 },
   fundVal:     { fontSize: 14, fontWeight: 600, fontVariantNumeric: 'tabular-nums' },
 }

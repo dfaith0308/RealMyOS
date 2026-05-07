@@ -110,24 +110,24 @@ export default function AnalyticsShell({
                   if (tab === 'overview') {
                     const r = await getAnalyticsOverview(from, to)
                     if (!r.success || !r.data) throw new Error(r.error ?? '데이터 없음')
-                    exportOverviewToExcel(r.data, from, to)
+                    await exportOverviewToExcel(r.data, from, to)
                     return
                   }
                   if (tab === 'margin') {
                     const r = await getMarginByProduct(from, to)
                     if (!r.success || !r.data) throw new Error(r.error ?? '데이터 없음')
-                    exportMarginToExcel(r.data, from, to)
+                    await exportMarginToExcel(r.data, from, to)
                     return
                   }
                   if (tab === 'customer') {
                     const r = await getMarginByCustomer(from, to)
                     if (!r.success || !r.data) throw new Error(r.error ?? '데이터 없음')
-                    exportCustomerToExcel(r.data, from, to)
+                    await exportCustomerToExcel(r.data, from, to)
                     return
                   }
                   const r = await getRiskSignals(from, to)
                   if (!r.success || !r.data) throw new Error(r.error ?? '데이터 없음')
-                  exportRiskToExcel(r.data, from, to)
+                  await exportRiskToExcel(r.data, from, to)
                 } catch (e) {
                   alert(e instanceof Error ? e.message : '엑셀 생성에 실패했어요')
                 }

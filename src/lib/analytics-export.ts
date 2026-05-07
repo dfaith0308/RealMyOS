@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx'
+'use client'
 
 import type {
   CustomerAnalyticsResult,
@@ -6,6 +6,17 @@ import type {
   OverviewResult,
   RiskSignals,
 } from '@/actions/analytics'
+
+type XLSXMod = typeof import('xlsx')
+
+let _xlsx: XLSXMod | null = null
+async function getXLSX(): Promise<XLSXMod> {
+  if (_xlsx) return _xlsx
+  // Dynamic import so /analytics build doesn't eagerly bundle xlsx.
+  const mod = (await import('xlsx')) as XLSXMod
+  _xlsx = mod
+  return mod
+}
 
 function safeSheetName(name: string): string {
   // Excel worksheet name constraints: <= 31 chars, no: : \ / ? * [ ]
@@ -18,11 +29,12 @@ function fileName(tab: string, from: string, to: string): string {
   return `analytics_${safe(tab)}_${safe(from)}_${safe(to)}.xlsx`
 }
 
-function downloadWorkbook(wb: XLSX.WorkBook, tab: string, from: string, to: string) {
+function downloadWorkbook(XLSX: XLSXMod, wb: any, tab: string, from: string, to: string) {
   XLSX.writeFile(wb, fileName(tab, from, to), { compression: true })
 }
 
-export function exportOverviewToExcel(data: OverviewResult, from: string, to: string) {
+export async function exportOverviewToExcel(data: OverviewResult, from: string, to: string) {
+  const XLSX = await getXLSX()
   const wb = XLSX.utils.book_new()
 
   const rows = (data.by_date ?? []).map((r) => ({
@@ -35,10 +47,11 @@ export function exportOverviewToExcel(data: OverviewResult, from: string, to: st
   const ws = XLSX.utils.json_to_sheet(rows)
   XLSX.utils.book_append_sheet(wb, ws, safeSheetName('by_date'))
 
-  downloadWorkbook(wb, 'overview', from, to)
+  downloadWorkbook(XLSX, wb, 'overview', from, to)
 }
 
-export function exportMarginToExcel(data: MarginResult, from: string, to: string) {
+export async function exportMarginToExcel(data: MarginResult, from: string, to: string) {
+  const XLSX = await getXLSX()
   const wb = XLSX.utils.book_new()
 
   const rows = (data.rows ?? []).map((r) => ({
@@ -54,10 +67,11 @@ export function exportMarginToExcel(data: MarginResult, from: string, to: string
   const ws = XLSX.utils.json_to_sheet(rows)
   XLSX.utils.book_append_sheet(wb, ws, safeSheetName('products'))
 
-  downloadWorkbook(wb, 'margin', from, to)
+  downloadWorkbook(XLSX, wb, 'margin', from, to)
 }
 
-export function exportCustomerToExcel(data: CustomerAnalyticsResult, from: string, to: string) {
+export async function exportCustomerToExcel(data: CustomerAnalyticsResult, from: string, to: string) {
+  const XLSX = await getXLSX()
   const wb = XLSX.utils.book_new()
 
   const rows = (data.rows ?? []).map((r) => ({
@@ -74,10 +88,11 @@ export function exportCustomerToExcel(data: CustomerAnalyticsResult, from: strin
   const ws = XLSX.utils.json_to_sheet(rows)
   XLSX.utils.book_append_sheet(wb, ws, safeSheetName('customers'))
 
-  downloadWorkbook(wb, 'customer', from, to)
+  downloadWorkbook(XLSX, wb, 'customer', from, to)
 }
 
-export function exportRiskToExcel(data: RiskSignals, from: string, to: string) {
+export async function exportRiskToExcel(data: RiskSignals, from: string, to: string) {
+  const XLSX = await getXLSX()
   const wb = XLSX.utils.book_new()
 
   XLSX.utils.book_append_sheet(
@@ -145,6 +160,6 @@ export function exportRiskToExcel(data: RiskSignals, from: string, to: string) {
     safeSheetName('반품많은상품'),
   )
 
-  downloadWorkbook(wb, 'risk', from, to)
+  downloadWorkbook(XLSX, wb, 'risk', from, to)
 }
 

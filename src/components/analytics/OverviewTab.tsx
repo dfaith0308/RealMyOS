@@ -1,3 +1,5 @@
+'use client'
+
 import { formatKRW } from '@/lib/calc'
 import type { OverviewResult } from '@/actions/analytics'
 import {
