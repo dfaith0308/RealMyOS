@@ -1056,6 +1056,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **요구사항(요약)**:
   - 지급예정 / 거래처미지급금 / 자금흐름 3 화면 분리
 - **migration 필요**: NO (UI 분리)
+- **작업 이력 (2026-05-07)**: 식당OS `resturant_os`에서 `/money`를 `/money/upcoming`으로 리다이렉트 + `/money/upcoming|/money/suppliers|/money/cashflow` 3메뉴 분리 + 화면 상단 서브 네비 추가 — worklog: `docs/worklogs/2026-05-07_res-missing-003-004_money-today.md`
 
 #### [RES-MISSING-004] 오늘운영 카드 생성 로직 미구현 (PRODUCT §8-3)
 - **PRODUCT 정의 위치**: PRODUCT §8-3
@@ -1064,6 +1065,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
   - 조건 기반 카드 자동 생성: 돈흐름카드 / 절약기회카드 / 오늘할일카드
   - 카드 완료 시 자동 제거
 - **migration 필요**: NO (로직 구현)
+- **작업 이력 (2026-05-07)**: 식당OS `resturant_os`에서 오늘운영 카드 최대 3개(돈흐름>절약기회>오늘할일) 규칙으로 카드 생성 로직 구현 + 카드 CTA는 화면 이동만(자동 발송/자동 실행 없음) — worklog: `docs/worklogs/2026-05-07_res-missing-003-004_money-today.md`
 
 ### 🔍 확인 필요
 
