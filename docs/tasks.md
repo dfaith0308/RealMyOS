@@ -17,7 +17,7 @@
 
 ## 문서 사용법 (Phase 0)
 
-1. **`## [공통 DB]`** — 마이그레이션 실사·스키마 정본·`DB-*` ID. **운영 DB forensic(001~006)는 종결**되었으나 **`DB-CHECK-007`·`008`** 및 RLS `WITH CHECK` 잔여 확인은 미결.
+1. **`## [공통 DB]`** — 마이그레이션 실사·스키마 정본·`DB-*` ID. **운영 DB forensic(001~006)는 종결**되었으나 **`DB-CHECK-007`·`008`** 은 미결. **`DB-CHECK-004`** 의 **`WITH CHECK`** 보강은 **2026-05-08 종결** (`supabase/migrations/20260508020000_fix_rls_with_check.sql`, `docs/FORENSIC.md` §2).
 2. **`## [공급자OS]` / `## [관리자OS]` / `## [식당OS]`** — 앱 코드 감사 ID (`SUP-*`, `ADM-*`, `RES-*`).
 3. **`## 감사 요약 (집계)`** · **`## 실행 로드맵`** — 숫자 요약 및 **현행 감사 ID만** 참조.
 4. **`## 비-DB 운영 확인`** — DB·스키마가 아닌 **배포 환경·외부 API** 확인 항목 (`SUP-CHECK-002`).
@@ -121,6 +121,7 @@
 - **완료 기준**: PRODUCT §10·CONTEXT와 일치하는 테이블·정책
 - **작업 이력 (2026-05-06)**: 테이블·RLS 포함 migration 파일 추가(미적용) — `supabase/migrations/20260506130001_create_admin_logs.sql` — worklog: [`docs/worklogs/2026-05-06_phase1_db-todo-001-002_migration-files.md`](./worklogs/2026-05-06_phase1_db-todo-001-002_migration-files.md)
 - **작업 이력 (2026-05-08)**: 레이어 불일치 현실 고정 문서 `docs/FORENSIC.md` 신규 — 앱 `insertAdminLog` 컬럼명 vs 스키마·정책키 소비·알리고 이원화·RLS `WITH CHECK` 잔여 정리 — worklog: [`docs/worklogs/2026-05-08_docs_forensic-layer-drift.md`](./worklogs/2026-05-08_docs_forensic-layer-drift.md)
+- **작업 이력 (2026-05-08)**: `admin_logs` 앱 정렬용 컬럼 7개 소급 migration — `supabase/migrations/20260508010000_add_admin_logs_columns.sql` (운영 적용 완료) — worklog: [`docs/worklogs/2026-05-08_docs_forensic-migrations.md`](./worklogs/2026-05-08_docs_forensic-migrations.md)
 
 ### ⚠️ DB 부분구현 (재분류)
 
@@ -155,8 +156,8 @@
 - **이관 출처**: 기존 **[RES-CHECK-001]** 본문
 
 #### [DB-CHECK-004] `orders`·`payments`·`rfq_requests` RLS — `USING`·테넌트 격리
-- **Forensic 상태**: **닫힘 (부분)** — `orders`, `payments`, `rfq_requests` 정책의 **`USING` qual** 기준 **테넌트 격리 실동작** 확인·기록.
-- **잔여 (미결)**: 동일 정책들의 **`WITH CHECK`** 가 **NULL**(미설정)인 경우가 있어, INSERT/UPDATE 경로에서의 격리 보장은 **추가 확인 필요** — 별도 스테이징·정책 DDL 재검 필요 시 본 항목에 후속 기록.
+- **Forensic 상태**: **닫힘** — `orders`, `payments`, `rfq_requests` 정책의 **`USING`** 및 **`WITH CHECK`** 를 동일 조건으로 정렬·운영 반영 완료 (`supabase/migrations/20260508020000_fix_rls_with_check.sql`). `docs/FORENSIC.md` §2 동일 기록.
+- **작업 이력 (2026-05-08)**: 소급 migration·운영 반영 정합 — worklog: [`docs/worklogs/2026-05-08_docs_forensic-migrations.md`](./worklogs/2026-05-08_docs_forensic-migrations.md)
 - **이관 출처**: 기존 **[RES-CHECK-002]** 본문
 
 #### [DB-CHECK-005] realmyos 운영 DB 스키마의 정본(SSOT)
@@ -1176,7 +1177,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 | 식당OS (`RES-*`) | 4 | 1 | 7 | 0 | 2 | 5 | **19** |
 | **전체** | **14** | **4** | **15** | **8** | **14** | **10** | **65** |
 
-> **DB 확인 8건**: `DB-CHECK-001`~`006`은 **forensic 종결(006은 스키마 스냅샷 diff 기록 완료)**. **`007`·`008`** 및 **`DB-CHECK-004`의 `WITH CHECK` 잔여**는 미결.
+> **DB 확인 8건**: `DB-CHECK-001`~`006`은 **forensic 종결(006은 스키마 스냅샷 diff 기록 완료)**. **`007`·`008`**은 미결. **`DB-CHECK-004`** 의 **`WITH CHECK`** 잔여는 **2026-05-08 종결** (`20260508020000_fix_rls_with_check.sql`).
 
 ### ID 접두사별 건수 (교차 검증)
 
@@ -1207,7 +1208,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 
 **Phase 0 — 공통 DB forensic** — **완료**  
 - **`DB-CHECK-001`~`006`**: 운영 DB 기준 **forensic 종결** (각 항목 본문 **Forensic 상태** 참조).  
-- **`DB-CHECK` 1차 배치**: **종료** — 미결은 **`DB-CHECK-007`**, **`DB-CHECK-008`**, 및 **`DB-CHECK-004`** 내 **`WITH CHECK` 추가 확인**만 잔류.  
+- **`DB-CHECK` 1차 배치**: **종료** — 미결은 **`DB-CHECK-007`**, **`DB-CHECK-008`**만 잔류. (**`DB-CHECK-004`** `WITH CHECK`: **2026-05-08 종결**.)  
 - 승격: **`DB-CHECK-002` → `DB-DANGER-004`** (RULE-02, `current_balance` delta 저장).  
 - **`DB-CHECK-005` 게이트 (이력)** — 닫힘: 대시보드 권한자 확인·`tasks.md` 기록 완료.  
 - 참고: 게이트 원문 — *`DB-CHECK-005`는 Cursor 단독 불가; 권한자 확인 후 본 문서 기록; 확인 전 Phase 1 금지* — **현재는 충족됨.**
@@ -1221,7 +1222,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 
 **Phase 2 — 테넌트·앱 보안·캐시 제거 설계** — **완료 (2026-05-06)**  
 - **`SUP-DANGER-005`**, **`SUP-DANGER-006`**, **`RES-DANGER-003`**, **`RES-DANGER-004`**, **`RES-PARTIAL-005`**, **`RES-PARTIAL-006`**, **`DB-DANGER-004`** (deprecated/원장 단일 소스 전환 **설계·단계 합의** — 즉시 DROP 금지)  
-- 입력: **`DB-CHECK-004`** — `USING` 격리 **종결**; **`WITH CHECK`** 잔여는 정책 DDL 재검 시 본 항목에 후속 기록
+- 입력: **`DB-CHECK-004`** — `USING`·**`WITH CHECK`** 테넌트 격리 **종결** (`20260508020000_fix_rls_with_check.sql`, `docs/FORENSIC.md` §2)
 
 **Phase 3 — 거래·돈 원자성**  
 - **`SUP-DANGER-002`**, **`SUP-DANGER-004`**, **`RES-DANGER-001`**, **`RES-DANGER-002`**, **`SUP-DANGER-001`**

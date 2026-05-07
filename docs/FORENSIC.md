@@ -2,13 +2,15 @@
 
 > 수정 전 현실 고정용 문서  
 > 운영 DB vs migration vs 앱 코드 불일치 기록  
-> 작성일: 2026-05-07
+> 작성일: 2026-05-07 · **갱신: 2026-05-08** (`admin_logs` 컬럼·RLS `WITH CHECK` 완료 처리)
 
 ---
 
 ## 1. admin_logs 컬럼 불일치
 
-### 운영 DB 실제 컬럼 (Supabase 확인)
+**✅ 완료 (2026-05-08)** — 소급 migration `supabase/migrations/20260508010000_add_admin_logs_columns.sql`: `admin_id`, `tenant_id`, `reason`, `target_table`, `target_id`, `old_value`, `new_value` 추가 및 COMMENT. 운영 DB 적용 완료.
+
+### 운영 DB 실제 컬럼 (불일치 시점 — Supabase 확인, 2026-05-07 기준)
 
 - id (uuid)
 - admin_tenant_id (uuid)
@@ -24,7 +26,7 @@
 
 ### 앱 코드 가정 (`insertAdminLog` 호출부)
 
-코드가 INSERT 시도하는 컬럼:
+코드가 INSERT 시도하는 컬럼 (**2026-05-07 진단** — 당시 DB에 없었던 항목):
 
 - `admin_id` ❌ (DB에 없음 — DB에는 `admin_tenant_id`만 존재)
 - `tenant_id` ❌ (DB에 없음 — DB에는 `target_tenant_id`만 존재)
@@ -34,43 +36,36 @@
 - `old_value` ❌ (DB에 없음)
 - `new_value` ❌ (DB에 없음)
 
-### 판정
+### 판정 (종결 전 기록)
 
 **CRITICAL** — 앱 코드가 스키마에 없는 컬럼명으로 INSERT를 시도할 수 있음  
 → 관리자 감사 로그 경로가 **실패하거나**, RLS/에러 처리로 **조용히 누락**될 가능성  
-→ 일부 호출부는 `.catch(() => {})` 등으로 실패가 드러나지 않을 수 있음
+→ 일부 호출부는 `.catch(() => {})` 등으로 실패가 드러나지 않을 수 있음  
+→ **2026-05-08**: DB 확장(택 1)으로 컬럼 정합 완료. 앱 INSERT와의 최종 일치는 동작 검증 권장.
 
-### 수정 방향 (수정은 별도 단계)
+### 수정 방향 (이력)
 
-**택 1 — DB 확장 (앱 코드 기준)**
+**택 1 — DB 확장 (앱 코드 기준)** — **적용됨 (2026-05-08)**
 
-추가할 컬럼 예시:
+- `admin_id`, `tenant_id`, `reason`, `target_table`, `target_id`, `old_value`, `new_value` — migration `20260508010000_add_admin_logs_columns.sql`
 
-- `admin_id` uuid (또는 기존 `admin_tenant_id` 의미를 코드와 통일)
-- `tenant_id` uuid (또는 `target_tenant_id` 용도와 역할 문서화)
-- `reason` text
-- `target_table` text
-- `target_id` uuid
-- `old_value` jsonb
-- `new_value` jsonb
-
-**택 2 — 앱 정렬 (DB 스키마 유지)**
-
-- 단일 `payload` jsonb에 위 정보를 구조화해 저장하도록 INSERT 변환
+**택 2 — 앱 정렬 (DB 스키마 유지)** — 미선택 (레거시 기록)
 
 ---
 
 ## 2. RLS WITH CHECK 현황
 
-### 확인 필요 테이블
+**✅ 완료 (2026-05-08)** — 소급 migration `supabase/migrations/20260508020000_fix_rls_with_check.sql`: `orders`·`payments`·`rfq_requests` 기존 정책에 `WITH CHECK`를 `USING`과 동일 조건으로 추가. 운영 DB 적용 완료.
 
-- orders
-- payments
-- rfq_requests
+### 확인 테이블 (이력)
 
-### 상태
+- orders — 정책 `"orders: all"`
+- payments — 정책 `"payments: all"`
+- rfq_requests — 정책 `"tenant_isolation"`
 
-⏳ Supabase에서 확인 진행 중 (`docs/tasks.md` `DB-CHECK-004` 잔여와 동일 축)
+### 상태 (종결 전 기록)
+
+~~⏳ Supabase에서 확인 진행 중 (`docs/tasks.md` `DB-CHECK-004` 잔여와 동일 축)~~ → **종결** — 위 migration 및 운영 반영으로 정리.
 
 ---
 
@@ -152,8 +147,8 @@
 ## 처리 순서
 
 1. ✅ admin_logs forensic 확인 완료
-2. ⏳ RLS WITH CHECK 검증
-3. ⏳ admin_logs 스키마 또는 앱 INSERT 정렬 (수정 단계)
+2. ✅ RLS WITH CHECK 검증·수정 (2026-05-08)
+3. ✅ admin_logs 스키마 확장 — migration 소급 파일·운영 반영 (2026-05-08)
 4. ⏳ 알리고 이원화 정리
 5. ⏳ 정책키 소비 코드 연결
 6. ⏳ CONTEXT.md·tasks.md 재수집
