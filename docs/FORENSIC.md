@@ -2,7 +2,7 @@
 
 > 수정 전 현실 고정용 문서  
 > 운영 DB vs migration vs 앱 코드 불일치 기록  
-> 작성일: 2026-05-07 · **갱신: 2026-05-08** (`admin_logs` 컬럼·RLS `WITH CHECK` 완료 처리)
+> 작성일: 2026-05-07 · **갱신: 2026-05-08** (`admin_logs`·RLS `WITH CHECK` 완료 · §3 알리고 **역할 분리 확정**)
 
 ---
 
@@ -69,29 +69,25 @@
 
 ---
 
-## 3. 알리고 자격증명 이원화
+## 3. 알리고 자격증명 — 역할 분리 확정
 
-### settings 테이블 사용처
+**✅ 해소 (2026-05-08)** — 과거 문서에서 **이원화(HIGH)** 로 표현했으나, 저장소·코드 경로 기준으로는 **역할 분리가 확정된 정상 구조**이다.
 
-- `src/actions/message.ts` → `getAligoSettings()`  
-- 실제 문자 발송 경로 (`sendAligo`, `sendAligoTest` 등)
+### settings 테이블 (`tenant_id` 있음)
 
-### admin_settings 사용처
+- 테넌트별 알리고 설정
+- 공급자가 **`/settings`**에서 직접 입력
+- **실제 문자 발송** 경로 (`src/actions/message.ts` → `getAligoSettings()`, `sendAligo`, `sendAligoTest` 등)
 
-- `src/actions/admin/policy-console.ts`  
-- 정책 콘솔 테스트 발송 (`sendPolicyConsoleAligoTest`)
+### admin_settings 테이블 (`tenant_id` 없음)
 
-### 판정
+- 플랫폼 레벨 기본값
+- 관리자 전용
+- **정책 콘솔 테스트 발송 전용** (`src/actions/admin/policy-console.ts` → `sendPolicyConsoleAligoTest`)
 
-**HIGH** — 실제 발송은 테넌트 `settings` / 관리자 콘솔 테스트는 `admin_settings`  
-→ 운영 혼선·어떤 값이 진짜인지 불명확할 수 있음
+### 결론
 
-### 수정 방향
-
-역할 분리 명시:
-
-- **settings**: 테넌트별 알리고 설정 (공급자 등이 직접 설정)
-- **admin_settings**: 플랫폼 레벨 기본값 또는 관리자 전용 테스트 자격 증명 (문서·PRODUCT와 합의 후 하나로 고정)
+**이원화가 아닌 역할 분리.** 테넌트 실발송과 플랫폼·관리자 테스트 자격 증명의 책임 경계가 분리되어 있다.
 
 ---
 
@@ -108,7 +104,7 @@
 | rfq_open_duration_hours | admin_settings | ❌ 미연결 | 정책 콘솔·시드만 |
 | trust_supplier_level1/2/3 | admin_settings | ✅ `trust-engine.ts` (경유 `policy-console.ts`) | Level 경계 |
 | trust_restaurant_level1/2/3 | admin_settings | ✅ `trust-engine.ts` (경유 `policy-console.ts`) | Level 경계 |
-| aligo_user_id / aligo_api_key / aligo_sender | admin_settings | ⚠️ 부분 | 정책 콘솔·테스트만; 실발송은 `settings` (§3 참조) |
+| aligo_user_id / aligo_api_key / aligo_sender | admin_settings | ✅ §3 역할 분리 | 플랫폼·정책 콘솔 **테스트 발송** 전용; 실발송은 `settings`(테넌트) |
 
 ### 판정
 
@@ -149,6 +145,6 @@
 1. ✅ admin_logs forensic 확인 완료
 2. ✅ RLS WITH CHECK 검증·수정 (2026-05-08)
 3. ✅ admin_logs 스키마 확장 — migration 소급 파일·운영 반영 (2026-05-08)
-4. ⏳ 알리고 이원화 정리
+4. ✅ 알리고 역할 분리 확정 — `docs/FORENSIC.md` §3 (2026-05-08)
 5. ⏳ 정책키 소비 코드 연결
 6. ⏳ CONTEXT.md·tasks.md 재수집
