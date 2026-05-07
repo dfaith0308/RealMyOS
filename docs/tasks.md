@@ -469,15 +469,18 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
     - 미지급금=총매입-총지급(계산) 원칙 준수(집계·상세 원장은 002-D·003-D)
     - `/disbursements/new` + `createDisbursement` → `create_disbursement_with_allocations` RPC(RULE-19)
     - **migration·RPC 운영 적용 완료 (2026-05-07)**: `20260507050000_create_disbursement_with_allocations.sql` — `create_disbursement_with_allocations`(SECURITY DEFINER, `purchases`/`payments` FK 연동 `payment_allocations`, RLS·WITH CHECK는 기존 테이블 정책과 동일 축)
-  - **[SUP-TODO-002-D] 지급 취소(reversed) 및 이력**
-    - 물리 삭제 금지, reversed 처리 + 재계산
-    - migration: 🔍 (로그 테이블 필요 가능)
+  - **[SUP-TODO-002-D] 지급 취소(reversed) 및 이력** — **완료 (2026-05-07)**
+    - 물리 삭제 금지(RULE-10): `payments.status='reversed'`만, `payment_allocations` 보존
+    - `purchases.status` 자동 재계산(`paid`/`partial`/`unpaid`) — `pending`/`confirmed` 분배만 합산
+    - `cancelDisbursement` 액션 + `/disbursements` 목록 “취소” 버튼; 별도 이력 테이블 없음
+    - migration: **운영 적용 완료** — `20260507060000_create_reverse_disbursement.sql` (RULE-19 RPC)
 - **작업 이력 (2026-05-06)**: PRODUCT 6-9 정독 + 지급 라우트 부재 확인 + 세부 분해 등록 — worklog: `docs/worklogs/2026-05-06_phase5_sup-todo-001-005-gap.md`
 - **작업 이력 (2026-05-07)**: SUP-TODO-002-A `/disbursements` 목록·액션·Sidebar — worklog: `docs/worklogs/2026-05-07_sup-todo-002a_disbursements-route.md`
 - **작업 이력 (2026-05-07)**: SUP-TODO-002-B payments 모델·CHECK·데이터 분포 확인(문서) — worklog: `docs/worklogs/2026-05-07_sup-todo-002b_payments-model-check.md`
 - **작업 이력 (2026-05-07)**: `purchases`·`payment_allocations` migration 운영 적용 + 저장소 DDL 정합(FK·`WITH CHECK`) — worklog: `docs/worklogs/2026-05-07_sup-todo-002c-003_purchases-migration.md`
 - **작업 이력 (2026-05-07)**: SUP-TODO-002-C·003-A 매입/지급분배 UI + `create_disbursement_with_allocations` migration 초안 — worklog: `docs/worklogs/2026-05-07_sup-todo-002c-003a_purchases-disburse-ui.md`
 - **작업 이력 (2026-05-07)**: `create_disbursement_with_allocations` RPC **운영 DB 적용 완료**(`pg_get_function_arguments` 확인) — worklog: `docs/worklogs/2026-05-07_sup-todo-002c-003a_purchases-disburse-ui.md`
+- **작업 이력 (2026-05-07)**: SUP-TODO-002-D `reverse_disbursement` RPC + `cancelDisbursement`·취소 UI — worklog: `docs/worklogs/2026-05-07_sup-todo-002d_disbursement-cancel.md`
 
 #### [SUP-TODO-003] 매입관리 메뉴·흐름
 - **PRODUCT 정의 위치**: PRODUCT.md §6-7 매입관리

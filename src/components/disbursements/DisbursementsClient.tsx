@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { cancelDisbursement } from '@/actions/payment'
 import { formatKRW } from '@/lib/calc'
 import type { DisbursementListItem } from '@/actions/payment'
 
@@ -24,12 +25,29 @@ interface Props {
 export default function DisbursementsClient({ rows, filters }: Props) {
   const router = useRouter()
   const [localStatus, setLocalStatus] = useState(filters.status)
+  const [pending, startTransition] = useTransition()
+  const [cancelTarget, setCancelTarget] = useState<DisbursementListItem | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   function applyFilter() {
     const params = new URLSearchParams()
     if (localStatus) params.set('status', localStatus)
     const q = params.toString()
     router.push(q ? `/disbursements?${q}` : '/disbursements')
+  }
+
+  function handleCancel() {
+    if (!cancelTarget) return
+    setError(null)
+    startTransition(async () => {
+      const res = await cancelDisbursement(cancelTarget.id)
+      if (!res.success) {
+        setError(res.error ?? '취소 실패')
+        return
+      }
+      setCancelTarget(null)
+      router.refresh()
+    })
   }
 
   const total = rows.reduce((s, r) => s + r.amount, 0)
@@ -66,6 +84,7 @@ export default function DisbursementsClient({ rows, filters }: Props) {
                 <th style={th}>지급예정일</th>
                 <th style={th}>상태</th>
                 <th style={th}>결제수단</th>
+                <th style={th}></th>
               </tr>
             </thead>
             <tbody>
@@ -75,8 +94,11 @@ export default function DisbursementsClient({ rows, filters }: Props) {
                   color: '#6b7280',
                   bg:    '#F9FAFB',
                 }
+                const isReversed = r.status === 'reversed'
                 return (
-                  <tr key={r.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                  <tr key={r.id} style={{ borderBottom: '1px solid #f3f4f6',
+                    opacity: isReversed ? 0.55 : 1,
+                    textDecoration: isReversed ? 'line-through' : 'none' }}>
                     <td style={{ ...td, fontWeight: 500 }}>
                       {r.counterparty_name?.trim() || '—'}
                     </td>
@@ -95,12 +117,41 @@ export default function DisbursementsClient({ rows, filters }: Props) {
                     <td style={{ ...td, color: '#6b7280' }}>
                       {METHOD_LABEL[r.payment_method] ?? r.payment_method}
                     </td>
+                    <td style={td}>
+                      {r.status === 'pending' && (
+                        <button type="button" style={s.cancelBtn}
+                          onClick={() => setCancelTarget(r)}>
+                          취소
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 )
               })}
             </tbody>
           </table>
         )}
+
+      {cancelTarget && (
+        <div style={s.overlay} onClick={() => { if (!pending) setCancelTarget(null) }}>
+          <div style={s.modal} onClick={(e) => e.stopPropagation()}>
+            <p style={{ fontSize: 15, fontWeight: 600, color: '#B91C1C', margin: '0 0 8px 0' }}>지급 취소</p>
+            <p style={{ fontSize: 13, color: '#374151', margin: '0 0 8px 0', lineHeight: 1.6 }}>
+              {cancelTarget.counterparty_name?.trim() || '—'} — {formatKRW(cancelTarget.amount)}
+              <br />취소 시 연결된 매입의 지급 상태가 자동 재계산됩니다.
+            </p>
+            {error && <p style={{ color: '#B91C1C', fontSize: 12, margin: '8px 0 12px 0' }}>{error}</p>}
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <button type="button" style={s.modalCancelBtn} disabled={pending}
+                onClick={() => setCancelTarget(null)}>아니오</button>
+              <button type="button" style={pending ? s.modalConfirmOff : s.modalConfirmBtn}
+                onClick={handleCancel} disabled={pending}>
+                {pending ? '처리 중...' : '네, 취소합니다'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
@@ -108,11 +159,17 @@ export default function DisbursementsClient({ rows, filters }: Props) {
 const th: React.CSSProperties = { padding: '10px 12px', textAlign: 'left' as const }
 const td: React.CSSProperties = { padding: '10px 12px', verticalAlign: 'middle' }
 const s: Record<string, React.CSSProperties> = {
-  kpi:       { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 4 },
-  kpiLabel:  { fontSize: 11, color: '#9ca3af' },
-  kpiVal:    { fontSize: 16, fontWeight: 700, fontVariantNumeric: 'tabular-nums' },
-  filterRow: { display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' },
-  select:    { padding: '7px 10px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13, background: '#fff' },
-  searchBtn: { padding: '7px 14px', background: '#111827', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, cursor: 'pointer' },
-  resetBtn:  { padding: '7px 14px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, cursor: 'pointer', color: '#6b7280' },
+  kpi:             { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 4 },
+  kpiLabel:        { fontSize: 11, color: '#9ca3af' },
+  kpiVal:          { fontSize: 16, fontWeight: 700, fontVariantNumeric: 'tabular-nums' },
+  filterRow:       { display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' },
+  select:          { padding: '7px 10px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13, background: '#fff' },
+  searchBtn:       { padding: '7px 14px', background: '#111827', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, cursor: 'pointer' },
+  resetBtn:        { padding: '7px 14px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, cursor: 'pointer', color: '#6b7280' },
+  cancelBtn:       { padding: '4px 8px', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 6, fontSize: 11, color: '#B91C1C', cursor: 'pointer' },
+  overlay:         { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  modal:           { background: '#fff', borderRadius: 12, padding: 24, width: 360, boxShadow: '0 20px 60px rgba(0,0,0,0.15)' },
+  modalCancelBtn:  { flex: 1, padding: '10px', background: '#fff', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13, cursor: 'pointer' },
+  modalConfirmBtn: { flex: 2, padding: '10px', background: '#B91C1C', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, cursor: 'pointer', fontWeight: 500 },
+  modalConfirmOff: { flex: 2, padding: '10px', background: '#9ca3af', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, cursor: 'not-allowed' },
 }

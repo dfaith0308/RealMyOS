@@ -373,3 +373,25 @@ export async function createDisbursement(
 
   return { success: true, data: { id: paymentId as string } }
 }
+
+// ============================================================
+// 지급 취소 — reverse_disbursement RPC (RULE-10/11/19/20)
+// ============================================================
+
+export async function cancelDisbursement(payment_id: string): Promise<ActionResult> {
+  const supabase = await createSupabaseServer()
+  const ctx      = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const { error } = await supabase.rpc('reverse_disbursement', {
+    p_tenant_id:  ctx.tenant_id,
+    p_payment_id: payment_id,
+  })
+
+  if (error) return { success: false, error: error.message }
+
+  revalidatePath('/disbursements')
+  revalidatePath('/purchases')
+
+  return { success: true }
+}
