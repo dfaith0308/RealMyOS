@@ -1,5 +1,6 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { processSettlement } from '@/actions/admin/settlement-control'
 
@@ -12,6 +13,7 @@ export default function SettleOrderButton({
   orderNumber: string
   amount: number
 }) {
+  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -26,6 +28,7 @@ export default function SettleOrderButton({
       return
     }
     setOpen(false)
+    router.refresh()
   }
 
   return (
