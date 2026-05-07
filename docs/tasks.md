@@ -546,10 +546,11 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
     - **사이드바**: `매출분석` 링크 `/sales` → `/analytics`
     - 차트 라이브러리/출력/평균결제기간 정확 정의는 아래 분리 ID
     - migration: NO
-  - **[SUP-TODO-004-C-2] 차트 라이브러리(라인차트) 도입** — **신규 (2026-05-07, 보류)**
-    - PRODUCT §6-11 라인차트(매출/원가/마진, 전월 대비) 정식 구현 — recharts/chart.js 후보, 번들/SSR 영향 평가 후 도입
-    - 본 PR(SUP-TODO-004-C)은 표 + CSS 막대까지로 한정
+  - **[SUP-TODO-004-C-2] 차트 라이브러리(라인차트) 도입** — **완료 (2026-05-07)**
+    - PRODUCT §6-11 라인차트 요구에 맞춰 `recharts` 도입
+    - `OverviewTab`의 “일자별 매출/원가/마진”을 `LineChart`(3개 라인)로 교체하고, 기존 CSS 막대 시각화는 제거
     - migration: NO
+    - **작업 이력 (2026-05-07)**: `recharts` 설치 + `OverviewTab` 라인차트 적용 — worklog: `docs/worklogs/2026-05-07_sup-todo-004c2_recharts.md`
   - **[SUP-TODO-004-C-3] 분석 결과 출력(엑셀/PDF/JPG)** — **신규 (2026-05-07, 보류)**
     - PRODUCT §6-11 출력 기능 — 라이브러리 도입(엑셀: SheetJS/PDF: pdf-lib/JPG: html2canvas) 별도
     - migration: NO

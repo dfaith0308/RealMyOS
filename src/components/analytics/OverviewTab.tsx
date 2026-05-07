@@ -1,5 +1,15 @@
 import { formatKRW } from '@/lib/calc'
 import type { OverviewResult } from '@/actions/analytics'
+import {
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
 
 function formatPct(n: number | null | undefined, digits = 1): string {
   if (n === null || n === undefined || !Number.isFinite(n)) return '—'
@@ -16,7 +26,6 @@ function deltaColor(n: number | null | undefined): string {
 
 export default function OverviewTab({ data }: { data: OverviewResult }) {
   const { summary, by_date } = data
-  const maxRev = Math.max(1, ...by_date.map((d) => Math.abs(d.revenue)))
 
   return (
     <>
@@ -40,43 +49,48 @@ export default function OverviewTab({ data }: { data: OverviewResult }) {
       {by_date.length === 0 ? (
         <div style={s.empty}>해당 기간 매출 데이터가 없습니다</div>
       ) : (
-        <div style={s.tableWrap}>
-          <table style={s.table}>
-            <thead>
-              <tr>
-                <th style={s.th}>날짜</th>
-                <th style={{ ...s.th, textAlign: 'right' }}>매출</th>
-                <th style={{ ...s.th, textAlign: 'right' }}>원가</th>
-                <th style={{ ...s.th, textAlign: 'right' }}>마진</th>
-                <th style={{ ...s.th, textAlign: 'right' }}>마진율</th>
-                <th style={s.th}>매출 분포</th>
-              </tr>
-            </thead>
-            <tbody>
-              {by_date.map((d) => {
-                const rate = d.revenue !== 0 ? (d.margin / d.revenue) * 100 : 0
-                const w = (Math.abs(d.revenue) / maxRev) * 100
-                return (
-                  <tr key={d.date} style={s.row}>
-                    <td style={s.td}><span style={s.date}>{d.date}</span></td>
-                    <td style={{ ...s.td, textAlign: 'right' }}><span style={s.num}>{formatKRW(d.revenue)}</span></td>
-                    <td style={{ ...s.td, textAlign: 'right' }}><span style={s.num}>{formatKRW(d.cost)}</span></td>
-                    <td style={{ ...s.td, textAlign: 'right', color: d.margin < 0 ? '#DC2626' : '#111827' }}>
-                      <span style={s.numBold}>{formatKRW(d.margin)}</span>
-                    </td>
-                    <td style={{ ...s.td, textAlign: 'right', color: rate < 0 ? '#DC2626' : '#374151' }}>
-                      {(Math.round(rate * 10) / 10).toFixed(1)}%
-                    </td>
-                    <td style={s.td}>
-                      <div style={s.barTrack}>
-                        <div style={{ ...s.barFill, width: `${Math.max(2, w)}%`, background: d.revenue < 0 ? '#FCA5A5' : '#93C5FD' }} />
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+        <div style={s.chartWrap}>
+          <ResponsiveContainer width="100%" height={240}>
+            <LineChart data={by_date} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
+              <CartesianGrid stroke="#e5e7eb" strokeDasharray="3 3" />
+              <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#6b7280' }} />
+              <YAxis
+                tick={{ fontSize: 11, fill: '#6b7280' }}
+                width={68}
+                tickFormatter={(v) => formatKRW(Number(v))}
+              />
+              <Tooltip
+                formatter={(value) => formatKRW(Number(value))}
+                labelStyle={{ fontSize: 11, color: '#6b7280' }}
+                contentStyle={{ borderRadius: 10, border: '1px solid #e5e7eb' }}
+              />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Line
+                type="monotone"
+                dataKey="revenue"
+                name="매출"
+                stroke="#2563EB"
+                strokeWidth={2}
+                dot={false}
+              />
+              <Line
+                type="monotone"
+                dataKey="cost"
+                name="원가"
+                stroke="#6B7280"
+                strokeWidth={2}
+                dot={false}
+              />
+              <Line
+                type="monotone"
+                dataKey="margin"
+                name="마진"
+                stroke="#16A34A"
+                strokeWidth={2}
+                dot={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
       )}
     </>
@@ -110,14 +124,5 @@ const s: Record<string, React.CSSProperties> = {
   compareNote:{ fontSize: 12, color: '#6b7280', marginBottom: 24 },
   h2:        { fontSize: 14, fontWeight: 600, margin: '8px 0 8px' },
   empty:     { textAlign: 'center', padding: '40px 0', color: '#9ca3af', fontSize: 13, border: '1px dashed #e5e7eb', borderRadius: 10 },
-  tableWrap: { border: '1px solid #e5e7eb', borderRadius: 10, overflowX: 'auto' },
-  table:     { width: '100%', borderCollapse: 'collapse', fontSize: 13 },
-  th:        { padding: '10px 14px', textAlign: 'left', fontSize: 11, fontWeight: 500, color: '#6b7280', background: '#f9fafb', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' },
-  row:       { borderBottom: '1px solid #f3f4f6' },
-  td:        { padding: '10px 14px', verticalAlign: 'middle' },
-  date:      { color: '#6b7280', fontSize: 12 },
-  num:       { color: '#374151', fontVariantNumeric: 'tabular-nums' },
-  numBold:   { fontWeight: 600, fontVariantNumeric: 'tabular-nums' },
-  barTrack:  { width: '100%', height: 10, background: '#f3f4f6', borderRadius: 999, overflow: 'hidden' },
-  barFill:   { height: '100%', borderRadius: 999 },
+  chartWrap: { border: '1px solid #e5e7eb', borderRadius: 10, padding: '12px 10px', background: '#fff' },
 }
