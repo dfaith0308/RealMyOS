@@ -96,6 +96,12 @@ export interface LedgerSummary {
   current_balance: number
 }
 
+export interface TaxSummary {
+  taxable_paid: number
+  card_paid: number
+  invoice_amount: number
+}
+
 export interface CustomerLedgerOptions {
   from?:           string
   to?:             string
@@ -105,7 +111,7 @@ export interface CustomerLedgerOptions {
 export async function getCustomerLedger(
   customer_id: string,
   options?: CustomerLedgerOptions,
-): Promise<ActionResult<{ rows: LedgerRow[]; summary: LedgerSummary }>> {
+): Promise<ActionResult<{ rows: LedgerRow[]; summary: LedgerSummary; tax_summary: TaxSummary }>> {
   const supabase = await createSupabaseServer()
   const ctx = await getAuthCtx(supabase)
   if (!ctx) return { success: false, error: '로그인 필요' }
@@ -194,6 +200,25 @@ export async function getCustomerLedger(
   const totalPayments = (payments ?? []).reduce((s, p) => s + p.amount, 0)
   const current_balance = getAccountsReceivable(customer.opening_balance ?? 0, totalOrders, totalPayments, 0)
 
+  const tax_summary: TaxSummary = (() => {
+    // MVP: 수금 기준 세금계산서 대상 금액 집계 (RULE-02: 런타임 계산만, DB 저장 금지)
+    let taxable_paid = 0
+    let card_paid = 0
+    for (const p of payments ?? []) {
+      const method = (p as { payment_method?: string | null }).payment_method ?? null
+      const amount = Number((p as { amount?: number | null }).amount ?? 0)
+      if (!amount) continue
+
+      if (method === 'cash' || method === 'transfer') taxable_paid += amount
+      else if (method === 'card') card_paid += amount
+    }
+    return {
+      taxable_paid,
+      card_paid,
+      invoice_amount: taxable_paid,
+    }
+  })()
+
   return {
     success: true,
     data: {
@@ -204,6 +229,7 @@ export async function getCustomerLedger(
         total_orders: totalOrders, total_payments: totalPayments,
         current_balance,
       },
+      tax_summary,
     },
   }
 }

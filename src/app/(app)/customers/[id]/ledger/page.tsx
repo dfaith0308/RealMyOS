@@ -39,7 +39,7 @@ export default async function CustomerLedgerPage({
 
   if (!result.success || !result.data) notFound()
 
-  const { rows, summary } = result.data
+  const { rows, summary, tax_summary } = result.data
 
   const supabase = await createSupabaseServer()
   const ctx = await getAuthCtx(supabase)
@@ -118,6 +118,26 @@ export default async function CustomerLedgerPage({
           </span>
         </div>
       </div>
+
+      {(tax_summary.taxable_paid > 0 || tax_summary.card_paid > 0 || tax_summary.invoice_amount > 0) && (
+        <div style={s.taxBox}>
+          <div style={s.taxTitle}>세금계산서 요약 (수금 기준, 기간)</div>
+          <div style={s.taxGrid}>
+            <div style={s.taxItem}>
+              <div style={s.taxLabel}>과세합계</div>
+              <div style={s.taxVal}>{formatKRW(tax_summary.taxable_paid)}</div>
+            </div>
+            <div style={s.taxItem}>
+              <div style={s.taxLabel}>카드(계산서 제외)</div>
+              <div style={s.taxVal}>{formatKRW(tax_summary.card_paid)}</div>
+            </div>
+            <div style={s.taxItem}>
+              <div style={s.taxLabel}>계산서발행금액</div>
+              <div style={s.taxValStrong}>{formatKRW(tax_summary.invoice_amount)}</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {actionLogs && actionLogs.length > 0 && (
         <div style={s.actionSection}>
@@ -304,6 +324,13 @@ const s: Record<string, React.CSSProperties> = {
   cardHighlight: { border: '1px solid #fca5a5', background: '#FFF5F5' },
   cardLabel: { fontSize: 11, color: '#6b7280', fontWeight: 500 },
   cardVal: { fontSize: 18, fontWeight: 700, fontVariantNumeric: 'tabular-nums' },
+  taxBox: { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '12px 14px', marginBottom: 16 },
+  taxTitle: { fontSize: 12, color: '#6b7280', fontWeight: 600, marginBottom: 10 },
+  taxGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 },
+  taxItem: { background: '#f9fafb', border: '1px solid #f3f4f6', borderRadius: 10, padding: '10px 12px' },
+  taxLabel: { fontSize: 11, color: '#6b7280', marginBottom: 6 },
+  taxVal: { fontSize: 14, fontWeight: 700, color: '#111827', fontVariantNumeric: 'tabular-nums' },
+  taxValStrong: { fontSize: 15, fontWeight: 800, color: '#111827', fontVariantNumeric: 'tabular-nums' },
   empty: { textAlign: 'center', padding: '40px 0', color: '#9ca3af', fontSize: 14 },
   tableWrap: { border: '1px solid #e5e7eb', borderRadius: 10, overflowX: 'auto' },
   table: { width: '100%', borderCollapse: 'collapse', fontSize: 13 },

@@ -531,11 +531,14 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
     - 호출부 점검: 호출처 1곳(`/customers/[id]/ledger/page.tsx`)뿐, 옵셔널 인자라 타입 호환 — `npx tsc --noEmit` 통과
     - **B-2 별도 분리**(아래 [SUP-TODO-004-B-2]): 카드 제외/혼합 결제 분리 세금계산서 로직, 세금 요약 영역, 매입원장 별도 페이지
     - migration: NO (조회·UI만)
-  - **[SUP-TODO-004-B-2] 세금계산서/세금 요약/매입원장 별도 페이지** — **신규 (2026-05-07, 보류)**
-    - 카드 결제는 세금계산서 대상 제외(`payment_method = 'card'` 분리), 혼합 결제 시 행 분할 또는 결제수단별 합계 분리
-    - 세금 요약 영역: 기간 내 공급가/부가세/합계 + 카드 제외 후 세금계산서 발행 대상 합계 별도 표시
-    - 매입원장 전용 페이지: 현재 `/ledger?kind=purchases&supplier=...`는 SUP-TODO-004-A의 허브 수준만 제공 → `/suppliers/[name]/ledger` 또는 동등 라우트로 매입+지급 분배 상세 표 신설(SUP-TODO-003-D와 정합)
-    - migration: 🔍 (세금계산서/매입처 도메인 모델 따라)
+  - **[SUP-TODO-004-B-2] 세금계산서/세금 요약/매입원장 별도 페이지** — **부분완료 (2026-05-07, MVP)**
+    - MVP(수금 기준) 세금계산서 요약 추가:
+      - 과세 대상: `cash` + `transfer`
+      - 제외: `card`
+      - `tax_summary`: `taxable_paid` / `card_paid` / `invoice_amount(=taxable_paid)` (RULE-02: 런타임 계산만)
+    - 매입원장 전용 페이지는 후속(별도 라우트/상세 표)로 유지
+    - migration: NO
+    - **작업 이력 (2026-05-07)**: 원장 세금계산서 요약(MVP, 수금 기준) 추가 — worklog: `docs/worklogs/2026-05-07_sup-todo-004b2_tax-invoice.md`
   - **[SUP-TODO-004-C] `/analytics`(매출분석) 라우트 신설** — **완료 (2026-05-07)**
     - `/analytics` 라우트 신설: 4개 탭(매출현황·마진분석·거래처분석·위험신호) + 공통 기간 필터(URL `from`/`to`/`preset`) + 정렬(URL `sort`)
     - **데이터 SSOT**: `order_lines` 스냅샷만 사용(`product` 테이블 미참조) — `lineMargin`·`aggregateByDate/Product/Customer` 메모리 집계(RULE-02·RULE-03)
