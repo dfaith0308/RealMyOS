@@ -644,6 +644,8 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **migration 필요**: YES  
   - `customers` 테이블에 분류 관련 컬럼 추가 **또는**
   - `customer_tags`(또는 동등) 테이블 신설 + 이력 테이블/로그 연동
+- **migration**: `customer_tags`/`customer_tag_logs` 테이블 신설 (**적용 완료** ✅)
+- **작업 이력 (2026-05-07)**: 분류 CRUD 액션 + 거래처 상세 “분류” 섹션 연결(물리 삭제 금지, 변경 이력 기록) — worklog: `docs/worklogs/2026-05-07_sup-missing-001_customer-tags.md`
 
 #### [SUP-MISSING-002] 거래처 등록 필드 누락 (PRODUCT §6-3 확정 필드)
 - **PRODUCT 정의 위치**: PRODUCT §6-3 거래처등록 — 확정 필드
