@@ -34,9 +34,9 @@ export default function CustomerTab({
           hint="높을수록 의존도 위험"
         />
         <KpiCard
-          label="평균 결제기간 (근사)"
+          label="평균 결제기간"
           value={kpi.avg_collection_days !== null ? `${kpi.avg_collection_days}일` : '—'}
-          hint="기간 내 마지막 수금 - 마지막 주문"
+          hint="수금 배분(FIFO) 기준"
         />
         <KpiCard
           label="미수금 비율"

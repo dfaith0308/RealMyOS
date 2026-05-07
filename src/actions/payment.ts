@@ -83,6 +83,14 @@ export async function createPayment(
     return { success: false, error: '수금 저장 실패: RPC 응답이 비어있습니다.' }
   }
 
+  // FIFO 자동 배분 (best-effort): 배분 실패해도 수금 자체는 성공 유지
+  try {
+    await supabase.rpc('allocate_payment_fifo', {
+      p_tenant_id:  ctx.tenant_id,
+      p_payment_id: rpcData.id as string,
+    })
+  } catch { /* noop */ }
+
   await linkActionResult({
     customer_id:        input.customer_id,
     tenant_id:          ctx.tenant_id,

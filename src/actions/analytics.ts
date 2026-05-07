@@ -167,34 +167,73 @@ export async function getMarginByCustomer(
         .is('deleted_at', null),
     ])
 
-    // 평균결제기간(근사) — 거래처별 (마지막 수금일 - 마지막 주문일) 평균
-    const lastOrderByCust   = new Map<string, string>()
-    const lastPaymentByCust = new Map<string, string>()
-    const buyerOrderCount   = new Map<string, number>()
-    for (const o of orders) {
-      if (!isSalesOrder(o) || !o.customer_id) continue
-      const prevDate = lastOrderByCust.get(o.customer_id)
-      if (!prevDate || o.order_date > prevDate) lastOrderByCust.set(o.customer_id, o.order_date)
-      buyerOrderCount.set(o.customer_id, (buyerOrderCount.get(o.customer_id) ?? 0) + 1)
+    // 평균결제기간(정확) — collection_allocations 기반
+    // (없으면 기존 근사치로 fallback)
+    const { data: allocAvg } = await supabase
+      .from('collection_allocations')
+      .select(`
+        allocated_amount,
+        payments!inner(status, direction, payment_date),
+        orders!inner(order_date)
+      `)
+      .eq('tenant_id', tid)
+      .eq('payments.status', 'confirmed')
+      .eq('payments.direction', 'inbound')
+
+    let avg_collection_days: number | null = null
+    if (allocAvg && allocAvg.length > 0) {
+      const diffs: number[] = []
+      for (const row of allocAvg as any[]) {
+        const pd = (row.payments as any)?.payment_date as string | undefined
+        const od = (row.orders as any)?.order_date as string | undefined
+        if (!pd || !od) continue
+        const days = Math.floor(
+          (new Date(pd + 'T00:00:00Z').getTime() - new Date(od + 'T00:00:00Z').getTime()) / 86400000,
+        )
+        if (days >= 0) diffs.push(days)
+      }
+      if (diffs.length > 0) {
+        avg_collection_days = Math.round(diffs.reduce((a, b) => a + b, 0) / diffs.length)
+      }
     }
-    for (const p of payments ?? []) {
-      const cid = (p as { customer_id?: string | null }).customer_id
-      if (!cid) continue
-      const pd = (p as { payment_date: string }).payment_date
-      const prevDate = lastPaymentByCust.get(cid)
-      if (!prevDate || pd > prevDate) lastPaymentByCust.set(cid, pd)
+
+    const buyerOrderCount = new Map<string, number>()
+    if (avg_collection_days === null) {
+      const lastOrderByCust   = new Map<string, string>()
+      const lastPaymentByCust = new Map<string, string>()
+
+      for (const o of orders) {
+        if (!isSalesOrder(o) || !o.customer_id) continue
+        const prevDate = lastOrderByCust.get(o.customer_id)
+        if (!prevDate || o.order_date > prevDate) lastOrderByCust.set(o.customer_id, o.order_date)
+        buyerOrderCount.set(o.customer_id, (buyerOrderCount.get(o.customer_id) ?? 0) + 1)
+      }
+      for (const p of payments ?? []) {
+        const cid = (p as { customer_id?: string | null }).customer_id
+        if (!cid) continue
+        const pd = (p as { payment_date: string }).payment_date
+        const prevDate = lastPaymentByCust.get(cid)
+        if (!prevDate || pd > prevDate) lastPaymentByCust.set(cid, pd)
+      }
+
+      const diffs: number[] = []
+      for (const [cid, od] of lastOrderByCust) {
+        const pd = lastPaymentByCust.get(cid)
+        if (!pd) continue
+        const days = Math.floor(
+          (new Date(pd + 'T00:00:00Z').getTime() - new Date(od + 'T00:00:00Z').getTime()) / 86400000,
+        )
+        if (days >= 0) diffs.push(days)
+      }
+      avg_collection_days =
+        diffs.length > 0 ? Math.round(diffs.reduce((a, b) => a + b, 0) / diffs.length) : null
+    } else {
+      // repeat 구매율 집계는 기존 로직 그대로 유지
+      for (const o of orders) {
+        if (!isSalesOrder(o) || !o.customer_id) continue
+        buyerOrderCount.set(o.customer_id, (buyerOrderCount.get(o.customer_id) ?? 0) + 1)
+      }
     }
-    const diffs: number[] = []
-    for (const [cid, od] of lastOrderByCust) {
-      const pd = lastPaymentByCust.get(cid)
-      if (!pd) continue
-      const days = Math.floor(
-        (new Date(pd + 'T00:00:00Z').getTime() - new Date(od + 'T00:00:00Z').getTime()) / 86400000,
-      )
-      if (days >= 0) diffs.push(days)
-    }
-    const avg_collection_days =
-      diffs.length > 0 ? Math.round(diffs.reduce((a, b) => a + b, 0) / diffs.length) : null
 
     // 미수금 비율 — Σ미수금 / Σ매출 (기간 내)
     const totalSales      = totalRevenue
