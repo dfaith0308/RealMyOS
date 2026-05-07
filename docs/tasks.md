@@ -716,6 +716,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
   - 부족금 이월(`carry_over`) 미구현
 - **현행 상태(코드 기준)**: 단순 표시/요약 위주로, PRODUCT 산식 기반의 계획 금액 산정 로직이 미흡
 - **migration 필요**: NO (로직 수정)
+- **작업 이력 (2026-05-07)**: 영업일(평일) 기반 daily_amount 계산(소수점 버림) + carry_over_amount 이월 로직(필요금액=planned+carry_over, 미이행분 다음날 이월) — worklog: `docs/worklogs/2026-05-07_sup-missing-008_fund-calc.md`
 
 #### [SUP-MISSING-009] 상품 상세 탭 구조 미구현 (PRODUCT §6-6)
 - **PRODUCT 정의 위치**: PRODUCT §6-6 상품관리

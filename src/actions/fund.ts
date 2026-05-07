@@ -21,7 +21,7 @@ function todayKST(): string {
 }
 
 // 해당 월 영업일수 계산 (주말 제외)
-function getBusinessDays(year: number, month: number): number {
+function getBusinessDaysInMonth(year: number, month: number): number {
   const days = new Date(year, month, 0).getDate() // 해당 월 총 일수
   let count = 0
   for (let d = 1; d <= days; d++) {
@@ -317,7 +317,7 @@ export async function generateDailyFundPlan(date?: string): Promise<ActionResult
   const month = d.getMonth() + 1
 
   // 영업일수 계산 (주말 제외)
-  const bizDays = getBusinessDays(year, month)
+  const bizDays = getBusinessDaysInMonth(year, month)
   if (bizDays === 0) return { success: false, error: '영업일수 계산 오류' }
 
   // 이번달 매출 조회
@@ -338,9 +338,11 @@ export async function generateDailyFundPlan(date?: string): Promise<ActionResult
   const rows = rules.map((r: any) => {
     let planned_amount = 0
     if (r.calculation_type === 'fixed') {
-      planned_amount = Math.round(r.amount / bizDays)
+      // PRODUCT: 소수점 버림
+      planned_amount = Math.floor(r.amount / bizDays)
     } else {
-      planned_amount = Math.round((monthlySales * (r.amount / 100)) / bizDays)
+      // PRODUCT: 소수점 버림
+      planned_amount = Math.floor((monthlySales * (r.amount / 100)) / bizDays)
     }
     return {
       account_id:     r.account_id,
@@ -378,24 +380,81 @@ export async function completeFundTransfer(
 
   const { data: transfer } = await supabase
     .from('fund_transfers')
-    .select('planned_amount, status')
+    .select('planned_amount, carry_over_amount, date, account_id, rule_id, status')
     .eq('id', transfer_id)
     .eq('tenant_id', ctx.tenant_id)
     .single()
   if (!transfer) return { success: false, error: '이체 항목을 찾을 수 없습니다.' }
 
+  const planned = (transfer as any).planned_amount as number
+  const carry = (transfer as any).carry_over_amount as number
+  const required = planned + carry
+
   const status: FundTransfer['status'] =
-    actual_amount === 0                           ? 'pending'
-    : actual_amount >= transfer.planned_amount   ? 'completed'
-    :                                              'partial'
+    actual_amount === 0 ? 'pending' : actual_amount >= required ? 'completed' : 'partial'
+
+  const carryForward = Math.max(0, required - actual_amount)
 
   const { error } = await supabase
     .from('fund_transfers')
-    .update({ actual_amount, status, updated_at: new Date().toISOString() })
+    .update({
+      actual_amount,
+      status,
+      // 완료 시: 과거 이월은 정산되었으므로 carry_over_amount=0으로 리셋
+      carry_over_amount: status === 'completed' ? 0 : carry,
+      updated_at: new Date().toISOString(),
+    })
     .eq('id', transfer_id)
     .eq('tenant_id', ctx.tenant_id)
 
   if (error) return { success: false, error: error.message }
+
+  // 미이행 금액 이월: 다음날 동일 account_id(+rule_id) 행의 carry_over_amount에 누적
+  if (carryForward > 0) {
+    const next = new Date((transfer as any).date + 'T00:00:00Z')
+    next.setUTCDate(next.getUTCDate() + 1)
+    const nextDate = next.toISOString().slice(0, 10)
+
+    const account_id = (transfer as any).account_id as string
+    const rule_id = (transfer as any).rule_id as string | null
+
+    const { data: nextRow, error: nextErr } = await supabase
+      .from('fund_transfers')
+      .select('id, carry_over_amount')
+      .eq('tenant_id', ctx.tenant_id)
+      .eq('date', nextDate)
+      .eq('account_id', account_id)
+      .eq('rule_id', rule_id)
+      .maybeSingle()
+
+    if (nextErr) return { success: false, error: nextErr.message }
+
+    if (!nextRow) {
+      // 다음날 행이 없으면 생성(기본 planned_amount=0; generateDailyFundPlan이 별도 planned를 채움)
+      const { error: insErr } = await supabase.from('fund_transfers').insert({
+        tenant_id: ctx.tenant_id,
+        date: nextDate,
+        account_id,
+        rule_id,
+        planned_amount: 0,
+        actual_amount: null,
+        carry_over_amount: carryForward,
+        status: 'pending',
+      })
+      if (insErr) return { success: false, error: insErr.message }
+    } else {
+      const { error: upErr } = await supabase
+        .from('fund_transfers')
+        .update({
+          carry_over_amount: (nextRow.carry_over_amount ?? 0) + carryForward,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('tenant_id', ctx.tenant_id)
+        .eq('id', nextRow.id)
+      if (upErr) return { success: false, error: upErr.message }
+    }
+  }
+
   revalidatePath('/funds')
   return { success: true }
 }
@@ -545,7 +604,7 @@ export async function getFundPreview(): Promise<ActionResult<FundPreviewResult>>
   const year  = kst.getUTCFullYear()
   const month = kst.getUTCMonth() + 1
 
-  const biz_days     = getBusinessDays(year, month)
+  const biz_days     = getBusinessDaysInMonth(year, month)
   const monthly_sales = await getMonthlySales(supabase, ctx.tenant_id, year, month)
 
   const { data: rulesRaw, error } = await supabase
@@ -560,8 +619,8 @@ export async function getFundPreview(): Promise<ActionResult<FundPreviewResult>>
     let daily_amount = 0
     if (r.is_active && biz_days > 0) {
       daily_amount = r.calculation_type === 'fixed'
-        ? Math.round(r.amount / biz_days)
-        : Math.round((monthly_sales * (r.amount / 100)) / biz_days)
+        ? Math.floor(r.amount / biz_days)
+        : Math.floor((monthly_sales * (r.amount / 100)) / biz_days)
       daily_amount = Math.max(0, daily_amount)
     }
     return {

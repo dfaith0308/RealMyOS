@@ -27,13 +27,13 @@ export default function FundsClient({ today, accounts, rules, plan: initPlan }: 
   const [actualAmounts, setActualAmounts] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
 
-  const totalPlanned = plan.reduce((s, t) => s + t.planned_amount, 0)
+  const totalPlanned = plan.reduce((s, t) => s + t.planned_amount + (t.carry_over_amount ?? 0), 0)
   const totalActual  = plan.filter((t) => t.actual_amount !== null)
                            .reduce((s, t) => s + (t.actual_amount ?? 0), 0)
   const pendingCount    = plan.filter((t) => t.status === 'pending').length
   const totalUnexecuted = plan.reduce((s, t) => {
     const actual = t.actual_amount ?? 0
-    return s + Math.max(0, t.planned_amount - actual)
+    return s + Math.max(0, (t.planned_amount + (t.carry_over_amount ?? 0)) - actual)
   }, 0)
 
   function handleGenerate() {
@@ -155,7 +155,7 @@ export default function FundsClient({ today, accounts, rules, plan: initPlan }: 
                     <input style={s.input} type="number"
                       value={actualAmounts[t.id] ?? ''}
                       onChange={(e) => setActualAmounts((p) => ({ ...p, [t.id]: e.target.value }))}
-                      placeholder={`${formatKRW(t.planned_amount)} 이체`}
+                      placeholder={`${formatKRW(t.planned_amount + (t.carry_over_amount ?? 0))} 이체`}
                       min={0} />
                     <button style={isPending ? s.btnOff : s.completeBtn}
                       onClick={() => handleComplete(t.id)} disabled={isPending}>
