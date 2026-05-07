@@ -30,6 +30,11 @@
   font-variant-numeric: tabular-nums;
 }
 
+.valueLg {
+  font-size: 28px;
+  font-weight: 900;
+}
+
 .sub {
   display: flex;
   gap: 10px;

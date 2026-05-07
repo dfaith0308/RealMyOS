@@ -35,6 +35,7 @@
 - **작업 이력 (2026-05-07)**: UI/UX Design System Phase 1(SSOT: tokens/state/density/semantic + `--ds-*` 매핑 + 핵심 프리미티브 4종 + UI audit 문서) — worklog: [`docs/worklogs/2026-05-07_uiux-design-system-phase1.md`](./worklogs/2026-05-07_uiux-design-system-phase1.md)
 - **작업 이력 (2026-05-07)**: Dashboard 운영 콘솔 구조(2열, Queue 중심) 적용 + CommandStrip/QueueSection 신설 + 인라인 스타일 제거(CSS Module + `--ds-*`) — worklog: [`docs/worklogs/2026-05-07_dashboard-ops-console-layout.md`](./worklogs/2026-05-07_dashboard-ops-console-layout.md)
 - **작업 이력 (2026-05-07)**: Customers 채권 운영 콘솔 row list 적용(즉시 필터링 + 행 클릭 원장 + 수금 액션 1개) — worklog: [`docs/worklogs/2026-05-07_customers-ops-row-list.md`](./worklogs/2026-05-07_customers-ops-row-list.md)
+- **작업 이력 (2026-05-07)**: Ledger 돈 흐름 콘솔 재설계(테이블 제거 + 날짜 그룹 sticky/subtotal + 즉시 필터 + KPI hierarchy) — worklog: [`docs/worklogs/2026-05-07_ledger-money-flow-console.md`](./worklogs/2026-05-07_ledger-money-flow-console.md)
 
 ---
 
@@ -573,6 +574,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **작업 이력 (2026-05-06)**: PRODUCT 6-10/6-11 정독 + `/ledger`/`/analytics` 라우트 부재 확인 + 세부 분해 등록 — worklog: `docs/worklogs/2026-05-06_phase5_sup-todo-001-005-gap.md`
 - **작업 이력 (2026-05-07)**: SUP-TODO-004-A `/ledger` 진입점·매출/매입 탭·기간 필터·Sidebar 교체 — worklog: `docs/worklogs/2026-05-07_sup-todo-004a_ledger-hub.md`
 - **작업 이력 (2026-05-07)**: SUP-TODO-004-B(B-1) 컬럼 정합·기초잔액 항상 표시·기간/결제수단 필터; B-2 신규 분리 — worklog: `docs/worklogs/2026-05-07_sup-todo-004b_ledger-columns.md`
+- **작업 이력 (2026-05-07)**: 거래처 원장(`/customers/[id]/ledger`)을 돈 흐름 콘솔로 재설계(테이블 제거, 날짜 그룹 sticky/subtotal, URL 즉시 필터, KPI hierarchy) — worklog: `docs/worklogs/2026-05-07_ledger-money-flow-console.md`
 - **작업 이력 (2026-05-07)**: SUP-TODO-004-C `/analytics` 4탭 신설(`order_lines` 스냅샷 SSOT, RULE-02·03 준수); 차트(C-2)·출력(C-3)·평균결제기간 정확 정의(C-4) 신규 분리 — worklog: `docs/worklogs/2026-05-07_sup-todo-004c_analytics.md`
 
 ### [CONVENTION] 반품(환불) 처리 규약 — **확정 (2026-05-07)**

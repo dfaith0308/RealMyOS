@@ -1,0 +1,176 @@
+.controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.chipRow {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.chip {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--ds-border-default);
+  background: var(--ds-surface-panel);
+  color: var(--ds-text-secondary);
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.chip:hover {
+  background: color-mix(in srgb, var(--ds-neutral-50) 70%, white);
+}
+
+.chipActive {
+  background: var(--ds-brand-text);
+  border-color: var(--ds-brand-text);
+  color: var(--ds-text-inverse);
+}
+
+.chip:focus-visible {
+  outline: 2px solid var(--ds-focus-ring);
+  outline-offset: 2px;
+}
+
+.dateInput {
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid var(--ds-border-default);
+  background: var(--ds-surface-panel);
+  color: var(--ds-text-primary);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.dateInput:focus-visible {
+  outline: 2px solid var(--ds-focus-ring);
+  outline-offset: 2px;
+}
+
+.sep {
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--ds-text-muted);
+}
+
+.flow {
+  border-top: 1px solid var(--ds-border-subtle);
+}
+
+.groupHead {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--ds-surface-panel);
+  border-bottom: 1px solid var(--ds-border-default);
+}
+
+.groupDate {
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--ds-text-primary);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.groupNums {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  font-variant-numeric: tabular-nums;
+}
+
+.gNum {
+  font-size: 11px;
+  font-weight: 900;
+  color: var(--ds-text-secondary);
+  white-space: nowrap;
+}
+
+.gNumStrong {
+  color: var(--ds-text-primary);
+}
+
+.rowMain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rowTitle {
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--ds-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowSub {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--ds-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.amt {
+  font-size: 13px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.amtSale {
+  color: color-mix(in srgb, var(--ds-brand-primary) 15%, var(--ds-text-primary));
+}
+
+.amtPay {
+  color: var(--ds-status-success);
+}
+
+.bal {
+  font-size: 12px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--ds-text-primary);
+}
+
+.opening {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--ds-border-subtle);
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.openingLabel {
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--ds-text-secondary);
+}
+
+.empty {
+  padding: 14px 0;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--ds-text-muted);
+}
+
