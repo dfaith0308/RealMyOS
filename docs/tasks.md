@@ -801,22 +801,6 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **결정**: 현행 유지 결정 — `getTenantId()`가 모든 `(app)` 페이지의 SSOT 접근 제어(인증/온보딩/승인 체크) 역할을 수행. Edge middleware DB 조회 제약으로 미들웨어 보강은 불필요. `middleware.ts` no-op 유지.
 - **작업 이력 (2026-05-06)**: 현행 구조 분석·GAP 정리 후 “현행 유지” 결정 기록 — worklog: `docs/worklogs/2026-05-06_res-partial-007_middleware-decision.md`
 
-### ❌ 미구현
-
-#### [RES-TODO-001] PRODUCT 8-2 메뉴 구조 대비 일부 라우트·기능 공백
-- **확인 내용**: `(app)` 기준 `/today`, `/rfq`, `/orders`, `/money`, `/suppliers`, `/settings` 등은 존재. 별도 `/notifications` 등 알림 전용 IA(§8-7), 「거래 조건 설정」 전용 화면 등은 본 회차 트리 상 미확인 또는 미구현.
-- **완료 기준**: §8-2·§8-7 화면 목록과 URL 1:1 매핑 표 작성 후 공백 항목 구현
-- **migration 필요**: NO
-- **매핑 결과 (2026-05-06, 분석)**:
-  - **확인된 라우트 트리**: `resturant_os/src/app/(app)/` 기준 `/today`, `/rfq`(+`/new`, `/[id]`), `/orders`(+`/[id]`), `/money`, `/suppliers`(+`/new`, `/[id]`), `/settings`(+`/ingredients`, `/fixed-costs`, `/restaurant`) 존재 확인.
-  - **공백(미구현) 후보**:
-    - **알림 메뉴(§8-2, §8-7)**: `/notifications`(알림 목록), `/notifications/important`(중요 알림) 라우트 부재
-    - **발주관리(§8-2) + 알림 액션 링크(§8-7)**: `/orders/results`(입찰 결과) 라우트 부재 (`rfq_result` action_link가 `/orders/results`로 정의됨)
-    - **설정(§8-2)**: “메뉴/가격 입력”, “거래 조건 설정” 전용 화면/라우트 부재(URL 규약 미확정)
-    - **돈관리 하위 3메뉴(§8-2)**: “지급 예정/미지급금/자금 흐름” IA 분리 필요 — 세부는 `RES-PARTIAL-001`에서 분해 진행
-  - **산출물**: PRODUCT 화면 목록 ↔ 현재 라우트 1:1 매핑 표(캔버스) — `res-todo-001-menu-route-gap.canvas.tsx`
-- **작업 이력 (2026-05-06)**: PRODUCT 8-2/8-7 정독 + `(app)` 라우트 트리 전수 확인 + 1:1 매핑표 작성 + 공백 항목 정리 — worklog: `docs/worklogs/2026-05-06_res-todo-001_menu-route-gap.md`
-
 ### 🔍 확인 필요
 
 #### [RES-CHECK-001] (이관 — 공통 DB)
@@ -838,6 +822,21 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 
 #### [RES-DONE-004] 테넌트 해석(`getTenantId`)에 승인 대기·온보딩 리다이렉트·데모용 env 오버라이드 정의
 - **위치**: `resturant_os/src/lib/get-restaurant.ts`
+
+#### [RES-TODO-001] PRODUCT 8-2 메뉴 구조 대비 일부 라우트·기능 공백 — **완료 (2026-05-07)**
+- **확인 내용**: `(app)` 기준 `/today`, `/rfq`, `/orders`, `/money`, `/suppliers`, `/settings` 등은 존재. 별도 `/notifications` 등 알림 전용 IA(§8-7), 「거래 조건 설정」 전용 화면 등은 본 회차 트리 상 미확인 또는 미구현.
+- **완료 기준**: §8-2·§8-7 화면 목록과 URL 1:1 매핑 표 작성 후 공백 항목 구현
+- **migration 필요**: NO
+- **매핑 결과 (2026-05-06, 분석)**:
+  - **확인된 라우트 트리**: `resturant_os/src/app/(app)/` 기준 `/today`, `/rfq`(+`/new`, `/[id]`), `/orders`(+`/[id]`), `/money`, `/suppliers`(+`/new`, `/[id]`), `/settings`(+`/ingredients`, `/fixed-costs`, `/restaurant`) 존재 확인.
+  - **공백(미구현) 후보**:
+    - **알림 메뉴(§8-2, §8-7)**: `/notifications`(알림 목록), `/notifications/important`(중요 알림) 라우트 부재
+    - **발주관리(§8-2) + 알림 액션 링크(§8-7)**: `/orders/results`(입찰 결과) 라우트 부재 (`rfq_result` action_link가 `/orders/results`로 정의됨)
+    - **설정(§8-2)**: “메뉴/가격 입력”, “거래 조건 설정” 전용 화면/라우트 부재(URL 규약 미확정)
+    - **돈관리 하위 3메뉴(§8-2)**: “지급 예정/미지급금/자금 흐름” IA 분리 필요 — 세부는 `RES-PARTIAL-001`에서 분해 진행
+  - **산출물**: PRODUCT 화면 목록 ↔ 현재 라우트 1:1 매핑 표(캔버스) — `res-todo-001-menu-route-gap.canvas.tsx`
+- **작업 이력 (2026-05-06)**: PRODUCT 8-2/8-7 정독 + `(app)` 라우트 트리 전수 확인 + 1:1 매핑표 작성 + 공백 항목 정리 — worklog: `docs/worklogs/2026-05-06_res-todo-001_menu-route-gap.md`
+- **작업 이력 (2026-05-07)**: `/notifications` 알림 목록(+읽음 처리) + `/orders/results` 입찰 결과 라우트 신설 + today 알림 “전체보기” 링크 추가 — worklog: `docs/worklogs/2026-05-07_res-todo-001_notifications-results.md`
 
 ---
 
@@ -867,8 +866,8 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 | 공통 DB (`DB-*`) | 4 | 2 | 1 | 2 | 8 | 0 | **17** |
 | 공급자OS (`SUP-*`) | 6 | 1 | 7 | 5 | 3 | 5 | **27** |
 | 관리자OS (`ADM-*`) | 0 | 0 | 0 | 1 | 1 | 0 | **2** |
-| 식당OS (`RES-*`) | 4 | 1 | 7 | 1 | 2 | 4 | **19** |
-| **전체** | **14** | **4** | **15** | **9** | **14** | **9** | **65** |
+| 식당OS (`RES-*`) | 4 | 1 | 7 | 0 | 2 | 5 | **19** |
+| **전체** | **14** | **4** | **15** | **8** | **14** | **10** | **65** |
 
 > **DB 확인 8건**: `DB-CHECK-001`~`006`은 **forensic 종결(006은 스키마 스냅샷 diff 기록 완료)**. **`007`·`008`** 및 **`DB-CHECK-004`의 `WITH CHECK` 잔여**는 미결.
 
@@ -891,7 +890,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 | RES- | 19 | ✅ |
 | **합계** | **65** | ✅ |
 
-유형 합: 구조위험 14 + 가짜 4 + 부분 15 + 미구현 9 + 확인 14 + 완료 9 = **65** ✅
+유형 합: 구조위험 14 + 가짜 4 + 부분 15 + 미구현 8 + 확인 14 + 완료 10 = **65** ✅
 
 ---
 
@@ -935,7 +934,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
   - `SUP-TODO-005-D` 선행 조건 게이트 명시 (A/B/C는 Phase 6+ 이월)
 - **분리/이월(다음 세션)**:
   - **B-2/C-2/C-3/C-4** (오늘 신규 분리): 원장 세금계산서 로직·매입원장 별도 페이지 / 차트 라이브러리 / 출력 / 평균결제기간 정확 정의
-  - **`RES-TODO-001`**: 식당OS 트랙 — 본 세션 미터치
+  - **`RES-TODO-001`**: 식당OS `/notifications` + `/orders/results` 라우트 공백 — **완료 (2026-05-07)** — worklog: `docs/worklogs/2026-05-07_res-todo-001_notifications-results.md`
   - **`SUP-TODO-005-A/B/C`**: Phase 6+ 보류 (관리자OS + `relationships`/`trust_scores` 선행)
 
 **Phase 6 — 관리자OS**  
