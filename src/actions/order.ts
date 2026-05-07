@@ -368,13 +368,12 @@ export async function cancelOrder(order_id: string, reason?: string): Promise<Ac
   if (!order)                       return { success: false, error: '주문을 찾을 수 없습니다.' }
   if (order.status === 'cancelled') return { success: false, error: '이미 취소된 주문입니다.' }
 
-  // status만 변경 — 데이터 삭제 금지
-  const { error } = await supabase
-    .from('orders').update({ status: 'cancelled' })
-    .eq('id', order_id)
-    // 전환 기간: seller_tenant_id 우선 + legacy tenant_id 병행
-    .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
-  if (error) return { success: false, error: error.message }
+  // 주문 취소 + 연결된 collection_allocations void 처리 (단일 RPC, RULE-19)
+  const { error: rpcErr } = await supabase.rpc('cancel_order_and_void_allocations', {
+    p_tenant_id: ctx.tenant_id,
+    p_order_id:  order_id,
+  })
+  if (rpcErr) return { success: false, error: rpcErr.message }
 
   // order_logs: cancel (취소 사유 after_data에 포함)
   await logOrder(supabase, {

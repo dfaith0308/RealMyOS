@@ -177,6 +177,7 @@ export async function getMarginByCustomer(
         orders!inner(order_date)
       `)
       .eq('tenant_id', tid)
+      .eq('status', 'active')
       .eq('payments.status', 'confirmed')
       .eq('payments.direction', 'inbound')
 

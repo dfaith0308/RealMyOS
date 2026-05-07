@@ -573,6 +573,16 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **영향 범위**: 매출분석 위험신호의 “반품/매출 비율” 계산은 `order_type='refund'` 가정 금지
 - **작업 이력 (2026-05-07)**: `analytics.ts`의 반품 집계를 음수 `line_total` 기반으로 교체 — worklog: `docs/worklogs/2026-05-07_refund-convention-fix.md`
 
+### [OPS] 주문 취소 시 수금 배분 void 처리 — **완료 (2026-05-07)**
+- **요약**: 취소된 주문에 배분된 수금(`collection_allocations`)을 물리 삭제하지 않고 `voided`로 전환해, 평균결제기간/원장 계산에서 제외한다.
+- **DB 적용 완료 (2026-05-07)**:
+  - `collection_allocations`에 `status(active/voided)`, `voided_at`, `voided_reason` 추가 ✅
+  - `cancel_order_and_void_allocations(p_tenant_id, p_order_id)` RPC 생성 ✅
+- **앱 반영 (2026-05-07)**:
+  - `cancelOrder`는 단일 RPC로 “주문 취소 + 배분 void” 처리 (RULE-19)
+  - 평균결제기간 계산은 `collection_allocations.status='active'`만 집계
+- **worklog**: `docs/worklogs/2026-05-07_order-cancel-void-allocations.md`
+
 #### [SUP-TODO-005] 플랫폼 결제·정산(식당↔공급자 단일 payments) 완성
 - **PRODUCT 정의 위치**: §3 돈 흐름, §9 payments
 - **완료 기준**: restaurant-os·공급자OS·관리자OS 간 결제 상태·정산 정의와 코드 일치(CONTEXT 로드맵)
