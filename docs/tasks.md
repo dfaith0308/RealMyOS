@@ -854,6 +854,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
   - `trust_scores` 테이블 연동(이미 존재)
   - Level 매핑 정책화
 - **migration 필요**: NO (`trust_scores` 이미 존재)
+- **작업 이력 (2026-05-08)**: 참여자 네트워크(`/admin/participants`) + 관계 네트워크(`/admin/participants/relationships`) + 신뢰도 계산/업데이트 엔진 + Level3→Action Queue(Critical) 연동 — worklog: `docs/worklogs/2026-05-07_adm-missing-002_participants.md`
 
 #### [ADM-MISSING-003] 데이터 학습 센터 미구현 (PRODUCT §10-6)
 - **PRODUCT 정의 위치**: PRODUCT §10-6
