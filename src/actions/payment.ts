@@ -309,3 +309,67 @@ export async function getDisbursementList(filters?: {
     })),
   }
 }
+
+// ============================================================
+// 지급 등록 + 분배 (outbound, RULE-19 → RPC 단일 트랜잭션)
+// ============================================================
+
+export interface DisbursementAllocationInput {
+  purchase_id?:      string | null
+  allocated_amount:  number
+}
+
+export interface CreateDisbursementInput {
+  counterparty_name: string
+  amount:            number
+  payment_date:      string
+  payment_method:    PaymentMethod
+  due_date:          string | null
+  memo?:             string | null
+  order_id?:         string | null
+  allocations:       DisbursementAllocationInput[]
+}
+
+export async function createDisbursement(
+  input: CreateDisbursementInput,
+): Promise<ActionResult<{ id: string }>> {
+  const supabase = await createSupabaseServer()
+  const ctx      = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  if (!input.counterparty_name?.trim())
+    return { success: false, error: '매입처명을 입력해주세요.' }
+  if (!input.amount || input.amount <= 0 || !Number.isInteger(input.amount))
+    return { success: false, error: '지급 금액은 양의 정수여야 합니다.' }
+
+  const allocations = (input.allocations ?? []).filter((a) => a.allocated_amount > 0)
+  const sumAlloc = allocations.reduce((s, a) => s + a.allocated_amount, 0)
+  if (sumAlloc > input.amount)
+    return { success: false, error: '분배 합계가 지급 금액을 초과할 수 없습니다.' }
+
+  const payload = allocations.map((a) => ({
+    purchase_id:      a.purchase_id && a.purchase_id.length > 0 ? a.purchase_id : null,
+    allocated_amount: a.allocated_amount,
+  }))
+
+  const { data: paymentId, error } = await supabase.rpc('create_disbursement_with_allocations', {
+    p_tenant_id:         ctx.tenant_id,
+    p_counterparty_name: input.counterparty_name.trim(),
+    p_amount:            input.amount,
+    p_payment_date:      input.payment_date,
+    p_payment_method:    input.payment_method,
+    p_due_date:          input.due_date,
+    p_memo:              input.memo ?? null,
+    p_order_id:          input.order_id ?? null,
+    p_created_by:        ctx.user_id,
+    p_allocations:       payload,
+  })
+
+  if (error) return { success: false, error: error.message }
+  if (!paymentId) return { success: false, error: '지급 저장 실패: RPC 응답 없음' }
+
+  revalidatePath('/disbursements')
+  revalidatePath('/disbursements/new')
+
+  return { success: true, data: { id: paymentId as string } }
+}

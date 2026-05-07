@@ -61,8 +61,15 @@ const MENU: MenuGroup[] = [
     label: '지급관리', icon: '💸', href: '/disbursements',
     items: [
       { label: '지급 목록', href: '/disbursements' },
-      { label: '지급 등록', soon: true },
+      { label: '지급 등록', href: '/disbursements/new' },
       { label: '지급 상세', soon: true },
+    ],
+  },
+  {
+    label: '매입관리', icon: '🚚', href: '/purchases',
+    items: [
+      { label: '매입 목록', href: '/purchases' },
+      { label: '매입 등록', href: '/purchases/new' },
     ],
   },
   {
@@ -74,7 +81,6 @@ const MENU: MenuGroup[] = [
   },
   { label: '설정', icon: '⚙️', href: '/settings' },
 
-  { label: '매입관리',   icon: '🚚', soon: true },
   { label: '원장관리',   icon: '📒', href: '/sales/history' },
   {
     label: '자동화영업', icon: '🎯', href: '/sales/schedule',
