@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useTransition, useRef, useCallback, useMemo } from 'react'
 import { createOrder, getCustomersForOrder, getProductsForOrder } from '@/actions/order'
+import { getCustomerProductPrice } from '@/actions/customer-product-prices'
 import { createPayment } from '@/actions/payment'
 import type { PaymentMethod } from '@/actions/payment'
 import { calcMarginRate, formatKRW, todayStr } from '@/lib/calc'
@@ -305,15 +306,51 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
       total_input      = ''  // resolveLine이 재계산
       quantity         = 1
     }
-    // 구매 이력 없음 → 빈 값
+    // 구매 이력 없음 → 기본가 자동 추천 (PRODUCT 우선순위의 3번 케이스)
+    if (!p.has_purchase_history && p.last_unit_price > 0) {
+      mode             = 'unit'
+      unit_price_input = String(p.last_unit_price)
+      total_input      = ''
+      quantity         = 1
+    }
 
+    const uid = crypto.randomUUID()
     setLines((prev) => [...prev, {
-      uid: crypto.randomUUID(), product: p,
+      uid, product: p,
       quantity, unit_price_input, total_input, mode,
     }])
+
+    // 명시 요구: 거래처+상품 선택 시 최근 단가 조회 (best-effort)
+    if (selectedCustomer) {
+      getCustomerProductPrice(selectedCustomer.id, p.id).then((r) => {
+        if (!r.success || !r.data) return
+        const cp = r.data
+        setLines((prev) => prev.map((l) => {
+          if (l.uid !== uid) return l
+          const nextMode = (cp.last_pricing_mode ?? 'unit') as 'unit' | 'total'
+          if (nextMode === 'total' && cp.last_line_total != null) {
+            return {
+              ...l,
+              mode: 'total',
+              quantity: cp.last_qty ?? l.quantity,
+              total_input: String(Math.abs(cp.last_line_total)),
+              unit_price_input: '',
+            }
+          }
+          return {
+            ...l,
+            mode: 'unit',
+            quantity: cp.last_qty ?? l.quantity,
+            unit_price_input: String(cp.last_price ?? l.product.last_unit_price ?? 0),
+            total_input: '',
+          }
+        }))
+      })
+    }
+
     setProductQuery(''); setShowProductDd(false)
     productRef.current?.focus()
-  }, [])
+  }, [selectedCustomer])
 
   // ── 라인 수정 — 단방향, 무한루프 없음 ────────────────────
 

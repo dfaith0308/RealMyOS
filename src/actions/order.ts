@@ -203,6 +203,7 @@ export async function createOrder(
 
   const totals      = calcOrderTotals(lineRows)
   const orderNumber = await issueOrderNumber(supabase, ctx.tenant_id, orderDate)
+  const orderStatus = input.status ?? 'confirmed'
 
   // 할인/적립금 — orders 레벨 처리 (상품 단가/라인 무관)
   const discount_raw = Number(input.discount_amount ?? 0)
@@ -232,7 +233,7 @@ export async function createOrder(
       customer_id:        input.customer_id,
       order_number:       orderNumber,
       order_date:         orderDate,
-      status:             input.status ?? 'confirmed',
+      status:             orderStatus,
       total_supply_price: totals.total_supply_price,
       total_vat_amount:   totals.total_vat_amount,
       total_amount:       totals.total_amount,   // 상품 합계 (할인 전, 매출 기준)
@@ -253,27 +254,31 @@ export async function createOrder(
     return { success: false, error: `라인 저장 실패: ${linesErr.message}` }
   }
 
-  // 거래처별 마지막 거래 캐시 — batch upsert (N+1 제거)
-  const cacheRows = lineRows
-    .filter((r) => !!r.product_id && !!input.customer_id)
-    .map((r, idx) => {
-      const origLine = input.lines[idx]
-      const pricing_mode = origLine?.line_total_override !== undefined ? 'total' : 'unit'
-      return {
-        customer_id:       input.customer_id,
-        product_id:        r.product_id,
-        last_price:        r.unit_price,
-        last_qty:          r.quantity,
-        last_line_total:   r.line_total,
-        last_pricing_mode: pricing_mode,
-        updated_at:        new Date().toISOString(),
-      }
-    })
+  // 거래처별 마지막 거래 단가 캐시 — confirmed 주문만 갱신 (N+1 금지 → batch upsert)
+  if (orderStatus === 'confirmed') {
+    const cacheRows = lineRows
+      .filter((r) => !!r.product_id && !!input.customer_id)
+      .map((r, idx) => {
+        const origLine = input.lines[idx]
+        const pricing_mode = origLine?.line_total_override !== undefined ? 'total' : 'unit'
+        return {
+          tenant_id:        ctx.tenant_id,
+          customer_id:      input.customer_id,
+          product_id:       r.product_id,
+          last_price:       r.unit_price,
+          last_qty:         r.quantity,
+          last_line_total:  r.line_total,
+          last_pricing_mode: pricing_mode,
+          source:           'order',
+          updated_at:       new Date().toISOString(),
+        }
+      })
 
-  if (cacheRows.length > 0) {
-    const { error: upsertErr } = await supabase
-      .from('customer_product_prices')
-      .upsert(cacheRows, { onConflict: 'customer_id,product_id' })
+    if (cacheRows.length > 0) {
+      await supabase
+        .from('customer_product_prices')
+        .upsert(cacheRows, { onConflict: 'customer_id,product_id' })
+    }
   }
 
   // order_logs: create
@@ -495,7 +500,7 @@ export async function getProductsForOrder(
       id, product_code, name, tax_type, procurement_type,
       product_costs ( cost_price, start_date, end_date ),
       product_prices ( price_type, price ),
-      customer_product_prices ( customer_id, last_price, last_line_total, last_qty, last_pricing_mode )
+      customer_product_prices ( tenant_id, customer_id, last_price, updated_at, last_line_total, last_qty, last_pricing_mode, source )
     `)
     .eq('tenant_id', ctx.tenant_id).is('deleted_at', null).order('name')
   if (error) return { success: false, error: error.message }
@@ -510,9 +515,16 @@ export async function getProductsForOrder(
       // 이 거래처의 구매 이력 — customer_id 정확히 일치하는 row만 사용
       // customer_product_prices는 모든 거래처 이력이 배열로 오므로 반드시 find 필터링 필요
       const customerRecord = customerId
-        ? (p.customer_product_prices ?? []).find(
-            (cp: any) => cp.customer_id === customerId && cp.last_price != null
-          )
+        ? (() => {
+            const rows = (p.customer_product_prices ?? [])
+              .filter((cp: any) =>
+                cp?.customer_id === customerId &&
+                cp?.last_price != null &&
+                cp?.tenant_id === ctx.tenant_id
+              )
+              .sort((a: any, b: any) => String(b.updated_at ?? '').localeCompare(String(a.updated_at ?? '')))
+            return rows[0]
+          })()
         : undefined
 
       const has_purchase_history = !!customerRecord

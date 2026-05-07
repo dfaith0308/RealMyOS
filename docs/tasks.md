@@ -761,7 +761,8 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
   - 거래처별 상품 단가(`customer_product_prices`) 관리
   - 견적가 → 주문 기본가 자동 적용
   - 거래처 선택 시 최근 거래가/추천 단가 자동 제안
-- **migration 필요**: YES — `customer_product_prices` 테이블
+- **migration 필요**: YES — `customer_product_prices` 컬럼 보강(tenant_id/source)
+- **작업 이력 (2026-05-07)**: `customer_product_prices`에 `tenant_id/source` 소급 migration 추가 + 주문 confirmed 시 단가 자동 갱신 + 주문등록 폼 기본가/최근가 자동 추천 — worklog: `docs/worklogs/2026-05-07_sup-missing-013_customer-product-prices.md`
 
 ### 🔍 확인 필요
 
