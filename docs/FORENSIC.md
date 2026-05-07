@@ -1,0 +1,159 @@
+# FORENSIC.md — 식식이OS 레이어 불일치 현실 고정
+
+> 수정 전 현실 고정용 문서  
+> 운영 DB vs migration vs 앱 코드 불일치 기록  
+> 작성일: 2026-05-07
+
+---
+
+## 1. admin_logs 컬럼 불일치
+
+### 운영 DB 실제 컬럼 (Supabase 확인)
+
+- id (uuid)
+- admin_tenant_id (uuid)
+- action_type (text)
+- target_tenant_id (uuid)
+- payload (jsonb)
+- created_at (timestamptz)
+
+### migration 파일 정의
+
+파일: `supabase/migrations/20260506130001_create_admin_logs.sql`  
+→ 운영 DB와 일치 ✅
+
+### 앱 코드 가정 (`insertAdminLog` 호출부)
+
+코드가 INSERT 시도하는 컬럼:
+
+- `admin_id` ❌ (DB에 없음 — DB에는 `admin_tenant_id`만 존재)
+- `tenant_id` ❌ (DB에 없음 — DB에는 `target_tenant_id`만 존재)
+- `reason` ❌ (DB에 없음)
+- `target_table` ❌ (DB에 없음)
+- `target_id` ❌ (DB에 없음)
+- `old_value` ❌ (DB에 없음)
+- `new_value` ❌ (DB에 없음)
+
+### 판정
+
+**CRITICAL** — 앱 코드가 스키마에 없는 컬럼명으로 INSERT를 시도할 수 있음  
+→ 관리자 감사 로그 경로가 **실패하거나**, RLS/에러 처리로 **조용히 누락**될 가능성  
+→ 일부 호출부는 `.catch(() => {})` 등으로 실패가 드러나지 않을 수 있음
+
+### 수정 방향 (수정은 별도 단계)
+
+**택 1 — DB 확장 (앱 코드 기준)**
+
+추가할 컬럼 예시:
+
+- `admin_id` uuid (또는 기존 `admin_tenant_id` 의미를 코드와 통일)
+- `tenant_id` uuid (또는 `target_tenant_id` 용도와 역할 문서화)
+- `reason` text
+- `target_table` text
+- `target_id` uuid
+- `old_value` jsonb
+- `new_value` jsonb
+
+**택 2 — 앱 정렬 (DB 스키마 유지)**
+
+- 단일 `payload` jsonb에 위 정보를 구조화해 저장하도록 INSERT 변환
+
+---
+
+## 2. RLS WITH CHECK 현황
+
+### 확인 필요 테이블
+
+- orders
+- payments
+- rfq_requests
+
+### 상태
+
+⏳ Supabase에서 확인 진행 중 (`docs/tasks.md` `DB-CHECK-004` 잔여와 동일 축)
+
+---
+
+## 3. 알리고 자격증명 이원화
+
+### settings 테이블 사용처
+
+- `src/actions/message.ts` → `getAligoSettings()`  
+- 실제 문자 발송 경로 (`sendAligo`, `sendAligoTest` 등)
+
+### admin_settings 사용처
+
+- `src/actions/admin/policy-console.ts`  
+- 정책 콘솔 테스트 발송 (`sendPolicyConsoleAligoTest`)
+
+### 판정
+
+**HIGH** — 실제 발송은 테넌트 `settings` / 관리자 콘솔 테스트는 `admin_settings`  
+→ 운영 혼선·어떤 값이 진짜인지 불명확할 수 있음
+
+### 수정 방향
+
+역할 분리 명시:
+
+- **settings**: 테넌트별 알리고 설정 (공급자 등이 직접 설정)
+- **admin_settings**: 플랫폼 레벨 기본값 또는 관리자 전용 테스트 자격 증명 (문서·PRODUCT와 합의 후 하나로 고정)
+
+---
+
+## 4. 정책키 소비 코드 매핑표
+
+| 키 이름 | 정의 위치 | 소비 코드 존재 | 비고 |
+|---|---|---|---|
+| platform_fee_rate | admin_settings | ✅ `settlement-control.ts` | 수수료·정산 로직 |
+| settlement_cycle_days | admin_settings | ✅ `settlement-control.ts` | 미정산 경과일 위험(`cycle_days`) |
+| order_cycle_calculation_count | admin_settings | ❌ 미연결 | 정책 콘솔·시드만 |
+| signal_suppression_days | admin_settings | ❌ 미연결 | 정책 콘솔·시드만 |
+| rfq_repeat_limit | admin_settings | ❌ 미연결 | 정책 콘솔·시드만 |
+| delivery_signal_window | admin_settings | ❌ 미연결 | 정책 콘솔·시드만 |
+| rfq_open_duration_hours | admin_settings | ❌ 미연결 | 정책 콘솔·시드만 |
+| trust_supplier_level1/2/3 | admin_settings | ✅ `trust-engine.ts` (경유 `policy-console.ts`) | Level 경계 |
+| trust_restaurant_level1/2/3 | admin_settings | ✅ `trust-engine.ts` (경유 `policy-console.ts`) | Level 경계 |
+| aligo_user_id / aligo_api_key / aligo_sender | admin_settings | ⚠️ 부분 | 정책 콘솔·테스트만; 실발송은 `settings` (§3 참조) |
+
+### 판정
+
+**HIGH** — 영업·발주·신호 관련 **5개 정책키**는 저장·편집만 되고 런타임 엔진 미연결 가능성 높음  
+→ 값을 바꿔도 RFQ/납기/반복 제한 등 **실동작이 안 바뀔 수 있음** (“가짜 레버” 위험)
+
+---
+
+## 5. tenant_id / seller_tenant_id 병행
+
+### 현황
+
+- `orders` 테이블: `tenant_id`(레거시) + `seller_tenant_id`(신규) 병행
+- 쿼리: `.or()` 필터로 양쪽 모두 처리하는 패턴 존재
+- `docs/CONTEXT.md` [ARCH-03]에 전환 중으로 명시
+
+### 판정
+
+**MEDIUM** — 쿼리 실수 시 다른 테넌트 데이터 노출·집계 오류 가능성
+
+---
+
+## 6. CONTEXT.md / tasks.md 문서 드리프트
+
+### 현황
+
+- **CONTEXT.md**: relationships 코드 없음 등으로 기술된 구간이 있으나, 실제로는 `(admin)/participants/` 등 관리자 라우트·액션이 존재할 수 있음 → 재수집 필요
+- **tasks.md**: 상단 migration 인벤토리 등 과거 서술과 실제 `realmyos/supabase/migrations/` 내 다수 `.sql` 파일 존재 사이 불일치 가능
+
+### 판정
+
+**MEDIUM** — 문서만 보고 운영·아키텍처 결정 시 오판 가능
+
+---
+
+## 처리 순서
+
+1. ✅ admin_logs forensic 확인 완료
+2. ⏳ RLS WITH CHECK 검증
+3. ⏳ admin_logs 스키마 또는 앱 INSERT 정렬 (수정 단계)
+4. ⏳ 알리고 이원화 정리
+5. ⏳ 정책키 소비 코드 연결
+6. ⏳ CONTEXT.md·tasks.md 재수집

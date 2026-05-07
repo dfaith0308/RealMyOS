@@ -120,6 +120,7 @@
 - **Forensic (운영 DB)**: **`admin_logs` 테이블 없음** 확정.
 - **완료 기준**: PRODUCT §10·CONTEXT와 일치하는 테이블·정책
 - **작업 이력 (2026-05-06)**: 테이블·RLS 포함 migration 파일 추가(미적용) — `supabase/migrations/20260506130001_create_admin_logs.sql` — worklog: [`docs/worklogs/2026-05-06_phase1_db-todo-001-002_migration-files.md`](./worklogs/2026-05-06_phase1_db-todo-001-002_migration-files.md)
+- **작업 이력 (2026-05-08)**: 레이어 불일치 현실 고정 문서 `docs/FORENSIC.md` 신규 — 앱 `insertAdminLog` 컬럼명 vs 스키마·정책키 소비·알리고 이원화·RLS `WITH CHECK` 잔여 정리 — worklog: [`docs/worklogs/2026-05-08_docs_forensic-layer-drift.md`](./worklogs/2026-05-08_docs_forensic-layer-drift.md)
 
 ### ⚠️ DB 부분구현 (재분류)
 
