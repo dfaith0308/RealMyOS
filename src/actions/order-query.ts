@@ -18,6 +18,7 @@ export interface OrderListItem {
   customer_name: string
   total_amount: number
   status: string
+  order_status: string
   order_lines: Array<{ product_name: string; quantity: number; unit_price: number; line_total: number }>
   current_balance: number | null   // 실시간 잔액 (ledger 기준)
   deposit_amount: number | null    // 예치금
@@ -43,6 +44,7 @@ export async function getOrderList(filters?: {
   from?: string
   to?: string
   status?: string
+  order_status?: string
   customer_id?: string
 }): Promise<ActionResult<OrderListItem[]>> {
   const supabase = await createSupabaseServer()
@@ -51,7 +53,7 @@ export async function getOrderList(filters?: {
 
   let query = supabase
     .from('orders')
-    .select('id, order_number, order_date, customer_id, total_amount, status, customers(name), order_lines(product_name, quantity, unit_price, line_total)')
+    .select('id, order_number, order_date, customer_id, total_amount, status, order_status, customers(name), order_lines(product_name, quantity, unit_price, line_total)')
     // 전환: seller_tenant_id 우선 (legacy tenant_id 병행)
     .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
     .is('deleted_at', null)
@@ -63,6 +65,7 @@ export async function getOrderList(filters?: {
   if (filters?.to)          query = query.lte('order_date', filters.to)
   if (filters?.status)      query = query.eq('status', filters.status)
   else                      query = query.in('status', ['draft', 'confirmed', 'cancelled'])
+  if (filters?.order_status) query = query.eq('order_status', filters.order_status)
   if (filters?.customer_id) query = query.eq('customer_id', filters.customer_id)
 
   const { data, error } = await query
@@ -87,6 +90,7 @@ export async function getOrderList(filters?: {
         customer_name:   o.customers?.name ?? '-',
         total_amount:    o.total_amount,
         status:          o.status,
+        order_status:    o.order_status ?? '접수',
         order_lines:     o.order_lines ?? [],
         current_balance: bal?.current_balance ?? null,
         deposit_amount:  bal?.deposit_amount ?? null,

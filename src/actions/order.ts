@@ -36,6 +36,65 @@ async function logOrder(supabase: any, opts: {
   })
 }
 
+// ============================================================
+// SUP-MISSING-010: 주문상태(order_status) 변경
+// - status(거래상태)와 완전 분리
+// ============================================================
+
+export type OrderStatusFlow =
+  | '접수'
+  | '확인'
+  | '출고준비'
+  | '출고완료'
+  | '납품완료'
+  | '취소'
+
+export async function updateOrderStatus(
+  order_id: string,
+  order_status: OrderStatusFlow,
+): Promise<ActionResult> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const { data: before, error: bErr } = await supabase
+    .from('orders')
+    .select('id, status, order_status')
+    .eq('id', order_id)
+    // 전환 기간: seller_tenant_id 우선 + legacy tenant_id 병행
+    .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
+    .is('deleted_at', null)
+    .single()
+
+  if (bErr) return { success: false, error: bErr.message }
+  if (!before) return { success: false, error: '주문을 찾을 수 없습니다.' }
+
+  if (before.order_status === order_status) return { success: true }
+
+  const { error } = await supabase
+    .from('orders')
+    .update({ order_status, updated_at: new Date().toISOString() })
+    .eq('id', order_id)
+    // 전환 기간: seller_tenant_id 우선 + legacy tenant_id 병행
+    .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
+    .is('deleted_at', null)
+
+  if (error) return { success: false, error: error.message }
+
+  await logOrder(supabase, {
+    order_id,
+    user_id: ctx.user_id,
+    user_type: ctx.user_type,
+    action: 'update',
+    before_data: { order_status: before.order_status },
+    after_data: { order_status },
+  })
+
+  revalidatePath('/orders')
+  revalidatePath(`/orders/${order_id}`)
+  return { success: true }
+}
+
 function getCurrentCostPrice(
   costs: Array<{ cost_price: number; start_date: string; end_date: string | null }>,
   date: string,

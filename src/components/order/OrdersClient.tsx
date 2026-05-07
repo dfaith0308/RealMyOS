@@ -12,7 +12,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge'
 import { DataCell, DataTableRow } from '@/components/ui/DataTableRow'
 import styles from '@/app/(app)/orders/orders-ops.module.css'
 
-interface Filters { from: string; to: string; status: string; customer_id: string }
+interface Filters { from: string; to: string; status: string; order_status: string; customer_id: string }
 interface Customer { id: string; name: string }
 
 interface Props {
@@ -22,6 +22,7 @@ interface Props {
 }
 
 type StatusChip = '' | 'draft' | 'confirmed' | 'cancelled' | 'today'
+type OpsTab = 'all' | 'today_delivery' | 'delayed' | 'prep' | 'done'
 type Preset = 'month' | '7d' | 'custom'
 
 function kstTodayStr() {
@@ -51,6 +52,8 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
       ? (filters.status as StatusChip)
       : '',
   )
+  const [opsTab, setOpsTab] = useState<OpsTab>('all')
+  const [orderStatus, setOrderStatus] = useState(filters.order_status ?? '')
 
   const preset: Preset = useMemo(() => {
     if (from === monthStartStr() && to === kstTodayStr()) return 'month'
@@ -67,6 +70,7 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
       if (to) params.set('to', to)
       if (customerId) params.set('customer_id', customerId)
       if (status && status !== 'today') params.set('status', status)
+      if (orderStatus) params.set('order_status', orderStatus)
       const q = params.toString()
       router.push(q ? `/orders?${q}` : '/orders')
     }, 250)
@@ -83,6 +87,29 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
     }
     return orders
   }, [orders, status, todayStr])
+
+  const opsFiltered = useMemo(() => {
+    const ms1d = 86400000
+    const todayMs = new Date(todayStr + 'T00:00:00Z').getTime()
+    const isDelayed = (o: OrderListItem) => {
+      // due_date 부재 → 운영 탭의 "지연"은 order_date 기준 근사치
+      if (o.order_status === '납품완료' || o.order_status === '취소') return false
+      const d = new Date(o.order_date + 'T00:00:00Z').getTime()
+      return d <= todayMs - ms1d
+    }
+    if (opsTab === 'all') return baseOrders
+    if (opsTab === 'prep') return baseOrders.filter((o) => o.order_status === '출고준비')
+    if (opsTab === 'done') return baseOrders.filter((o) => o.order_status === '납품완료')
+    if (opsTab === 'today_delivery') {
+      return baseOrders.filter(
+        (o) =>
+          o.order_date === todayStr &&
+          (o.order_status === '출고완료' || o.order_status === '납품완료'),
+      )
+    }
+    // delayed
+    return baseOrders.filter(isDelayed)
+  }, [baseOrders, opsTab, todayStr])
 
   const counts = useMemo(() => {
     const draft = orders.filter((o) => o.status === 'draft').length
@@ -113,7 +140,7 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
 
   const groupedByDate = useMemo(() => {
     const map = new Map<string, { date: string; rows: OrderListItem[]; cnt: number; sum: number }>()
-    for (const o of baseOrders) {
+    for (const o of opsFiltered) {
       const g = map.get(o.order_date) ?? { date: o.order_date, rows: [], cnt: 0, sum: 0 }
       g.rows.push(o)
       g.cnt += 1
@@ -121,7 +148,7 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
       map.set(o.order_date, g)
     }
     return [...map.values()]
-  }, [baseOrders])
+  }, [opsFiltered])
 
   return (
     <>
@@ -164,6 +191,14 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
 
       <Surface variant="panel" density="comfortable">
         <div className={styles.controls}>
+          <div className={styles.chipRow} aria-label="주문현황 탭">
+            <Chip active={opsTab === 'all'} onClick={() => setOpsTab('all')}>전체</Chip>
+            <Chip active={opsTab === 'today_delivery'} onClick={() => setOpsTab('today_delivery')}>오늘납품</Chip>
+            <Chip active={opsTab === 'delayed'} onClick={() => setOpsTab('delayed')}>지연</Chip>
+            <Chip active={opsTab === 'prep'} onClick={() => setOpsTab('prep')}>출고준비</Chip>
+            <Chip active={opsTab === 'done'} onClick={() => setOpsTab('done')}>완료</Chip>
+          </div>
+
           <div className={styles.chipRow} aria-label="상태 필터">
             <Chip active={status === ''} onClick={() => setStatus('')}>전체</Chip>
             <Chip active={status === 'draft'} onClick={() => setStatus('draft')}>처리 필요</Chip>
@@ -191,6 +226,20 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
             {customers.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
+              </option>
+            ))}
+          </select>
+
+          <select
+            className={styles.select}
+            value={orderStatus}
+            onChange={(e) => setOrderStatus(e.target.value)}
+            aria-label="주문상태"
+          >
+            <option value="">주문상태 전체</option>
+            {['접수', '확인', '출고준비', '출고완료', '납품완료', '취소'].map((s) => (
+              <option key={s} value={s}>
+                {s}
               </option>
             ))}
           </select>
@@ -278,6 +327,8 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
                       <DataCell align="end" tone="secondary">
                         <StatusBadge status={statusKey} size="sm" />{' '}
                         <span className={styles.rowSub}>{statusLabel}</span>
+                        {' '}
+                        <span className={styles.tag}>{o.order_status}</span>
                       </DataCell>
 
                       <DataCell align="end">

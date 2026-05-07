@@ -736,6 +736,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **현행 상태(코드 기준)**: 단일 `status`만 존재
 - **연계**: `SUP-PARTIAL-005`
 - **migration 필요**: YES — `order_status` 컬럼 추가
+- **작업 이력 (2026-05-07)**: `order_status`(운영) 도입 + `status`(원장) 분리 + 주문 목록/상세에서 상태 표시/전이 UI + 주문현황 탭(전체/오늘납품/지연/출고준비/완료) — worklog: `docs/worklogs/2026-05-07_sup-missing-010_order-status.md`
 
 #### [SUP-MISSING-011] 상품 사진 인식 기반 자동 등록 미구현
 - **PRODUCT 정의 위치**: PRODUCT §8-7 식당OS + §6-6 공급자OS

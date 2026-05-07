@@ -10,7 +10,7 @@ export const metadata = { title: '주문 목록 — RealMyOS' }
 export default async function OrdersPage({
   searchParams,
 }: {
-  searchParams: { customer_id?: string; from?: string; to?: string; status?: string }
+  searchParams: { customer_id?: string; from?: string; to?: string; status?: string; order_status?: string; view?: string }
 }) {
   const sp = searchParams
 
@@ -21,6 +21,7 @@ export default async function OrdersPage({
   const from   = sp.from   ?? monthStart
   const to     = sp.to     ?? today
   const status = sp.status ?? ''
+  const order_status = sp.order_status ?? ''
   const customerId = sp.customer_id ?? ''
 
   const supabase = await createSupabaseServer()
@@ -29,7 +30,13 @@ export default async function OrdersPage({
 
   const _t0 = Date.now()
   const [ordersResult, { data: customers }] = await Promise.all([
-    getOrderList({ from, to, status: status || undefined, customer_id: customerId || undefined }),
+    getOrderList({
+      from,
+      to,
+      status: status || undefined,
+      order_status: order_status || undefined,
+      customer_id: customerId || undefined,
+    }),
     supabase
       .from('customers')
       .select('id, name')
@@ -44,7 +51,7 @@ export default async function OrdersPage({
       <OrdersClient
         orders={ordersResult.data ?? []}
         customers={customers ?? []}
-        filters={{ from, to, status, customer_id: customerId }}
+        filters={{ from, to, status, order_status, customer_id: customerId }}
       />
     </main>
   )
