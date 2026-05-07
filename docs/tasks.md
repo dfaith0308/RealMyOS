@@ -742,6 +742,22 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
   - 대상 화면: 공급자OS `/products/new` + 식당OS `/settings/ingredients`
 - **migration 필요**: NO (외부 API 연동 + UI만)
 
+#### [SUP-MISSING-012] 견적서 PDF/JPG 출력 미구현 (PRODUCT §6-5)
+- **PRODUCT 정의 위치**: PRODUCT §6-5 견적관리
+- **요구사항(요약)**:
+  - 견적서 PDF 다운로드 / JPG 다운로드
+  - 도장 이미지 포함(설정에서 업로드/선택)
+  - 카카오/문자 공유 링크 생성
+- **migration 필요**: NO (라이브러리/렌더링 구현)
+
+#### [SUP-MISSING-013] 거래처별 단가 시스템 미구현 (PRODUCT §6-6)
+- **PRODUCT 정의 위치**: PRODUCT §6-6 상품관리
+- **요구사항(요약)**:
+  - 거래처별 상품 단가(`customer_product_prices`) 관리
+  - 견적가 → 주문 기본가 자동 적용
+  - 거래처 선택 시 최근 거래가/추천 단가 자동 제안
+- **migration 필요**: YES — `customer_product_prices` 테이블
+
 ### 🔍 확인 필요
 
 #### [SUP-CHECK-001] (이관 — 공통 DB)
@@ -785,6 +801,64 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **migration 필요**: NO
 - **작업 이력 (2026-05-07)**: 관리자OS `(admin)` route group 신설 + `/admin/*` admin role 보호 + 관리자 대시보드 기본 화면 추가 — worklog: `docs/worklogs/2026-05-07_adm-todo-001_admin-os-route.md`
 - **작업 이력 (2026-05-07)**: `/admin/tenants` 테넌트 관리(승인/정지) + `/admin/logs` 로그 화면 + admin action 로깅 추가 — worklog: `docs/worklogs/2026-05-07_adm-todo-001_admin-tenant-management.md`
+
+#### [ADM-MISSING-001] 거래 흐름 관제 미구현 (PRODUCT §10-4)
+- **PRODUCT 정의 위치**: PRODUCT §10-4
+- **요구사항(요약)**:
+  - 발주→낙찰→주문→정산 전 과정 추적
+  - Level 1~3 자동 개입 시스템(정상 체류 시간 기준, 이상 감지)
+  - 이상 감지 → Action Queue 연결
+- **migration 필요**: YES — `action_queue` 테이블 신설(ADM-MISSING-008과 공통)
+
+#### [ADM-MISSING-002] 참여자/관계 네트워크 미구현 (PRODUCT §10-5)
+- **PRODUCT 정의 위치**: PRODUCT §10-5
+- **요구사항(요약)**:
+  - 신뢰도 기반 참여자 통제
+  - `trust_scores` 테이블 연동(이미 존재)
+  - Level 매핑 정책화
+- **migration 필요**: NO (`trust_scores` 이미 존재)
+
+#### [ADM-MISSING-003] 데이터 학습 센터 미구현 (PRODUCT §10-6)
+- **PRODUCT 정의 위치**: PRODUCT §10-6
+- **요구사항(요약)**:
+  - 플랫폼 전체 데이터 수집/학습
+  - MVP: 임계값 기반 자동 판단(룰 엔진 형태)
+- **migration 필요**: NO (로직/파이프라인 구현)
+
+#### [ADM-MISSING-004] 판단/분석 엔진 미구현 (PRODUCT §10-7)
+- **PRODUCT 정의 위치**: PRODUCT §10-7
+- **요구사항(요약)**:
+  - 위험/기회 판단 → 정책 트리거 생성
+  - Action Queue 자동 생성
+- **migration 필요**: YES — `action_queue` 테이블 신설(ADM-MISSING-008과 공통)
+
+#### [ADM-MISSING-005] 성장/영업 엔진 미구현 (PRODUCT §10-8)
+- **PRODUCT 정의 위치**: PRODUCT §10-8
+- **요구사항(요약)**:
+  - 이탈 위험/휴면 참여자 자동 영업
+- **migration 필요**: NO (로직 구현)
+
+#### [ADM-MISSING-006] 수익/정산 통제 미구현 (PRODUCT §10-9)
+- **PRODUCT 정의 위치**: PRODUCT §10-9
+- **요구사항(요약)**:
+  - 자동 정산 조건 처리
+  - 선지급(Credit Line) 시스템
+  - 수수료 구조
+- **migration 필요**: YES — settlements 관련 테이블
+
+#### [ADM-MISSING-007] 정책/실험 콘솔 미구현 (PRODUCT §10-10)
+- **PRODUCT 정의 위치**: PRODUCT §10-10
+- **요구사항(요약)**:
+  - 코드 없이 정책 생성/수정
+  - A/B 테스트 지원
+  - 정책 충돌 감지
+- **migration 필요**: YES — `admin_settings_logs` 테이블
+
+#### [ADM-MISSING-008] Action Queue 시스템 미구현 (PRODUCT §10-3)
+- **PRODUCT 정의 위치**: PRODUCT §10-3 중앙 대시보드
+- **CONTEXT**: [ARCH-08C] `action_queue` 테이블 정의 존재
+- **현행 상태**: `action_queue` 테이블 없음
+- **migration 필요**: YES — `action_queue` 테이블 신설
 
 ### 🔍 확인 필요
 
@@ -949,6 +1023,39 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **migration 필요**: NO
 - **결정**: 현행 유지 결정 — `getTenantId()`가 모든 `(app)` 페이지의 SSOT 접근 제어(인증/온보딩/승인 체크) 역할을 수행. Edge middleware DB 조회 제약으로 미들웨어 보강은 불필요. `middleware.ts` no-op 유지.
 - **작업 이력 (2026-05-06)**: 현행 구조 분석·GAP 정리 후 “현행 유지” 결정 기록 — worklog: `docs/worklogs/2026-05-06_res-partial-007_middleware-decision.md`
+
+### ❌ 미구현
+
+#### [RES-MISSING-001] 식자재(ingredients) 화면 미구현 (PRODUCT §8-7)
+- **PRODUCT 정의 위치**: PRODUCT §8-7 식당OS 설정
+- **요구사항(요약)**:
+  - `/settings/ingredients` 화면에서 식자재 수기 입력 + 사진 인식(= `SUP-MISSING-011` 연계)
+  - `ingredients` 테이블(현 운영/SSOT) 확인 필요
+- **migration 필요**: 🔍 (DB 확인 필요)
+
+#### [RES-MISSING-002] 메뉴(menus) + 원가 계산 미구현 (PRODUCT §8-7)
+- **PRODUCT 정의 위치**: PRODUCT §8-7 식당OS 설정
+- **요구사항(요약)**:
+  - `menus` 테이블
+  - `menu_ingredients` 연결 테이블
+  - 메뉴별 원가 자동 계산: Σ `ingredient.current_price × quantity`
+  - `menu_cost_cache` AI 추정 캐시
+- **migration 필요**: YES
+
+#### [RES-MISSING-003] 돈관리 하위 3메뉴 분리 미구현 (PRODUCT §8-4)
+- **PRODUCT 정의 위치**: PRODUCT §8-4
+- **현행 상태**: 단일 `/money` 화면
+- **요구사항(요약)**:
+  - 지급예정 / 거래처미지급금 / 자금흐름 3 화면 분리
+- **migration 필요**: NO (UI 분리)
+
+#### [RES-MISSING-004] 오늘운영 카드 생성 로직 미구현 (PRODUCT §8-3)
+- **PRODUCT 정의 위치**: PRODUCT §8-3
+- **현행 상태**: 단순 목록 표시
+- **요구사항(요약)**:
+  - 조건 기반 카드 자동 생성: 돈흐름카드 / 절약기회카드 / 오늘할일카드
+  - 카드 완료 시 자동 제거
+- **migration 필요**: NO (로직 구현)
 
 ### 🔍 확인 필요
 
