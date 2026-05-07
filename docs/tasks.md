@@ -492,18 +492,23 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
     - PRODUCT 6-7: 매입내역(메인)/매입등록 화면 및 상세 이동
     - `/purchases`·`/purchases/new` + `getPurchaseList`·`createPurchase`·`getUnpaidPurchases` + Sidebar 매입관리
     - **DB 적용**: `purchases`·`payment_allocations` DDL **적용됨** (`20260507030000`, `20260507040000`); 지급 분배와의 연동 RPC **`create_disbursement_with_allocations` 운영 적용 완료** (`20260507050000`)
-  - **[SUP-TODO-003-B] 상품↔매입처 매핑(default_supplier_id) 정합**
-    - 상품 등록 시 customers에서 검색 선택(텍스트 직접 입력 금지) 원칙 반영
-    - migration: 🔍 (products.default_supplier_id 존재/정합 확인)
-  - **[SUP-TODO-003-C] 자동 매입 생성(재고/위탁) 로직 분리**
-    - fulfillment_type(consignment/stock) 및 재고 차감/자동 매입 생성 규칙 구현
-    - migration: 🔍 (필드/정책 필요)
-  - **[SUP-TODO-003-D] 매입 원장(매입+지급) 연동**
-    - 매입 흐름이 지급/원장 계산에 반영되도록 집계/조회 경로 정리
-    - migration: 🔍
+  - **[SUP-TODO-003-B] 상품↔매입처 매핑(default_supplier_id) 정합** — **완료 (2026-05-07, 문서만)**
+    - **운영 DB 확인**: `products.default_supplier_id` **존재** ✅ — migration **불필요**
+    - 구현 방향(잔여 작업): 매입 등록 시 상품 선택 → `default_supplier_id`로 `customers` 조회해 `counterparty_name`(필요 시 `supplier_tenant_id`) **자동 채움**, 텍스트 직접 입력 금지(PRODUCT 6-7)
+    - migration: 없음 (UI/액션 후속 ID에서 처리)
+  - **[SUP-TODO-003-C] 자동 매입 생성(재고/위탁) 로직 분리** — **완료 (2026-05-07, 문서만 — Phase 7 이후로 보류)**
+    - **SSOT 확정**: `products.procurement_type` (`stock` / `consignment`) 가 **운영 SSOT**; `products.fulfillment_type` 없음 → `fulfillment_type`은 `order_lines` 측 컬럼만 유지(앱은 `defaultFulfillment(procurement_type)` 매핑)
+    - **재고 컬럼 부재**: `products.stock_qty` **없음** → 현재 자동 매입 생성 **불가**(재고 차감/임계치 트리거 불가)
+    - 결정: **수동 매입 등록만 지원**(현재 `/purchases/new`)으로 두고, **자동 매입 생성·재고는 Phase 7 이후**(별도 ID로 분리, 재고 모델 설계 동반)
+    - migration: 없음 (Phase 7 설계 시 재검토)
+  - **[SUP-TODO-003-D] 매입 원장(매입+지급) 연동** — **완료 (2026-05-07, 문서만)**
+    - 매입 원장 = `purchases` + `payment_allocations` 집계 — 미지급금 = `total_amount − Σ allocated_amount`(부모 `payments.status IN ('pending','confirmed')`만), `purchases.status`는 002-D RPC가 `paid`/`partial`/`unpaid` 자동 반영
+    - 잔여 작업: `getPurchaseList`(또는 별도 액션)에 **지급 합계·잔액 컬럼** 추가, `/ledger`에서 매입원장 진입(SUP-TODO-004와 정합)
+    - migration: 없음 (조회·집계만)
 - **작업 이력 (2026-05-06)**: PRODUCT 6-7 정독 + 매입 라우트 부재 확인 + 세부 분해 등록 — worklog: `docs/worklogs/2026-05-06_phase5_sup-todo-001-005-gap.md`
 - **작업 이력 (2026-05-07)**: SUP-TODO-003-A `/purchases`·매입 액션·Sidebar — worklog: `docs/worklogs/2026-05-07_sup-todo-002c-003a_purchases-disburse-ui.md`
 - **작업 이력 (2026-05-07)**: SUP-TODO-003-A 연동 — `create_disbursement_with_allocations` RPC 운영 적용 완료 — worklog: `docs/worklogs/2026-05-07_sup-todo-002c-003a_purchases-disburse-ui.md`
+- **작업 이력 (2026-05-07)**: SUP-TODO-003-B/C/D 매입관리 감사 — `default_supplier_id` 존재·`procurement_type` SSOT·`stock_qty` 부재·자동 매입 Phase 7+ — worklog: `docs/worklogs/2026-05-07_sup-todo-003b-c-d_purchase-audit.md`
 
 #### [SUP-TODO-004] 원장관리 단독 `/ledger`·매출분석 `/analytics` (이전 tasks에도 미완)
 - **PRODUCT 정의 위치**: §6-10 원장관리, §6-11 매출분석
