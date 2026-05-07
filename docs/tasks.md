@@ -361,7 +361,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **migration 필요**: 🔍 확인 필요
 - **메모**: Phase 7으로 이동 — 주문상태(운영 흐름) 컬럼 추가는 연체 시스템(SUP-DANGER-003)과 함께 설계 필요. 현재 거래상태(draft/confirmed/cancelled)는 DB CHECK와 코드 일치 확인. 임의 착수 금지.
 
-#### [SUP-PARTIAL-006] 자동화영업·매출 화면은 일부만 존재 — **완료 (2026-05-07, 문서 기준)**
+#### [SUP-PARTIAL-006] 자동화영업·매출 화면은 일부만 존재 — **부분완료 (006-A, 006-C 완료 / 006-B, 006-D 미완료)**
 - **위치**: `realmyos/src/app/(app)/sales/` — `schedule`, `history`, `scripts`; `sales/page.tsx`는 `/sales/schedule`로 redirect
 - **현재 동작 (코드 확인 완료, 2026-05-07)**:
   - 라우트: `/sales/schedule`, `/sales/history`, `/sales/scripts` 존재 (`/sales`는 schedule로 redirect)
@@ -385,8 +385,9 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
     - “지금 연락해야 할 고객 TOP3 + 추천 행동 + 바로 실행 버튼” MVP 구성
     - migration: 🔍 (추천 대상/점수/스케줄 데이터 소스에 따라)
   - **[SUP-PARTIAL-006-B] 영업스케줄 UX(달력/리스트, snooze, 제약) 정합 점검**
-    - 달력↔리스트 뷰, “내일로(snooze)” 동작(삭제 금지) 확인/정렬
-    - 중복 방지(unique customer_id+date)와 충돌 처리
+    - 달력↔리스트 뷰 전환 미구현
+    - snooze(내일로) 삭제 금지 검증 필요
+    - 중복 방지(customer_id+date unique) 검증 필요
     - migration: 🔍
   - **[SUP-PARTIAL-006-C] 메시지 발송(알리고) 경로/로그 정합 점검**
     - message_logs 생성 → API 호출 → sent/failed → contact_logs 자동 기록
@@ -394,8 +395,9 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
     - migration: 🔍 (로그 테이블/필드 필요 가능)
     - **작업 이력 (2026-05-07)**: 알리고 실제 연동 구현(`sendAligo` Server Action) + SMS/LMS 자동 분기(90바이트) + 설정 화면 알리고 설정/테스트 발송 + 실행센터 실제 발송(확인 모달)로 교체 + D-015 결정 추가 — worklog: `docs/worklogs/2026-05-07_sup-partial-006c_aligo-api.md`
   - **[SUP-PARTIAL-006-D] 영업이력 컬럼/필터/성과 연결 검증**
-    - contact_logs 확장(결과코드/다음행동일/주문발생 여부) 및 필터 정합
-    - “이 영업 → 주문 발생 여부 연결” 구현 여부 점검 후 분해
+    - contact_logs에 주문 발생 여부 연결 미구현
+    - “이 영업 → 주문 발생” 추적 없음
+    - 다음 행동 날짜(주문주기 기반) 자동 계산 미구현
     - migration: 🔍
 - **산출물 (대조표 캔버스)**: `phase5-sup-partial-001-002-006-gap.canvas.tsx`
 - **작업 이력 (2026-05-06)**: PRODUCT 6-13 정독 + `sales/` 라우트 확인 + 공백 항목 분해 등록 — worklog: `docs/worklogs/2026-05-06_phase5_sup-partial-001-002-006-gap.md`
