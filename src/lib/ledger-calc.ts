@@ -19,7 +19,13 @@ export function isConfirmedRevenueStatus(status: string): boolean {
   return status === 'confirmed'
 }
 
-/** 공급자 매출 주문 여부 (purchase 제외, legacy null = sale 간주) */
+/**
+ * 공급자 매출 주문 여부 (purchase 제외, legacy null = sale 간주)
+ *
+ * 반품 컨벤션:
+ * - order_type에 'refund' 같은 값은 사용하지 않는다 (운영 DB: sale/purchase)
+ * - 반품/환불은 sale(null 포함) 주문의 음수 line_total(또는 합계 음수)로 표현한다.
+ */
 export function isSalesOrder(order: { order_type?: string | null }): boolean {
   return order.order_type == null || order.order_type === 'sale'
 }

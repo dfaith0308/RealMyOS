@@ -567,6 +567,12 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **작업 이력 (2026-05-07)**: SUP-TODO-004-B(B-1) 컬럼 정합·기초잔액 항상 표시·기간/결제수단 필터; B-2 신규 분리 — worklog: `docs/worklogs/2026-05-07_sup-todo-004b_ledger-columns.md`
 - **작업 이력 (2026-05-07)**: SUP-TODO-004-C `/analytics` 4탭 신설(`order_lines` 스냅샷 SSOT, RULE-02·03 준수); 차트(C-2)·출력(C-3)·평균결제기간 정확 정의(C-4) 신규 분리 — worklog: `docs/worklogs/2026-05-07_sup-todo-004c_analytics.md`
 
+### [CONVENTION] 반품(환불) 처리 규약 — **확정 (2026-05-07)**
+- **운영 DB 사실**: `orders.order_type`는 `sale` / `purchase`만 존재 (`refund` 없음, 타입은 USER-DEFINED)
+- **확정 규약**: **반품/환불은 `order_type`이 아니라 `order_lines.line_total < 0`(음수 금액)로 표현**한다. (`order_type`은 `sale`/NULL 유지)
+- **영향 범위**: 매출분석 위험신호의 “반품/매출 비율” 계산은 `order_type='refund'` 가정 금지
+- **작업 이력 (2026-05-07)**: `analytics.ts`의 반품 집계를 음수 `line_total` 기반으로 교체 — worklog: `docs/worklogs/2026-05-07_refund-convention-fix.md`
+
 #### [SUP-TODO-005] 플랫폼 결제·정산(식당↔공급자 단일 payments) 완성
 - **PRODUCT 정의 위치**: §3 돈 흐름, §9 payments
 - **완료 기준**: restaurant-os·공급자OS·관리자OS 간 결제 상태·정산 정의와 코드 일치(CONTEXT 로드맵)

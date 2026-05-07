@@ -362,19 +362,22 @@ export async function getRiskSignals(
         rank:          c.rank,
       }))
 
-    // 5. 반품 많은 상품 — refund 주문(order_type='refund') line_total은 음수 가정
+    // 5. 반품 많은 상품 — 반품 컨벤션: order_type이 아니라 음수 line_total로 구분
+    //    - 대상: sale(null 포함) 주문 중 line_total < 0 라인
+    //    - sales_revenue: line_total > 0 합
+    //    - refund_revenue: line_total < 0 합(음수 유지)
     //    refund_ratio = |refund_revenue| / sales_revenue
     const salesByProduct  = new Map<string, number>()
     const refundByProduct = new Map<string, number>()
     for (const o of orders) {
       const isSale = isSalesOrder(o)
-      const isRefund = o.order_type === 'refund'
+      if (!isSale) continue
       for (const l of o.order_lines ?? []) {
-        if (isSale) {
+        if (l.line_total > 0) {
           salesByProduct.set(l.product_name, (salesByProduct.get(l.product_name) ?? 0) + l.line_total)
-        } else if (isRefund) {
+        } else if (l.line_total < 0) {
           refundByProduct.set(l.product_name, (refundByProduct.get(l.product_name) ?? 0) + l.line_total)
-        }
+        } // 0은 무시
       }
     }
     const high_refund_products = [...refundByProduct.entries()]
