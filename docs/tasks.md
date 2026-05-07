@@ -862,6 +862,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
   - 플랫폼 전체 데이터 수집/학습
   - MVP: 임계값 기반 자동 판단(룰 엔진 형태)
 - **migration 필요**: NO (로직/파이프라인 구현)
+- **작업 이력 (2026-05-08)**: 학습센터 액션(`collectPlatformStats/getLearningStatus`) + `/admin/learning` 화면으로 학습 단계/전환 달성률/자동화율 지표 표시 — worklog: `docs/worklogs/2026-05-07_adm-missing-003-004_learning-engine.md`
 
 #### [ADM-MISSING-004] 판단/분석 엔진 미구현 (PRODUCT §10-7)
 - **PRODUCT 정의 위치**: PRODUCT §10-7
@@ -869,6 +870,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
   - 위험/기회 판단 → 정책 트리거 생성
   - Action Queue 자동 생성
 - **migration 필요**: YES — `action_queue` 테이블 신설(ADM-MISSING-008과 공통)
+- **작업 이력 (2026-05-08)**: 분석엔진 액션(`runAnalysisEngine/getRiskSummary`) + `/admin/engine` 화면 + 위험 감지→Action Queue 자동 생성(MVP 규칙) — worklog: `docs/worklogs/2026-05-07_adm-missing-003-004_learning-engine.md`
 
 #### [ADM-MISSING-005] 성장/영업 엔진 미구현 (PRODUCT §10-8)
 - **PRODUCT 정의 위치**: PRODUCT §10-8

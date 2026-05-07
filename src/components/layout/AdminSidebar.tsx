@@ -14,6 +14,8 @@ const MENU: MenuItem[] = [
   { label: '대시보드', icon: '🧭', href: '/admin/dashboard' },
   { label: '거래관제', icon: '🧬', href: '/admin/trades' },
   { label: '참여자', icon: '🧠', href: '/admin/participants' },
+  { label: '학습센터', icon: '🧪', href: '/admin/learning' },
+  { label: '분석엔진', icon: '🧷', href: '/admin/engine' },
   { label: '테넌트관리', icon: '🏢', href: '/admin/tenants' },
   { label: '로그', icon: '🧾', href: '/admin/logs' },
 ]
