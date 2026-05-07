@@ -16,7 +16,7 @@
 
 ## 수정 파일 목록
 
-- `supabase/migrations/20260507050000_create_disbursement_with_allocations.sql` — `direction`을 **`'outbound'::public.payment_direction`** 로 캐스트(운영 enum typname이 다르면 `format_type` 쿼리로 확인 후 교체)
+- `supabase/migrations/20260507050000_create_disbursement_with_allocations.sql` — `direction`을 **`'outbound'::public.payment_direction`** 로 캐스트(운영 적용 완료·시그니처 일치 확인)
 - `src/actions/payment.ts` — `createDisbursement`, 타입 export
 - `src/actions/purchase.ts` — `revalidatePath` 보강
 - `src/app/(app)/purchases/page.tsx`, `new/page.tsx`
@@ -36,16 +36,18 @@
 ## migration 여부
 
 - **파일**: `20260507050000_create_disbursement_with_allocations.sql` (저장소 기록).
-- **운영 적용**: 본 로그 시점 **사용자 파이프라인에서 실행** — 에이전트는 DB 미실행.
+- **운영 적용 (2026-05-07, 사용자 확인)**: `create_disbursement_with_allocations` RPC **배포 완료**. `pg_get_function_arguments` 기준 시그니처:
+  - `p_tenant_id uuid`, `p_counterparty_name text`, `p_amount integer`, `p_payment_date date`, `p_payment_method text`, `p_due_date date`, `p_memo text`, `p_order_id uuid`, `p_created_by uuid`, `p_allocations jsonb`
+- 동일 배포에 포함: `purchases`·`payment_allocations` 테이블과의 FK·RLS(`WITH CHECK`) 축(기존 migration `20260507030000`·`20260507040000`과 합치).
 
 ## 테스트 결과
 
 - `npx tsc --noEmit` — 통과 (realmyos).
+- RPC: 운영에서 함수 생성 확인(에이전트는 DB 직접 검증 없음 — 사용자 제공 `proname`/`pg_get_function_arguments`).
 
 ## 남은 위험
 
-- **`payment_direction` 명 오류**: 운영 `payments.direction`의 실제 enum 이름이 다르면 RPC 생성이 실패한다. migration 파일 상단 주석의 `format_type`/`typname` 쿼리로 확인 후 캐스트 수정.
-- **`purchases.status` 자동 갱신 없음**: 분배 후에도 매입 행은 `unpaid`/`partial` 그대로일 수 있음 — 향후 집계 RPC·트리거 또는 003-D에서 정합.
+- **`purchases.status` 자동 갱신 없음**(분배 후에도 `unpaid`/`partial` 유지 가능) — 향후 집계 RPC·트리거 또는 003-D에서 정합.
 
 ## 다음 권장 작업
 
