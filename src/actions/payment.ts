@@ -83,6 +83,78 @@ export async function createPayment(
     return { success: false, error: '수금 저장 실패: RPC 응답이 비어있습니다.' }
   }
 
+  // 예치금 반영 (SUP-MISSING-007)
+  // - create_payment_atomic이 계산한 deposit_amount를 SSOT로 보고, customer_deposits/deposit_logs에 기록
+  // - 실패 시 수금 자체를 실패로 만들지 않고 warning으로 반환 (회계상 수동 점검 가능하도록)
+  let depositWarning: string | undefined
+  const deposit_amount = (rpcData.deposit_amount as number | null) ?? 0
+  if (deposit_amount > 0) {
+    try {
+      const { data: depRow, error: depErr } = await supabase
+        .from('customer_deposits')
+        .select('id, balance')
+        .eq('tenant_id', ctx.tenant_id)
+        .eq('customer_id', input.customer_id)
+        .maybeSingle()
+
+      if (depErr) throw new Error(depErr.message)
+
+      const before = depRow?.balance ?? 0
+      const after = before + deposit_amount
+
+      if (!depRow) {
+        const { error: insErr } = await supabase.from('customer_deposits').insert({
+          tenant_id: ctx.tenant_id,
+          customer_id: input.customer_id,
+          balance: after,
+          updated_at: new Date().toISOString(),
+        })
+        if (insErr) throw new Error(insErr.message)
+      } else {
+        const { error: upErr } = await supabase
+          .from('customer_deposits')
+          .update({ balance: after, updated_at: new Date().toISOString() })
+          .eq('tenant_id', ctx.tenant_id)
+          .eq('id', depRow.id)
+        if (upErr) throw new Error(upErr.message)
+      }
+
+      const { error: logErr } = await supabase.from('deposit_logs').insert({
+        tenant_id: ctx.tenant_id,
+        customer_id: input.customer_id,
+        amount: deposit_amount,
+        type: 'credit',
+        reason: 'payment_over',
+        payment_id: rpcData.id as string,
+      })
+
+      if (logErr) {
+        // 롤백(가능한 범위): balance 복구
+        if (depRow) {
+          await supabase
+            .from('customer_deposits')
+            .update({ balance: before, updated_at: new Date().toISOString() })
+            .eq('tenant_id', ctx.tenant_id)
+            .eq('id', depRow.id)
+        } else {
+          await supabase
+            .from('customer_deposits')
+            .update({ balance: 0, updated_at: new Date().toISOString() })
+            .eq('tenant_id', ctx.tenant_id)
+            .eq('customer_id', input.customer_id)
+        }
+        throw new Error(logErr.message)
+      }
+
+      revalidatePath('/payments/new')
+      revalidatePath('/customers')
+      revalidatePath(`/customers/${input.customer_id}/ledger`)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'unknown error'
+      depositWarning = `예치금 기록 실패(수금은 저장됨): ${msg}`
+    }
+  }
+
   // FIFO 자동 배분 (best-effort): 배분 실패해도 수금 자체는 성공 유지
   try {
     await supabase.rpc('allocate_payment_fifo', {
@@ -107,10 +179,10 @@ export async function createPayment(
     data: {
       id:             rpcData.id             as string,
       applied_amount: rpcData.applied_amount as number,
-      deposit_amount: rpcData.deposit_amount as number,
+      deposit_amount: deposit_amount,
       balance_before: rpcData.balance_before as number,
       mode:           'rpc',
-      warning:        dupWarning,
+      warning:        [dupWarning, depositWarning].filter(Boolean).join(' · ') || undefined,
     },
   }
 }

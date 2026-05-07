@@ -3,6 +3,7 @@
 import { useState, useTransition, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createPayment, getCustomerBalance } from '@/actions/payment'
+import { useDeposit } from '@/actions/customer-deposits'
 import { getCustomersForOrder } from '@/actions/order'
 import { formatKRW, todayStr } from '@/lib/calc'
 import type { CustomerForOrder } from '@/types/order'
@@ -36,6 +37,9 @@ export default function PaymentCreateForm({ initialCustomerId = '', collectionSc
   const [memo, setMemo]               = useState('')
   const [error, setError]             = useState<string | null>(null)
 
+  const [useDepositEnabled, setUseDepositEnabled] = useState(false)
+  const [useDepositAmount, setUseDepositAmount] = useState('')
+
   // 수금 완료 후 결과 표시
   const [resultDeposit, setResultDeposit] = useState<number | null>(null)
 
@@ -65,6 +69,7 @@ export default function PaymentCreateForm({ initialCustomerId = '', collectionSc
   }, [selectedCustomer])
 
   const amountNum      = Number(amount) || 0
+  const useDepNum      = Number(useDepositAmount) || 0
   const currentBalance = balance ?? 0
   const overAmount     = amountNum > currentBalance && currentBalance >= 0
     ? amountNum - currentBalance : 0
@@ -79,14 +84,34 @@ export default function PaymentCreateForm({ initialCustomerId = '', collectionSc
     setResultDeposit(null)
     if (!selectedCustomer) { setError('거래처를 선택해주세요.'); return }
     if (!amount || amountNum <= 0) { setError('금액을 입력해주세요.'); return }
+    if (useDepositEnabled) {
+      if (!useDepositAmount || useDepNum <= 0) { setError('예치금 사용 금액을 입력해주세요.'); return }
+      if (!Number.isInteger(useDepNum)) { setError('예치금 사용 금액은 정수여야 합니다.'); return }
+      if (useDepNum > (deposit ?? 0)) { setError('예치금 잔액을 초과할 수 없습니다.'); return }
+    }
 
     startTransition(async () => {
+      const totalSettlement = amountNum + (useDepositEnabled ? useDepNum : 0)
+      const memoMerged = useDepositEnabled
+        ? [memo?.trim(), `예치금 사용: ${formatKRW(useDepNum)}`].filter(Boolean).join(' / ')
+        : memo
+
+      // 예치금 사용(내부 차감) → 수금 등록(미수 상계)
+      if (useDepositEnabled && useDepNum > 0) {
+        const d = await useDeposit(selectedCustomer.id, useDepNum, null)
+        if (!d.success) {
+          setError(d.error ?? '예치금 사용 실패')
+          return
+        }
+        setDeposit((v) => Math.max(0, (v ?? 0) - useDepNum))
+      }
+
       const r = await createPayment({
         customer_id:          selectedCustomer.id,
-        amount:               amountNum,
+        amount:               totalSettlement,
         payment_date:         paymentDate,
         payment_method:       method,
-        memo:                 memo || undefined,
+        memo:                 memoMerged || undefined,
         collection_schedule_id: collectionScheduleId || undefined,
       })
       if (r.success && r.data) {
@@ -95,10 +120,12 @@ export default function PaymentCreateForm({ initialCustomerId = '', collectionSc
           setBalance(0)
           setDeposit((d) => (d ?? 0) + r.data!.deposit_amount)
         } else {
-          setBalance((b) => Math.max(0, (b ?? 0) - amountNum))
+          setBalance((b) => Math.max(0, (b ?? 0) - totalSettlement))
         }
         setAmount('')
         setMemo('')
+        setUseDepositEnabled(false)
+        setUseDepositAmount('')
         setTimeout(() => { router.refresh(); setResultDeposit(null) }, 2000)
       } else {
         setError(r.error ?? '저장 실패')
@@ -181,6 +208,40 @@ export default function PaymentCreateForm({ initialCustomerId = '', collectionSc
           )}
         </div>
 
+        {/* 예치금 사용 */}
+        {selectedCustomer && (deposit ?? 0) > 0 && (
+          <div style={s.depositUseBox}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={useDepositEnabled}
+                onChange={(e) => { setUseDepositEnabled(e.target.checked); if (!e.target.checked) setUseDepositAmount('') }}
+              />
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#1D4ED8' }}>
+                예치금 사용
+              </span>
+              <span style={{ fontSize: 12, color: '#6b7280' }}>
+                (잔액 +{formatKRW(deposit ?? 0)})
+              </span>
+            </label>
+            {useDepositEnabled && (
+              <div style={{ marginTop: 8 }}>
+                <input
+                  style={s.input}
+                  type="number"
+                  value={useDepositAmount}
+                  onChange={(e) => setUseDepositAmount(e.target.value)}
+                  placeholder="사용 금액"
+                  min={1}
+                />
+                <div style={s.depositHint}>
+                  예치금 사용분은 내부 차감 후, 수금액과 합산되어 미수에 반영됩니다.
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* 날짜 */}
         <div>
           <label style={s.label}>수금일자 *</label>
@@ -241,6 +302,8 @@ const s: Record<string, React.CSSProperties> = {
   balLabel:      { fontSize: 11, color: '#9ca3af', marginBottom: 4 },
   balVal:        { fontSize: 16, fontWeight: 600, fontVariantNumeric: 'tabular-nums' },
   overWarn:      { marginTop: 6, padding: '7px 12px', background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 6, fontSize: 12, color: '#C2410C', fontWeight: 500 },
+  depositUseBox: { background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 8, padding: '12px 16px' },
+  depositHint:   { marginTop: 6, fontSize: 12, color: '#6b7280', lineHeight: 1.5 },
   seg:           { display: 'flex', border: '1px solid #d1d5db', borderRadius: 8, overflow: 'hidden' },
   submit:        { padding: '12px', background: '#111827', color: '#fff', border: 'none', borderRadius: 8, fontSize: 15, fontWeight: 500, cursor: 'pointer' },
   submitOff:     { padding: '12px', background: '#9ca3af', color: '#fff', border: 'none', borderRadius: 8, fontSize: 15, cursor: 'not-allowed' },

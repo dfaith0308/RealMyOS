@@ -706,6 +706,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **migration 필요**: YES
   - `customer_deposits` 테이블 신설
   - `deposit_logs` 테이블 신설
+- **작업 이력 (2026-05-07)**: 예치금 시스템 연동(`customer_deposits`/`deposit_logs`) + 수금 초과분 자동 예치 + 수금 등록 화면 “예치금 사용” 옵션 — worklog: `docs/worklogs/2026-05-07_sup-missing-007_deposits.md`
 
 #### [SUP-MISSING-008] 자금관리 `fund_rules` 계산 정확도 미달 (PRODUCT §6-12)
 - **PRODUCT 정의 위치**: PRODUCT §6-12 자금관리
