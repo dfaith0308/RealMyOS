@@ -4,6 +4,8 @@ import { revalidatePath } from 'next/cache'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import type { ActionResult } from '@/types/order'
 
+/** 발주 확정 후 공급자 알림: `@/lib/rfq-notify-suppliers`의 `notifyRfqBidOutcomesAfterAccept` — 식당OS `acceptBidAndCreateOrder`에서 호출. */
+
 export type SupplierRfqRow = {
   id: string
   product_name: string

@@ -1,15 +1,19 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
 import { formatKRW } from '@/lib/calc'
 import type { MyBidRow, SupplierRfqRow } from '@/actions/rfq'
+import type { NotificationRow } from '@/actions/notifications'
+import { markNotificationRead } from '@/actions/notifications'
 
 type Props = {
   supplierRfqs: SupplierRfqRow[]
   myBids: MyBidRow[]
   rfqError: string | null
   bidsError: string | null
+  notifications: NotificationRow[]
+  notificationsError: string | null
 }
 
 function fmtDate(iso: string | null) {
@@ -45,8 +49,16 @@ function ExposeBadge({ level }: { level: number | null }) {
   )
 }
 
-export default function RfqHubClient({ supplierRfqs, myBids, rfqError, bidsError }: Props) {
+export default function RfqHubClient({
+  supplierRfqs,
+  myBids,
+  rfqError,
+  bidsError,
+  notifications,
+  notificationsError,
+}: Props) {
   const router = useRouter()
+  const [pendingRead, startTransition] = useTransition()
   const [tab, setTab] = useState<'open' | 'bids'>('open')
 
   const tabBtn = (active: boolean) => ({
@@ -72,6 +84,69 @@ export default function RfqHubClient({ supplierRfqs, myBids, rfqError, bidsError
         <button type="button" style={tabBtn(tab === 'bids')} onClick={() => setTab('bids')}>
           내 입찰
         </button>
+      </div>
+
+      <div style={{ marginBottom: 24, padding: 16, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12 }}>
+        <h2 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 12px' }}>알림</h2>
+        {notificationsError && (
+          <p style={{ color: '#b91c1c', fontSize: 13 }}>{notificationsError}</p>
+        )}
+        {!notificationsError && notifications.length === 0 && (
+          <p style={{ fontSize: 13, color: '#6b7280' }}>알림이 없습니다.</p>
+        )}
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+            {notifications.map((n) => (
+              <li
+                key={n.id}
+                style={{
+                  padding: '10px 0',
+                  borderBottom: '1px solid #f3f4f6',
+                  opacity: n.is_read ? 0.65 : 1,
+                }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{n.title}</div>
+                <div style={{ fontSize: 12, color: '#4b5563', marginTop: 4 }}>{n.message}</div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
+                  {!n.is_read && (
+                    <button
+                      type="button"
+                      disabled={pendingRead}
+                      onClick={() => {
+                        startTransition(async () => {
+                          await markNotificationRead(n.id)
+                          router.refresh()
+                        })
+                      }}
+                      style={{
+                        fontSize: 11,
+                        padding: '4px 10px',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: 6,
+                        background: '#fff',
+                        cursor: pendingRead ? 'wait' : 'pointer',
+                      }}>
+                      읽음
+                    </button>
+                  )}
+                  {n.action_link && (
+                    <button
+                      type="button"
+                      onClick={() => router.push(n.action_link!)}
+                      style={{
+                        fontSize: 11,
+                        padding: '4px 10px',
+                        border: 'none',
+                        borderRadius: 6,
+                        background: 'var(--color-primary-light, #e0e7ff)',
+                        color: 'var(--color-primary, #3730a3)',
+                        cursor: 'pointer',
+                      }}>
+                      이동
+                    </button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
       </div>
 
       {tab === 'open' && (
