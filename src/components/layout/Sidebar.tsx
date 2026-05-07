@@ -41,6 +41,7 @@ const MENU: MenuGroup[] = [
       { label: '견적등록', href: '/quotes/new' },
     ],
   },
+  { label: '발주요청', icon: '📣', href: '/rfq' },
   {
     label: '상품관리', icon: '📦', href: '/products',
     items: [
