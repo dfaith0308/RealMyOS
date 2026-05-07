@@ -14,6 +14,24 @@ interface Props {
 }
 
 type CustomerType = 'business' | 'individual' | 'prospect'
+type CustomerRole = '' | 'buyer' | 'supplier' | 'both'
+type ContactStatus = 'unknown' | 'safe_number' | 'connected' | 'converted'
+
+function buildPaymentTermsString(
+  termsType: PaymentTermsType,
+  termsDay: string,
+  termsDays: string,
+) {
+  if (termsType === 'monthly_day') {
+    const d = Number(termsDay)
+    return d ? `monthly_day:${d}` : 'monthly_day'
+  }
+  if (termsType === 'days_after') {
+    const n = Number(termsDays)
+    return n ? `days_after:${n}` : 'days_after'
+  }
+  return termsType
+}
 
 export default function CustomerCreateForm({ channels: init }: Props) {
   const router = useRouter()
@@ -38,6 +56,8 @@ export default function CustomerCreateForm({ channels: init }: Props) {
   const [targetRevenue, setTargetRevenue] = useState('')
   const [isBuyer, setIsBuyer] = useState(true)
   const [isSupplier, setIsSupplier] = useState(false)
+  const [role, setRole] = useState<CustomerRole>('')
+  const [contactStatus, setContactStatus] = useState<ContactStatus>('unknown')
 
   const [channels, setChannels] = useState(init)
   const [channelId, setChannelId] = useState('')
@@ -72,6 +92,14 @@ export default function CustomerCreateForm({ channels: init }: Props) {
     if (dupBlock) { setError('이미 등록된 사업자번호입니다. 기존 거래처를 수정해주세요.'); return }
 
     startTransition(async () => {
+      const derivedRole =
+        role ||
+        (isBuyer && isSupplier ? 'both' : isBuyer ? 'buyer' : isSupplier ? 'supplier' : '')
+      const nextIsBuyer = derivedRole ? derivedRole === 'buyer' || derivedRole === 'both' : isBuyer
+      const nextIsSupplier = derivedRole
+        ? derivedRole === 'supplier' || derivedRole === 'both'
+        : isSupplier
+
       const result = await createCustomer({
         customer_type:          customerType,
         name,
@@ -87,10 +115,13 @@ export default function CustomerCreateForm({ channels: init }: Props) {
         payment_day:            termsType === 'monthly_day' ? (termsDay ? Number(termsDay) : undefined)
                               : termsType === 'days_after'  ? (termsDays ? Number(termsDays) : undefined)
                               : undefined,
+        payment_terms: buildPaymentTermsString(termsType, termsDay, termsDays),
+        role: derivedRole ? (derivedRole as any) : undefined,
+        contact_status: contactStatus,
         target_monthly_revenue: targetRevenue ? Number(targetRevenue) : undefined,
         acquisition_channel_id: channelId || undefined,
-        is_buyer:  isBuyer,
-        is_supplier: isSupplier,
+        is_buyer:  nextIsBuyer,
+        is_supplier: nextIsSupplier,
       })
       if (result.success) router.push('/customers')
       else setError(result.error ?? '저장 실패')
@@ -197,43 +228,67 @@ export default function CustomerCreateForm({ channels: init }: Props) {
             onChange={(e) => setOpeningDate(e.target.value)} />
         </F>
 
-        {/* 결제조건 */}
-        <F label={`결제조건 — ${termsPreview}`}>
-          <Seg options={[
-            { value: 'immediate',   label: '즉시' },
-            { value: 'monthly_end', label: '말일' },
-            { value: 'monthly_day', label: '매월N일' },
-            { value: 'days_after',  label: 'N일후' },
-          ]} value={termsType} onChange={(v) => setTermsType(v as PaymentTermsType)} />
+        {/* 거래 설정 */}
+        <F label={`결제조건 (선택) — ${termsPreview}`}>
+          <select
+            style={s.input}
+            value={termsType}
+            onChange={(e) => setTermsType(e.target.value as PaymentTermsType)}
+          >
+            <option value="immediate">즉시결제</option>
+            <option value="monthly_end">말일</option>
+            <option value="monthly_day">매월N일</option>
+            <option value="days_after">N일후</option>
+          </select>
           {termsType === 'monthly_day' && (
-            <input style={{ ...s.input, marginTop: 8 }} type="number"
-              value={termsDay} onChange={(e) => setTermsDay(e.target.value)}
-              placeholder="몇 일? (예: 15)" min={1} max={31} />
+            <input
+              style={{ ...s.input, marginTop: 8 }}
+              type="number"
+              value={termsDay}
+              onChange={(e) => setTermsDay(e.target.value)}
+              placeholder="몇 일? (예: 15)"
+              min={1}
+              max={31}
+            />
           )}
           {termsType === 'days_after' && (
-            <input style={{ ...s.input, marginTop: 8 }} type="number"
-              value={termsDays} onChange={(e) => setTermsDays(e.target.value)}
-              placeholder="며칠 후? (예: 30)" min={1} />
+            <input
+              style={{ ...s.input, marginTop: 8 }}
+              type="number"
+              value={termsDays}
+              onChange={(e) => setTermsDays(e.target.value)}
+              placeholder="며칠 후? (예: 30)"
+              min={1}
+            />
           )}
+        </F>
+
+        <F label="역할 (선택)">
+          <select style={s.input} value={role} onChange={(e) => setRole(e.target.value as CustomerRole)}>
+            <option value="">선택 안 함</option>
+            <option value="buyer">매출처(buyer)</option>
+            <option value="supplier">매입처(supplier)</option>
+            <option value="both">둘다(both)</option>
+          </select>
+        </F>
+
+        <F label="연락 상태 (기본: 미확인)">
+          <select
+            style={s.input}
+            value={contactStatus}
+            onChange={(e) => setContactStatus(e.target.value as ContactStatus)}
+          >
+            <option value="unknown">미확인</option>
+            <option value="safe_number">안심번호</option>
+            <option value="connected">연락가능</option>
+            <option value="converted">전환완료</option>
+          </select>
         </F>
 
         <F label="목표 월매출">
           <input style={s.input} type="number" value={targetRevenue}
             onChange={(e) => setTargetRevenue(e.target.value)}
             placeholder="미입력 시 기본값 적용" />
-        </F>
-
-        <F label="역할">
-          <div style={{ display: 'flex', gap: 16 }}>
-            <label style={s.check}>
-              <input type="checkbox" checked={isBuyer}
-                onChange={(e) => setIsBuyer(e.target.checked)} /> 매출처
-            </label>
-            <label style={s.check}>
-              <input type="checkbox" checked={isSupplier}
-                onChange={(e) => setIsSupplier(e.target.checked)} /> 매입처
-            </label>
-          </div>
         </F>
 
         <F label="유입경로">

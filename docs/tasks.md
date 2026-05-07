@@ -656,8 +656,8 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
   - 업종 / 관리등급 / 유입경로
   - `contact_status` (예: `unknown/safe_number/connected/converte...` — 원문 요구사항에 따라 상태 정의 확정 필요)
 - **현행 상태(코드 기준)**: `createCustomer`/거래처 입력 UI가 PRODUCT §6-3 확정 필드를 전부 강제/수집/저장/표시하는 구조로 정리되어 있지 않음
-- **migration 필요**: 🔍 (정본 스키마/필드 정의 확정 후)  
-  - `customers` 컬럼 확장 또는 정규화 테이블 신설 + 이력/감사 로그 포함
+- **migration 필요**: YES — `customers` 누락 컬럼 추가 (**적용 완료** ✅)
+- **작업 이력 (2026-05-07)**: `payment_terms`/`role`/`contact_status` 컬럼 추가 + 거래처 등록 폼 “거래 설정” 섹션에 선택 입력 연결 — worklog: `docs/worklogs/2026-05-07_sup-missing-002_customer-fields.md`
 
 #### [SUP-MISSING-003] 상품 등록 필드 누락 (PRODUCT §6-6 확정 필드)
 - **PRODUCT 정의 위치**: PRODUCT §6-6 상품관리 — 확정 필드

@@ -18,6 +18,9 @@ export interface CustomerInput {
   payment_terms_type?: PaymentTermsType
   payment_terms_days?: number
   payment_day?: number
+  payment_terms?: string
+  role?: 'buyer' | 'supplier' | 'both'
+  contact_status?: 'unknown' | 'safe_number' | 'connected' | 'converted'
   target_monthly_revenue?: number
   target_per_order?: number
   acquisition_channel_id?: string
@@ -40,6 +43,7 @@ export async function createCustomer(
 
   const today = new Date().toISOString().slice(0, 10)
   const openingBalance = input.opening_balance ?? 0
+  const contact_status = input.contact_status ?? 'unknown'
 
   const { data, error } = await supabase
     .from('customers')
@@ -57,6 +61,9 @@ export async function createCustomer(
       payment_terms_type:     input.payment_terms_type ?? 'immediate',
       payment_terms_days:     input.payment_terms_days ?? 0,
       payment_day:            input.payment_day ?? null,
+      payment_terms:          input.payment_terms?.trim() || null,
+      role:                   input.role ?? null,
+      contact_status,
       target_monthly_revenue: input.target_monthly_revenue || null,
       target_per_order:       input.target_per_order || null,
       acquisition_channel_id: input.acquisition_channel_id || null,
@@ -115,6 +122,9 @@ export async function updateCustomer(
   if (input.payment_terms_type)                   payload.payment_terms_type = input.payment_terms_type
   if (input.payment_terms_days !== undefined)     payload.payment_terms_days = input.payment_terms_days
   if (input.payment_day !== undefined)            payload.payment_day = input.payment_day ?? null
+  if (input.payment_terms !== undefined)          payload.payment_terms = input.payment_terms?.trim() || null
+  if (input.role !== undefined)                   payload.role = input.role ?? null
+  if (input.contact_status !== undefined)         payload.contact_status = input.contact_status ?? 'unknown'
   if (input.target_monthly_revenue !== undefined) payload.target_monthly_revenue = input.target_monthly_revenue || null
   if (input.acquisition_channel_id !== undefined) payload.acquisition_channel_id = input.acquisition_channel_id || null
   if (input.is_buyer !== undefined)               payload.is_buyer = input.is_buyer
