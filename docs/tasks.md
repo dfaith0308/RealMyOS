@@ -680,6 +680,51 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
   - `days_since_payment`
 - **migration 필요**: NO — 쿼리/집계 수정으로 해결 가능
 
+#### [SUP-MISSING-006] 수금 주문 분배 UI 미구현 (PRODUCT §6-8)
+- **PRODUCT 정의 위치**: PRODUCT §6-8 수금관리
+- **GAP(요약)**:
+  - 수금 등록 후 **[주문에 분배]** 버튼/흐름 부재
+  - `payment_allocations` 수동 분배 UI 없음
+  - `collection_allocations`(FIFO/RPC) 구현은 있으나 **UI 연결 없음**
+- **migration 필요**: NO (UI 구현만)
+
+#### [SUP-MISSING-007] 예치금 시스템 미구현 (PRODUCT §6-8)
+- **PRODUCT 정의 위치**: PRODUCT §6-8 수금관리
+- **GAP(요약)**:
+  - `customer_deposits` 테이블 없음
+  - 수금 초과분 예치금 처리 없음
+  - `deposit_logs` 없음
+  - 예치금은 **부채(회계) 개념**으로 필수
+- **migration 필요**: YES
+  - `customer_deposits` 테이블 신설
+  - `deposit_logs` 테이블 신설
+
+#### [SUP-MISSING-008] 자금관리 `fund_rules` 계산 정확도 미달 (PRODUCT §6-12)
+- **PRODUCT 정의 위치**: PRODUCT §6-12 자금관리
+- **요구사항(요약)**:
+  - `daily_amount = 이번달 누적매출 × 비율 ÷ 영업일수`
+  - 영업일 설정 미구현
+  - 부족금 이월(`carry_over`) 미구현
+- **현행 상태(코드 기준)**: 단순 표시/요약 위주로, PRODUCT 산식 기반의 계획 금액 산정 로직이 미흡
+- **migration 필요**: NO (로직 수정)
+
+#### [SUP-MISSING-009] 상품 상세 탭 구조 미구현 (PRODUCT §6-6)
+- **PRODUCT 정의 위치**: PRODUCT §6-6 상품관리
+- **요구 탭 구조(요약)**: 기본정보 / 가격마진 / 연관상품 / 사용패턴 / 로그
+- **GAP(요약)**:
+  - 연관상품 수동 등록 없음
+  - 사용패턴 분석 없음
+- **migration 필요**: NO (UI 구현)
+
+#### [SUP-MISSING-010] 주문상태 이중 구조 미완성 (PRODUCT §6-4)
+- **PRODUCT 정의 위치**: PRODUCT §6-4 주문관리
+- **요구사항(요약)**:
+  - 주문상태(운영): 접수/확인/출고준비/출고완료/납품완료/취소
+  - 거래상태(원장): draft/confirmed/cancelled
+- **현행 상태(코드 기준)**: 단일 `status`만 존재
+- **연계**: `SUP-PARTIAL-005`
+- **migration 필요**: YES — `order_status` 컬럼 추가
+
 ### 🔍 확인 필요
 
 #### [SUP-CHECK-001] (이관 — 공통 DB)
