@@ -36,6 +36,7 @@
 - **작업 이력 (2026-05-07)**: Dashboard 운영 콘솔 구조(2열, Queue 중심) 적용 + CommandStrip/QueueSection 신설 + 인라인 스타일 제거(CSS Module + `--ds-*`) — worklog: [`docs/worklogs/2026-05-07_dashboard-ops-console-layout.md`](./worklogs/2026-05-07_dashboard-ops-console-layout.md)
 - **작업 이력 (2026-05-07)**: Customers 채권 운영 콘솔 row list 적용(즉시 필터링 + 행 클릭 원장 + 수금 액션 1개) — worklog: [`docs/worklogs/2026-05-07_customers-ops-row-list.md`](./worklogs/2026-05-07_customers-ops-row-list.md)
 - **작업 이력 (2026-05-07)**: Ledger 돈 흐름 콘솔 재설계(테이블 제거 + 날짜 그룹 sticky/subtotal + 즉시 필터 + KPI hierarchy) — worklog: [`docs/worklogs/2026-05-07_ledger-money-flow-console.md`](./worklogs/2026-05-07_ledger-money-flow-console.md)
+- **작업 이력 (2026-05-07)**: Orders 운영 Queue 콘솔 재설계(테이블 제거 + Queue/sticky 날짜 그룹 + 즉시 필터 + CommandStrip/KPI 스트립) — worklog: [`docs/worklogs/2026-05-07_orders-ops-queue-console.md`](./worklogs/2026-05-07_orders-ops-queue-console.md)
 
 ---
 

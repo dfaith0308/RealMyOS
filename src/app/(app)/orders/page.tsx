@@ -2,8 +2,8 @@ import { Suspense } from 'react'
 import { notFound } from 'next/navigation'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import { getOrderList } from '@/actions/order-query'
-import { formatKRW } from '@/lib/calc'
 import OrdersClient from '@/components/order/OrdersClient'
+import styles from './orders-ops.module.css'
 
 export const metadata = { title: '주문 목록 — RealMyOS' }
 
@@ -15,8 +15,9 @@ export default async function OrdersPage({
   const sp = searchParams
 
   // 기본 조회: 이번 달 1일 ~ 오늘
-  const today     = new Date().toISOString().slice(0, 10)
-  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10)
+  const nowKst = new Date(Date.now() + 9 * 3600000)
+  const today     = nowKst.toISOString().slice(0, 10)
+  const monthStart = `${nowKst.getUTCFullYear()}-${String(nowKst.getUTCMonth() + 1).padStart(2, '0')}-01`
   const from   = sp.from   ?? monthStart
   const to     = sp.to     ?? today
   const status = sp.status ?? ''
@@ -39,7 +40,7 @@ export default async function OrdersPage({
   ])
 
   return (
-    <main style={{ maxWidth: 1000, margin: '0 auto', padding: '32px 24px 60px' }}>
+    <main className={styles.page}>
       <OrdersClient
         orders={ordersResult.data ?? []}
         customers={customers ?? []}
