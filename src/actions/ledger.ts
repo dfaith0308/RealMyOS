@@ -263,6 +263,9 @@ export interface CustomerWithBalance {
   // ── 연락 ───────────────────────────────────────────────────
   last_contacted_at: string | null
   days_since_contact: number | null
+  // ── 수금 ───────────────────────────────────────────────────
+  last_payment_date: string | null
+  days_since_payment: number | null
   // ── 전환율 지표 (7일) ───────────────────────────────────────
   call_attempts_7d: number
   connected_7d: number
@@ -368,7 +371,7 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
         .order('order_date', { ascending: false }),
 
       supabase.from('payments')
-        .select('customer_id, amount')
+        .select('customer_id, amount, payment_date')
         .in('customer_id', ids)
         // 전환: payee_tenant_id 우선 (legacy tenant_id 병행)
         .or(`payee_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
@@ -407,8 +410,14 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
   }
 
   const paymentMap  = new Map<string, number>()
+  const lastPaymentMap = new Map<string, string>()
   for (const p of paymentRows ?? []) {
     paymentMap.set(p.customer_id, (paymentMap.get(p.customer_id) ?? 0) + p.amount)
+    const d = (p as any).payment_date as string | undefined
+    if (d) {
+      const prev = lastPaymentMap.get(p.customer_id) ?? null
+      if (!prev || d > prev) lastPaymentMap.set(p.customer_id, d)
+    }
   }
 
   const depositByCustomer = new Map<string, number>()
@@ -487,6 +496,13 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
       ? Math.floor((today.getTime() - new Date(last_contacted_at).getTime()) / 86400000)
       : null
 
+    const last_payment_date = lastPaymentMap.get(c.id) ?? null
+    const days_since_payment = last_payment_date
+      ? Math.floor(
+          (today.getTime() - new Date(last_payment_date + 'T00:00:00Z').getTime()) / 86400000,
+        )
+      : null
+
     const is_new = last_order_date !== null
       ? days_since_order !== null && days_since_order <= cfg.new_customer_days
       : false
@@ -530,6 +546,7 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
       order_cycle_days, monthly_revenue, avg_monthly_revenue,
       target_monthly_revenue, revenue_gap,
       last_contacted_at, days_since_contact,
+      last_payment_date, days_since_payment,
       call_attempts_7d, connected_7d,
       payments_7d: payments_7d_val,
       call_connect_rate, connect_to_payment_rate,
@@ -699,6 +716,7 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
     const days_since_order  = last_payment_date
       ? Math.floor((today.getTime() - new Date(last_payment_date + 'T00:00:00Z').getTime()) / 86400000)
       : null
+    const days_since_payment = days_since_order
     const days_since_contact: number | null = null
     const last_contacted_at: string | null  = null
     const order_cycle_days  = Number((cfg as any).order_cycle_days ?? 14)
@@ -734,6 +752,8 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
       target_monthly_revenue: Number(c.target_monthly_revenue ?? 0),
       revenue_gap:            Number(c.target_monthly_revenue ?? 0) - Math.round(total_sales / 3),
       last_contacted_at,      days_since_contact,
+      last_payment_date,
+      days_since_payment,
       call_attempts_7d:       0,
       connected_7d:           0,
       payments_7d:            0,

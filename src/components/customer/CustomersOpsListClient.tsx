@@ -145,7 +145,9 @@ export function CustomersOpsListClient({
                           조건 {c.payment_terms_days ?? 0}일
                         </span>
                         <span className={styles.eItem}>
-                          최근 수금(7일) {c.payments_7d ?? 0}회
+                          {c.last_payment_date
+                            ? `마지막 수금 D+${c.days_since_payment ?? 0}`
+                            : '수금 이력 없음'}
                         </span>
                         <span className={styles.eItem}>
                           연락{' '}
