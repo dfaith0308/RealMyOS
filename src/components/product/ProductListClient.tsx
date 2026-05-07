@@ -52,7 +52,9 @@ export default function ProductListClient({ products, marginThreshold }: Props) 
                 <td style={{ ...td, color: '#9ca3af', fontSize: 11 }}>{p.category_name ?? '-'}</td>
                 <td style={{ ...td, fontFamily: 'monospace', fontSize: 11, color: '#9ca3af' }}>{p.product_code}</td>
                 <td style={{ ...td, fontWeight: 500 }}>
-                  {p.name}
+                  <Link href={`/products/${p.id}`} style={{ color: '#111827', textDecoration: 'none' }}>
+                    {p.name}
+                  </Link>
                   {p.tax_type === 'exempt' && <span style={s.exemptBadge}>면세</span>}
                 </td>
                 <td style={{ ...td, fontVariantNumeric: 'tabular-nums' }}>{formatKRW(p.cost_price)}</td>

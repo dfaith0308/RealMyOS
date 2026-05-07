@@ -725,6 +725,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
   - 연관상품 수동 등록 없음
   - 사용패턴 분석 없음
 - **migration 필요**: NO (UI 구현)
+- **작업 이력 (2026-05-07)**: `/products/[id]` 5탭(기본정보/가격마진/연관상품/사용패턴/로그) 구현 + order_lines 기반 패턴(빈 화면 금지) + 연관상품 수동등록/자동추천 조건 분리 — worklog: `docs/worklogs/2026-05-07_sup-missing-009_product-detail-tabs.md`
 
 #### [SUP-MISSING-010] 주문상태 이중 구조 미완성 (PRODUCT §6-4)
 - **PRODUCT 정의 위치**: PRODUCT §6-4 주문관리
