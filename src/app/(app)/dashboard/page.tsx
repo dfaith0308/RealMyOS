@@ -1,6 +1,6 @@
 import { getDashboardData, getTodayCollections } from '@/actions/dashboard'
 import { formatKRW } from '@/lib/calc'
-import { CommandStrip } from '@/components/dashboard/CommandStrip'
+import { DashboardCommandStrip } from '@/components/dashboard/CommandStrip'
 import { DashboardQueueSection } from '@/components/dashboard/DashboardQueueSection'
 import { Surface } from '@/components/ui/Surface'
 import { KPIBlock } from '@/components/ui/KPIBlock'
@@ -36,7 +36,7 @@ export default async function DashboardPage() {
 
   return (
     <main className={styles.page}>
-      <CommandStrip d={d} />
+      <DashboardCommandStrip d={d} />
 
       <div className={styles.mainGrid}>
         <DashboardQueueSection d={d} collections={collections} />
