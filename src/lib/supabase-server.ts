@@ -34,6 +34,7 @@ export async function createSupabaseServer() {
 export interface AuthCtx {
   user_id:   string
   tenant_id: string
+  role:      string
   user_type: string
 }
 
@@ -46,18 +47,25 @@ export async function getAuthCtx(supabase: any): Promise<AuthCtx | null> {
   if (error || !user) return null
 
   let tenant_id = user.user_metadata?.tenant_id as string | undefined
+  let role      = user.user_metadata?.role as string | undefined
+
+  // users 테이블에서 role/tenant_id 조회 (admin gate 포함 공통 SSOT)
+  const { data: userRow, error: userRowErr } = await supabase
+    .from('users')
+    .select('tenant_id, role')
+    .eq('id', user.id)
+    .maybeSingle()
+
+  if (userRowErr) {
+    console.error('[PERF:AUTH] users 테이블 조회 실패:', userRowErr)
+  }
+
+  if (!role) role = (userRow as any)?.role ?? undefined
 
   // fallback: user_metadata에 없으면 users 테이블에서 조회
   if (!tenant_id) {
     console.error('[PERF:AUTH] tenant_id missing in user_metadata — fallback to users table, user:', user.id)
-
-    const { data: userRow } = await supabase
-      .from('users')
-      .select('tenant_id')
-      .eq('id', user.id)
-      .single()
-
-    tenant_id = userRow?.tenant_id ?? undefined
+    tenant_id = (userRow as any)?.tenant_id ?? undefined
 
     // fallback 성공 시 user_metadata 비동기 동기화 (다음 요청부터 빠르게)
     if (tenant_id) {
@@ -75,6 +83,7 @@ export async function getAuthCtx(supabase: any): Promise<AuthCtx | null> {
   return {
     user_id:   user.id,
     tenant_id,
+    role:      role ?? 'unknown',
     user_type: 'human',
   }
 }
