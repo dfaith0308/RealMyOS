@@ -28,6 +28,8 @@ export interface CreateProductInput {
   category_id?: string
   supplier_id?: string
   barcode?: string
+  ingredients?: string
+  item_report_number?: string
   min_margin_rate?: number
   cost_price: number
   selling_price?: number
@@ -104,6 +106,8 @@ export async function createProduct(
       category_id: input.category_id ?? null,
       supplier_id: input.supplier_id ?? null,
       barcode: input.barcode?.trim() || null,
+      ingredients: input.ingredients?.trim() || null,
+      item_report_number: input.item_report_number?.trim() || null,
       min_margin_rate: input.min_margin_rate ?? null,
       procurement_type: 'consignment',
     })

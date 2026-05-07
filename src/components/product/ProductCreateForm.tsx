@@ -62,6 +62,8 @@ export default function ProductCreateForm({ categories: initCats, suppliers, cop
 
   const [costPrice, setCostPrice] = useState('')
   const [sellingPrice, setSellingPrice] = useState('')
+  const [ingredients, setIngredients] = useState('')
+  const [itemReportNumber, setItemReportNumber] = useState('')
 
   // 복사 초기값 세팅 — initialized 가드로 입력 중 덮어쓰기 방지
   useEffect(() => {
@@ -118,6 +120,8 @@ export default function ProductCreateForm({ categories: initCats, suppliers, cop
         category_id: categoryId || undefined,
         supplier_id: supplierId || undefined,
         barcode: barcode || undefined,
+        ingredients: ingredients || undefined,
+        item_report_number: itemReportNumber || undefined,
         min_margin_rate: minMargin ? Number(minMargin) : undefined,
         cost_price: cost,
         selling_price:      sellingPrice      ? Number(sellingPrice)      : undefined,
@@ -261,6 +265,34 @@ export default function ProductCreateForm({ categories: initCats, suppliers, cop
 
         <div style={s.divider} />
 
+        {/* 선택 입력: 상품 인텔리전스 */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#6b7280' }}>선택 입력</div>
+
+          <F label="원재료명 및 함량 (선택)">
+            <textarea
+              style={s.textarea}
+              value={ingredients}
+              onChange={(e) => setIngredients(e.target.value)}
+              placeholder="예: 고춧가루 100% (국내산)…"
+              rows={3}
+            />
+            <div style={s.help}>입력 시 상품 인텔리전스 기능 활성화</div>
+          </F>
+
+          <F label="품목보고번호 (선택)">
+            <input
+              style={s.input}
+              value={itemReportNumber}
+              onChange={(e) => setItemReportNumber(e.target.value)}
+              placeholder="상품 식별용 고유 값"
+            />
+            <div style={s.help}>상품 식별용 고유 값</div>
+          </F>
+        </div>
+
+        <div style={s.divider} />
+
         <F label="최소 마진율 (%) — 미입력 시 전역 기준 적용">
           <input style={s.input} type="number" value={minMargin}
             onChange={(e) => setMinMargin(e.target.value)} placeholder="미입력 시 설정값 사용" min={0} max={100} />
@@ -310,6 +342,8 @@ const s: Record<string, React.CSSProperties> = {
   err:       { background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 16 },
   form:      { display: 'flex', flexDirection: 'column', gap: 16 },
   input:     { padding: '9px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, outline: 'none', width: '100%', boxSizing: 'border-box' },
+  textarea:  { padding: '9px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, outline: 'none', width: '100%', boxSizing: 'border-box', resize: 'vertical' },
+  help:      { fontSize: 11, color: '#9ca3af' },
   modeBtn:   { padding: '6px 14px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 12, cursor: 'pointer' },
   divider:   { height: 1, background: '#f3f4f6', margin: '4px 0' },
   submit:    { padding: '12px', background: '#111827', color: '#fff', border: 'none', borderRadius: 8, fontSize: 15, fontWeight: 500, cursor: 'pointer' },

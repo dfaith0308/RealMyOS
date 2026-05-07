@@ -665,7 +665,8 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
   - 원재료명 및 함량 (선택 입력)
   - 품목보고번호 (선택 입력)
 - **중요성**: 상품 인텔리전스 기반 학습(제품 속성/규제/원재료) 데이터로 필요
-- **migration 필요**: YES — `products` 테이블 컬럼 추가
+- **migration 필요**: YES — `products` 테이블 컬럼 추가 (**적용 완료** ✅)
+- **작업 이력 (2026-05-07)**: `ingredients`/`item_report_number` 컬럼 추가 + 상품 등록 폼 선택 입력 섹션 연결 — worklog: `docs/worklogs/2026-05-07_sup-missing-003_product-fields.md`
 
 #### [SUP-MISSING-004] 자동화영업 분류 기반 트리거 미구현 (PRODUCT §6-13)
 - **PRODUCT 정의 위치**: PRODUCT §6-13 자동화영업
