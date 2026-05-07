@@ -124,6 +124,7 @@
   - **근거**: PRODUCT는 `relationships`를 별도 테이블로 필드까지 고정 정의하고, CONTEXT는 `trust_scores`를 관리자 레이어의 별도 테이블로 정의함. `tenant_relationships`는 현행 컬럼 축(요청/연결 이력)과 성격이 달라 확장 혼재 위험이 커서 분리 신설이 더 정합적.
 - **migration 생성 시점**: **Phase 6(관리자OS, `ADM-TODO-001`) 진입 시** `relationships` + `trust_scores` migration 파일 생성(이번 Phase 1에서는 금지)
 - **작업 이력 (2026-05-06)**: GAP 정리 및 방향 B 확정(문서) — worklog: [`docs/worklogs/2026-05-06_phase1_db-todo-003_relationships-direction.md`](./worklogs/2026-05-06_phase1_db-todo-003_relationships-direction.md)
+- **작업 이력 (2026-05-07)**: Phase 6에서 `relationships`/`trust_scores` migration 생성 + **운영 DB 적용 완료**(relationships ✅, trust_scores ✅) — worklog: `docs/worklogs/2026-05-07_db-todo-003_relationships-trust-scores.md`
 
 ### 🔍 DB 확인 필요 (DB-CHECK)
 
