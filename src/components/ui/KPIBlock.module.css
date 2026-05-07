@@ -18,7 +18,7 @@
   align-items: center;
   color: var(--ds-text-secondary);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: -0.01em;
 }
 
@@ -39,6 +39,14 @@
   display: flex;
   gap: 10px;
   align-items: baseline;
+}
+
+.below {
+  margin-top: -2px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
 }
 
 .delta {
@@ -62,6 +70,7 @@
 
 .hint {
   color: var(--ds-text-muted);
-  font-size: 12px;
+  font-size: 11px;
+  font-weight: 600;
 }
 

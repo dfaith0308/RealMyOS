@@ -52,23 +52,29 @@ export default async function DashboardPage() {
               <KPIBlock
                 label="총 미수금"
                 value={formatKRW(d.total_receivable)}
-                status={d.total_receivable > 0 ? 'warning' : 'paid'}
+                  status={d.total_receivable > 0 ? 'warning' : 'paid'}
+                  statusPlacement="below"
+                  valueSize="lg"
                 hint="거래처 원장/수금으로 이동"
               />
               <KPIBlock
                 label="총 연체금"
                 value={formatKRW(d.total_overdue)}
-                status={d.total_overdue > 0 ? 'overdue' : 'paid'}
+                  status={d.total_overdue > 0 ? 'overdue' : 'paid'}
+                  statusPlacement="below"
+                  valueSize="lg"
                 hint="연체 우선순위 확인"
               />
               <KPIBlock
                 label="이번달 매출"
                 value={formatKRW(d.monthly_sales)}
+                  valueSize="lg"
                 hint="거래처/상품 추이"
               />
               <KPIBlock
                 label="수금 속도"
                 value={avgDelayDays > 0 ? `${avgDelayDays}일 지연` : '정상'}
+                  valueSize="lg"
                 hint="TOP 거래처 기준 근사"
               />
             </div>
@@ -102,15 +108,23 @@ export default async function DashboardPage() {
 
       <Surface variant="panel" density="comfortable">
         <div className={styles.sectionTitleRow}>
-          <div className={styles.sectionTitle}>분석 (참고)</div>
-          <div className={styles.sectionMeta}>운영 Queue 아래 · 참고용</div>
+          <div className={[styles.sectionTitle, styles.analysisTitle].join(' ')}>
+            분석 (참고)
+          </div>
+          <div className={[styles.sectionMeta, styles.analysisMeta].join(' ')}>
+            운영 Queue 아래 · 참고용
+          </div>
         </div>
 
         <div className={styles.analysisGrid}>
           <Surface variant="card" density="comfortable">
             <div className={styles.sectionTitleRow}>
-              <div className={styles.sectionTitle}>거래처 매출 TOP</div>
-              <div className={styles.sectionMeta}>이번달</div>
+              <div className={[styles.sectionTitle, styles.analysisTitle].join(' ')}>
+                거래처 매출 TOP
+              </div>
+              <div className={[styles.sectionMeta, styles.analysisMeta].join(' ')}>
+                이번달
+              </div>
             </div>
 
             {d.top_customer_sales.length === 0 ? (
@@ -130,8 +144,12 @@ export default async function DashboardPage() {
 
           <Surface variant="card" density="comfortable">
             <div className={styles.sectionTitleRow}>
-              <div className={styles.sectionTitle}>상품 매출 TOP</div>
-              <div className={styles.sectionMeta}>이번달</div>
+              <div className={[styles.sectionTitle, styles.analysisTitle].join(' ')}>
+                상품 매출 TOP
+              </div>
+              <div className={[styles.sectionMeta, styles.analysisMeta].join(' ')}>
+                이번달
+              </div>
             </div>
 
             {d.top_product_sales.length === 0 ? (

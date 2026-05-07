@@ -1,7 +1,7 @@
 .root {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
 
 .head {
@@ -39,10 +39,9 @@
 
 .groupLabel {
   font-size: 11px;
-  font-weight: 900;
-  color: var(--ds-text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-weight: 800;
+  color: var(--ds-text-muted);
+  letter-spacing: -0.01em;
 }
 
 .rows {
@@ -70,9 +69,10 @@
 }
 
 .rowHint {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--ds-text-muted);
+  opacity: 0.85;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -81,15 +81,30 @@
 .action {
   font-size: 12px;
   font-weight: 800;
-  color: var(--ds-brand-primary);
+  color: var(--ds-text-muted);
+  opacity: 0.9;
   text-align: right;
   white-space: nowrap;
+}
+
+.rows :global(a:hover) .action {
+  color: var(--ds-brand-primary);
+  opacity: 1;
+}
+
+.rows :global(a:focus-visible) .action {
+  color: var(--ds-brand-primary);
+  opacity: 1;
 }
 
 .empty {
   font-size: 12px;
   font-weight: 600;
   color: var(--ds-text-muted);
-  padding: 10px 0;
+  padding: 6px 0;
+}
+
+.badgeSoft {
+  opacity: 0.86;
 }
 

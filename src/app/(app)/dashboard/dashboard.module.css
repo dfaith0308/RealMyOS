@@ -4,20 +4,20 @@
   padding: 28px 24px 60px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 24px;
 }
 
 .mainGrid {
   display: grid;
   grid-template-columns: 3fr 2fr;
-  gap: 14px;
+  gap: 16px;
   align-items: start;
 }
 
 .rightCol {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
 
 .kpiStack {
@@ -29,13 +29,13 @@
 .kpiGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 16px;
 }
 
 .quickActions {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .qaTitle {
@@ -48,7 +48,8 @@
 .qaList {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0;
+  border-top: 1px solid var(--ds-border-subtle);
 }
 
 .qaBtn {
@@ -56,11 +57,12 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  height: 36px;
-  padding: 0 12px;
+  height: 34px;
+  padding: 0 10px;
   border-radius: 10px;
-  border: 1px solid var(--ds-border-default);
-  background: var(--ds-surface-panel);
+  border: 0;
+  border-bottom: 1px solid var(--ds-border-subtle);
+  background: transparent;
   color: var(--ds-text-primary);
   text-decoration: none;
   font-size: 12px;
@@ -80,12 +82,13 @@
   font-size: 11px;
   color: var(--ds-text-muted);
   font-weight: 700;
+  opacity: 0.85;
 }
 
 .analysisGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  gap: 16px;
 }
 
 .sectionTitleRow {
@@ -107,6 +110,15 @@
   font-size: 11px;
   color: var(--ds-text-muted);
   font-weight: 700;
+}
+
+.analysisTitle {
+  color: var(--ds-text-secondary);
+  font-weight: 800;
+}
+
+.analysisMeta {
+  opacity: 0.85;
 }
 
 .empty {

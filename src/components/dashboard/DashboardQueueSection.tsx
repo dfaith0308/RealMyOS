@@ -173,7 +173,7 @@ function QueueRow({
     <DataTableRow href={href} density="compact">
       <DataCell>
         <div className={styles.rowMain}>
-          <StatusBadge status={status} size="sm" />
+          <StatusBadge status={status} size="sm" className={styles.badgeSoft} />
           <div className={styles.min0}>
             <div className={styles.rowTitle}>{title}</div>
             <div className={styles.rowHint}>{hint}</div>

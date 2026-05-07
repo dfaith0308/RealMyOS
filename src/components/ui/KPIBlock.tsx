@@ -11,6 +11,7 @@ export function KPIBlock({
   status,
   align = 'start',
   valueSize = 'md',
+  statusPlacement = 'head',
 }: {
   label: string
   value: string
@@ -19,6 +20,7 @@ export function KPIBlock({
   status?: DSStatus
   align?: 'start' | 'end'
   valueSize?: 'md' | 'lg'
+  statusPlacement?: 'head' | 'below'
 }) {
   const rootAlign = align === 'end' ? styles.alignEnd : styles.alignStart
   const deltaClass =
@@ -34,7 +36,9 @@ export function KPIBlock({
     <div className={[styles.root, rootAlign].join(' ')}>
       <div className={styles.head}>
         <span>{label}</span>
-        {status ? <StatusBadge status={status} size="sm" /> : null}
+        {status && statusPlacement === 'head' ? (
+          <StatusBadge status={status} size="sm" />
+        ) : null}
       </div>
 
       <div
@@ -44,6 +48,12 @@ export function KPIBlock({
       >
         {value}
       </div>
+
+      {status && statusPlacement === 'below' ? (
+        <div className={styles.below}>
+          <StatusBadge status={status} size="sm" />
+        </div>
+      ) : null}
 
       {delta || hint ? (
         <div className={styles.sub}>

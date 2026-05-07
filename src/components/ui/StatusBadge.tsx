@@ -11,12 +11,14 @@ export function StatusBadge({
   size = 'md',
   prefix,
   title,
+  className,
 }: {
   status: DSStatus
   lang?: 'ko' | 'en'
   size?: BadgeSize
   prefix?: string
   title?: string
+  className?: string
 }) {
   const meta = ds.status[status]
 
@@ -37,7 +39,7 @@ export function StatusBadge({
   return (
     <span
       title={title ?? `${label} · P${meta.priority}`}
-      className={[styles.root, sizeClass, emphasisClass, toneClass]
+      className={[styles.root, sizeClass, emphasisClass, toneClass, className ?? '']
         .filter(Boolean)
         .join(' ')}
     >
