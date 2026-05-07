@@ -30,6 +30,7 @@
 - **작업 이력 (2026-05-06)**: 종료 의무·`tasks.md` 연계·`docs/worklogs/README.md` 갱신 — worklog: [`docs/worklogs/2026-05-06_docs_worklog-completion-mandatory.md`](./worklogs/2026-05-06_docs_worklog-completion-mandatory.md)
 - **작업 이력 (2026-05-06)**: 오늘 세션 전체 요약 + Phase 5 진행 상태 업데이트 — worklog: [`docs/worklogs/2026-05-06_session-summary.md`](./worklogs/2026-05-06_session-summary.md)
 - **작업 이력 (2026-05-07)**: Phase 5 SUP 트랙 종료 — SUP-PARTIAL-001/006, SUP-TODO-001~004(본체), 005-D 완료 처리; B-2/C-2/C-3/C-4 신규 분리; 005-A/B/C Phase 6+ 이월 — worklog: [`docs/worklogs/2026-05-07_session-summary.md`](./worklogs/2026-05-07_session-summary.md)
+- **작업 이력 (2026-05-07)**: UI/UX 전면 개선 1단계(브랜드 컬러 토큰 정리 + Sidebar 차콜/딥그린 테마 + (app) 레이아웃 여백/폭 정리) — worklog: [`docs/worklogs/2026-05-07_design-uiux-phase1.md`](./worklogs/2026-05-07_design-uiux-phase1.md)
 
 ---
 
