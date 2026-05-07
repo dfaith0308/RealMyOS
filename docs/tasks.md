@@ -1049,7 +1049,8 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
   - `menu_ingredients` 연결 테이블
   - 메뉴별 원가 자동 계산: Σ `ingredient.current_price × quantity`
   - `menu_cost_cache` AI 추정 캐시
-- **migration 필요**: YES
+- **migration 필요**: NO (UI 구현만, 단 migration 파일 소급 추가)
+- **작업 이력 (2026-05-07)**: 식당OS `resturant_os`에 `/settings/menus` 화면 신설(메뉴 CRUD + 식재료 구성 입력) + `menu_ingredients` 기반 원가/마진율 실시간 계산(계산값 DB 저장 금지) + 대표메뉴 최대 3개 서버 검증 + `menu_cost_cache` 기반 AI 추정 원가 표시 — worklog: `docs/worklogs/2026-05-07_res-missing-002_menus.md`
 
 #### [RES-MISSING-003] 돈관리 하위 3메뉴 분리 미구현 (PRODUCT §8-4)
 - **PRODUCT 정의 위치**: PRODUCT §8-4
