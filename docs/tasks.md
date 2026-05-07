@@ -451,7 +451,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **PRODUCT 정의 위치**: PRODUCT.md §6-9 지급관리
 - **완료 기준**: `direction=outbound` 지급 목록·등록·분배·상세
 - **선행 조건**: payments 모델 정렬(CONTEXT Phase 1~3)
-- **migration 필요**: 🔍
+- **migration 필요**: `purchases`·`payment_allocations` **운영 적용 완료 (2026-05-07)** — 저장소 SQL은 FK·RLS `WITH CHECK`까지 반영
 - **분해 (Phase 5, 문서화)**:
   - **[SUP-TODO-002-A] 지급 IA/라우트 신설** — **완료 (2026-05-07)**
     - PRODUCT 6-9: 지급목록/지급등록/지급상세(`/disbursements/[id]`) 화면 구조 반영
@@ -467,24 +467,25 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
   - **[SUP-TODO-002-C] 지급 분배(allocations) UX/로직**
     - “미지급 매입 목록 표시 → 분배 저장” 흐름
     - 미지급금=총매입-총지급(계산) 원칙 준수
-    - migration: 🔍
+    - migration: **적용 완료** — `20260507030000_create_purchases.sql`, `20260507040000_create_payment_allocations.sql` (FK `payments`/`purchases`, RLS+`WITH CHECK`); UX/RPC는 잔여
   - **[SUP-TODO-002-D] 지급 취소(reversed) 및 이력**
     - 물리 삭제 금지, reversed 처리 + 재계산
     - migration: 🔍 (로그 테이블 필요 가능)
 - **작업 이력 (2026-05-06)**: PRODUCT 6-9 정독 + 지급 라우트 부재 확인 + 세부 분해 등록 — worklog: `docs/worklogs/2026-05-06_phase5_sup-todo-001-005-gap.md`
 - **작업 이력 (2026-05-07)**: SUP-TODO-002-A `/disbursements` 목록·액션·Sidebar — worklog: `docs/worklogs/2026-05-07_sup-todo-002a_disbursements-route.md`
 - **작업 이력 (2026-05-07)**: SUP-TODO-002-B payments 모델·CHECK·데이터 분포 확인(문서) — worklog: `docs/worklogs/2026-05-07_sup-todo-002b_payments-model-check.md`
+- **작업 이력 (2026-05-07)**: `purchases`·`payment_allocations` migration 운영 적용 + 저장소 DDL 정합(FK·`WITH CHECK`) — worklog: `docs/worklogs/2026-05-07_sup-todo-002c-003_purchases-migration.md`
 
 #### [SUP-TODO-003] 매입관리 메뉴·흐름
 - **PRODUCT 정의 위치**: PRODUCT.md §6-7 매입관리
 - **완료 기준**: 매입 내역·등록·원장 연동
-- **선행 조건**: `fulfillment_type`·재고·자동 매입 로직과 스키마 정합
-- **migration 필요**: 🔍
+- **선행 조건**: `fulfillment_type`·재고·자동 매입 로직과 스키마 정합 · **`public.purchases` 테이블 생성(운영 적용 2026-05-07)으로 원장 스키마 선행 충족** — UI·로직은 A~D 잔여
+- **migration 필요**: `purchases` **적용됨**; 세부 컬럼·트리거는 🔍
 - **분해 (Phase 5, 문서화)**:
   - **[SUP-TODO-003-A] 매입 IA/라우트 신설**
     - PRODUCT 6-7: 매입내역(메인)/매입등록 화면 및 상세 이동
     - 현재 `realmyos/src/app/(app)/`에 purchases 라우트가 없음 → 신규 라우트 필요
-    - migration: 🔍
+    - migration: `purchases` DDL **적용됨** (`20260507030000`)
   - **[SUP-TODO-003-B] 상품↔매입처 매핑(default_supplier_id) 정합**
     - 상품 등록 시 customers에서 검색 선택(텍스트 직접 입력 금지) 원칙 반영
     - migration: 🔍 (products.default_supplier_id 존재/정합 확인)
