@@ -401,11 +401,12 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 
 ### ❌ 미구현
 
-#### [SUP-TODO-001] 발주요청(RFQ) 공급자OS 핵심 흐름
+#### [SUP-TODO-001] 발주요청(RFQ) 공급자OS 핵심 흐름 — **완료 (Phase 5 분해 A~E, 2026-05-07)**
 - **PRODUCT 정의 위치**: PRODUCT.md §6-2 발주요청 (상태 흐름, 노출 단계, 입찰, 알림)
-- **완료 기준**: 공급자OS에서 RFQ 수신·입찰·상태 전이·알림이 PRODUCT 정의와 동작
+- **Phase 5 달성 범위**: 공급자OS `/rfq`·노출 RPC·입찰·낙찰/탈락 알림 MVP·계약/후속 **최소 정의 문서화**(001-E). §6-2 **전체** 상태머신(`contract_pending`~`completed`)·양측 동의 UI·주소 공개 게이트·알림 전부·`supplier_bid_viewed` 등은 **미구현 → 후속 페이즈/별 감사 ID**.
+- **완료 기준 (원문, 장기)**: 공급자OS에서 RFQ 수신·입찰·상태 전이·알림이 PRODUCT 정의와 동작 → **Phase 5에서는 분해 항목 기준으로 종료**, 장기 기준은 위 잔여에 따름.
 - **선행 조건**: CONTEXT Phase 0 — 공통 `orders`/`rfq_*` 테이블·컬럼 실제 상태 확인 (**`DB-CHECK-005`**·**`DB-FAKE-001`** 정리 후)
-- **migration 필요**: 🔍
+- **migration 필요**: 🔍 (세부는 A~E 각 항목 참고)
 - buyer_tenant_id 미입력 상태 (order.ts 기존 TODO 이관): restaurant-os 연동 확정 후 입력 필요
 - **분해 (Phase 5, 문서화)**:
   - **[SUP-TODO-001-A] RFQ 공급자OS 라우트/IA 신설** — **완료 (2026-05-07)**
@@ -425,15 +426,17 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
     - **작업 이력 (2026-05-07)**: 입찰 UI·액션·제약 migration — worklog: `docs/worklogs/2026-05-07_sup-todo-001c_rfq-bid.md`
     - **작업 이력 (2026-05-07)**: `rfq_bids_rfq_supplier_unique` 운영 DB 적용 완료 — worklog: `docs/worklogs/2026-05-07_sup-todo-001c_rfq-bid.md`
     - migration: `20260507020000_rfq_bids_unique_supplier.sql` (**운영 적용 완료** — `rfq_bids_rfq_supplier_unique`)
-  - **[SUP-TODO-001-D] 알림/이벤트(상태 변화 기반) 최소 구현** — **부분완료 (2026-05-07)**
+  - **[SUP-TODO-001-D] 알림/이벤트(상태 변화 기반) 최소 구현** — **완료 (Phase 5 MVP, 2026-05-07)**
     - 신규/마감임박/낙찰/탈락/계약/결제/주소공개/납품/정산 알림
-    - **MVP 완료**: 입찰 **낙찰/탈락** 시 `notifications` INSERT(식당OS 발주 확정 후), 공급자OS `/rfq` **목록·미읽음 배지·읽음 처리**. 신규 RFQ·마감·supplier_bid_viewed·계약/결제 등은 미구현.
+    - **Phase 5 범위**: 입찰 **낙찰/탈락** 시 `notifications` INSERT(식당OS 발주 확정 후), 공급자OS `/rfq` **목록·미읽음 배지·읽음 처리**. 그 외 알림·이벤트는 후속.
     - supplier_bid_viewed 이벤트 정의 및 기록
     - **작업 이력 (2026-05-07)**: RFQ 입찰 결과 알림 + 목록 UI — worklog: `docs/worklogs/2026-05-07_sup-todo-001d_rfq-notifications.md`
     - migration: 없음 (기존 `notifications` 스키마 사용)
-  - **[SUP-TODO-001-E] 계약(contract_pending) 및 후속 흐름 분리**
+  - **[SUP-TODO-001-E] 계약(contract_pending) 및 후속 흐름 분리** — **완료 (2026-05-07, 문서만)**
     - 계약서 자동 생성/양측 동의/paid 이후 주소 공개 등 후속 단계는 별 분리(Phase 5에서 최소 기능 정의)
-    - migration: 🔍
+    - **완료 내용**: PRODUCT §6-2 **계약 생성 흐름(MVP)**·상태 흐름(`selected`→`contract_pending`→양측 동의→`paid`→`address_revealed`…)·알림 표와 대조하여 **현재 구현 가능한 것 / 별도 설계·스키마·RPC 필요한 것**을 `tasks.md`·worklog에 정리. 코드·migration 없음.
+    - **작업 이력 (2026-05-07)**: 계약·후속 최소 정의 문서화 — worklog: `docs/worklogs/2026-05-07_sup-todo-001e_rfq-contract.md`
+    - migration: 없음 (이번 턴). 후속 구현 시 `contracts`·RFQ 상태 확장·결제/주소 게이트 RPC 등 검토
 - **작업 이력 (2026-05-06)**: PRODUCT 6-2 정독 + 공급자OS 라우트 부재 확인 + RFQ 핵심 흐름 분해 등록 — worklog: `docs/worklogs/2026-05-06_phase5_sup-todo-001-005-gap.md`
 - **작업 이력 (2026-05-07)**: SUP-TODO-001-A 구현(`/rfq`, 액션, Sidebar) — worklog: `docs/worklogs/2026-05-07_sup-todo-001a_rfq-route.md`
 - **작업 이력 (2026-05-07)**: SUP-TODO-001-B RPC migration 초안(`get_supplier_rfqs`) — worklog: `docs/worklogs/2026-05-07_sup-todo-001b_rfq-expose-rpc.md`
@@ -441,6 +444,8 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **작업 이력 (2026-05-07)**: SUP-TODO-001-C RFQ 입찰·상세·UNIQUE migration — worklog: `docs/worklogs/2026-05-07_sup-todo-001c_rfq-bid.md`
 - **작업 이력 (2026-05-07)**: SUP-TODO-001-C `rfq_bids_rfq_supplier_unique` 운영 적용 — worklog: `docs/worklogs/2026-05-07_sup-todo-001c_rfq-bid.md`
 - **작업 이력 (2026-05-07)**: SUP-TODO-001-D RFQ 낙찰/탈락 알림(MVP) — worklog: `docs/worklogs/2026-05-07_sup-todo-001d_rfq-notifications.md`
+- **작업 이력 (2026-05-07)**: SUP-TODO-001-E 계약·후속 흐름 문서화 — worklog: `docs/worklogs/2026-05-07_sup-todo-001e_rfq-contract.md`
+- **작업 이력 (2026-05-07)**: SUP-TODO-001 Phase 5 분해(A~E) 종료 — worklog: `docs/worklogs/2026-05-07_sup-todo-001e_rfq-contract.md`
 
 #### [SUP-TODO-002] 지급관리(매입처 지급)
 - **PRODUCT 정의 위치**: PRODUCT.md §6-9 지급관리
