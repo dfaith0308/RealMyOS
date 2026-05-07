@@ -967,7 +967,8 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **선행 조건**: **Phase 4~5 완료 후 진행** (상태 모델·도메인 정합이 먼저)  
 - **핵심 선행 결정**: `due_date` 컬럼 설계 확정 필요  
 - **설계 범위**: 약정일/유예기간/자동연체/알림/위험도/수금스코어 전체 설계 문서 작성 후 진행  
-- **금지**: 임의 착수 금지
+- **완료 기준**: `docs/phase7-overdue-design.md` 설계 문서 확정 + 본 tasks에 작업 이력 기록
+- **작업 이력 (2026-05-07)**: Phase 7 연체 시스템 설계 문서 작성(`due_date`/`grace_days`/`trade_status` 런타임 계산, `collection_allocations` 연동) — worklog: `docs/worklogs/2026-05-07_phase7-overdue-design.md`
 
 **비-DB 운영 확인** (`## 비-DB 운영 확인` 참조)  
 - **`SUP-CHECK-002`** — 언제든 병렬 가능 (Phase 0~6과 독립, 단 **운영/환경 접근** 필요)
