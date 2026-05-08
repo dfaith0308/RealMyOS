@@ -73,6 +73,14 @@
 - **방향**: PRODUCT §10-10을 **단계별 MVP 스코프**로 분해해 하위 `ADM-*` 또는 별도 ID 등록.
 - **연계**: **`ADM-MISSING-007`**, `docs/PRODUCT.md` §10-10.
 
+**MVP (지금 구현 가능)**:
+- **[FORENSIC-002-A] 정책 충돌 감지**: 같은 키를 두 번 설정하려 할 때 경고 표시
+- **[FORENSIC-002-B] 정책 변경 시 영향 범위 표시**: `"이 값을 바꾸면 N개 거래처에 영향"` — `admin_settings` 변경 전 미리보기
+
+**중기 (데이터 쌓인 후)**:
+- **[FORENSIC-002-C] A/B 테스트 생명주기**: 정책 A vs 정책 B 효과 비교
+- **[FORENSIC-002-D] 성과 평가 루프**: 정책 변경 → 결과 측정 → 자동 제안
+
 #### [FORENSIC-003] §10-9 금융 통제 범위 좁음
 - **판정**: **HIGH** — PRODUCT 대비 구현 범위 좁음.
 - **현행**: 수수료 레코드 + 수동 정산 버튼 등 **`ADM-MISSING-005`/`006` 수준**.
@@ -80,12 +88,31 @@
 - **방향**: §10-9 요구사항 **체크리스트화** 후 격차별 작업 분해.
 - **연계**: **`ADM-MISSING-005`**, **`ADM-MISSING-006`**, `docs/CONTEXT.md` [ARCH-08I].
 
+**MVP (지금 구현 가능)**:
+- **[FORENSIC-003-A] 정산 증빙 첨부**: settlements 화면에 파일 첨부 기능 (storage 연동 필요)
+- **[FORENSIC-003-B] 정산 상태 통합 표시**: payments + orders + settlements 통합 뷰
+
+**중기**:
+- **[FORENSIC-003-C] 선지급(Credit Line) 시스템**: 신뢰도 기반 선지급 한도 설정 (credit_line 테이블 필요)
+- **[FORENSIC-003-D] 자동 정산 조건 처리**: 조건 충족 시 자동 정산 제안 (자동 실행 금지 / 제안만)
+
 #### [FORENSIC-004] 신뢰도 산식·운영 데이터 정합성 미흡
 - **판정**: **HIGH**.
 - **현행**: `trust_scores` 행의 요약 필드 + **`trust-engine.ts`** 휴리스틱.
 - **문제**: 실제 거래·수금·클레임 데이터와 **미동기화** 가능.
 - **방향**: 점수 입력 소스·갱신 주기를 **PRODUCT**와 정렬·파이프라인 명세.
 - **연계**: **`ADM-MISSING-002`** 계열, `trust_scores`·RPC.
+
+**MVP (지금 구현 가능)**:
+- **[FORENSIC-004-A] 신뢰도 입력 소스 연결**: `trust_scores`를 실거래 데이터로 갱신하는 배치
+  - orders confirmed 건수
+  - payments confirmed 건수
+  - claim_count (contact_logs outcome_type=claim)
+  - delivery_rate (order_status=납품완료 비율)
+- **[FORENSIC-004-B] 신뢰도 갱신 주기 정책화**: `admin_settings`에 `trust_update_cycle_days` 키 추가 (기본값: 7일)
+
+**중기**:
+- **[FORENSIC-004-C] 신뢰도 이력 추적**: `trust_score_logs` 테이블 신설, 점수 변화 추이 시각화
 
 #### [FORENSIC-005] 거래 단위 end-to-end 추적 UI 미구현 — **종료 (2026-05-08)**
 - **판정**: **MEDIUM**.
