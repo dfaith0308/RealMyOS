@@ -50,11 +50,10 @@ export default function PrivacyPage() {
 
           <h2 style={{ fontSize: 16, margin: '18px 0 8px' }}>7. 개인정보 보호 책임자</h2>
           <ul style={{ margin: 0, paddingLeft: 18 }}>
-            <li>책임자: [대표자명]</li>
-            <li>연락처: [연락처]</li>
-            <li>이메일: [이메일]</li>
+            <li>책임자: 김정무</li>
+            <li>연락처: 032-215-3207</li>
+            <li>이메일: dfaith0308@gmail.com</li>
           </ul>
-          {/* TODO: 개인정보 보호 책임자(이름/연락처/이메일)를 실제 값으로 교체하세요. */}
 
           <p style={{ marginTop: 22, color: '#6b7280', fontSize: 13 }}>
             시행일: 2026년 5월

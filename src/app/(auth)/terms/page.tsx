@@ -15,11 +15,10 @@ export default function TermsPage() {
           <h2 style={{ fontSize: 16, margin: '18px 0 8px' }}>1. 서비스 정보</h2>
           <ul style={{ margin: 0, paddingLeft: 18 }}>
             <li>서비스 명칭: 식식이OS</li>
-            <li>운영자: [상호명] / 대표자: [대표자명]</li>
-            <li>사업자등록번호: [사업자등록번호]</li>
-            <li>연락처: [연락처] / 이메일: [이메일]</li>
+            <li>운영자: 디닷페이스 / 대표자: 김정무</li>
+            <li>사업자등록번호: 728-02-02513</li>
+            <li>연락처: 032-215-3207 / 이메일: dfaith0308@gmail.com</li>
           </ul>
-          {/* TODO: 운영자 정보(상호/대표/사업자등록번호/연락처/이메일)를 실제 값으로 교체하세요. */}
 
           <h2 style={{ fontSize: 16, margin: '18px 0 8px' }}>2. 서비스 목적</h2>
           <p style={{ margin: 0 }}>
