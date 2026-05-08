@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
+import { getAdminSettingNumber } from '@/actions/admin/policy-console'
 
 type ActionResult<T = void> = { success: boolean; data?: T; error?: string }
 
@@ -51,6 +52,23 @@ function isoDayStartDaysAgo(days: number) {
   const d = new Date(Date.now() + 9 * 3600000)
   d.setUTCDate(d.getUTCDate() - days)
   return d.toISOString().slice(0, 10)
+}
+
+async function fetchAllPaged<T>(
+  // supabase-js query builder는 "thenable"이라 타입이 Promise로 좁혀지지 않을 수 있어 any로 받는다.
+  makeQuery: (rangeFrom: number, rangeTo: number) => any,
+  opts?: { pageSize?: number },
+): Promise<T[]> {
+  const pageSize = Math.max(100, Math.min(10000, opts?.pageSize ?? 5000))
+  const out: T[] = []
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = (await makeQuery(offset, offset + pageSize - 1)) as { data: T[] | null; error: any }
+    if (error) throw new Error(error.message ?? String(error))
+    const rows = (data ?? []) as T[]
+    out.push(...rows)
+    if (rows.length < pageSize) break
+  }
+  return out
 }
 
 export interface ChurnCustomerRow {
@@ -121,26 +139,30 @@ async function loadExistingDormantKeys(supabase: any): Promise<Set<string>> {
   return keys
 }
 
-/** 최근 120일 확정 주문 스냅샷 — 거래처별 이탈 신호 계산에 사용 */
-async function fetchRecentConfirmedOrders(supabase: any) {
-  const sinceDay = isoDayStartDaysAgo(120)
-  const { data, error } = await supabase
-    .from('orders')
-    .select('id, order_date, customer_id, tenant_id, seller_tenant_id, status')
-    .eq('status', 'confirmed')
-    .is('deleted_at', null)
-    .gte('order_date', sinceDay)
-    .limit(8000)
-
-  if (error) throw new Error(error.message)
-  return (data ?? []) as Array<{
+/** 최근 N일 확정 주문 스냅샷 — 거래처별 이탈 신호 계산에 사용 (FORENSIC-009: 고정 120일/limit 샘플링 제거) */
+async function fetchRecentConfirmedOrders(supabase: any, windowDays: number) {
+  const sinceDay = isoDayStartDaysAgo(windowDays)
+  type Row = {
     id: string
     order_date: string
     customer_id: string
     tenant_id: string | null
     seller_tenant_id: string | null
     status: string
-  }>
+  }
+
+  return await fetchAllPaged<Row>(
+    (from, to) =>
+      supabase
+        .from('orders')
+        .select('id, order_date, customer_id, tenant_id, seller_tenant_id, status')
+        .eq('status', 'confirmed')
+        .is('deleted_at', null)
+        .gte('order_date', sinceDay)
+        .order('id', { ascending: true })
+        .range(from, to),
+    { pageSize: 5000 },
+  )
 }
 
 function buildChurnCustomerSignals(
@@ -207,6 +229,7 @@ async function mergeTrustDropTenants(
     .eq('action_type', 'trust_update')
     .eq('target_table', 'trust_scores')
     .gte('created_at', since)
+    // 상한: 최근 30일 내 trust_update 폭주 시 엔진 보호(지표 집계와 무관)
     .limit(800)
 
   if (error) throw new Error(error.message)
@@ -240,64 +263,72 @@ export async function detectChurnRisk(): Promise<ActionResult<{ created: number 
   const auth = await requireAdmin(supabase)
   if (!auth.ok) return { success: false, error: auth.error }
 
-  const orders = await fetchRecentConfirmedOrders(supabase)
-  const churnMap = buildChurnCustomerSignals(orders)
-  await mergeTrustDropTenants(supabase, churnMap)
+  try {
+    // FORENSIC-009: 이탈 감지 기간을 정책키 기반으로 동적 산정
+    // - 기본값: order_cycle_calculation_count=3 → 90일
+    const calcCount = await getAdminSettingNumber('order_cycle_calculation_count', { min: 2, max: 90 })
+    const windowDays = Math.max(90, Math.min(365, calcCount * 30))
+    const orders = await fetchRecentConfirmedOrders(supabase, windowDays)
+    const churnMap = buildChurnCustomerSignals(orders)
+    await mergeTrustDropTenants(supabase, churnMap)
 
-  const existing = await loadExistingTradeTodayKeys(supabase)
-  const customerIds = [...new Set([...churnMap.values()].map((r) => r.customer_id).filter(Boolean))]
-  const nameMap = new Map<string, string>()
-  if (customerIds.length) {
-    const { data: custRows } = await supabase.from('customers').select('id, name').in('id', customerIds).limit(2000)
-    for (const c of (custRows ?? []) as any[]) nameMap.set(c.id, c.name ?? '-')
-  }
+    const existing = await loadExistingTradeTodayKeys(supabase)
+    const customerIds = [...new Set([...churnMap.values()].map((r) => r.customer_id).filter(Boolean))]
+    const nameMap = new Map<string, string>()
+    if (customerIds.length) {
+      const { data: custRows } = await supabase.from('customers').select('id, name').in('id', customerIds).limit(2000)
+      for (const c of (custRows ?? []) as any[]) nameMap.set(c.id, c.name ?? '-')
+    }
 
-  const nowIso = new Date().toISOString()
-  const inserts: any[] = []
+    const nowIso = new Date().toISOString()
+    const inserts: any[] = []
 
-  for (const row of churnMap.values()) {
-    if (existing.has(row.dedup_key)) continue
-    const cname = row.customer_id ? nameMap.get(row.customer_id) ?? '-' : row.customer_name
-    inserts.push({
-      priority: 'today',
-      category: 'trade',
-      title: row.customer_id ? `이탈 위험 거래처: ${cname}` : `이탈 위험: 신뢰도 급락 (${row.seller_tenant_id.slice(0, 8)}…)`,
-      description: row.reasons.join(' / '),
-      status: 'pending',
-      action_options: {
-        dedup_key: row.dedup_key,
-        kind: 'churn_risk',
-        seller_tenant_id: row.seller_tenant_id,
-        customer_id: row.customer_id || null,
-        reasons: row.reasons,
-        last_order_date: row.last_order_date,
-      },
-      target_tenant_id: row.seller_tenant_id,
-      expires_at: null,
-      escalated_at: null,
-      resolved_by: null,
-      resolved_at: null,
-      created_at: nowIso,
+    for (const row of churnMap.values()) {
+      if (existing.has(row.dedup_key)) continue
+      const cname = row.customer_id ? nameMap.get(row.customer_id) ?? '-' : row.customer_name
+      inserts.push({
+        priority: 'today',
+        category: 'trade',
+        title: row.customer_id ? `이탈 위험 거래처: ${cname}` : `이탈 위험: 신뢰도 급락 (${row.seller_tenant_id.slice(0, 8)}…)`,
+        description: row.reasons.join(' / '),
+        status: 'pending',
+        action_options: {
+          dedup_key: row.dedup_key,
+          kind: 'churn_risk',
+          seller_tenant_id: row.seller_tenant_id,
+          customer_id: row.customer_id || null,
+          reasons: row.reasons,
+          last_order_date: row.last_order_date,
+        },
+        target_tenant_id: row.seller_tenant_id,
+        expires_at: null,
+        escalated_at: null,
+        resolved_by: null,
+        resolved_at: null,
+        created_at: nowIso,
+      })
+    }
+
+    if (inserts.length) {
+      const { error } = await supabase.from('action_queue').insert(inserts)
+      if (error) return { success: false, error: error.message }
+    }
+
+    const logRes = await insertAdminLog(supabase, {
+      admin_id: auth.ctx.user_id,
+      action_type: 'growth_churn_detect',
+      tenant_id: null,
+      reason: 'detectChurnRisk enqueue',
+      target_table: 'action_queue',
+      new_value: { created: inserts.length },
     })
+    if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
+
+    revalidatePath('/admin/growth')
+    return { success: true, data: { created: inserts.length } }
+  } catch (e: any) {
+    return { success: false, error: e?.message ?? '이탈 위험 감지 실패' }
   }
-
-  if (inserts.length) {
-    const { error } = await supabase.from('action_queue').insert(inserts)
-    if (error) return { success: false, error: error.message }
-  }
-
-  const logRes = await insertAdminLog(supabase, {
-    admin_id: auth.ctx.user_id,
-    action_type: 'growth_churn_detect',
-    tenant_id: null,
-    reason: 'detectChurnRisk enqueue',
-    target_table: 'action_queue',
-    new_value: { created: inserts.length },
-  })
-  if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
-
-  revalidatePath('/admin/growth')
-  return { success: true, data: { created: inserts.length } }
 }
 
 export async function detectDormant(): Promise<ActionResult<{ created: number }>> {
@@ -305,76 +336,112 @@ export async function detectDormant(): Promise<ActionResult<{ created: number }>
   const auth = await requireAdmin(supabase)
   if (!auth.ok) return { success: false, error: auth.error }
 
-  const d90 = isoDayStartDaysAgo(90)
+  try {
+    const d90 = isoDayStartDaysAgo(90)
 
-  const [{ data: tenants, error: tenErr }, { data: userRows, error: uErr }, { data: orders, error: oErr }, { data: rfqs, error: rErr }] =
-    await Promise.all([
-      supabase.from('tenants').select('id, name, created_at').limit(5000),
-      supabase.from('users').select('tenant_id, updated_at').not('tenant_id', 'is', null).limit(20000),
-      supabase
-        .from('orders')
-        .select('order_date, tenant_id, seller_tenant_id')
-        .eq('status', 'confirmed')
-        .is('deleted_at', null)
-        .limit(12000),
-      supabase.from('rfq_requests').select('tenant_id, created_at').limit(12000),
+    // FORENSIC-009: 휴면 판별 프록시(users.updated_at) 제거 → 실제 활동 신호 기반
+    // - contact_logs 마지막 활동일
+    // - orders 마지막 주문일(confirmed)
+    // - rfq_requests 마지막 발주일
+    // 위 3가지 중 가장 최신 날짜를 활동일로 본다.
+
+    const [tenants, contactRows, orderRows, rfqRows] = await Promise.all([
+      fetchAllPaged<{ id: string; name: string | null; created_at?: string }>(
+        (from, to) => supabase.from('tenants').select('id, name, created_at').order('id', { ascending: true }).range(from, to),
+        { pageSize: 5000 },
+      ),
+      fetchAllPaged<{ tenant_id: string | null; contacted_at: string | null }>(
+        (from, to) =>
+          supabase
+            .from('contact_logs')
+            .select('tenant_id, contacted_at')
+            .not('tenant_id', 'is', null)
+            .order('contacted_at', { ascending: false })
+            .range(from, to),
+        { pageSize: 5000 },
+      ),
+      fetchAllPaged<{ order_date: string; tenant_id: string | null; seller_tenant_id: string | null }>(
+        (from, to) =>
+          supabase
+            .from('orders')
+            .select('order_date, tenant_id, seller_tenant_id')
+            .eq('status', 'confirmed')
+            .is('deleted_at', null)
+            .order('order_date', { ascending: false })
+            .range(from, to),
+        { pageSize: 5000 },
+      ),
+      fetchAllPaged<{ tenant_id: string | null; created_at: string | null }>(
+        (from, to) =>
+          supabase
+            .from('rfq_requests')
+            .select('tenant_id, created_at')
+            .not('tenant_id', 'is', null)
+            .order('created_at', { ascending: false })
+            .range(from, to),
+        { pageSize: 5000 },
+      ),
     ])
 
-  if (tenErr) return { success: false, error: tenErr.message }
-  if (uErr) return { success: false, error: uErr.message }
-  if (oErr) return { success: false, error: oErr.message }
-  if (rErr) return { success: false, error: rErr.message }
-
-  const lastLogin = new Map<string, string>()
-  for (const u of (userRows ?? []) as any[]) {
-    const tid = u.tenant_id as string
-    const ua = u.updated_at as string
-    const prev = lastLogin.get(tid)
-    if (!prev || ua > prev) lastLogin.set(tid, ua)
+  const lastContact = new Map<string, string>()
+  for (const r of (contactRows ?? []) as any[]) {
+    const tid = r.tenant_id as string | null
+    const ca = r.contacted_at as string | null
+    if (!tid || !ca) continue
+    const prev = lastContact.get(tid)
+    if (!prev || ca > prev) lastContact.set(tid, ca)
   }
 
-  const lastTrade = new Map<string, string>()
-  for (const o of (orders ?? []) as any[]) {
+  const lastOrder = new Map<string, string>()
+  for (const o of (orderRows ?? []) as any[]) {
     const od = o.order_date as string
     const sk = sellerKey(o)
-    if (sk) {
-      const p = lastTrade.get(sk)
-      if (!p || od > p) lastTrade.set(sk, od)
-    }
-  }
-  for (const r of (rfqs ?? []) as any[]) {
-    const tid = r.tenant_id as string
-    const ca = r.created_at as string
-    if (!tid) continue
-    const p = lastTrade.get(tid)
-    if (!ca) continue
-    if (!p || ca.slice(0, 10) > p) lastTrade.set(tid, ca.slice(0, 10))
+    if (!sk || !od) continue
+    const prev = lastOrder.get(sk)
+    if (!prev || od > prev) lastOrder.set(sk, od)
   }
 
-  const existing = await loadExistingDormantKeys(supabase)
-  const nowIso = new Date().toISOString()
-  const inserts: any[] = []
+  const lastRfq = new Map<string, string>()
+  for (const r of (rfqRows ?? []) as any[]) {
+    const tid = r.tenant_id as string | null
+    const ca = r.created_at as string | null
+    if (!tid || !ca) continue
+    const day = ca.slice(0, 10)
+    const prev = lastRfq.get(tid)
+    if (!prev || day > prev) lastRfq.set(tid, day)
+  }
+
+  const lastActivityDay = (tid: string) => {
+    const c = lastContact.get(tid)?.slice(0, 10) ?? null
+    const o = lastOrder.get(tid) ?? null
+    const r = lastRfq.get(tid) ?? null
+    return [c, o, r].filter(Boolean).sort().at(-1) ?? null
+  }
+
+    const existing = await loadExistingDormantKeys(supabase)
+    const nowIso = new Date().toISOString()
+    const inserts: any[] = []
 
   for (const t of (tenants ?? []) as any[]) {
     const tid = t.id as string
-    const lu = lastLogin.get(tid)
-    const lt = lastTrade.get(tid)
-    const loginStale = !lu || lu.slice(0, 10) < d90
-    const tradeStale = !lt || lt < d90
-    if (!(loginStale && tradeStale)) continue
+    const lc = lastContact.get(tid) ?? null
+    const lo = lastOrder.get(tid) ?? null
+    const lr = lastRfq.get(tid) ?? null
+    const la = lastActivityDay(tid)
+    if (la && la >= d90) continue
     if (existing.has(tid)) continue
 
     inserts.push({
       priority: 'normal',
       category: 'trade',
       title: `휴면 참여자 재활성: ${t.name ?? tid.slice(0, 8)}`,
-      description: `로그인/거래 신호 90일 초과 (login:${lu?.slice(0, 10) ?? '없음'}, trade:${lt ?? '없음'})`,
+      description: `활동 신호 90일 초과 (contact:${lc?.slice(0, 10) ?? '없음'}, order:${lo ?? '없음'}, rfq:${lr ?? '없음'})`,
       status: 'pending',
       action_options: {
         kind: 'dormant_reengage',
         tenant_id: tid,
-        last_login_at: lu ?? null,
-        last_trade_at: lt ?? null,
+        last_login_at: lc ?? null,
+        last_trade_at: la ?? null,
       },
       target_tenant_id: tid,
       expires_at: null,
@@ -385,10 +452,10 @@ export async function detectDormant(): Promise<ActionResult<{ created: number }>
     })
   }
 
-  if (inserts.length) {
-    const { error } = await supabase.from('action_queue').insert(inserts)
-    if (error) return { success: false, error: error.message }
-  }
+    if (inserts.length) {
+      const { error } = await supabase.from('action_queue').insert(inserts)
+      if (error) return { success: false, error: error.message }
+    }
 
   const logRes = await insertAdminLog(supabase, {
     admin_id: auth.ctx.user_id,
@@ -399,8 +466,11 @@ export async function detectDormant(): Promise<ActionResult<{ created: number }>
   })
   if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
 
-  revalidatePath('/admin/growth')
-  return { success: true, data: { created: inserts.length } }
+    revalidatePath('/admin/growth')
+    return { success: true, data: { created: inserts.length } }
+  } catch (e: any) {
+    return { success: false, error: e?.message ?? '휴면 감지 실패' }
+  }
 }
 
 export async function getGrowthMetrics(): Promise<ActionResult<GrowthMetrics>> {
@@ -408,30 +478,62 @@ export async function getGrowthMetrics(): Promise<ActionResult<GrowthMetrics>> {
   const auth = await requireAdmin(supabase)
   if (!auth.ok) return { success: false, error: auth.error }
 
-  const day30 = isoDayStartDaysAgo(30)
-  const sixMo = isoDayStartDaysAgo(185)
+  try {
+    const day30 = isoDayStartDaysAgo(30)
+    const sixMo = isoDayStartDaysAgo(185)
 
   const [
-    { data: tenantsNew, error: e1 },
-    { data: orders180, error: e2 },
-    { data: rfqRecent, error: e3 },
+    tenantsNew,
+    orders180,
+    rfqRecent,
     orders120,
   ] = await Promise.all([
-    supabase.from('tenants').select('id, created_at').gte('created_at', `${day30}T00:00:00.000Z`).limit(5000),
-    supabase
-      .from('orders')
-      .select('order_date, final_amount, total_amount, tenant_id, seller_tenant_id')
-      .eq('status', 'confirmed')
-      .is('deleted_at', null)
-      .gte('order_date', sixMo.slice(0, 10))
-      .limit(20000),
-    supabase.from('rfq_requests').select('tenant_id, created_at').gte('created_at', `${day30}T00:00:00.000Z`).limit(8000),
-    fetchRecentConfirmedOrders(supabase),
+    // FORENSIC-009: 신규 참여자 집계도 전체 기준(페이지네이션)
+    fetchAllPaged<{ id: string; created_at: string }>(
+      (from, to) =>
+        supabase
+          .from('tenants')
+          .select('id, created_at')
+          .gte('created_at', `${day30}T00:00:00.000Z`)
+          .order('id', { ascending: true })
+          .range(from, to),
+      { pageSize: 5000 },
+    ),
+    // FORENSIC-009: 지표 집계는 전체 데이터를 기준으로 계산 (limit 샘플링 금지)
+    fetchAllPaged<{
+      order_date: string
+      final_amount?: number | null
+      total_amount?: number | null
+      tenant_id: string | null
+      seller_tenant_id: string | null
+    }>(
+      (from, to) =>
+        supabase
+          .from('orders')
+          .select('order_date, final_amount, total_amount, tenant_id, seller_tenant_id')
+          .eq('status', 'confirmed')
+          .is('deleted_at', null)
+          .gte('order_date', sixMo.slice(0, 10))
+          .order('order_date', { ascending: true })
+          .range(from, to),
+      { pageSize: 5000 },
+    ),
+    fetchAllPaged<{ tenant_id: string | null; created_at: string }>(
+      (from, to) =>
+        supabase
+          .from('rfq_requests')
+          .select('tenant_id, created_at')
+          .gte('created_at', `${day30}T00:00:00.000Z`)
+          .order('created_at', { ascending: true })
+          .range(from, to),
+      { pageSize: 5000 },
+    ),
+    (async () => {
+      const calcCount = await getAdminSettingNumber('order_cycle_calculation_count', { min: 2, max: 90 })
+      const windowDays = Math.max(90, Math.min(365, calcCount * 30))
+      return await fetchRecentConfirmedOrders(supabase, windowDays)
+    })(),
   ])
-
-  if (e1) return { success: false, error: e1.message }
-  if (e2) return { success: false, error: e2.message }
-  if (e3) return { success: false, error: e3.message }
 
   const monthlyMap = new Map<string, number>()
   let gmv30 = 0
@@ -472,61 +574,90 @@ export async function getGrowthMetrics(): Promise<ActionResult<GrowthMetrics>> {
 
   // 휴면 목록은 detectDormant와 동일 규칙으로 계산(삽입 없이 표시만)
   const d90 = isoDayStartDaysAgo(90)
-  const [{ data: allTenants, error: teErr }, { data: userRows, error: ueErr }, { data: allOrders, error: oeErr }, { data: allRfqs, error: reErr }] =
-    await Promise.all([
-      supabase.from('tenants').select('id, name').limit(5000),
-      supabase.from('users').select('tenant_id, updated_at').not('tenant_id', 'is', null).limit(20000),
-      supabase
-        .from('orders')
-        .select('order_date, tenant_id, seller_tenant_id')
-        .eq('status', 'confirmed')
-        .is('deleted_at', null)
-        .limit(12000),
-      supabase.from('rfq_requests').select('tenant_id, created_at').limit(12000),
-    ])
-  if (teErr) return { success: false, error: teErr.message }
-  if (ueErr) return { success: false, error: ueErr.message }
-  if (oeErr) return { success: false, error: oeErr.message }
-  if (reErr) return { success: false, error: reErr.message }
+  const [allTenants, allContacts, allOrders, allRfqs] = await Promise.all([
+    fetchAllPaged<{ id: string; name: string | null }>(
+      (from, to) => supabase.from('tenants').select('id, name').order('id', { ascending: true }).range(from, to),
+      { pageSize: 5000 },
+    ),
+    fetchAllPaged<{ tenant_id: string | null; contacted_at: string | null }>(
+      (from, to) =>
+        supabase
+          .from('contact_logs')
+          .select('tenant_id, contacted_at')
+          .not('tenant_id', 'is', null)
+          .order('contacted_at', { ascending: false })
+          .range(from, to),
+      { pageSize: 5000 },
+    ),
+    fetchAllPaged<{ order_date: string; tenant_id: string | null; seller_tenant_id: string | null }>(
+      (from, to) =>
+        supabase
+          .from('orders')
+          .select('order_date, tenant_id, seller_tenant_id')
+          .eq('status', 'confirmed')
+          .is('deleted_at', null)
+          .order('order_date', { ascending: false })
+          .range(from, to),
+      { pageSize: 5000 },
+    ),
+    fetchAllPaged<{ tenant_id: string | null; created_at: string | null }>(
+      (from, to) =>
+        supabase
+          .from('rfq_requests')
+          .select('tenant_id, created_at')
+          .not('tenant_id', 'is', null)
+          .order('created_at', { ascending: false })
+          .range(from, to),
+      { pageSize: 5000 },
+    ),
+  ])
 
-  const lastLoginM = new Map<string, string>()
-  for (const u of (userRows ?? []) as any[]) {
-    const tid = u.tenant_id as string
-    const ua = u.updated_at as string
-    const prev = lastLoginM.get(tid)
-    if (!prev || ua > prev) lastLoginM.set(tid, ua)
+  const lastContactM = new Map<string, string>()
+  for (const r of (allContacts ?? []) as any[]) {
+    const tid = r.tenant_id as string | null
+    const ca = r.contacted_at as string | null
+    if (!tid || !ca) continue
+    const prev = lastContactM.get(tid)
+    if (!prev || ca > prev) lastContactM.set(tid, ca)
   }
-  const lastTradeM = new Map<string, string>()
+
+  const lastOrderM = new Map<string, string>()
   for (const o of (allOrders ?? []) as any[]) {
     const od = o.order_date as string
     const sk = sellerKey(o)
-    if (sk) {
-      const p = lastTradeM.get(sk)
-      if (!p || od > p) lastTradeM.set(sk, od)
-    }
+    if (!sk || !od) continue
+    const prev = lastOrderM.get(sk)
+    if (!prev || od > prev) lastOrderM.set(sk, od)
   }
+
+  const lastRfqM = new Map<string, string>()
   for (const r of (allRfqs ?? []) as any[]) {
-    const tid = r.tenant_id as string
-    const ca = r.created_at as string
+    const tid = r.tenant_id as string | null
+    const ca = r.created_at as string | null
     if (!tid || !ca) continue
     const day = ca.slice(0, 10)
-    const p = lastTradeM.get(tid)
-    if (!p || day > p) lastTradeM.set(tid, day)
+    const prev = lastRfqM.get(tid)
+    if (!prev || day > prev) lastRfqM.set(tid, day)
+  }
+
+  const lastActivityDayM = (tid: string) => {
+    const c = lastContactM.get(tid)?.slice(0, 10) ?? null
+    const o = lastOrderM.get(tid) ?? null
+    const r = lastRfqM.get(tid) ?? null
+    return [c, o, r].filter(Boolean).sort().at(-1) ?? null
   }
 
   const dormantRows: DormantTenantRow[] = []
   for (const t of (allTenants ?? []) as any[]) {
     const tid = t.id as string
-    const lu = lastLoginM.get(tid)
-    const lt = lastTradeM.get(tid)
-    const loginStale = !lu || lu.slice(0, 10) < d90
-    const tradeStale = !lt || lt < d90
-    if (loginStale && tradeStale) {
+    const lc = lastContactM.get(tid) ?? null
+    const la = lastActivityDayM(tid)
+    if (!la || la < d90) {
       dormantRows.push({
         tenant_id: tid,
         tenant_label: t.name ?? tid.slice(0, 8),
-        last_login_at: lu ?? null,
-        last_trade_at: lt ?? null,
+        last_login_at: lc ?? null,
+        last_trade_at: la ?? null,
       })
     }
   }
@@ -554,17 +685,20 @@ export async function getGrowthMetrics(): Promise<ActionResult<GrowthMetrics>> {
     },
   }).catch(() => {})
 
-  return {
-    success: true,
-    data: {
-      new_participants_30d: (tenantsNew ?? []).length,
-      active_participants_30d: activeTenants.size,
-      churn_risk_customers: churnRows.length,
-      dormant_tenants: dormantRows.length,
-      platform_gmv_30d: gmv30,
-      monthly_gmv_trend,
-      churn_customer_rows: churnRows.slice(0, 80),
-      dormant_rows: dormantRows.slice(0, 80),
-    },
+    return {
+      success: true,
+      data: {
+        new_participants_30d: (tenantsNew ?? []).length,
+        active_participants_30d: activeTenants.size,
+        churn_risk_customers: churnRows.length,
+        dormant_tenants: dormantRows.length,
+        platform_gmv_30d: gmv30,
+        monthly_gmv_trend,
+        churn_customer_rows: churnRows.slice(0, 80),
+        dormant_rows: dormantRows.slice(0, 80),
+      },
+    }
+  } catch (e: any) {
+    return { success: false, error: e?.message ?? '성장 지표 조회 실패' }
   }
 }

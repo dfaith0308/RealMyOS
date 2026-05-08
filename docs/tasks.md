@@ -112,11 +112,12 @@
 - **현행**: 거래·참여자·학습·엔진·성장·정산·정책 화면 **`admin-shared.module.css`** (`--ds-*`) + 클라이언트 동일 모듈로 **`style={{ }}`** 제거(차트 높이·프로그레스 폭 등 **CSS 변수 한 줄**만 잔류).
 - **작업 이력 (2026-05-08)**: 관리자 지정 라우트 스타일 모듈화 — 동일 worklog 참조.
 
-#### [FORENSIC-009] 성장 지표 쿼리 상한·근사치
+#### [FORENSIC-009] 성장 지표 쿼리 상한·근사치 — **종료 (2026-05-08)**
 - **판정**: **MEDIUM** (Performance).
-- **현행**: `growth-engine.ts` 등에서 `.limit()`·프록시 지표.
+- **현행**: `growth-engine.ts`에서 `.limit()` 기반 샘플링·`users.updated_at` 프록시로 휴면 판별·이탈 감지 120일 고정.
 - **문제**: 대형 테넌트에서 지표 왜곡 → **잘못된 큐 적재** 위험.
-- **방향**: 지표 정의를 **PRODUCT 수준**으로 고정 + 스케일링·집계 전략(rollup·MV 등) 검토.
+- **조치 (2026-05-08)**: 휴면 판별을 **실제 활동일**(contact/order/rfq) 기준으로 개선, 이탈 감지 기간을 `admin_settings.order_cycle_calculation_count` 기반으로 **동적 산정(기본 90일)**, 지표 집계 쿼리의 `.limit()` 샘플링 제거(페이지네이션).
+- **작업 이력 (2026-05-08)**: FORENSIC-009 성장 지표 정확도 개선 — worklog: [`docs/worklogs/2026-05-08_forensic-009-growth-metrics.md`](./worklogs/2026-05-08_forensic-009-growth-metrics.md)
 - **연계**: **`ADM-MISSING-005`** 성장/KPI 경로.
 
 ---
