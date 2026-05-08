@@ -23,6 +23,7 @@
 4. **`## 비-DB 운영 확인`** — DB·스키마가 아닌 **배포 환경·외부 API** 확인 항목 (`SUP-CHECK-002`).
 5. **레거시** — [`tasks-legacy.md`](./tasks-legacy.md) (TASK-nn, 2026-04-27). **`tasks.md`와 혼합 금지.**
 6. **AI·코드 작업 종료 시** — 관련 감사 ID 블록에 **작업 이력**(날짜·요약·`docs/worklogs/YYYY-MM-DD_phase-topic.md` 링크)을 남기고, worklog에 목적·ID·파일·변경 요약·migration·테스트·위험·다음 권장 작업을 기록한다. **작업 완료 = 변경 + tasks 반영 + worklog** (`.cursor/rules/worklog-completion.mdc`).
+7. **`## [FORENSIC]`** — `docs/FORENSIC.md` 연계 **레이어 감사 후속** (`FORENSIC-*`). 표준 `DB-*`/`SUP-*`/`ADM-*`/`RES-*` **유형별 표와 별도 축** — 집계는 **`감사 요약`** 참조.
 
 ### [OPS — AI worklog] 절차 기록 (감사 ID와 별도)
 
@@ -45,6 +46,78 @@
 - **작업 이력 (2026-05-08)**: FORENSIC RLS 배치(`tenant_relationships`·`action_queue`·`admin_settings`) + `product_related_manual` 운영 생성 이력 주석 — worklog: [`docs/worklogs/2026-05-08_forensic-missing-rls-batch.md`](./worklogs/2026-05-08_forensic-missing-rls-batch.md)
 - **작업 이력 (2026-05-08)**: `admin_settings` RLS 읽기 공개·쓰기 관리자 분리(`20260508050000`) — worklog: [`docs/worklogs/2026-05-08_forensic-admin-settings-rls-readwrite.md`](./worklogs/2026-05-08_forensic-admin-settings-rls-readwrite.md)
 - **작업 이력 (2026-05-08)**: `docs/CONTEXT.md` 재수집(운영 테이블 70·migration 35·관리자 라우트·middleware)·`tasks.md` 인벤토리·`ADM-CHECK-001` 종결·`FORENSIC.md` §7 — worklog: [`docs/worklogs/2026-05-08_context-recollect.md`](./worklogs/2026-05-08_context-recollect.md)
+- **작업 이력 (2026-05-08)**: FORENSIC 감사 미등록 후속 `FORENSIC-001`~`009`를 `tasks.md`에 등록·집계 반영 — worklog: [`docs/worklogs/2026-05-08_docs_forensic-tasks-001-009.md`](./worklogs/2026-05-08_docs_forensic-tasks-001-009.md)
+
+---
+
+## [FORENSIC] 레이어 감사 후속 (`docs/FORENSIC.md` 연계)
+
+> 문서·아키텍처 forensic에서 도출된 **미종결 과제**를 ID로 고정한다. **즉시 스키마·코드 변경 금지** 전제 항목은 본문에 명시.
+
+### 🔎 후속 과제 (FORENSIC-*)
+
+#### [FORENSIC-001] customer_stats 계산값 저장 문제
+- **판정**: **MEDIUM** — RLS는 해결됨 (`docs/FORENSIC.md` §6); **계산값 저장**은 미해결.
+- **현황**: `current_balance` / `total_sales` 등 **계산값 DB 저장** 유지.
+- **RULE**: **RULE-02 위반** (원장 단일 소스 원칙).
+- **금지**: 즉시 수정·DROP (**데이터 손실 위험**).
+- **방향**: **원장 SSOT** 전환 로드맵 수립.
+- **선행 조건**: 원장 계산값과 캐시값 **불일치 여부 먼저 검증**.
+- **연계**: **`DB-DANGER-004`**, `docs/FORENSIC.md` §6.
+
+#### [FORENSIC-002] §10-10 정책 오케스트레이션 미구현
+- **판정**: **HIGH** — PRODUCT 대비 구현 범위 좁음.
+- **현행**: 키-값 편집 + 이력(`ADM-MISSING-007` / 정책 콘솔) 중심.
+- **미구현**: 정책 충돌 감지 / A/B 생명주기 / 성과 평가 / 롤백 등 §10-10 전 범위.
+- **방향**: PRODUCT §10-10을 **단계별 MVP 스코프**로 분해해 하위 `ADM-*` 또는 별도 ID 등록.
+- **연계**: **`ADM-MISSING-007`**, `docs/PRODUCT.md` §10-10.
+
+#### [FORENSIC-003] §10-9 금융 통제 범위 좁음
+- **판정**: **HIGH** — PRODUCT 대비 구현 범위 좁음.
+- **현행**: 수수료 레코드 + 수동 정산 버튼 등 **`ADM-MISSING-005`/`006` 수준**.
+- **미구현**: 증빙 / 선지급(Credit Line) 운영 / 통합 상태 모델 등 §10-9 전 범위.
+- **방향**: §10-9 요구사항 **체크리스트화** 후 격차별 작업 분해.
+- **연계**: **`ADM-MISSING-005`**, **`ADM-MISSING-006`**, `docs/CONTEXT.md` [ARCH-08I].
+
+#### [FORENSIC-004] 신뢰도 산식·운영 데이터 정합성 미흡
+- **판정**: **HIGH**.
+- **현행**: `trust_scores` 행의 요약 필드 + **`trust-engine.ts`** 휴리스틱.
+- **문제**: 실제 거래·수금·클레임 데이터와 **미동기화** 가능.
+- **방향**: 점수 입력 소스·갱신 주기를 **PRODUCT**와 정렬·파이프라인 명세.
+- **연계**: **`ADM-MISSING-002`** 계열, `trust_scores`·RPC.
+
+#### [FORENSIC-005] 거래 단위 end-to-end 추적 UI 미구현
+- **판정**: **MEDIUM**.
+- **현행**: `/admin/trades`는 이상 큐(`trade-monitor`·`action_queue`) 나열 중심.
+- **미구현**: 발주→낙찰→주문→정산 **타임라인 drill-down**.
+- **방향**: 거래 단위 식별자 체인 설계 후 UI 스펙 확정.
+- **연계**: **`ADM-MISSING-001`**, `docs/FORENSIC.md` 거래 관제 맥락.
+
+#### [FORENSIC-006] 주문 상태 이중 축 단일화 필요
+- **판정**: **MEDIUM**.
+- **현황**: `status`(원장·draft/confirmed/cancelled 등) vs **`order_status`**(운영·접수/확인/출고준비 등) 병행.
+- **문제**: 타입·전이 규칙 불일치 시 **자동화 깨짐 위험**.
+- **방향**: 상태 머신을 **PRODUCT 한 장**으로 고정 후 코드·DB 정렬.
+- **연계**: **`SUP-PARTIAL-005`**, Phase 7 연체 설계와 간섭 시 통합 검토.
+
+#### [FORENSIC-007] loading.tsx 불균일
+- **판정**: **MEDIUM** (UX).
+- **현행**: 일부 라우트에만 `loading.tsx` 존재(실측 약 **7경로** 수준 — 증감 시 본 항목 갱신).
+- **문제**: 로딩·스켈레톤 경험 **들쭉날쭉**.
+- **방향**: 라우트 그룹`(app)`/`(admin)`별 **로딩 패턴 가이드** 수립 후 적용 페이즈.
+
+#### [FORENSIC-008] 관리자 화면 인라인 스타일
+- **판정**: **LOW–MEDIUM** (Design System).
+- **현행**: `/admin/trades` 등 `style={{ }}` 패턴 잔존.
+- **문제**: DS 토큰(`--ds-*`)과 공존 → **일관성 저하**.
+- **방향**: 관리자 라우트 그룹 **DS 적용 범위·페이즈** 문서화.
+
+#### [FORENSIC-009] 성장 지표 쿼리 상한·근사치
+- **판정**: **MEDIUM** (Performance).
+- **현행**: `growth-engine.ts` 등에서 `.limit()`·프록시 지표.
+- **문제**: 대형 테넌트에서 지표 왜곡 → **잘못된 큐 적재** 위험.
+- **방향**: 지표 정의를 **PRODUCT 수준**으로 고정 + 스케일링·집계 전략(rollup·MV 등) 검토.
+- **연계**: **`ADM-MISSING-005`** 성장/KPI 경로.
 
 ---
 
@@ -1170,7 +1243,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 
 ## 감사 요약 (집계)
 
-> **집계 규칙**: 아래 숫자는 `tasks.md` 본문에 **제목이 한 번씩 등장하는 ID**만 센다. `SUP-CHECK-001` 등 **이관 스텁**은 원 소속(공급자OS)에 포함, 상세는 `DB-CHECK-*` 참조. **`SUP-CHECK-002`**는 **`## 비-DB 운영 확인`**에 두었으나 접두사 `SUP-`이므로 **공급자OS 행의 확인필요 건수**에 포함된다.
+> **집계 규칙**: 아래 숫자는 `tasks.md` 본문에 **제목이 한 번씩 등장하는 ID**만 센다. `SUP-CHECK-001` 등 **이관 스텁**은 원 소속(공급자OS)에 포함, 상세는 `DB-CHECK-*` 참조. **`SUP-CHECK-002`**는 **`## 비-DB 운영 확인`**에 두었으나 접두사 `SUP-`이므로 **공급자OS 행의 확인필요 건수**에 포함된다. **`FORENSIC-*`**는 **`## [FORENSIC]`** 교차 축으로 **유형별 표(DB/SUP/ADM/RES)** 에는 넣지 않고, **접두사별·교차 검증**에서만 합산한다.
 
 ### 유형별 건수
 
@@ -1192,6 +1265,9 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 | SUP- | 27 |
 | ADM- | 2 |
 | RES- | 19 |
+| *(소계 `DB`/`SUP`/`ADM`/`RES`)* | **65** |
+| FORENSIC- | **9** |
+| **본문 ID 합계** | **74** |
 
 ### 교차 검증 (운영 DB forensic 반영 후, 본문 `#### [접두사-…]` 개수)
 
@@ -1201,9 +1277,10 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 | SUP- | 27 | ✅ |
 | ADM- | 2 | ✅ |
 | RES- | 19 | ✅ |
-| **합계** | **65** | ✅ |
+| FORENSIC- | 9 | ✅ |
+| **합계** | **74** | ✅ |
 
-유형 합: 구조위험 14 + 가짜 4 + 부분 15 + 미구현 8 + 확인 14 + 완료 10 = **65** ✅
+유형 합(`DB`/`SUP`/`ADM`/`RES` 표만): 구조위험 14 + 가짜 4 + 부분 15 + 미구현 8 + 확인 14 + 완료 10 = **65** ✅ — **`FORENSIC-*` 9건은 별도 축** (`## [FORENSIC]`).
 
 ---
 
@@ -1253,6 +1330,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 **Phase 6 — 관리자OS**  
 - **`ADM-TODO-001`** — 입력: **`ADM-CHECK-001`**, **`DB-TODO-002`**
 - **추가 (Phase 6에서 migration 생성)**: `relationships`(PRODUCT §8-6) + `trust_scores`(CONTEXT 정의) 테이블 신설 migration (Phase 1에서 방향 B 확정, `DB-TODO-003` 참조)
+- **교차 후속**: 정책·금융·신뢰도·거래 UI 등 레이어 격차는 **`FORENSIC-002`~`005`** 등 **`## [FORENSIC]`** 와 병행 추적
 
 **Phase 7 — 연체 시스템 설계**  
 - **대상**: **`SUP-DANGER-003`** (연체 시스템), **`SUP-PARTIAL-005`** (주문상태 이중 구조) — 두 항목 함께 설계 필요  
