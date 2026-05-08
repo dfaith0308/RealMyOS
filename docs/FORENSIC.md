@@ -2,7 +2,7 @@
 
 > 수정 전 현실 고정용 문서  
 > 운영 DB vs migration vs 앱 코드 불일치 기록  
-> 작성일: 2026-05-07 · **갱신: 2026-05-08** (`admin_logs`·RLS `WITH CHECK`·`customer_stats` · §3 알리고 역할 분리 · §4 **정책키 엔진 연결**)
+> 작성일: 2026-05-07 · **갱신: 2026-05-08** (`admin_logs`·RLS·`customer_stats`·`tenant_relationships`/`action_queue`/`admin_settings` · §3 알리고 역할 분리 · §4 **정책키 엔진 연결**)
 
 ---
 
@@ -168,4 +168,5 @@
 4. ✅ 알리고 역할 분리 확정 — `docs/FORENSIC.md` §3 (2026-05-08)
 5. ✅ 정책키 소비 코드 연결 — D-018, 본 표 및 코드 참조 (2026-05-08)
 6. ✅ `customer_stats` RLS — migration `20260508030000_fix_customer_stats_rls.sql` (2026-05-08)
-7. ⏳ CONTEXT.md·tasks.md 재수집
+7. ✅ 누락 RLS 배치 — `20260508040000_fix_missing_rls_policies.sql` + `product_related_manual` 운영 생성 정합 (2026-05-08)
+8. ⏳ CONTEXT.md·tasks.md 재수집

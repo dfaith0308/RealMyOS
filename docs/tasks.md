@@ -42,6 +42,7 @@
 - **작업 이력 (2026-05-08)**: 정책/실험 콘솔(ADM-MISSING-007) — worklog: [`docs/worklogs/2026-05-07_adm-missing-007_policy-console.md`](./worklogs/2026-05-07_adm-missing-007_policy-console.md)
 - **작업 이력 (2026-05-08)**: FORENSIC §4 정책키 5종 엔진 연결 + `DECISIONS.md` D-018 — worklog: [`docs/worklogs/2026-05-08_forensic-policy-keys-engine.md`](./worklogs/2026-05-08_forensic-policy-keys-engine.md)
 - **작업 이력 (2026-05-08)**: `customer_stats` RLS 소급 migration + `docs/FORENSIC.md` §5·§6·§7 정리 — worklog: [`docs/worklogs/2026-05-08_forensic-customer-stats-rls.md`](./worklogs/2026-05-08_forensic-customer-stats-rls.md)
+- **작업 이력 (2026-05-08)**: FORENSIC RLS 배치(`tenant_relationships`·`action_queue`·`admin_settings`) + `product_related_manual` 운영 생성 이력 주석 — worklog: [`docs/worklogs/2026-05-08_forensic-missing-rls-batch.md`](./worklogs/2026-05-08_forensic-missing-rls-batch.md)
 
 ---
 

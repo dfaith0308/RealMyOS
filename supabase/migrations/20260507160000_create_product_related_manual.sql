@@ -1,6 +1,8 @@
--- fix: product_related_manual migration 소급 생성
--- - 운영 DB에 존재하나 저장소 migrations에 누락된 테이블 추적 보완
--- - SUP-MISSING-009(연관상품 수동등록) 기반
+-- 주의: 2026-05-07 소급 생성했으나
+-- 운영 DB에 실제로 없었음이 확인됨
+-- 2026-05-08 Supabase에서 직접 생성 완료
+--
+-- 본 파일은 DDL 소급 추적용(SUP-MISSING-009 연관상품 수동등록).
 
 CREATE TABLE IF NOT EXISTS public.product_related_manual (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
