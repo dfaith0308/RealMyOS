@@ -87,12 +87,12 @@
 - **방향**: 점수 입력 소스·갱신 주기를 **PRODUCT**와 정렬·파이프라인 명세.
 - **연계**: **`ADM-MISSING-002`** 계열, `trust_scores`·RPC.
 
-#### [FORENSIC-005] 거래 단위 end-to-end 추적 UI 미구현
+#### [FORENSIC-005] 거래 단위 end-to-end 추적 UI 미구현 — **종료 (2026-05-08)**
 - **판정**: **MEDIUM**.
 - **현행**: `/admin/trades`는 이상 큐(`trade-monitor`·`action_queue`) 나열 중심.
-- **미구현**: 발주→낙찰→주문→정산 **타임라인 drill-down**.
-- **방향**: 거래 단위 식별자 체인 설계 후 UI 스펙 확정.
+- **조치 (2026-05-08)**: `/admin/trades/[id]` 드릴다운 신규 + `getTradeTimeline()`으로 RFQ→입찰→낙찰→주문→출고/납품→정산 단계별 타임라인/체류시간/이상 표시, 목록에서 **거래 상세 →** 링크 제공.
 - **연계**: **`ADM-MISSING-001`**, `docs/FORENSIC.md` 거래 관제 맥락.
+- **작업 이력 (2026-05-08)**: FORENSIC-005 거래 단위 타임라인 UI — worklog: [`docs/worklogs/2026-05-08_forensic-005-trade-timeline.md`](./worklogs/2026-05-08_forensic-005-trade-timeline.md)
 
 #### [FORENSIC-006] 주문 상태 이중 축 단일화 필요 — **종료 (2026-05-08)**
 - **판정**: **MEDIUM**.

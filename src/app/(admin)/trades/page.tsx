@@ -113,6 +113,15 @@ function Panel({ title, items }: { title: string; items: any[] }) {
                   <td className={s.tdNowrap}>{hoursSince(it.created_at)}h</td>
                   <td className={s.tdNowrap}>{String(it.created_at).slice(0, 16).replace('T', ' ')}</td>
                   <td className={s.tdNowrap}>
+                    {it?.action_options?.rfq_id ? (
+                      <Link href={`/admin/trades/${it.action_options.rfq_id}`} className={s.ghostBtn}>
+                        거래 상세 →
+                      </Link>
+                    ) : it?.action_options?.payment_id ? (
+                      <Link href={`/admin/trades/${it.action_options.payment_id}`} className={s.ghostBtn}>
+                        거래 상세 →
+                      </Link>
+                    ) : null}
                     <form action={resolve.bind(null, it.id)}>
                       <button type="submit" className={s.primaryBtn}>
                         처리
