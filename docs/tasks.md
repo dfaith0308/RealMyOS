@@ -49,6 +49,7 @@
 - **작업 이력 (2026-05-08)**: FORENSIC 감사 미등록 후속 `FORENSIC-001`~`009`를 `tasks.md`에 등록·집계 반영 — worklog: [`docs/worklogs/2026-05-08_docs_forensic-tasks-001-009.md`](./worklogs/2026-05-08_docs_forensic-tasks-001-009.md)
 - **작업 이력 (2026-05-08)**: FORENSIC-007·008 — `loading.tsx` 보강 + 관리자 인라인 스타일 `admin-shared.module.css` 이관 + **DB-TODO-001** 운영 종결 — worklog: [`docs/worklogs/2026-05-08_forensic-007-008-loading-admin-style.md`](./worklogs/2026-05-08_forensic-007-008-loading-admin-style.md)
 - **작업 이력 (2026-05-08)**: Next `'use server'` 규약 준수 — policy/contact 유틸·상수 lib 분리, 관리자 `/dashboard` 충돌 해소(`/admin/dashboard`) — worklog: [`docs/worklogs/2026-05-08_fix-use-server-exports-build.md`](./worklogs/2026-05-08_fix-use-server-exports-build.md)
+- **작업 이력 (2026-05-09)**: PRODUCT.md §13 자동발주 전략 추가 — worklog: [`docs/worklogs/2026-05-09_docs_product-13-auto-ordering.md`](./worklogs/2026-05-09_docs_product-13-auto-ordering.md)
 
 ---
 
