@@ -82,16 +82,17 @@
 - **[FORENSIC-002-C] A/B 테스트 생명주기**: 정책 A vs 정책 B 효과 비교
 - **[FORENSIC-002-D] 성과 평가 루프**: 정책 변경 → 결과 측정 → 자동 제안
 
-#### [FORENSIC-003] §10-9 금융 통제 범위 좁음
+#### [FORENSIC-003] §10-9 금융 통제 범위 좁음 — **부분 완료 (2026-05-08)**
 - **판정**: **HIGH** — PRODUCT 대비 구현 범위 좁음.
 - **현행**: 수수료 레코드 + 수동 정산 버튼 등 **`ADM-MISSING-005`/`006` 수준**.
-- **미구현**: 증빙 / 선지급(Credit Line) 운영 / 통합 상태 모델 등 §10-9 전 범위.
+- **미구현**: 파일 증빙(Storage) / 선지급(Credit Line) 운영 / 자동 정산 제안 등 §10-9 전 범위.
 - **방향**: §10-9 요구사항 **체크리스트화** 후 격차별 작업 분해.
 - **연계**: **`ADM-MISSING-005`**, **`ADM-MISSING-006`**, `docs/CONTEXT.md` [ARCH-08I].
 
 **MVP (지금 구현 가능)**:
-- **[FORENSIC-003-A] 정산 증빙 첨부**: settlements 화면에 파일 첨부 기능 (storage 연동 필요)
-- **[FORENSIC-003-B] 정산 상태 통합 표시**: payments + orders + settlements 통합 뷰
+- **[FORENSIC-003-A] 정산 증빙 — 완료 (2026-05-08, MVP)**: Storage 파일 첨부 대신 **`payments.settlement_memo`**(증빙 번호/메모) + 정산 처리 시 입력. 운영 DB 컬럼 적용 완료.
+- **[FORENSIC-003-B] 정산 상태 통합 표시 — 완료 (2026-05-08)**: `/admin/settlements`에 거래처별 **주문·수금·정산·미정산 잔액** 통합 뷰.
+  - **작업 이력 (2026-05-08)**: FORENSIC-003-A,B — worklog: [`docs/worklogs/2026-05-08_forensic-003ab-settlement.md`](./worklogs/2026-05-08_forensic-003ab-settlement.md)
 
 **중기**:
 - **[FORENSIC-003-C] 선지급(Credit Line) 시스템**: 신뢰도 기반 선지급 한도 설정 (credit_line 테이블 필요)

@@ -1,10 +1,15 @@
 import Link from 'next/link'
-import { getPendingSettlements, getPlatformRevenue, getSettlementHistory } from '@/actions/admin/settlement-control'
+import { getPendingSettlements, getPlatformRevenue, getSettlementHistory, getUnifiedSettlementView } from '@/actions/admin/settlement-control'
 import SettleOrderButton from './SettleOrderButton'
 import s from '../admin-shared.module.css'
 
 export default async function AdminSettlementsPage() {
-  const [rev, pend, hist] = await Promise.all([getPlatformRevenue(), getPendingSettlements(), getSettlementHistory()])
+  const [rev, pend, unified, hist] = await Promise.all([
+    getPlatformRevenue(),
+    getPendingSettlements(),
+    getUnifiedSettlementView(),
+    getSettlementHistory(),
+  ])
 
   return (
     <main className={s.main}>
@@ -48,6 +53,60 @@ export default async function AdminSettlementsPage() {
         <div className={s.alert}>{pend.error ?? '미정산 목록을 불러오지 못했습니다.'}</div>
       ) : (
         <>
+          <section className={s.panel}>
+            <div className={s.panelHeader}>
+              <h2 className={s.panelTitle}>정산 상태 통합 뷰 (거래처별)</h2>
+              <span className={s.inlineMuted}>정산 상태: 완료(초록) / 부분(노랑) / 미정산(빨강) · 30일 초과 시 경고</span>
+            </div>
+            {!unified.success || !unified.data ? (
+              <div className={s.alert}>{unified.error ?? '통합 뷰 조회 실패'}</div>
+            ) : unified.data.by_customer.length === 0 ? (
+              <div className={s.empty}>표시할 항목이 없습니다.</div>
+            ) : (
+              <div className={s.tableWrap}>
+                <table className={s.table}>
+                  <thead>
+                    <tr className={s.theadRow}>
+                      {['거래처', '공급 테넌트', '주문합', '수금합', '정산합', '미정산 잔액', '상태', '30일+'].map((h) => (
+                        <th key={h} className={s.th}>
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {unified.data.by_customer.map((c) => {
+                      const anyOver30 = c.orders.some((o) => o.is_over_30_days)
+                      const status =
+                        c.total_remaining_balance <= 0
+                          ? { cls: s.badgeScoreOk, label: '정산완료' }
+                          : c.total_paid_amount > 0 || c.total_settled_amount > 0
+                            ? { cls: s.badgeL2, label: '부분정산' }
+                            : { cls: s.badgeCritical, label: '미정산' }
+                      return (
+                        <tr key={`${c.seller_tenant_id}:${c.customer_id}`}>
+                          <td className={s.td}>
+                            <div className={s.cellStrong}>{c.customer_name}</div>
+                            <div className={s.cellMutedSm}>{c.customer_id ? `${c.customer_id.slice(0, 8)}…` : '—'}</div>
+                          </td>
+                          <td className={s.td}>{c.seller_tenant_id.slice(0, 8)}…</td>
+                          <td className={s.td}>{Math.round(c.total_order_amount).toLocaleString()}원</td>
+                          <td className={s.td}>{Math.round(c.total_paid_amount).toLocaleString()}원</td>
+                          <td className={s.td}>{Math.round(c.total_settled_amount).toLocaleString()}원</td>
+                          <td className={s.td}>{Math.round(c.total_remaining_balance).toLocaleString()}원</td>
+                          <td className={s.td}>
+                            <span className={status.cls}>{status.label}</span>
+                          </td>
+                          <td className={s.td}>{anyOver30 ? <span className={s.riskLabel}>경고</span> : <span className={s.mutedDash}>—</span>}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
           <section className={s.panel}>
             <div className={s.panelHeader}>
               <h2 className={s.panelTitle}>거래처별 미정산 합계</h2>

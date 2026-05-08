@@ -132,6 +132,35 @@ export interface SettlementHistoryRow {
   memo: string | null
 }
 
+export type UnifiedSettlementStatus = '정산완료' | '부분정산' | '미정산'
+
+export interface UnifiedSettlementOrderRow {
+  order_id: string
+  order_number: string
+  order_date: string
+  customer_id: string
+  customer_name: string
+  seller_tenant_id: string
+  order_amount: number
+  paid_amount: number
+  settled_amount: number
+  remaining_balance: number
+  days_pending: number
+  status_label: UnifiedSettlementStatus
+  is_over_30_days: boolean
+}
+
+export interface UnifiedSettlementCustomerGroup {
+  customer_id: string
+  customer_name: string
+  seller_tenant_id: string
+  total_order_amount: number
+  total_paid_amount: number
+  total_settled_amount: number
+  total_remaining_balance: number
+  orders: UnifiedSettlementOrderRow[]
+}
+
 export async function getPlatformRevenue(): Promise<ActionResult<PlatformRevenue>> {
   const supabase = await createSupabaseServer()
   const auth = await requireAdmin(supabase)
@@ -318,7 +347,7 @@ export async function getSettlementHistory(): Promise<ActionResult<SettlementHis
 
   const { data, error } = await supabase
     .from('payments')
-    .select('id, created_at, order_id, amount, status, memo')
+    .select('id, created_at, order_id, amount, status, memo, settlement_memo')
     .eq('type', 'settlement')
     .order('created_at', { ascending: false })
     .limit(50)
@@ -333,8 +362,147 @@ export async function getSettlementHistory(): Promise<ActionResult<SettlementHis
 
   return {
     success: true,
-    data: (data ?? []) as SettlementHistoryRow[],
+    data: (data ?? []).map((r: any) => ({
+      id: r.id,
+      created_at: r.created_at,
+      order_id: r.order_id ?? null,
+      amount: typeof r.amount === 'number' ? r.amount : 0,
+      status: String(r.status ?? ''),
+      memo: (r.settlement_memo ?? r.memo) != null ? String(r.settlement_memo ?? r.memo) : null,
+    })) as SettlementHistoryRow[],
   }
+}
+
+export async function getUnifiedSettlementView(): Promise<ActionResult<{ rows: UnifiedSettlementOrderRow[]; by_customer: UnifiedSettlementCustomerGroup[] }>> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const { data: orders, error: oErr } = await supabase
+    .from('orders')
+    .select('id, order_number, order_date, customer_id, tenant_id, seller_tenant_id, status, final_amount, total_amount')
+    .eq('status', 'confirmed')
+    .is('deleted_at', null)
+    .order('order_date', { ascending: false })
+    .limit(1200)
+
+  if (oErr) return { success: false, error: oErr.message }
+
+  const orderRows = (orders ?? []) as any[]
+  const orderIds = orderRows.map((o) => o.id).filter(Boolean)
+  if (orderIds.length === 0) return { success: true, data: { rows: [], by_customer: [] } }
+
+  const custIds = [...new Set(orderRows.map((o) => o.customer_id).filter(Boolean))]
+  const nameMap = new Map<string, string>()
+  if (custIds.length) {
+    const { data: cn } = await supabase.from('customers').select('id, name').in('id', custIds).limit(5000)
+    for (const c of (cn ?? []) as any[]) nameMap.set(String(c.id), c.name ?? '-')
+  }
+
+  // payments for these orders
+  const [{ data: pays, error: pErr }, { data: settles, error: sErr }] = await Promise.all([
+    supabase
+      .from('payments')
+      .select('order_id, amount, status, direction, type')
+      .in('order_id', orderIds)
+      .eq('status', 'confirmed')
+      .neq('type', 'settlement')
+      .eq('direction', 'inbound')
+      .limit(25000),
+    supabase
+      .from('payments')
+      .select('order_id, amount, status, type')
+      .in('order_id', orderIds)
+      .eq('status', 'confirmed')
+      .eq('type', 'settlement')
+      .limit(25000),
+  ])
+  if (pErr) return { success: false, error: pErr.message }
+  if (sErr) return { success: false, error: sErr.message }
+
+  const paidByOrder = new Map<string, number>()
+  for (const p of (pays ?? []) as any[]) {
+    const oid = String(p.order_id ?? '')
+    if (!oid) continue
+    const amt = typeof p.amount === 'number' ? p.amount : 0
+    paidByOrder.set(oid, (paidByOrder.get(oid) ?? 0) + amt)
+  }
+
+  const settledByOrder = new Map<string, number>()
+  for (const p of (settles ?? []) as any[]) {
+    const oid = String(p.order_id ?? '')
+    if (!oid) continue
+    const amt = typeof p.amount === 'number' ? p.amount : 0
+    settledByOrder.set(oid, (settledByOrder.get(oid) ?? 0) + amt)
+  }
+
+  const today = kstTodayDateString()
+  const rows: UnifiedSettlementOrderRow[] = orderRows.map((o) => {
+    const order_id = String(o.id)
+    const seller = String(o.seller_tenant_id ?? o.tenant_id ?? '')
+    const order_date = String(o.order_date).slice(0, 10)
+    let days_pending = Math.floor((new Date(today).getTime() - new Date(order_date).getTime()) / 86400000)
+    if (!Number.isFinite(days_pending) || days_pending < 0) days_pending = 0
+
+    const order_amount = orderAmount(o)
+    const paid_amount = paidByOrder.get(order_id) ?? 0
+    const settled_amount = settledByOrder.get(order_id) ?? 0
+    const remaining_balance = Math.max(0, Math.round(order_amount - paid_amount - settled_amount))
+
+    const status_label: UnifiedSettlementStatus =
+      remaining_balance <= 0 ? '정산완료' : (paid_amount > 0 || settled_amount > 0) ? '부분정산' : '미정산'
+
+    return {
+      order_id,
+      order_number: String(o.order_number ?? order_id),
+      order_date,
+      customer_id: String(o.customer_id ?? ''),
+      customer_name: nameMap.get(String(o.customer_id ?? '')) ?? '-',
+      seller_tenant_id: seller,
+      order_amount,
+      paid_amount,
+      settled_amount,
+      remaining_balance,
+      days_pending,
+      status_label,
+      is_over_30_days: days_pending > 30 && remaining_balance > 0,
+    }
+  })
+
+  const byCustomer = new Map<string, UnifiedSettlementCustomerGroup>()
+  for (const r of rows) {
+    const k = `${r.seller_tenant_id}:${r.customer_id}`
+    const ex = byCustomer.get(k)
+    if (!ex) {
+      byCustomer.set(k, {
+        customer_id: r.customer_id,
+        customer_name: r.customer_name,
+        seller_tenant_id: r.seller_tenant_id,
+        total_order_amount: r.order_amount,
+        total_paid_amount: r.paid_amount,
+        total_settled_amount: r.settled_amount,
+        total_remaining_balance: r.remaining_balance,
+        orders: [r],
+      })
+    } else {
+      ex.total_order_amount += r.order_amount
+      ex.total_paid_amount += r.paid_amount
+      ex.total_settled_amount += r.settled_amount
+      ex.total_remaining_balance += r.remaining_balance
+      ex.orders.push(r)
+    }
+  }
+
+  const groups = [...byCustomer.values()].sort((a, b) => b.total_remaining_balance - a.total_remaining_balance)
+
+  await insertAdminLog(supabase, {
+    admin_id: auth.ctx.user_id,
+    action_type: 'settlement_unified_view',
+    target_table: 'orders/payments',
+    new_value: { order_count: rows.length, customer_groups: groups.length },
+  }).catch(() => {})
+
+  return { success: true, data: { rows, by_customer: groups } }
 }
 
 async function completeRelatedActionQueue(supabase: any, adminId: string, orderId: string) {
@@ -363,7 +531,7 @@ async function completeRelatedActionQueue(supabase: any, adminId: string, orderI
   if (error) throw new Error(error.message)
 }
 
-export async function processSettlement(order_id: string): Promise<ActionResult<{ payment_id: string }>> {
+export async function processSettlement(order_id: string, settlement_memo?: string | null): Promise<ActionResult<{ payment_id: string }>> {
   const supabase = await createSupabaseServer()
   const auth = await requireAdmin(supabase)
   if (!auth.ok) return { success: false, error: auth.error }
@@ -411,6 +579,7 @@ export async function processSettlement(order_id: string): Promise<ActionResult<
     due_date: today,
     payment_method: 'platform',
     memo: `플랫폼 수수료 정산 — 주문 ${(order as any).order_number ?? order_id}`,
+    settlement_memo: settlement_memo ? String(settlement_memo).slice(0, 500) : null,
     status: 'confirmed',
     direction: 'inbound',
     deposit_amount: 0,
@@ -433,7 +602,7 @@ export async function processSettlement(order_id: string): Promise<ActionResult<
     target_table: 'payments',
     target_id: inserted?.id ?? null,
     old_value: { order_id },
-    new_value: { payment_id: inserted?.id, fee_percent_used: feePct, fee_amount: feeAmount },
+    new_value: { payment_id: inserted?.id, fee_percent_used: feePct, fee_amount: feeAmount, settlement_memo: settlement_memo ?? null },
   })
   if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
 

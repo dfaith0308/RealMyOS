@@ -18,17 +18,19 @@ export default function SettleOrderButton({
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [memo, setMemo] = useState('')
 
   async function onConfirm() {
     setBusy(true)
     setErr(null)
-    const r = await processSettlement(orderId)
+    const r = await processSettlement(orderId, memo)
     setBusy(false)
     if (!r.success) {
       setErr(r.error ?? '정산 처리 실패')
       return
     }
     setOpen(false)
+    setMemo('')
     router.refresh()
   }
 
@@ -48,6 +50,19 @@ export default function SettleOrderButton({
               <code className={s.code}>admin_settings.platform_fee_rate</code>)
             </p>
             <p className={s.modalMuted}>주문 금액(참고): {amount.toLocaleString()}원</p>
+            <div className={s.policyEditGap}>
+              <label className={s.policyDesc}>
+                정산 메모 (증빙 번호/메모)
+                <input
+                  type="text"
+                  value={memo}
+                  onChange={(e) => setMemo(e.target.value)}
+                  className={s.policyInput}
+                  disabled={busy}
+                  placeholder="예: 세금계산서 2026-05-08 / 입금확인"
+                />
+              </label>
+            </div>
             {err && (
               <p className={s.modalAlert} role="alert">
                 {err}
