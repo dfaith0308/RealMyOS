@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition, useEffect, useRef } from 'react'
+import { useState, useTransition, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createProduct } from '@/actions/product'
 import type { ProductCopyData } from '@/actions/product'
@@ -9,6 +9,7 @@ import { calcMarginRate, formatKRW } from '@/lib/calc'
 import SearchableSelectWithAdd from '@/components/common/SearchableSelectWithAdd'
 import type { Category } from '@/actions/category'
 import type { SelectOption } from '@/components/common/SearchableSelectWithAdd'
+import BarcodeLookupSection, { type ProductBarcodeApplyHints } from '@/components/product/BarcodeLookupSection'
 
 interface Supplier { id: string; name: string }
 
@@ -90,6 +91,15 @@ export default function ProductCreateForm({ categories: initCats, suppliers, cop
 
   const cost = Number(costPrice) || 0
 
+  const applyBarcodeHints = useCallback((h: ProductBarcodeApplyHints) => {
+    if (h.name != null) setName(h.name)
+    if (h.barcode != null) setBarcode(h.barcode)
+    if (h.item_report_number != null) setItemReportNumber(h.item_report_number)
+    if (h.ingredients != null) setIngredients(h.ingredients)
+    if (h.categoryId != null) setCategoryId(h.categoryId)
+    if (h.costPrice != null) setCostPrice(h.costPrice)
+  }, [])
+
   function handleMarginInput(v: string) {
     setMarginInput(v)
     const m = Number(v) / 100
@@ -145,6 +155,8 @@ export default function ProductCreateForm({ categories: initCats, suppliers, cop
       )}
       <h1 style={s.title}>상품 등록</h1>
       {error && <div style={s.err}>{error}</div>}
+
+      <BarcodeLookupSection categories={initCats} onApply={applyBarcodeHints} />
 
       <form onSubmit={handleSubmit} style={s.form}>
 
