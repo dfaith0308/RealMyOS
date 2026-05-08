@@ -1,5 +1,6 @@
 -- HIGH: admin_settings SELECT 전면 허용 수정
 -- DB 실행 금지 (migration 제안 파일)
+-- 운영 DB 적용 완료 (2026-05-08)
 --
 -- 기존 정책:
 --   CREATE POLICY "admin_settings_read" ... USING (true)
