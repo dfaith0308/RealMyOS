@@ -10,6 +10,7 @@ import {
   type GroupedPolicySettings,
   type PolicySettingItem,
 } from '@/actions/admin/policy-console'
+import s from '../admin-shared.module.css'
 
 const SHORT_LABEL: Record<string, string> = {
   platform_fee_rate: '플랫폼 수수료율',
@@ -31,7 +32,8 @@ const SHORT_LABEL: Record<string, string> = {
 }
 
 function maskValue(key: string, value: string) {
-  if (key === 'aligo_api_key' && value.length > 0) return '•'.repeat(Math.min(24, value.length)) + (value.length > 24 ? '…' : '')
+  if (key === 'aligo_api_key' && value.length > 0)
+    return '•'.repeat(Math.min(24, value.length)) + (value.length > 24 ? '…' : '')
   return value || '—'
 }
 
@@ -111,7 +113,7 @@ export default function PolicyConsoleClient({ initial }: { initial: GroupedPolic
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div className={s.stackCol}>
       <PolicySection title="1. 수수료 정책">
         <PolicyRows
           items={initial.fee}
@@ -183,11 +185,11 @@ export default function PolicyConsoleClient({ initial }: { initial: GroupedPolic
       </PolicySection>
 
       <PolicySection title="5. 알림 설정 (알리고)">
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
-          <button type="button" style={btnSecondary} disabled={pending} onClick={sendTest}>
+        <div className={s.policyNotifyRow}>
+          <button type="button" className={s.policySecondaryBtn} disabled={pending} onClick={sendTest}>
             테스트 발송
           </button>
-          {testMsg && <span style={{ fontSize: 13, color: '#374151' }}>{testMsg}</span>}
+          {testMsg && <span className={s.testMsg}>{testMsg}</span>}
         </div>
         <PolicyRows
           items={initial.notify}
@@ -203,38 +205,26 @@ export default function PolicyConsoleClient({ initial }: { initial: GroupedPolic
       </PolicySection>
 
       {applyOpen && applyPayload && (
-        <div style={overlay}>
-          <div style={modal}>
-            <h3 style={{ margin: '0 0 10px', fontSize: 16, fontWeight: 900 }}>정책 적용 확인</h3>
-            <p style={{ margin: 0, fontSize: 13, color: '#374151', lineHeight: 1.55 }}>
+        <div className={s.overlayModal}>
+          <div className={s.modalBox}>
+            <h3 className={s.modalTitle}>정책 적용 확인</h3>
+            <p className={s.modalBody}>
               이 값을 변경하면 <strong>즉시 적용</strong>됩니다. (캐시 없음)
             </p>
-            <p style={{ margin: '10px 0 0', fontSize: 12, color: '#6b7280' }}>
-              키: <code>{applyPayload.key}</code>
+            <p className={s.modalMuted}>
+              키: <code className={s.code}>{applyPayload.key}</code>
             </p>
-            <pre
-              style={{
-                margin: '12px 0 0',
-                padding: 10,
-                background: '#f9fafb',
-                borderRadius: 8,
-                fontSize: 13,
-                overflow: 'auto',
-                maxHeight: 120,
-              }}
-            >
-              {applyPayload.value || '(빈 값)'}
-            </pre>
+            <pre className={s.modalPre}>{applyPayload.value || '(빈 값)'}</pre>
             {applyErr && (
-              <p style={{ color: '#DC2626', fontSize: 13, fontWeight: 700, marginTop: 12 }} role="alert">
+              <p className={s.modalAlert} role="alert">
                 {applyErr}
               </p>
             )}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
-              <button type="button" style={btnGhost} disabled={pending} onClick={() => setApplyOpen(false)}>
+            <div className={s.modalFooter}>
+              <button type="button" className={s.policyCompactGhost} disabled={pending} onClick={() => setApplyOpen(false)}>
                 취소
               </button>
-              <button type="button" style={btnPrimary} disabled={pending} onClick={confirmApply}>
+              <button type="button" className={s.policyCompactPrimary} disabled={pending} onClick={confirmApply}>
                 {pending ? '저장 중…' : '확인 후 적용'}
               </button>
             </div>
@@ -243,28 +233,26 @@ export default function PolicyConsoleClient({ initial }: { initial: GroupedPolic
       )}
 
       {histOpen && (
-        <div style={overlay}>
-          <div style={{ ...modal, width: 'min(560px, 100%)' }}>
-            <h3 style={{ margin: '0 0 10px', fontSize: 16, fontWeight: 900 }}>변경 이력</h3>
-            <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>
-              키: <code>{histKey}</code>
+        <div className={s.overlayModal}>
+          <div className={`${s.modalBox} ${s.modalWide}`}>
+            <h3 className={s.modalTitle}>변경 이력</h3>
+            <p className={s.modalMuted}>
+              키: <code className={s.code}>{histKey}</code>
             </p>
-            {histLoading && <p style={{ marginTop: 12, fontSize: 13 }}>불러오는 중…</p>}
+            {histLoading && <p className={s.loadingHint}>불러오는 중…</p>}
             {histErr && (
-              <p style={{ color: '#DC2626', marginTop: 12, fontSize: 13 }} role="alert">
+              <p className={s.modalAlert} role="alert">
                 {histErr}
               </p>
             )}
-            {!histLoading && !histErr && histRows.length === 0 && (
-              <p style={{ marginTop: 12, fontSize: 13, color: '#9ca3af' }}>이력이 없습니다.</p>
-            )}
+            {!histLoading && !histErr && histRows.length === 0 && <p className={s.emptyHist}>이력이 없습니다.</p>}
             {!histLoading && histRows.length > 0 && (
-              <div style={{ overflowX: 'auto', marginTop: 12 }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <div className={s.historyTableWrap}>
+                <table className={s.table}>
                   <thead>
-                    <tr style={{ background: '#f9fafb' }}>
+                    <tr className={s.theadRow}>
                       {['일시', '이전', '이후', '변경자'].map((h) => (
-                        <th key={h} style={th}>
+                        <th key={h} className={s.thSm}>
                           {h}
                         </th>
                       ))}
@@ -273,18 +261,18 @@ export default function PolicyConsoleClient({ initial }: { initial: GroupedPolic
                   <tbody>
                     {histRows.map((r) => (
                       <tr key={r.id}>
-                        <td style={td}>{String(r.created_at).slice(0, 19).replace('T', ' ')}</td>
-                        <td style={td}>{r.before_value ?? '—'}</td>
-                        <td style={td}>{r.after_value ?? '—'}</td>
-                        <td style={td}>{r.admin_id ? `${String(r.admin_id).slice(0, 8)}…` : '—'}</td>
+                        <td className={s.tdSm}>{String(r.created_at).slice(0, 19).replace('T', ' ')}</td>
+                        <td className={s.tdSm}>{r.before_value ?? '—'}</td>
+                        <td className={s.tdSm}>{r.after_value ?? '—'}</td>
+                        <td className={s.tdSm}>{r.admin_id ? `${String(r.admin_id).slice(0, 8)}…` : '—'}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             )}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
-              <button type="button" style={btnPrimary} onClick={() => setHistOpen(false)}>
+            <div className={s.modalFooterLoose}>
+              <button type="button" className={s.policyCompactPrimary} onClick={() => setHistOpen(false)}>
                 닫기
               </button>
             </div>
@@ -297,11 +285,11 @@ export default function PolicyConsoleClient({ initial }: { initial: GroupedPolic
 
 function PolicySection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section style={panel}>
-      <div style={panelHeader}>
-        <h2 style={panelTitle}>{title}</h2>
+    <section className={s.panel}>
+      <div className={s.panelHeader}>
+        <h2 className={s.panelTitle}>{title}</h2>
       </div>
-      <div style={{ padding: 14 }}>{children}</div>
+      <div className={s.panelBody}>{children}</div>
     </section>
   )
 }
@@ -320,60 +308,47 @@ function PolicyRows(props: {
   const { items, editKey, editDraft, pending, onDraftChange, onEdit, onCancel, onSave, onHistory } = props
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div className={s.policyRowsStack}>
       {items.map((item) => {
         const label = SHORT_LABEL[item.key] ?? item.key
         const editing = editKey === item.key
 
         return (
-          <div
-            key={item.key}
-            style={{
-              border: '1px solid #e5e7eb',
-              borderRadius: 10,
-              padding: '12px 14px',
-              display: 'grid',
-              gridTemplateColumns: 'minmax(0, 1fr) auto',
-              gap: 12,
-              alignItems: 'start',
-            }}
-          >
+          <div key={item.key} className={s.policyRowCard}>
             <div>
-              <div style={{ fontWeight: 900, fontSize: 14, color: '#111827' }}>{label}</div>
-              <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>{item.description ?? ''}</div>
-              <div style={{ marginTop: 10 }}>
+              <div className={s.policyLabel}>{label}</div>
+              <div className={s.policyDesc}>{item.description ?? ''}</div>
+              <div className={s.policyEditGap}>
                 {editing ? (
                   <input
                     type="text"
                     value={editDraft}
                     onChange={(e) => onDraftChange(e.target.value)}
-                    style={inputStyle}
+                    className={s.policyInput}
                     disabled={pending}
                   />
                 ) : (
-                  <div style={{ fontSize: 15, fontWeight: 700, color: '#111827', wordBreak: 'break-all' }}>
-                    {maskValue(item.key, item.value)}
-                  </div>
+                  <div className={s.policyValue}>{maskValue(item.key, item.value)}</div>
                 )}
               </div>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <div className={s.policyActionsCol}>
+              <div className={s.policyActionsRow}>
                 {editing ? (
                   <>
-                    <button type="button" style={btnGhost} disabled={pending} onClick={onCancel}>
+                    <button type="button" className={s.policyCompactGhost} disabled={pending} onClick={onCancel}>
                       취소
                     </button>
-                    <button type="button" style={btnPrimary} disabled={pending} onClick={onSave}>
+                    <button type="button" className={s.policyCompactPrimary} disabled={pending} onClick={onSave}>
                       저장
                     </button>
                   </>
                 ) : (
-                  <button type="button" style={btnGhost} disabled={pending} onClick={() => onEdit(item)}>
+                  <button type="button" className={s.policyCompactGhost} disabled={pending} onClick={() => onEdit(item)}>
                     수정
                   </button>
                 )}
-                <button type="button" style={btnGhost} disabled={pending} onClick={() => onHistory(item.key)}>
+                <button type="button" className={s.policyCompactGhost} disabled={pending} onClick={() => onHistory(item.key)}>
                   이력
                 </button>
               </div>
@@ -383,80 +358,4 @@ function PolicyRows(props: {
       })}
     </div>
   )
-}
-
-const panel: React.CSSProperties = {
-  background: '#fff',
-  border: '1px solid #e5e7eb',
-  borderRadius: 12,
-  overflow: 'hidden',
-}
-const panelHeader: React.CSSProperties = {
-  padding: '12px 14px',
-  borderBottom: '1px solid #f3f4f6',
-}
-const panelTitle: React.CSSProperties = { margin: 0, fontSize: 14, fontWeight: 900 }
-
-const btnPrimary: React.CSSProperties = {
-  padding: '8px 12px',
-  borderRadius: 10,
-  border: 'none',
-  background: '#111827',
-  color: '#fff',
-  fontSize: 12,
-  fontWeight: 800,
-  cursor: 'pointer',
-}
-const btnGhost: React.CSSProperties = {
-  ...btnPrimary,
-  background: '#fff',
-  color: '#111827',
-  border: '1px solid #e5e7eb',
-}
-const btnSecondary: React.CSSProperties = {
-  ...btnPrimary,
-  background: '#047857',
-}
-
-const overlay: React.CSSProperties = {
-  position: 'fixed',
-  inset: 0,
-  background: 'rgba(17,24,39,0.35)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  zIndex: 50,
-  padding: 16,
-}
-const modal: React.CSSProperties = {
-  width: 'min(440px, 100%)',
-  background: '#fff',
-  borderRadius: 14,
-  padding: '22px 20px',
-  boxShadow: '0 18px 50px rgba(0,0,0,0.18)',
-}
-
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  maxWidth: 420,
-  padding: '8px 10px',
-  borderRadius: 8,
-  border: '1px solid #e5e7eb',
-  fontSize: 14,
-}
-
-const th: React.CSSProperties = {
-  textAlign: 'left',
-  fontSize: 11,
-  color: '#6b7280',
-  padding: '8px 10px',
-  borderBottom: '1px solid #e5e7eb',
-}
-const td: React.CSSProperties = {
-  fontSize: 12,
-  color: '#111827',
-  padding: '8px 10px',
-  borderBottom: '1px solid #f3f4f6',
-  verticalAlign: 'top',
-  wordBreak: 'break-all',
 }

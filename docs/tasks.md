@@ -47,6 +47,7 @@
 - **작업 이력 (2026-05-08)**: `admin_settings` RLS 읽기 공개·쓰기 관리자 분리(`20260508050000`) — worklog: [`docs/worklogs/2026-05-08_forensic-admin-settings-rls-readwrite.md`](./worklogs/2026-05-08_forensic-admin-settings-rls-readwrite.md)
 - **작업 이력 (2026-05-08)**: `docs/CONTEXT.md` 재수집(운영 테이블 70·migration 35·관리자 라우트·middleware)·`tasks.md` 인벤토리·`ADM-CHECK-001` 종결·`FORENSIC.md` §7 — worklog: [`docs/worklogs/2026-05-08_context-recollect.md`](./worklogs/2026-05-08_context-recollect.md)
 - **작업 이력 (2026-05-08)**: FORENSIC 감사 미등록 후속 `FORENSIC-001`~`009`를 `tasks.md`에 등록·집계 반영 — worklog: [`docs/worklogs/2026-05-08_docs_forensic-tasks-001-009.md`](./worklogs/2026-05-08_docs_forensic-tasks-001-009.md)
+- **작업 이력 (2026-05-08)**: FORENSIC-007·008 — `loading.tsx` 보강 + 관리자 인라인 스타일 `admin-shared.module.css` 이관 + **DB-TODO-001** 운영 종결 — worklog: [`docs/worklogs/2026-05-08_forensic-007-008-loading-admin-style.md`](./worklogs/2026-05-08_forensic-007-008-loading-admin-style.md)
 - **작업 이력 (2026-05-08)**: Next `'use server'` 규약 준수 — policy/contact 유틸·상수 lib 분리, 관리자 `/dashboard` 충돌 해소(`/admin/dashboard`) — worklog: [`docs/worklogs/2026-05-08_fix-use-server-exports-build.md`](./worklogs/2026-05-08_fix-use-server-exports-build.md)
 
 ---
@@ -101,17 +102,15 @@
 - **방향**: 상태 머신을 **PRODUCT 한 장**으로 고정 후 코드·DB 정렬.
 - **연계**: **`SUP-PARTIAL-005`**, Phase 7 연체 설계와 간섭 시 통합 검토.
 
-#### [FORENSIC-007] loading.tsx 불균일
+#### [FORENSIC-007] loading.tsx 불균일 — **종료 (2026-05-08)**
 - **판정**: **MEDIUM** (UX).
-- **현행**: 일부 라우트에만 `loading.tsx` 존재(실측 약 **7경로** 수준 — 증감 시 본 항목 갱신).
-- **문제**: 로딩·스켈레톤 경험 **들쭉날쭉**.
-- **방향**: 라우트 그룹`(app)`/`(admin)`별 **로딩 패턴 가이드** 수립 후 적용 페이즈.
+- **현행**: `(app)`·`(admin)` 지정 라우트에 **`loading.tsx`** 보감 · 공통 **`DefaultRouteLoading`** (`@/components/route-loading`) · 스피너 **`globals.css` `.loading-spinner`** (`--ds-*` 보더/브랜드색).
+- **작업 이력 (2026-05-08)**: 누락 경로 `loading.tsx` 추가 + 스피너 토큰화 — worklog: [`docs/worklogs/2026-05-08_forensic-007-008-loading-admin-style.md`](./worklogs/2026-05-08_forensic-007-008-loading-admin-style.md)
 
-#### [FORENSIC-008] 관리자 화면 인라인 스타일
+#### [FORENSIC-008] 관리자 화면 인라인 스타일 — **종료 (2026-05-08)**
 - **판정**: **LOW–MEDIUM** (Design System).
-- **현행**: `/admin/trades` 등 `style={{ }}` 패턴 잔존.
-- **문제**: DS 토큰(`--ds-*`)과 공존 → **일관성 저하**.
-- **방향**: 관리자 라우트 그룹 **DS 적용 범위·페이즈** 문서화.
+- **현행**: 거래·참여자·학습·엔진·성장·정산·정책 화면 **`admin-shared.module.css`** (`--ds-*`) + 클라이언트 동일 모듈로 **`style={{ }}`** 제거(차트 높이·프로그레스 폭 등 **CSS 변수 한 줄**만 잔류).
+- **작업 이력 (2026-05-08)**: 관리자 지정 라우트 스타일 모듈화 — 동일 worklog 참조.
 
 #### [FORENSIC-009] 성장 지표 쿼리 상한·근사치
 - **판정**: **MEDIUM** (Performance).
@@ -188,11 +187,12 @@
 
 ### ❌ DB 미구현·미입증 (PRODUCT 대비, DB-TODO)
 
-#### [DB-TODO-001] `settings_logs` (PRODUCT 6-14, 설정 변경 감사)
-- **확인 내용**: `SUP-PARTIAL-003`에서 앱 기록 부재. 워크스페이스 `realmyos`에 해당 테이블을 정의하는 migration 파일 **없음**.
-- **Forensic (운영 DB)**: **`settings_logs` 테이블 없음** 확정.
-- **완료 기준**: 테이블·앱 기록 또는 PRODUCT에서 제외 명시
-- **작업 이력 (2026-05-06)**: 테이블·RLS 포함 migration 파일 추가(미적용) — `supabase/migrations/20260506130000_create_settings_logs.sql` — worklog: [`docs/worklogs/2026-05-06_phase1_db-todo-001-002_migration-files.md`](./worklogs/2026-05-06_phase1_db-todo-001-002_migration-files.md)
+#### [DB-TODO-001] `settings_logs` (PRODUCT 6-14, 설정 변경 감사) — **종료 (운영 DB 확인·2026-05-08)**
+- **확인 내용 (이력)**: 저장소 migration `20260506130000_create_settings_logs.sql` — 앱 연동은 **`SUP-PARTIAL-003`** 종료 시점에 반영됨.
+- **Forensic (운영 DB·2026-05-08 재확인)**: 테이블 **존재** — 컬럼 **`id` / `tenant_id` / `key` / `old_value` / `new_value` / `changed_by` / `changed_at`**. **RLS**: **SELECT·INSERT** 모두 **`tenant_id` 기반 정상**.
+- **완료 기준 충족**: **예** — 스키마·격리·앱 기록 축 정합 (`saveSettings` 경로).
+- **작업 이력 (2026-05-06)**: 테이블·RLS 포함 migration 파일 추가 — `supabase/migrations/20260506130000_create_settings_logs.sql` — worklog: [`docs/worklogs/2026-05-06_phase1_db-todo-001-002_migration-files.md`](./worklogs/2026-05-06_phase1_db-todo-001-002_migration-files.md)
+- **작업 이력 (2026-05-08)**: 운영 DB 실존·컬럼·RLS 재확인 후 본 항목 **`tasks.md` 종결** — worklog: [`docs/worklogs/2026-05-08_forensic-007-008-loading-admin-style.md`](./worklogs/2026-05-08_forensic-007-008-loading-admin-style.md)
 
 #### [DB-TODO-002] `admin_logs` (관리자 활동 감사, `ADM-CHECK-001` 맥락)
 - **확인 내용**: 관리자OS 라우트 부재 + migration 부재로 **스키마·기록 강제 미입증**.
@@ -1250,11 +1250,11 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 
 | 대상 | 구조위험 | 가짜구현 | 부분구현 | 미구현 | 확인필요 | 완료 | 합계 |
 |------|----------|----------|----------|--------|----------|------|------|
-| 공통 DB (`DB-*`) | 4 | 2 | 1 | 2 | 8 | 0 | **17** |
+| 공통 DB (`DB-*`) | 4 | 2 | 1 | 1 | 8 | 1 | **17** |
 | 공급자OS (`SUP-*`) | 6 | 1 | 7 | 5 | 3 | 5 | **27** |
 | 관리자OS (`ADM-*`) | 0 | 0 | 0 | 1 | 1 | 0 | **2** |
 | 식당OS (`RES-*`) | 4 | 1 | 7 | 0 | 2 | 5 | **19** |
-| **전체** | **14** | **4** | **15** | **8** | **14** | **10** | **65** |
+| **전체** | **14** | **4** | **15** | **7** | **14** | **11** | **65** |
 
 > **DB 확인 8건**: `DB-CHECK-001`~`006`은 **forensic 종결(006은 스키마 스냅샷 diff 기록 완료)**. **`007`·`008`**은 미결. **`DB-CHECK-004`** 의 **`WITH CHECK`** 잔여는 **2026-05-08 종결** (`20260508020000_fix_rls_with_check.sql`).
 
@@ -1281,7 +1281,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 | FORENSIC- | 9 | ✅ |
 | **합계** | **74** | ✅ |
 
-유형 합(`DB`/`SUP`/`ADM`/`RES` 표만): 구조위험 14 + 가짜 4 + 부분 15 + 미구현 8 + 확인 14 + 완료 10 = **65** ✅ — **`FORENSIC-*` 9건은 별도 축** (`## [FORENSIC]`).
+유형 합(`DB`/`SUP`/`ADM`/`RES` 표만): 구조위험 14 + 가짜 4 + 부분 15 + 미구현 7 + 확인 14 + 완료 11 = **65** ✅ — **`FORENSIC-*` 9건은 별도 축** (`## [FORENSIC]`).
 
 ---
 
@@ -1298,7 +1298,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 
 **Phase 1 — 스키마·정책 위험** — **완료 (2026-05-06, 문서 기준)**  
 - **시작 조건**: **Migration governance 확립** — `realmyos/supabase/migrations/README.md` 기준의 **운영 DB SSOT·baseline·incremental·dev → validation → production** 적용·승인 흐름이 채택됨. 과거 migration 복원·히스토리 재구성·환각 DDL 금지. **실제 스키마 변경 SQL 실행·DROP·RPC/테이블 수정은 별 승인·별 작업.**
-- **`DB-DANGER-002`** (2026-05-06 **종료** — 레거시 `schema.sql`·운영 SSOT 확정, 본문 참조), **`DB-DANGER-003`** (2026-05-06 **종료 (저장소)** — `action_kind` CHECK 확장 migration 추가·**DB 미적용**, 본문 참조), **`DB-TODO-001`**, **`DB-TODO-002`**, **`DB-TODO-003`** (⚠️ 부분 — `trust_score`/`signal` 미구현) — DDL·PRODUCT·앱 정렬 방향 확정 (구현은 별 작업)  
+- **`DB-DANGER-002`** (2026-05-06 **종료** — 레거시 `schema.sql`·운영 SSOT 확정, 본문 참조), **`DB-DANGER-003`** (2026-05-06 **종료 (저장소)** — `action_kind` CHECK 확장 migration 추가·**DB 미적용**, 본문 참조), **`DB-TODO-001`** (**2026-05-08 종료** — 운영 `settings_logs`·RLS 확인), **`DB-TODO-002`**, **`DB-TODO-003`** (⚠️ 부분 — `trust_score`/`signal` 미구현) — DDL·PRODUCT·앱 정렬 방향 확정 (구현은 별 작업)  
 - 병렬: **`DB-CHECK-007`**, **`DB-CHECK-008`**
 - migration 파일 검증 완료 (2026-05-06):
   worklog: docs/worklogs/2026-05-06_phase1_migration-validation.md

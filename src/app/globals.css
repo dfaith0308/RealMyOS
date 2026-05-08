@@ -204,3 +204,19 @@ tr[data-status="cancelled"] {
   size: A4;
   margin: 15mm;
 }
+
+/* ── 라우트 전환 로딩 (`loading.tsx`) ─────────────────────── */
+.loading-spinner {
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--ds-border-default);
+  border-top-color: var(--ds-brand-primary);
+  border-radius: 50%;
+  animation: ds-route-spin 0.7s linear infinite;
+}
+
+@keyframes ds-route-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
