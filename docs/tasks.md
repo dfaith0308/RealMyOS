@@ -47,6 +47,7 @@
 - **작업 이력 (2026-05-08)**: `admin_settings` RLS 읽기 공개·쓰기 관리자 분리(`20260508050000`) — worklog: [`docs/worklogs/2026-05-08_forensic-admin-settings-rls-readwrite.md`](./worklogs/2026-05-08_forensic-admin-settings-rls-readwrite.md)
 - **작업 이력 (2026-05-08)**: `docs/CONTEXT.md` 재수집(운영 테이블 70·migration 35·관리자 라우트·middleware)·`tasks.md` 인벤토리·`ADM-CHECK-001` 종결·`FORENSIC.md` §7 — worklog: [`docs/worklogs/2026-05-08_context-recollect.md`](./worklogs/2026-05-08_context-recollect.md)
 - **작업 이력 (2026-05-08)**: FORENSIC 감사 미등록 후속 `FORENSIC-001`~`009`를 `tasks.md`에 등록·집계 반영 — worklog: [`docs/worklogs/2026-05-08_docs_forensic-tasks-001-009.md`](./worklogs/2026-05-08_docs_forensic-tasks-001-009.md)
+- **작업 이력 (2026-05-08)**: Next `'use server'` 규약 준수 — policy/contact 유틸·상수 lib 분리, 관리자 `/dashboard` 충돌 해소(`/admin/dashboard`) — worklog: [`docs/worklogs/2026-05-08_fix-use-server-exports-build.md`](./worklogs/2026-05-08_fix-use-server-exports-build.md)
 
 ---
 

@@ -5,34 +5,13 @@ import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import { updateActionConversion } from '@/actions/action-log'
 import type { ConversionStatus } from '@/actions/action-log'
 import type { ActionResult } from '@/types/order'
+import type { CustomerStatusType, OutcomeType } from '@/lib/contact-options'
 
 export type ContactMethod = 'call' | 'visit' | 'message' | 'payment'
 export type ContactResult  = 'connected' | 'no_answer' | 'interested' | 'rejected' | 'scheduled'
 export type NextActionType = 'call' | 'visit' | 'message'
 
-export const OUTCOME_TYPES = [
-  { value: 'interested',         label: '관심있음' },
-  { value: 'potential',          label: '잠재고객' },
-  { value: 'maintained',         label: '관계유지' },
-  { value: 'churn_risk',         label: '이탈위험' },
-  { value: 'competitor',         label: '경쟁사사용' },
-  { value: 'rejected',           label: '거절' },
-  { value: 'no_answer',          label: '부재중' },
-  { value: 'callback_requested', label: '콜백요청' },
-  { value: 'order_placed',       label: '주문성사' },
-] as const
-
-export type OutcomeType = typeof OUTCOME_TYPES[number]['value']
-
-export const CUSTOMER_STATUS_OPTIONS = [
-  { value: 'regular', label: '단골' },
-  { value: 'new',     label: '신규' },
-  { value: 'churn',   label: '이탈' },
-  { value: 'dormant', label: '휴면' },
-] as const
-
-export type CustomerStatusType = typeof CUSTOMER_STATUS_OPTIONS[number]['value']
-
+export type { CustomerStatusType, OutcomeType }
 export interface CreateContactLogInput {
   customer_id:        string
   contact_method:     ContactMethod

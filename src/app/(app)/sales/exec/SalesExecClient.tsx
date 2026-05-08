@@ -5,7 +5,8 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createContactLog } from '@/actions/contact'
 import { updateScheduleStatus, type ExecCenterTarget, type SalesScript } from '@/actions/sales'
-import { sendAligo, smsByteLength } from '@/actions/message'
+import { sendAligo } from '@/actions/message'
+import { smsByteLength } from '@/lib/sms-byte-length'
 
 function kstDateOnly(iso: string | null) {
   if (!iso) return '-'

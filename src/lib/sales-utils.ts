@@ -1,4 +1,4 @@
-import type { OutcomeType } from '@/actions/contact'
+import type { OutcomeType } from '@/lib/contact-options'
 
 // next_action_date 자동 계산 유틸
 // actions 파일 밖에 위치 (Server Action 규칙 준수)

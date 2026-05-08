@@ -1,6 +1,7 @@
 'use server'
 
-import { getTrustLevelThresholds, resolveTrustLevel } from '@/actions/admin/policy-console'
+import { getTrustLevelThresholds } from '@/actions/admin/policy-console'
+import { resolveTrustLevel } from '@/lib/policy-utils'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 
 type ActionResult<T = void> = { success: boolean; data?: T; error?: string }

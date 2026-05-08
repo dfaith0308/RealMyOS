@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { smsByteLength } from '@/lib/sms-byte-length'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import type { ActionResult } from '@/types/order'
 
@@ -8,17 +9,6 @@ export interface AligoSettings {
   aligo_user_id: string
   aligo_api_key: string
   aligo_sender: string
-}
-
-export function smsByteLength(text: string): number {
-  // PRODUCT 확정: 한글 1자=2바이트 / 영문 1자=1바이트 (근사 규칙)
-  // 구현: ASCII(0x00~0x7F)=1, 그 외=2
-  let sum = 0
-  for (const ch of text ?? '') {
-    const code = ch.codePointAt(0) ?? 0
-    sum += code <= 0x7f ? 1 : 2
-  }
-  return sum
 }
 
 function normalizePhoneDigits(phone: string): string {
