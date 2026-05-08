@@ -38,6 +38,11 @@ export interface AuthCtx {
   user_type: string
 }
 
+// admin 계정이 tenant_id 를 가지지 않는 경우가 있어, 안전한 sentinel 값을 둔다.
+// - admin 페이지는 tenant_id 기반 쿼리를 사용하지 않고 RLS(is_admin())로 보호되는 액션을 사용해야 한다.
+// - tenant_id 가 필요한 (app) 영역에서는 getAuthCtx()가 null 반환 또는 호출부에서 tenant_id 존재를 전제한다.
+const ADMIN_TENANT_ID = '00000000-0000-0000-0000-000000000000'
+
 export async function getAuthCtx(supabase: any): Promise<AuthCtx | null> {
   const _t = Date.now()
 
@@ -75,6 +80,16 @@ export async function getAuthCtx(supabase: any): Promise<AuthCtx | null> {
     }
   }
 
+  // admin은 tenant_id가 null일 수 있음 (운영 계정)
+  if (!tenant_id && role === 'admin') {
+    return {
+      user_id: user.id,
+      tenant_id: ADMIN_TENANT_ID,
+      role,
+      user_type: 'admin',
+    }
+  }
+
   if (!tenant_id) {
     console.error('[PERF:AUTH] tenant_id 최종 없음 — user:', user.id)
     return null
@@ -84,6 +99,6 @@ export async function getAuthCtx(supabase: any): Promise<AuthCtx | null> {
     user_id:   user.id,
     tenant_id,
     role:      role ?? 'unknown',
-    user_type: 'human',
+    user_type: role === 'admin' ? 'admin' : 'human',
   }
 }
