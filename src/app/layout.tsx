@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import LegalFooter from '@/components/layout/LegalFooter'
 
 export const metadata: Metadata = {
   title: 'RealMyOS',
@@ -13,7 +14,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ko">
-      <body>{children}</body>
+      <body>
+        {children}
+        <LegalFooter />
+      </body>
     </html>
   )
 }

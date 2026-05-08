@@ -9,16 +9,23 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { createSupabaseBrowser } from '@/lib/supabase-browser'
+import Link from 'next/link'
 
 export default function OnboardingPage() {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [companyName, setCompanyName] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [agreeTerms, setAgreeTerms] = useState(false)
+  const [agreePrivacy, setAgreePrivacy] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!companyName.trim()) { setError('회사명을 입력해주세요.'); return }
+    if (!agreeTerms || !agreePrivacy) {
+      setError('이용약관 및 개인정보처리방침에 동의해야 가입할 수 있습니다.')
+      return
+    }
     setError(null)
 
     startTransition(async () => {
@@ -115,6 +122,38 @@ export default function OnboardingPage() {
               required
             />
           </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 13, color: '#374151' }}>
+              <input
+                type="checkbox"
+                checked={agreeTerms}
+                onChange={(e) => setAgreeTerms(e.target.checked)}
+                style={{ marginTop: 3 }}
+              />
+              <span>
+                <b>[필수]</b> 이용약관에 동의합니다.{' '}
+                <Link href="/terms" style={{ color: '#4F46E5', textDecoration: 'none', fontWeight: 600 }}>
+                  보기
+                </Link>
+              </span>
+            </label>
+            <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 13, color: '#374151' }}>
+              <input
+                type="checkbox"
+                checked={agreePrivacy}
+                onChange={(e) => setAgreePrivacy(e.target.checked)}
+                style={{ marginTop: 3 }}
+              />
+              <span>
+                <b>[필수]</b> 개인정보처리방침에 동의합니다.{' '}
+                <Link href="/privacy" style={{ color: '#4F46E5', textDecoration: 'none', fontWeight: 600 }}>
+                  보기
+                </Link>
+              </span>
+            </label>
+          </div>
+
           <button
             type="submit"
             style={{
