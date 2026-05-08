@@ -1,4 +1,5 @@
 -- fix: RULE-10 / RULE-01 (quotes)
+-- 운영 DB 적용 완료 (2026-05-08)
 -- - quote_items physical delete → is_active soft delete
 -- - quote_logs tenant_id 기록
 
