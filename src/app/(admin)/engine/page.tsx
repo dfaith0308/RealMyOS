@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { getRiskSummary, runAnalysisEngine } from '@/actions/admin/analysis-engine'
 import { getActionQueue } from '@/actions/admin/action-queue'
+import { runTrustSyncBatch } from '@/actions/admin/trust-engine'
 import s from '../admin-shared.module.css'
 
 export default async function AdminEnginePage() {
@@ -12,6 +13,11 @@ export default async function AdminEnginePage() {
   async function run() {
     'use server'
     await runAnalysisEngine()
+  }
+
+  async function syncTrust() {
+    'use server'
+    await runTrustSyncBatch()
   }
 
   return (
@@ -27,6 +33,11 @@ export default async function AdminEnginePage() {
           <Link href="/admin/trades" className={s.ghostBtnMd}>
             Action Queue로 이동
           </Link>
+          <form action={syncTrust}>
+            <button type="submit" className={s.ghostBtnMd}>
+              신뢰도 배치 실행
+            </button>
+          </form>
           <form action={run}>
             <button type="submit" className={s.primaryBtnMd}>
               분석 실행

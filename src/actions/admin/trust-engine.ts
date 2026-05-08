@@ -3,6 +3,7 @@
 import { getTrustLevelThresholds } from '@/actions/admin/policy-console'
 import { resolveTrustLevel } from '@/lib/policy-utils'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
+import { getAdminSettingNumber } from '@/actions/admin/policy-console'
 
 type ActionResult<T = void> = { success: boolean; data?: T; error?: string }
 
@@ -138,6 +139,128 @@ async function enqueueTrustLevel3ActionQueue(supabase: any, input: {
     resolved_by: null,
     resolved_at: null,
   })
+}
+
+function orderAmount(o: { final_amount?: number | null; total_amount?: number | null }) {
+  const f = o.final_amount
+  const t = o.total_amount
+  if (typeof f === 'number' && Number.isFinite(f)) return f
+  if (typeof t === 'number' && Number.isFinite(t)) return t
+  return 0
+}
+
+function monthRangeUtcNow() {
+  const anchor = new Date(Date.now() + 9 * 3600000)
+  const y = anchor.getUTCFullYear()
+  const m = anchor.getUTCMonth()
+  const start = `${y}-${String(m + 1).padStart(2, '0')}-01`
+  const endDate = new Date(Date.UTC(y, m + 1, 0))
+  const end = `${endDate.getUTCFullYear()}-${String(endDate.getUTCMonth() + 1).padStart(2, '0')}-${String(endDate.getUTCDate()).padStart(2, '0')}`
+  return { start, end }
+}
+
+function daysSinceIso(iso: string) {
+  const t = new Date(iso).getTime()
+  if (Number.isNaN(t)) return 9999
+  return Math.floor((Date.now() - t) / 86400000)
+}
+
+async function loadTenantRole(supabase: any, tenant_id: string): Promise<TrustRole | null> {
+  const { data } = await supabase.from('tenants').select('id, role').eq('id', tenant_id).maybeSingle()
+  const r = String((data as any)?.role ?? '')
+  if (r === 'supplier') return 'supplier'
+  if (r === 'restaurant') return 'restaurant'
+  return null
+}
+
+async function computeMetricsForTenant(supabase: any, tenant_id: string, role: TrustRole) {
+  const { start, end } = monthRangeUtcNow()
+  const since90 = new Date(Date.now() - 90 * 86400000).toISOString()
+
+  // orders scope
+  const ordersScope =
+    role === 'supplier'
+      ? `seller_tenant_id.eq.${tenant_id},tenant_id.eq.${tenant_id}`
+      : `buyer_tenant_id.eq.${tenant_id},tenant_id.eq.${tenant_id}`
+
+  const [{ data: ordersConfirmed, error: oErr }, { data: paysConfirmed, error: pErr }, { data: claimRows, error: cErr }, { data: rfqRows, error: rErr }, { data: customers, error: cuErr }] =
+    await Promise.all([
+      supabase
+        .from('orders')
+        .select('id, customer_id, status, order_status, order_date, final_amount, total_amount')
+        .or(ordersScope)
+        .eq('status', 'confirmed')
+        .is('deleted_at', null)
+        .gte('order_date', start)
+        .lte('order_date', end)
+        .limit(25000),
+      supabase
+        .from('payments')
+        .select('amount, status, direction, created_at, payer_tenant_id, payee_tenant_id, tenant_id')
+        .eq('direction', role === 'supplier' ? 'inbound' : 'outbound')
+        .eq('status', 'confirmed')
+        .gte('created_at', `${start}T00:00:00.000Z`)
+        .lte('created_at', `${end}T23:59:59.999Z`)
+        .or(
+          role === 'supplier'
+            ? `payee_tenant_id.eq.${tenant_id},tenant_id.eq.${tenant_id}`
+            : `payer_tenant_id.eq.${tenant_id},tenant_id.eq.${tenant_id}`,
+        )
+        .limit(25000),
+      supabase
+        .from('contact_logs')
+        .select('id')
+        .eq('tenant_id', tenant_id)
+        .eq('outcome_type', 'claim')
+        .gte('contacted_at', since90)
+        .limit(25000),
+      supabase
+        .from('rfq_requests')
+        .select('id, status')
+        .eq('tenant_id', tenant_id)
+        .limit(25000),
+      supabase.from('customers').select('id').eq('tenant_id', tenant_id).is('deleted_at', null).limit(25000),
+    ])
+
+  if (oErr) throw new Error(oErr.message)
+  if (pErr) throw new Error(pErr.message)
+  if (cErr) throw new Error(cErr.message)
+  if (rErr) throw new Error(rErr.message)
+  if (cuErr) throw new Error(cuErr.message)
+
+  const totalConfirmed = (ordersConfirmed ?? []).length
+  const delivered = (ordersConfirmed ?? []).filter((o: any) => o.order_status === '납품완료').length
+  const delivery_rate = totalConfirmed > 0 ? Math.round((delivered / totalConfirmed) * 1000) / 10 : null
+
+  const monthOrdersAmount = (ordersConfirmed ?? []).reduce((s: number, o: any) => s + orderAmount(o), 0)
+  const monthPaidAmount = (paysConfirmed ?? []).reduce((s: number, p: any) => s + (typeof (p as any).amount === 'number' ? (p as any).amount : 0), 0)
+  const payment_rate = monthOrdersAmount > 0 ? Math.round((monthPaidAmount / monthOrdersAmount) * 1000) / 10 : null
+
+  const claim_count = (claimRows ?? []).length
+
+  const rfqTotal = (rfqRows ?? []).length
+  const rfqClosed = (rfqRows ?? []).filter((r: any) => r.status === 'closed').length
+  const rfq_complete_rate = rfqTotal > 0 ? Math.round((rfqClosed / rfqTotal) * 1000) / 10 : null
+
+  const custTotal = (customers ?? []).length
+  const orders90 = (await supabase
+    .from('orders')
+    .select('customer_id, order_date, status')
+    .or(ordersScope)
+    .eq('status', 'confirmed')
+    .is('deleted_at', null)
+    .gte('order_date', new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10))
+    .limit(25000)).data ?? []
+
+  const countByCustomer = new Map<string, number>()
+  for (const o of orders90 as any[]) {
+    if (!o.customer_id) continue
+    countByCustomer.set(o.customer_id, (countByCustomer.get(o.customer_id) ?? 0) + 1)
+  }
+  const repeatCustomers = [...countByCustomer.values()].filter((n) => n >= 2).length
+  const repeat_trade_rate = custTotal > 0 ? Math.round((repeatCustomers / custTotal) * 1000) / 10 : null
+
+  return { delivery_rate, payment_rate, claim_count, rfq_complete_rate, repeat_trade_rate }
 }
 
 export async function calculateTrustScore(
@@ -381,5 +504,119 @@ export async function getRelationships(filters?: {
       created_at: r.created_at ?? null,
     })),
   }
+}
+
+export async function syncTrustScoreFromRealData(tenant_id: string): Promise<ActionResult<{ updated: number }>> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+  if (!tenant_id?.trim()) return { success: false, error: 'tenant_id가 올바르지 않습니다.' }
+
+  const role = await loadTenantRole(supabase, tenant_id)
+  if (!role) return { success: false, error: '지원되지 않는 tenant role 입니다.' }
+
+  const thresholds = await getTrustLevelThresholds(supabase, auth.ctx.user_id)
+
+  const { data: before, error: bErr } = await supabase
+    .from('trust_scores')
+    .select('*')
+    .eq('tenant_id', tenant_id)
+    .eq('role', role)
+    .maybeSingle()
+
+  if (bErr) return { success: false, error: bErr.message }
+
+  const metrics = await computeMetricsForTenant(supabase, tenant_id, role)
+  const computedScore = calcScoreFromRow({ ...(before ?? { tenant_id, role } as any), ...metrics })
+  const level = resolveTrustLevel(role, computedScore, thresholds)
+
+  const payload: any = {
+    tenant_id,
+    role,
+    score: computedScore,
+    level,
+    delivery_rate: metrics.delivery_rate,
+    payment_rate: metrics.payment_rate,
+    claim_count: metrics.claim_count,
+    rfq_complete_rate: metrics.rfq_complete_rate,
+    repeat_trade_rate: metrics.repeat_trade_rate,
+    updated_at: new Date().toISOString(),
+  }
+
+  const { data: up, error: uErr } = await supabase
+    .from('trust_scores')
+    .upsert(payload, { onConflict: 'tenant_id,role' })
+    .select('id')
+    .single()
+
+  if (uErr) return { success: false, error: uErr.message }
+
+  const logRes = await insertAdminLog(supabase, {
+    admin_id: auth.ctx.user_id,
+    action_type: 'trust_sync_realdata',
+    tenant_id,
+    target_table: 'trust_scores',
+    target_id: up?.id ?? null,
+    reason: 'syncTrustScoreFromRealData',
+    old_value: before ?? null,
+    new_value: { ...metrics, score: computedScore, level },
+  })
+  if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
+
+  if (level >= 3) {
+    await enqueueTrustLevel3ActionQueue(supabase, { tenant_id, role, score: computedScore }).catch(() => {})
+  }
+
+  return { success: true, data: { updated: 1 } }
+}
+
+export async function runTrustSyncBatch(): Promise<ActionResult<{ updated_tenants: number; skipped: number; errors: number }>> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const cycleDays = await getAdminSettingNumber('trust_update_cycle_days', { min: 1, max: 365 })
+
+  const { data: tenants, error } = await supabase.from('tenants').select('id, role').in('role', ['supplier', 'restaurant']).limit(5000)
+  if (error) return { success: false, error: error.message }
+
+  let updated = 0
+  let skipped = 0
+  let errors = 0
+
+  for (const t of (tenants ?? []) as any[]) {
+    const tid = String(t.id ?? '')
+    const role: TrustRole | null = t.role === 'supplier' ? 'supplier' : t.role === 'restaurant' ? 'restaurant' : null
+    if (!tid || !role) continue
+
+    const { data: tsRow } = await supabase
+      .from('trust_scores')
+      .select('updated_at')
+      .eq('tenant_id', tid)
+      .eq('role', role)
+      .maybeSingle()
+
+    const last = tsRow?.updated_at as string | null | undefined
+    if (last && daysSinceIso(last) < cycleDays) {
+      skipped++
+      continue
+    }
+
+    const r = await syncTrustScoreFromRealData(tid)
+    if (r.success) updated++
+    else errors++
+  }
+
+  const logRes = await insertAdminLog(supabase, {
+    admin_id: auth.ctx.user_id,
+    action_type: 'trust_sync_batch',
+    tenant_id: null,
+    target_table: 'trust_scores',
+    reason: `runTrustSyncBatch (cycle_days=${cycleDays})`,
+    new_value: { updated_tenants: updated, skipped, errors },
+  })
+  if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
+
+  return { success: true, data: { updated_tenants: updated, skipped, errors } }
 }
 

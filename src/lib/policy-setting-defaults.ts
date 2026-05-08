@@ -10,6 +10,7 @@ export const POLICY_SETTING_DEFAULTS: Record<string, { value: string; descriptio
   rfq_repeat_limit: { value: '3', description: '발주요청 반복 제한 (회)' },
   delivery_signal_window: { value: '5', description: '납기 신호 윈도우 (일)' },
   rfq_open_duration_hours: { value: '24', description: '입찰 공개 시간 (시간)' },
+  trust_update_cycle_days: { value: '7', description: '신뢰도 갱신 주기 (일)' },
   trust_supplier_level1: { value: '70', description: '공급자 Level 1 상한 (점수 이하)' },
   trust_supplier_level2: { value: '60', description: '공급자 Level 2 상한 (점수 이하)' },
   trust_supplier_level3: { value: '50', description: '공급자 Level 3 상한 (점수 이하)' },

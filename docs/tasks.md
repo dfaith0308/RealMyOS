@@ -96,7 +96,7 @@
 - **[FORENSIC-003-C] 선지급(Credit Line) 시스템**: 신뢰도 기반 선지급 한도 설정 (credit_line 테이블 필요)
 - **[FORENSIC-003-D] 자동 정산 조건 처리**: 조건 충족 시 자동 정산 제안 (자동 실행 금지 / 제안만)
 
-#### [FORENSIC-004] 신뢰도 산식·운영 데이터 정합성 미흡
+#### [FORENSIC-004] 신뢰도 산식·운영 데이터 정합성 미흡 — **부분 완료 (2026-05-08)**
 - **판정**: **HIGH**.
 - **현행**: `trust_scores` 행의 요약 필드 + **`trust-engine.ts`** 휴리스틱.
 - **문제**: 실제 거래·수금·클레임 데이터와 **미동기화** 가능.
@@ -104,12 +104,13 @@
 - **연계**: **`ADM-MISSING-002`** 계열, `trust_scores`·RPC.
 
 **MVP (지금 구현 가능)**:
-- **[FORENSIC-004-A] 신뢰도 입력 소스 연결**: `trust_scores`를 실거래 데이터로 갱신하는 배치
+- **[FORENSIC-004-A] 신뢰도 입력 소스 연결 — 완료 (2026-05-08)**: `trust_scores`를 실거래 데이터로 갱신하는 배치
   - orders confirmed 건수
   - payments confirmed 건수
   - claim_count (contact_logs outcome_type=claim)
   - delivery_rate (order_status=납품완료 비율)
-- **[FORENSIC-004-B] 신뢰도 갱신 주기 정책화**: `admin_settings`에 `trust_update_cycle_days` 키 추가 (기본값: 7일)
+- **[FORENSIC-004-B] 신뢰도 갱신 주기 정책화 — 완료 (2026-05-08)**: `admin_settings`에 `trust_update_cycle_days` 키 추가 (기본값: 7일)
+  - **작업 이력 (2026-05-08)**: FORENSIC-004 신뢰도 동기화 배치 + 정책키 추가 — worklog: [`docs/worklogs/2026-05-08_forensic-004-trust-sync.md`](./worklogs/2026-05-08_forensic-004-trust-sync.md)
 
 **중기**:
 - **[FORENSIC-004-C] 신뢰도 이력 추적**: `trust_score_logs` 테이블 신설, 점수 변화 추이 시각화
