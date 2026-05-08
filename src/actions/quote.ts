@@ -18,10 +18,12 @@ function calcLineTotal(price: number, qty: number, mode: 'unit' | 'total', total
 }
 
 async function logQuote(supabase: any, opts: {
+  tenant_id: string
   quote_id: string; user_id: string; user_type: string
   action: string; before_data?: object | null; after_data?: object | null
 }) {
   await supabase.from('quote_logs').insert({
+    tenant_id:   opts.tenant_id,
     quote_id:    opts.quote_id,
     user_id:     opts.user_id,
     user_type:   opts.user_type,
@@ -98,15 +100,17 @@ export async function createQuote(input: CreateQuoteInput): Promise<ActionResult
       pricing_mode: i.pricing_mode ?? 'unit',
       converted_quantity: 0,
       status: 'pending',
+      is_active: true,
     }))
   )
 
   if (itemsErr) {
-    await supabase.from('quotes').delete().eq('id', quote.id)
+    await supabase.from('quotes').update({ deleted_at: new Date().toISOString() }).eq('id', quote.id).eq('tenant_id', ctx.tenant_id)
     return { success: false, error: `항목 저장 실패: ${itemsErr.message}` }
   }
 
   await logQuote(supabase, {
+    tenant_id: ctx.tenant_id,
     quote_id: quote.id, user_id: ctx.user_id, user_type: ctx.user_type,
     action: 'create', before_data: null, after_data: { total_amount, items: input.items },
   })
@@ -143,7 +147,11 @@ export async function updateQuote(
     const total_amount = input.items.reduce((s, i) => s + i.line_total, 0)
     updatePayload.total_amount = total_amount
 
-    await supabase.from('quote_items').delete().eq('quote_id', quote_id)
+    await supabase
+      .from('quote_items')
+      .update({ is_active: false })
+      .eq('tenant_id', ctx.tenant_id)
+      .eq('quote_id', quote_id)
     await supabase.from('quote_items').insert(
       input.items.map((i) => ({
         tenant_id: ctx.tenant_id,
@@ -158,12 +166,14 @@ export async function updateQuote(
         pricing_mode: i.pricing_mode ?? 'unit',
         converted_quantity: 0,
         status: 'pending',
+        is_active: true,
       }))
     )
   }
 
-  await supabase.from('quotes').update(updatePayload).eq('id', quote_id)
+  await supabase.from('quotes').update(updatePayload).eq('id', quote_id).eq('tenant_id', ctx.tenant_id)
   await logQuote(supabase, {
+    tenant_id: ctx.tenant_id,
     quote_id, user_id: ctx.user_id, user_type: ctx.user_type,
     action: 'update', after_data: updatePayload,
   })
@@ -190,6 +200,7 @@ export async function deleteQuote(quote_id: string): Promise<ActionResult> {
   if (error) return { success: false, error: error.message }
 
   await logQuote(supabase, {
+    tenant_id: ctx.tenant_id,
     quote_id, user_id: ctx.user_id, user_type: ctx.user_type, action: 'delete',
   })
 
@@ -289,6 +300,8 @@ export async function getQuotes(filters?: {
     ? await supabase
         .from('quote_items')
         .select('quote_id, quantity, converted_quantity')
+        .eq('tenant_id', ctx.tenant_id)
+        .eq('is_active', true)
         .in('quote_id', ids)
     : { data: [] as any[] }
 
@@ -343,7 +356,9 @@ export async function getQuoteDetail(quote_id: string): Promise<ActionResult<Quo
       .eq('id', quote_id).eq('tenant_id', ctx.tenant_id).is('deleted_at', null).single(),
     supabase.from('quote_items')
       .select('*')
+      .eq('tenant_id', ctx.tenant_id)
       .eq('quote_id', quote_id)
+      .eq('is_active', true)
       .order('created_at', { ascending: true }),
   ])
 
@@ -376,6 +391,7 @@ export async function logQuoteSent(
   const ctx = await getAuthCtx(supabase)
   if (!ctx) return { success: false, error: '로그인 필요' }
   await logQuote(supabase, {
+    tenant_id: ctx.tenant_id,
     quote_id,
     user_id: ctx.user_id,
     user_type: ctx.user_type,
@@ -402,6 +418,7 @@ export async function getQuoteSentLogs(quote_id: string): Promise<ActionResult<Q
   const { data, error } = await supabase
     .from('quote_logs')
     .select('id, created_at, user_id, action, after_data')
+    .eq('tenant_id', ctx.tenant_id)
     .eq('quote_id', quote_id)
     .eq('action', 'sent')
     .order('created_at', { ascending: false })
@@ -481,7 +498,7 @@ export async function convertQuoteToOrder(input: ConvertQuoteInput): Promise<Act
   })
 
   const orderResult = await createOrder({
-    customer_id: (await supabase.from('quotes').select('customer_id').eq('id', input.quote_id).single()).data?.customer_id ?? '',
+    customer_id: (await supabase.from('quotes').select('customer_id').eq('id', input.quote_id).eq('tenant_id', ctx.tenant_id).single()).data?.customer_id ?? '',
     order_date:  input.order_date ?? today,
     memo:        input.memo ?? `견적 전환`,
     lines:       orderLines,
@@ -492,6 +509,7 @@ export async function convertQuoteToOrder(input: ConvertQuoteInput): Promise<Act
   }
 
   await logQuote(supabase, {
+    tenant_id: ctx.tenant_id,
     quote_id: input.quote_id, user_id: ctx.user_id, user_type: ctx.user_type,
     action: 'convert',
     after_data: { order_id: orderResult.data.order_id, conversions: input.conversions },

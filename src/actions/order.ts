@@ -244,7 +244,7 @@ export async function createOrder(
     .from('order_lines')
     .insert(lineRows.map((r) => ({ order_id: newOrder.id, tenant_id: ctx.tenant_id, ...r })))
   if (linesErr) {
-    await supabase.from('orders').update({ status: 'cancelled' }).eq('id', newOrder.id)
+    await supabase.from('orders').update({ status: 'cancelled' }).eq('id', newOrder.id).eq('tenant_id', ctx.tenant_id)
     return { success: false, error: `라인 저장 실패: ${linesErr.message}` }
   }
 

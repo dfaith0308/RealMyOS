@@ -1354,6 +1354,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **`ADM-TODO-001`** — 입력: **`ADM-CHECK-001`**, **`DB-TODO-002`**
 - **추가 (Phase 6에서 migration 생성)**: `relationships`(PRODUCT §8-6) + `trust_scores`(CONTEXT 정의) 테이블 신설 migration (Phase 1에서 방향 B 확정, `DB-TODO-003` 참조)
 - **교차 후속**: 정책·금융·신뢰도·거래 UI 등 레이어 격차는 **`FORENSIC-002`~`005`** 등 **`## [FORENSIC]`** 와 병행 추적
+- **작업 이력 (2026-05-08)**: 관리자 라우트 URL prefix 정규화(`/admin/*`) + 전수조사 HIGH 수정(RULE-01/03/10) — worklog: `docs/worklogs/2026-05-08_fix-admin-routes-and-audit.md`
 
 **Phase 7 — 연체 시스템 설계**  
 - **대상**: **`SUP-DANGER-003`** (연체 시스템), **`SUP-PARTIAL-005`** (주문상태 이중 구조) — 두 항목 함께 설계 필요  

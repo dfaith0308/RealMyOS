@@ -263,11 +263,13 @@ export async function updateProduct(input: UpdateProductInput): Promise<ActionRe
     { price_type: 'bulk',         price: input.bulk_price },
   ].filter((p) => p.price !== undefined)
 
-  for (const p of priceUpdates) {
-    await supabase.from('product_prices').upsert(
-      { product_id: input.id, price_type: p.price_type, price: p.price },
-      { onConflict: 'product_id,price_type' }
-    )
+  if (priceUpdates.length > 0) {
+    const rows = priceUpdates.map((p) => ({
+      product_id: input.id,
+      price_type: p.price_type,
+      price: p.price,
+    }))
+    await supabase.from('product_prices').upsert(rows, { onConflict: 'product_id,price_type' })
   }
 
   // 가격 변경과 상품정보 변경 로그 분리
@@ -327,8 +329,8 @@ export async function getProducts(filters?: {
   q?: string
 }): Promise<ActionResult<ProductListItem[]>> {
   const supabase = await createSupabaseServer()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { success: false, error: '로그인 필요' }
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
 
   let query = supabase
     .from('products')
@@ -340,6 +342,7 @@ export async function getProducts(filters?: {
       product_prices ( price_type, price ),
       product_stats ( avg_unit_price, used_by_count )
     `)
+    .eq('tenant_id', ctx.tenant_id)
     .is('deleted_at', null)
     .order('name')
 
