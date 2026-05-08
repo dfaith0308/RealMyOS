@@ -2,7 +2,7 @@
 
 > 수정 전 현실 고정용 문서  
 > 운영 DB vs migration vs 앱 코드 불일치 기록  
-> 작성일: 2026-05-07 · **갱신: 2026-05-08** (`admin_logs`·RLS·`customer_stats`·`tenant_relationships`/`action_queue`/`admin_settings` · §3 알리고 역할 분리 · §4 **정책키 엔진 연결**)
+> 작성일: 2026-05-07 · **갱신: 2026-05-08** (`admin_logs`·RLS·`customer_stats`·`tenant_relationships`/`action_queue`/`admin_settings` **읽기 공개·쓰기 관리자** · §3 알리고 역할 분리 · §4 **정책키 엔진 연결**)
 
 ---
 
@@ -145,6 +145,17 @@
 - **RLS** — **✅ 완료 (2026-05-08)** (위 migration).
 - **계산값(`current_balance` / `total_sales` 등) 저장** — **MEDIUM**: 장기적으로는 **원장 SSOT** 로 정합·전환 권장. **당장 스키마·데이터 대량 변경 시 데이터 손실·불일치 위험** → 별도 설계·마이그레이션 단계에서 처리.
 
+### 추가 RLS·테이블 정합 (forensic 배치)
+
+- **`tenant_relationships` RLS ✅ (2026-05-08)** — `supabase/migrations/20260508040000_fix_missing_rls_policies.sql` (`tenant_relationships_tenant`). 운영 반영 완료.
+- **`action_queue` RLS ✅ (2026-05-08)** — 동일 파일 (`action_queue_admin`, 관리자만 `USING`/`WITH CHECK`). 운영 반영 완료.
+- **`admin_settings` RLS ✅ (2026-05-08, 수정 완료)**  
+  - **1차**: `20260508040000_fix_missing_rls_policies.sql` — 정책 `admin_settings_admin`: **`is_admin()` 로 FOR ALL**(관리자만 접근).  
+  - **2차(현행)**: `supabase/migrations/20260508050000_fix_admin_settings_rls.sql` — **`admin_settings_admin` 제거** 후 분리: **읽기** `admin_settings_read` — `FOR SELECT` **`USING (true)`**(인증 주체 전원 조회 가능 — 정책키 소비 코드가 **테넌트 세션**에서 `admin_settings` 조회 필요). **쓰기** — `INSERT`/`UPDATE`/`DELETE` 각각 관리자만(`is_admin()`).  
+  - **이유**: D-018 연계 · `getAdminSettingNumber` 등이 비관리자 세션에서 SELECT해야 함.  
+  - **검증**: Supabase **`pg_policies`** 확인으로 정책 존재·역할 분리 검증 완료 ✅.
+- **`product_related_manual` 테이블 신규 생성 ✅** — 저장소 migration `20260507160000_create_product_related_manual.sql`만으로는 운영에 반영되지 않았던 것으로 확인 후 **2026-05-08 Supabase에서 직접 생성** 완료. 파일 상단 주석으로 불일치 이력 고정.
+
 ---
 
 ## 7. CONTEXT.md / tasks.md 문서 드리프트
@@ -169,4 +180,5 @@
 5. ✅ 정책키 소비 코드 연결 — D-018, 본 표 및 코드 참조 (2026-05-08)
 6. ✅ `customer_stats` RLS — migration `20260508030000_fix_customer_stats_rls.sql` (2026-05-08)
 7. ✅ 누락 RLS 배치 — `20260508040000_fix_missing_rls_policies.sql` + `product_related_manual` 운영 생성 정합 (2026-05-08)
-8. ⏳ CONTEXT.md·tasks.md 재수집
+8. ✅ `admin_settings` RLS 읽기/쓰기 분리 — `20260508050000_fix_admin_settings_rls.sql` (2026-05-08)
+9. ⏳ CONTEXT.md·tasks.md 재수집
