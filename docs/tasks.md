@@ -41,6 +41,7 @@
 - **작업 이력 (2026-05-08)**: 관리자OS 성장/영업 엔진 + 수익/정산 통제(ADM-MISSING-005/006) — worklog: [`docs/worklogs/2026-05-07_adm-missing-005-006_growth-settlement.md`](./worklogs/2026-05-07_adm-missing-005-006_growth-settlement.md)
 - **작업 이력 (2026-05-08)**: 정책/실험 콘솔(ADM-MISSING-007) — worklog: [`docs/worklogs/2026-05-07_adm-missing-007_policy-console.md`](./worklogs/2026-05-07_adm-missing-007_policy-console.md)
 - **작업 이력 (2026-05-08)**: FORENSIC §4 정책키 5종 엔진 연결 + `DECISIONS.md` D-018 — worklog: [`docs/worklogs/2026-05-08_forensic-policy-keys-engine.md`](./worklogs/2026-05-08_forensic-policy-keys-engine.md)
+- **작업 이력 (2026-05-08)**: `customer_stats` RLS 소급 migration + `docs/FORENSIC.md` §5·§6·§7 정리 — worklog: [`docs/worklogs/2026-05-08_forensic-customer-stats-rls.md`](./worklogs/2026-05-08_forensic-customer-stats-rls.md)
 
 ---
 

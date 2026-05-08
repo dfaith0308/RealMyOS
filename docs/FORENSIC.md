@@ -2,7 +2,7 @@
 
 > 수정 전 현실 고정용 문서  
 > 운영 DB vs migration vs 앱 코드 불일치 기록  
-> 작성일: 2026-05-07 · **갱신: 2026-05-08** (`admin_logs`·RLS `WITH CHECK` · §3 알리고 역할 분리 · §4 **정책키 엔진 연결**)
+> 작성일: 2026-05-07 · **갱신: 2026-05-08** (`admin_logs`·RLS `WITH CHECK`·`customer_stats` · §3 알리고 역할 분리 · §4 **정책키 엔진 연결**)
 
 ---
 
@@ -114,19 +114,40 @@
 
 ## 5. tenant_id / seller_tenant_id 병행
 
+**✅ 부분 해소 (2026-05-08)** — 컬럼 병행·앱 `.or()` 패턴은 **유지**하되, `orders`에 **`WITH CHECK`** 가 들어간 소급 migration으로 **쓰기 경로 테넌트 정합**을 보강함 (`supabase/migrations/20260508020000_fix_rls_with_check.sql`, 운영 반영 완료).
+
 ### 현황
 
-- `orders` 테이블: `tenant_id`(레거시) + `seller_tenant_id`(신규) 병행
-- 쿼리: `.or()` 필터로 양쪽 모두 처리하는 패턴 존재
-- `docs/CONTEXT.md` [ARCH-03]에 전환 중으로 명시
+- `orders` 테이블: **`tenant_id`**(레거시) + **`seller_tenant_id`** + **`buyer_tenant_id`** — 세 컬럼 모두 존재(운영 DDL 기준). 전환·조회 시 레거시와 신규 축을 함께 다루는 코드 패턴 유지.
+- 쿼리: `.or()` 필터로 판매자/구매자·레거시 `tenant_id` 등을 함께 처리하는 패턴 존재.
+- `docs/CONTEXT.md` [ARCH-03]에 단일 축으로의 전환 진행 중으로 명시.
 
 ### 판정
 
-**MEDIUM** — 쿼리 실수 시 다른 테넌트 데이터 노출·집계 오류 가능성
+**MEDIUM → 부분 완화** — 읽기·집계에서의 `.or()` 실수 리스크는 남음. **INSERT/UPDATE** 는 `WITH CHECK` 로 테넌트 불일치 쓰기 억제.
 
 ---
 
-## 6. CONTEXT.md / tasks.md 문서 드리프트
+## 6. customer_stats RLS 누락
+
+### 현황 (종결 전 진단)
+
+- `customer_stats`에 **RLS 미적용** 상태였을 경우, 테넌트 간 **`tenant_id` 우회 조회·변경** 가능성이 이론상 존재.
+- 테이블은 **계산 캐시** 성격(`current_balance`, `total_sales` 등 집계값 저장)으로 **원장 단일 소스(SSOT)와 이중화** 위험이 있음.
+
+### 조치
+
+**✅ RLS 적용 완료 (2026-05-08)** — 소급 migration `supabase/migrations/20260508030000_fix_customer_stats_rls.sql`: `ENABLE ROW LEVEL SECURITY` + 정책 `customer_stats_tenant` (`USING`·`WITH CHECK`: `tenant_id = get_my_tenant_id()`). 운영 DB 적용 완료.
+
+### 판정
+
+- **CRITICAL (이력)** — RLS 없음 + 계산값 저장 구조의 조합.
+- **RLS** — **✅ 완료 (2026-05-08)** (위 migration).
+- **계산값(`current_balance` / `total_sales` 등) 저장** — **MEDIUM**: 장기적으로는 **원장 SSOT** 로 정합·전환 권장. **당장 스키마·데이터 대량 변경 시 데이터 손실·불일치 위험** → 별도 설계·마이그레이션 단계에서 처리.
+
+---
+
+## 7. CONTEXT.md / tasks.md 문서 드리프트
 
 ### 현황
 
@@ -146,4 +167,5 @@
 3. ✅ admin_logs 스키마 확장 — migration 소급 파일·운영 반영 (2026-05-08)
 4. ✅ 알리고 역할 분리 확정 — `docs/FORENSIC.md` §3 (2026-05-08)
 5. ✅ 정책키 소비 코드 연결 — D-018, 본 표 및 코드 참조 (2026-05-08)
-6. ⏳ CONTEXT.md·tasks.md 재수집
+6. ✅ `customer_stats` RLS — migration `20260508030000_fix_customer_stats_rls.sql` (2026-05-08)
+7. ⏳ CONTEXT.md·tasks.md 재수집
