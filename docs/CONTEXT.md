@@ -1,7 +1,7 @@
 # CONTEXT.md — 식식이OS 시스템 구조 정의서
 > 목적: 운영 중인 시스템을 유지하면서 PRODUCT.md 기준으로 정렬 가능한 상태를 만드는 것
 > 코드 재작성 ❌ / DB 변경 ❌ / 추가(additive) 방식으로만 진행
-> 최종 업데이트: 2026-05-05
+> 최종 업데이트: 2026-05-08
 
 ---
 
@@ -58,10 +58,10 @@
         │
         └── [admin-os]       Next.js 14   플랫폼 관제 시스템
               GitHub: dfaith0308/RealMyOS (supplier-os와 동일 repo)
-              경로:   realmyos/src/app/(admin)/   ← 신규 route group
-              사용자: tenants.role = 'admin'
-              권한:   tenant_id 필터 없이 전체 데이터 접근
-                      모든 행동 → admin_logs 기록 필수
+              경로:   realmyos/src/app/(admin)/   ← 구현됨 (`src/middleware.ts` + `(admin)/layout.tsx` 보호)
+              역할:   세션 `users.role === 'admin'` 기준 접근(미들웨어)·테넌트 주체는 `tenants.role = 'admin'`
+              권한:   관제 목적상 테넌트 한정 필터 없이 넓은 조회; 전용 쓰기 테이블 분리
+                      모든 행동 → admin_logs 기록 필수 (PRODUCT 기준)
 ```
 
 **admin-os를 별도 repo로 분리하지 않는 이유:**
@@ -80,7 +80,21 @@ OS 간 직접 API 호출 금지. 상태 변경 기반 이벤트로만 연결.
 
 ## [ARCH-03] 현재 시스템 구조 요약 (코드 기준 실제 상태)
 
-### supplier-os (realmyos) — 실제 사용 테이블
+### 운영 DB 테이블 전체 (SSOT 스냅샷 2026-05-08)
+
+단일 Supabase 인스턴스 **`public`** 기준 존재 테이블 인벤토리 (코드 참조 여부와 무관). `_etl_*`는 레거시/추출 성격으로 별도 관리 전제.
+
+`account_purposes`, `accounts`, `acquisition_channels`, `action_logs`, `action_queue`, `admin_logs`, `admin_settings`, `ai_decision_logs`, `categories`, `collection_allocations`, `collection_schedules`, `contact_logs`, `customer_deposits`, `customer_monthly_stats`, `customer_product_prices`, `customer_stats`, `customer_tag_logs`, `customer_tag_options`, `customer_tags`, `customers`, `deposit_logs`, `fixed_costs`, `fund_rules`, `fund_transfers`, `ingredients`, `menu_cost_cache`, `menu_ingredients`, `menus`, `message_logs`, `notices`, `notifications`, `opening_balance_logs`, `order_lines`, `order_logs`, `orders`, `payment_allocations`, `payments`, `price_history`, `product_categories`, `product_code_sequences`, `product_costs`, `product_logs`, `product_prices`, `product_related_manual`, `product_stats`, `products`, `purchases`, `quote_items`, `quote_logs`, `quotes`, `relationships`, `restaurant_order_items`, `rfq_bids`, `rfq_requests`, `sales_schedules`, `sales_scripts`, `savings_stats`, `settings`, `settings_logs`, `supplier_contacts`, `tenant_relationships`, `tenants`, `today_events`, `trust_scores`, `users`, `_etl_order_items`, `_etl_orders`, `_etl_payments_outgoing`, `_etl_restaurants`, `_etl_rfq_bids`, `_etl_rfq_requests`, `_etl_suppliers`
+
+**합계 70개** (코드에서 미참조·레거시 포함 가능).
+
+### realmyos `supabase/migrations/` (저장소 DDL 추적)
+
+- **2026-05-08 실측**: incremental `.sql` 파일 **35개** (`README.md` 및 타임스탬프 파일명 규칙 동일).
+
+---
+
+### supplier-os (realmyos) — 앱별 주요 사용 테이블 (요약)
 
 | 테이블 | 실제 사용 방식 | 전환 상태 |
 |--------|--------------|-----------|
@@ -94,10 +108,10 @@ OS 간 직접 API 호출 금지. 상태 변경 기반 이벤트로만 연결.
 | `settings` | key/value + tenant_id | ✅ 사용 중 |
 | `collection_schedules` | 수금 일정 | ✅ 사용 중 |
 | `quotes` / `quote_items` | 견적 관리 | ✅ 사용 중 |
-| `funds` / `fund_rules` | 자금 관리 | ✅ 사용 중 |
+| `fund_rules` / `fund_transfers` | 자금 규칙·이체 (`fund_transfers` 등 실테이블 기준) | ✅ 사용 중 |
 | `contact_logs` / `action_logs` | CRM 이력 | ✅ 사용 중 |
 
-**relationships 테이블**: 코드 전체에서 사용 흔적 없음 → **미구현**
+**`relationships` 테이블**: DDL은 `supabase/migrations/20260507070000_create_relationships.sql`로 추적. **`src/actions/admin/trust-engine.ts`** 등 관리자OS 코드에서 조회 사용. 식당·공급자 간 관계 UI는 **`/admin/participants`**, **`/admin/participants/relationships`** 등에서 노출·확장 중이며, 과거 문서의 「코드 미사용=미구현」 표현은 **철회**.
 
 ### restaurant-os — 실제 사용 테이블
 
@@ -178,9 +192,9 @@ tenants (모든 주체)
 
 | 항목 | 현재 상태 | 목표 상태 | 차이 |
 |------|-----------|-----------|------|
-| 존재 여부 | 코드에서 사용 없음 | 완전 구현 필요 | ❌ 미구현 |
-| 현재 대체 | restaurant-os: `suppliers` 테이블 (독립) | relationships로 통합 | ❌ 미구현 |
-| trust_score | 없음 | 신뢰도 기반 정책 | ❌ 미구현 |
+| 존재 여부 | 테이블·migration 존재; 관리자 신뢰 엔진 등에서 SELECT 사용 (`trust-engine.ts`) | 제품·정책 수준 완전 정렬 | ⚠️ 부분 구현 |
+| UI·연계 | `/admin/participants`, `/admin/participants/relationships` 라우트 존재 | PRODUCT §8-6 등과 필드·플로우 일치 | ⚠️ 확장 중 |
+| trust_score | `trust_scores`·`tenant_relationships` 등 별도 테이블·마이그레이션과 병행 | 단일 도메인 모델로 수렴 | ⚠️ 정렬 진행 |
 
 ### tenants
 
@@ -253,19 +267,19 @@ tenants (모든 주체)
 
 ```
 현재 구조:
-  supplier-os: 없음 (customers 테이블로 거래처 관리)
-  restaurant-os: suppliers 테이블 (독립)
+  supplier-os: customers 테이블 중심 거래처 관리 + 관리자OS에서 relationships 테이블 조회(trust-engine)
+  restaurant-os: suppliers 테이블 (독립 주소록) 유지
+  DB: relationships DDL 적용됨(migration 추적)
 
 목표 구조:
-  relationships(restaurant_tenant_id, supplier_tenant_id) 신규 테이블
+  PRODUCT 기준 관계·신호·신뢰도 단일 모델
 
-충돌 여부: X (기존 테이블과 충돌 없음)
+충돌 여부: X (테이블 추가 후 점진 적재·UI 연결 단계)
 위험도: LOW
 
 이유:
-  - 기존 테이블 삭제 없이 신규 추가만으로 구현 가능
-  - suppliers 테이블 유지하면서 관계 확장
-  - trust_score, 신호 체계는 relationships 추가 후 독립 구현
+  - 신규 테이블 삭제 없이 확장 가능
+  - suppliers 레거시 유지 전제와 병행 가능
 ```
 
 ---
@@ -814,7 +828,7 @@ RFQ 생성 → 입찰:    24시간 내 첫 입찰 없으면 플래그
 
 ---
 
-## [ARCH-08G] 관리자OS 파일 구조 (구현 기준)
+## [ARCH-08G] 관리자OS 파일 구조 (구현 기준, 2026-05-08)
 
 ```
 realmyos/src/
@@ -825,35 +839,51 @@ realmyos/src/
       customers/
       ...
 
-    (admin)/        ← 관리자OS (신규 route group)
-      layout.tsx    ← admin role 체크 미들웨어
-      dashboard/    ← 중앙 대시보드
-      trades/       ← 거래 흐름 관제
-      participants/ ← 참여자/관계 네트워크
-      learning/     ← 데이터 학습 센터
-      engine/       ← 판단/분석 엔진
-      growth/       ← 성장/영업 엔진
-      settlement/   ← 수익/정산 통제
-      policy/       ← 정책/실험 콘솔
+    (admin)/        ← 관리자OS route group (존재 ✅)
+      layout.tsx    ← getAuthCtx → role === 'admin' 아니면 /dashboard
+      dashboard/
+      trades/
+      participants/
+        relationships/
+      learning/
+      engine/
+      growth/
+      settlements/
+      policy/
+      overview/
+      tenants/
+      page.tsx      ← /admin 루트
 
-  actions/
-    (기존 supplier-os actions 그대로)
-    admin/          ← 관리자OS 전용 Server Actions
-      admin-dashboard.ts
-      admin-trades.ts
-      admin-participants.ts
-      admin-policy.ts
-      admin-settlement.ts
-
-middleware.ts       ← /admin/* 경로: tenants.role = 'admin' 체크
+  middleware.ts     ← 프로젝트 루트 대신 src/middleware.ts (Next 권장 경로)
 ```
 
-**관리자OS 접근 제어:**
+### 관리자OS 라우트 (주요 경로)
+
+Next.js App Router 기준 **페이지가 존재하는 주요 URL**:
+
+- `/admin/dashboard`
+- `/admin/trades`
+- `/admin/participants`
+- `/admin/participants/relationships`
+- `/admin/learning`
+- `/admin/engine`
+- `/admin/growth`
+- `/admin/settlements`
+- `/admin/policy`
+
+*(그 외 `/admin`, `/admin/overview`, `/admin/tenants` 등.)*
+
+### 접근 제어
+
+- **`src/middleware.ts`**: 경로가 `/admin` 으로 시작하면 로그인 후 **`users` 테이블에서 `role === 'admin'`** 인 경우만 통과. 아니면 **`/dashboard`** 로 리다이렉트.
+- **`src/app/(admin)/layout.tsx`**: 동일 조건으로 **서버 컴포넌트 이중 검증** (`redirect('/dashboard')`).
+
 ```typescript
-// middleware.ts에서 /admin/* 경로 보호
-// tenants.role = 'admin'인 사용자만 접근 허용
-// role 확인 실패 시 → /dashboard로 리다이렉트 (403 아님)
+// 요지: /admin/* → 세션 필수 + users.role === 'admin'
+// 실패 시 403 대신 /dashboard 리다이렉트 (middleware 구현 기준)
 ```
+
+**관리자 전용 Server Actions**: `src/actions/admin/` 하위 (`policy-console`, `trade-monitor`, `trust-engine`, `settlement-control` 등). 과거 스켈 이름(`admin-dashboard.ts` 등)과 실제 파일명은 다를 수 있음 — **`admin/` 디렉터리 기준으로 정독**.
 
 ---
 

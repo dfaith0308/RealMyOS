@@ -44,6 +44,7 @@
 - **작업 이력 (2026-05-08)**: `customer_stats` RLS 소급 migration + `docs/FORENSIC.md` §5·§6·§7 정리 — worklog: [`docs/worklogs/2026-05-08_forensic-customer-stats-rls.md`](./worklogs/2026-05-08_forensic-customer-stats-rls.md)
 - **작업 이력 (2026-05-08)**: FORENSIC RLS 배치(`tenant_relationships`·`action_queue`·`admin_settings`) + `product_related_manual` 운영 생성 이력 주석 — worklog: [`docs/worklogs/2026-05-08_forensic-missing-rls-batch.md`](./worklogs/2026-05-08_forensic-missing-rls-batch.md)
 - **작업 이력 (2026-05-08)**: `admin_settings` RLS 읽기 공개·쓰기 관리자 분리(`20260508050000`) — worklog: [`docs/worklogs/2026-05-08_forensic-admin-settings-rls-readwrite.md`](./worklogs/2026-05-08_forensic-admin-settings-rls-readwrite.md)
+- **작업 이력 (2026-05-08)**: `docs/CONTEXT.md` 재수집(운영 테이블 70·migration 35·관리자 라우트·middleware)·`tasks.md` 인벤토리·`ADM-CHECK-001` 종결·`FORENSIC.md` §7 — worklog: [`docs/worklogs/2026-05-08_context-recollect.md`](./worklogs/2026-05-08_context-recollect.md)
 
 ---
 
@@ -57,15 +58,15 @@
 
 | 저장소 | 경로 | 결과 |
 |--------|------|------|
-| realmyos | `supabase/migrations/` | **폴더·`README.md` 존재** — **`.sql` 1개** `20260506120000_fix_today_events_action_kind_check.sql` (DB-DANGER-003·**미적용**); baseline 스냅샷은 운영 추출·승인 후 별도 |
+| realmyos | `supabase/migrations/` | **폴더·`README.md` 존재** — **`.sql` 35개** (2026-05-08 디렉터리 실측, incremental DDL 추적). 적용 여부는 운영 배포 이력·파일별 주석과 정합 필요 |
 | resturant_os | `supabase/migrations/` | **폴더 없음** — migration 파일 0개 |
 | resturant_os | `supabase/schema.sql` | **파일 1개 존재** (DDL 스냅샷·RLS·`upsert_savings_stat` RPC 포함; 시계열 migration 아님) |
 
 ### ☠️ DB 구조위험 (DB-DANGER)
 
 #### [DB-DANGER-001] 공급자OS — migration 추적·baseline 체계
-- **확인 내용**: 과거에는 `realmyos/supabase/migrations/`가 없어 코드 `.from('…')`·RPC와 **저장소 DDL 간 추적이 단절**된 상태였음. **8회차**: 디렉터리·`README.md`로 **운영 DB SSOT 기준 baseline + incremental** 거버넌스를 확립. **`.sql` 파일은 아직 없음** — 코드↔저장소 입증은 baseline 스냅샷(운영 추출, 환각 DDL 금지) 커밋 후 본격화.
-- **완료 기준 (baseline migration 체계 구축)**: `realmyos/supabase/migrations/` 존재; `README.md`에 SSOT·baseline 1회 고정·이후 incremental만·파일명 `YYYYMMDDHHMMSS_description.sql`·**dev → validation → production** 순서·승인·금지 사항(과거 복원·추측 migration) 명시; 팀이 해당 흐름을 채택. *(실제 baseline `.sql` 커밋·DDL 적용은 별 승인·별 작업.)*
+- **확인 내용 (갱신 2026-05-08)**: 과거에는 저장소에 migration 파일이 없어 DDL 입증이 단절된 시기가 있었음. **현재**: `realmyos/supabase/migrations/`에 incremental `.sql` **35개** 커밋됨·`README.md` 거버넌스 존재. **코드↔운영 적용 여부**는 파일 상단 주석·Supabase migration 이력으로 테이블별 확인.
+- **완료 기준 (baseline migration 체계 구축)**: `realmyos/supabase/migrations/` 존재; `README.md`에 SSOT·baseline 1회 고정·이후 incremental만·파일명 `YYYYMMDDHHMMSS_description.sql`·**dev → validation → production** 순서·승인·금지 사항(과거 복원·추측 migration) 명시; 팀이 해당 흐름을 채택. *(운영 전체 baseline 스냅샷 단일 파일 확정은 별 작업.)*
 - **연계**: `SUP-DANGER-003`·`SUP-DANGER-004` 문맥과 합치
 
 #### [DB-DANGER-002] 식당OS `schema.sql` vs 현행 앱 코드 스키마 불일치 — **종료 (2026-05-06)**
@@ -915,9 +916,9 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 ### 🔍 확인 필요
 
 #### [ADM-CHECK-001] 관리자OS 접근 제어 구현 여부 (`middleware.ts`, admin role 판별)
-- **위치**: `realmyos/src/middleware.ts` 또는 `realmyos/src/app/(admin)/layout.tsx` (예상 위치)
-- **확인하지 못한 이유**: `src/app/(admin)/` 폴더가 존재하지 않아, 관리자OS 관련 파일 트리 기반 정독이 불가
-- **확인 방법**: `middleware.ts`/`layout.tsx`에서 `tenants.role='admin'` 체크 및 `admin_logs` 기록 강제 여부 확인
+- **Forensic 상태**: **닫힘 (2026-05-08)** — `realmyos/src/app/(admin)/` **폴더 존재** ✅. `realmyos/src/middleware.ts`: `/admin/*` 요청에 대해 로그인 후 **`users.role === 'admin'`** 만 허용, 실패 시 **`/dashboard`** 리다이렉트. `src/app/(admin)/layout.tsx`: `getAuthCtx`로 **`role !== 'admin'` 시 동일 리다이렉트**(이중 방어).
+- **확인 방법**: 저장소 직접 열람·라우트 트리·미들웨어 정적 검증 완료. **과거 서술** 「`(admin)` 폴더 없음」→ **철회**.
+- **잔여**: 모든 관리자 행위의 `admin_logs` 강제 등은 **`ADM-*` · PRODUCT §10** 별도 감사.
 
 ---
 

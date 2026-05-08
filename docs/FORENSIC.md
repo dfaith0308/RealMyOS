@@ -2,7 +2,7 @@
 
 > 수정 전 현실 고정용 문서  
 > 운영 DB vs migration vs 앱 코드 불일치 기록  
-> 작성일: 2026-05-07 · **갱신: 2026-05-08** (`admin_logs`·RLS·`customer_stats`·`tenant_relationships`/`action_queue`/`admin_settings` **읽기 공개·쓰기 관리자** · §3 알리고 역할 분리 · §4 **정책키 엔진 연결**)
+> 작성일: 2026-05-07 · **갱신: 2026-05-08** (`admin_logs`·RLS·`customer_stats`·`tenant_relationships`/`action_queue`/`admin_settings` **읽기 공개·쓰기 관리자** · §3 알리고 역할 분리 · §4 **정책키 엔진 연결** · §7 **CONTEXT 재수집**)
 
 ---
 
@@ -160,14 +160,16 @@
 
 ## 7. CONTEXT.md / tasks.md 문서 드리프트
 
-### 현황
+**✅ 완료 (2026-05-08)** — `docs/CONTEXT.md` **재수집**: 운영 DB 테이블 **70개** 인벤토리, 저장소 migration **35개** 실측, 관리자OS 라우트(`dashboard`·`trades`·`participants`/`relationships`·`learning`·`engine`·`growth`·`settlements`·`policy` 등)·`src/middleware.ts` + `(admin)` 레이아웃 보호·`relationships` 코드 참조 반영. `docs/tasks.md` **migration 인벤토리 행** 및 **`ADM-CHECK-001` 종결** 반영.
 
-- **CONTEXT.md**: relationships 코드 없음 등으로 기술된 구간이 있으나, 실제로는 `(admin)/participants/` 등 관리자 라우트·액션이 존재할 수 있음 → 재수집 필요
-- **tasks.md**: 상단 migration 인벤토리 등 과거 서술과 실제 `realmyos/supabase/migrations/` 내 다수 `.sql` 파일 존재 사이 불일치 가능
+### 현황 (이력 보존)
+
+- 과거: CONTEXT에 「relationships 미구현」·tasks에 「migration 1건」 등과 코드베이스 불일치.
+- 현재: 위 재수집으로 FORENSIC §7 축 종결; 장기 문서 드리프트 방지를 위해 **SSOT 스냅샷 날짜**를 CONTEXT 헤더·본문에 명시.
 
 ### 판정
 
-**MEDIUM** — 문서만 보고 운영·아키텍처 결정 시 오판 가능
+~~**MEDIUM**~~ → **종결 (2026-05-08)** — 재수집본 기준 정합.
 
 ---
 
@@ -181,4 +183,4 @@
 6. ✅ `customer_stats` RLS — migration `20260508030000_fix_customer_stats_rls.sql` (2026-05-08)
 7. ✅ 누락 RLS 배치 — `20260508040000_fix_missing_rls_policies.sql` + `product_related_manual` 운영 생성 정합 (2026-05-08)
 8. ✅ `admin_settings` RLS 읽기/쓰기 분리 — `20260508050000_fix_admin_settings_rls.sql` (2026-05-08)
-9. ⏳ CONTEXT.md·tasks.md 재수집
+9. ✅ CONTEXT.md·tasks.md 재수집 — `docs/CONTEXT.md` SSOT 스냅샷·`ADM-CHECK-001`·migration 인벤토리 (2026-05-08)
