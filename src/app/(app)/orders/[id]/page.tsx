@@ -3,15 +3,16 @@ import { notFound } from 'next/navigation'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import { Surface } from '@/components/ui/Surface'
 import { StatusBadge } from '@/components/ui/StatusBadge'
-import { updateOrderStatus, type OrderStatusFlow } from '@/actions/order'
+import { updateOrderStatus } from '@/actions/order'
 import { DataCell, DataTableRow } from '@/components/ui/DataTableRow'
 import { formatKRW } from '@/lib/calc'
+import { ORDER_OPERATION_STATUS_LABEL, ORDER_OPERATION_STATUS_LIST, type OrderOperationStatus } from '@/types/order'
 
 export const metadata = { title: '주문 상세 — RealMyOS' }
 
-const FLOW: OrderStatusFlow[] = ['접수', '확인', '출고준비', '출고완료', '납품완료', '취소']
+const FLOW: OrderOperationStatus[] = ORDER_OPERATION_STATUS_LIST
 
-function nextStatus(s: OrderStatusFlow): OrderStatusFlow | null {
+function nextStatus(s: OrderOperationStatus): OrderOperationStatus | null {
   const idx = FLOW.indexOf(s)
   if (idx < 0) return null
   if (s === '납품완료' || s === '취소') return null
@@ -46,7 +47,7 @@ export default async function OrderDetailPage({ params }: { params: { id: string
         ? ('confirmed' as const)
         : ('cancelled' as const)
 
-  const opStatus = (order.order_status ?? '접수') as OrderStatusFlow
+  const opStatus = (order.order_status ?? '접수') as OrderOperationStatus
   const next = nextStatus(opStatus)
 
   async function step() {
@@ -55,7 +56,7 @@ export default async function OrderDetailPage({ params }: { params: { id: string
     await updateOrderStatus(order.id, next)
   }
 
-  async function setTo(s: OrderStatusFlow) {
+  async function setTo(s: OrderOperationStatus) {
     'use server'
     await updateOrderStatus(order.id, s)
   }
@@ -93,7 +94,7 @@ export default async function OrderDetailPage({ params }: { params: { id: string
             { k: '주문일', v: order.order_date },
             { k: '총금액', v: formatKRW(order.total_amount) },
             { k: '거래상태(status)', v: order.status },
-            { k: '주문상태(order_status)', v: order.order_status ?? '접수' },
+            { k: '주문상태(order_status)', v: ORDER_OPERATION_STATUS_LABEL[opStatus] ?? opStatus },
           ].map((x) => (
             <div key={x.k} style={{ border: '1px solid var(--ds-border-default)', borderRadius: 12, padding: '12px 14px', background: 'var(--ds-surface-panel)' }}>
               <div style={{ fontSize: 11, fontWeight: 900, color: 'var(--ds-text-muted)' }}>{x.k}</div>

@@ -94,12 +94,13 @@
 - **방향**: 거래 단위 식별자 체인 설계 후 UI 스펙 확정.
 - **연계**: **`ADM-MISSING-001`**, `docs/FORENSIC.md` 거래 관제 맥락.
 
-#### [FORENSIC-006] 주문 상태 이중 축 단일화 필요
+#### [FORENSIC-006] 주문 상태 이중 축 단일화 필요 — **종료 (2026-05-08)**
 - **판정**: **MEDIUM**.
 - **현황**: `status`(원장·draft/confirmed/cancelled 등) vs **`order_status`**(운영·접수/확인/출고준비 등) 병행.
 - **문제**: 타입·전이 규칙 불일치 시 **자동화 깨짐 위험**.
-- **방향**: 상태 머신을 **PRODUCT 한 장**으로 고정 후 코드·DB 정렬.
+- **조치 (2026-05-08)**: `OrderOperationStatus` 타입 + 리스트/라벨 상수 추가, `order_status` 사용처에 타입 적용, `DECISIONS.md` **D-019**로 이중 축 확정.
 - **연계**: **`SUP-PARTIAL-005`**, Phase 7 연체 설계와 간섭 시 통합 검토.
+- **작업 이력 (2026-05-08)**: FORENSIC-006 주문 상태 이중 축 타입 정의 — worklog: [`docs/worklogs/2026-05-08_forensic-006-order-status-types.md`](./worklogs/2026-05-08_forensic-006-order-status-types.md)
 
 #### [FORENSIC-007] loading.tsx 불균일 — **종료 (2026-05-08)**
 - **판정**: **MEDIUM** (UX).

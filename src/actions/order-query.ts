@@ -8,7 +8,7 @@ import { getCustomersWithBalance } from '@/actions/ledger'
 // ============================================================
 
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
-import type { ActionResult } from '@/types/order'
+import type { ActionResult, OrderOperationStatus } from '@/types/order'
 
 export interface OrderListItem {
   id: string
@@ -18,7 +18,7 @@ export interface OrderListItem {
   customer_name: string
   total_amount: number
   status: string
-  order_status: string
+  order_status: OrderOperationStatus
   order_lines: Array<{ product_name: string; quantity: number; unit_price: number; line_total: number }>
   current_balance: number | null   // 실시간 잔액 (ledger 기준)
   deposit_amount: number | null    // 예치금
@@ -44,7 +44,7 @@ export async function getOrderList(filters?: {
   from?: string
   to?: string
   status?: string
-  order_status?: string
+  order_status?: OrderOperationStatus
   customer_id?: string
 }): Promise<ActionResult<OrderListItem[]>> {
   const supabase = await createSupabaseServer()
@@ -90,7 +90,7 @@ export async function getOrderList(filters?: {
         customer_name:   o.customers?.name ?? '-',
         total_amount:    o.total_amount,
         status:          o.status,
-        order_status:    o.order_status ?? '접수',
+        order_status:    (o.order_status ?? '접수') as OrderOperationStatus,
         order_lines:     o.order_lines ?? [],
         current_balance: bal?.current_balance ?? null,
         deposit_amount:  bal?.deposit_amount ?? null,

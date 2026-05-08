@@ -10,6 +10,7 @@ import type {
   CreatedOrder,
   CustomerForOrder,
   ProductForOrder,
+  OrderOperationStatus,
 } from '@/types/order'
 
 // ============================================================
@@ -39,19 +40,12 @@ async function logOrder(supabase: any, opts: {
 // ============================================================
 // SUP-MISSING-010: 주문상태(order_status) 변경
 // - status(거래상태)와 완전 분리
+// - 타입: OrderOperationStatus (D-019)
 // ============================================================
-
-export type OrderStatusFlow =
-  | '접수'
-  | '확인'
-  | '출고준비'
-  | '출고완료'
-  | '납품완료'
-  | '취소'
 
 export async function updateOrderStatus(
   order_id: string,
-  order_status: OrderStatusFlow,
+  order_status: OrderOperationStatus,
 ): Promise<ActionResult> {
   const supabase = await createSupabaseServer()
   const ctx = await getCtx(supabase)

@@ -11,8 +11,9 @@ import { KPIBlock } from '@/components/ui/KPIBlock'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { DataCell, DataTableRow } from '@/components/ui/DataTableRow'
 import styles from '@/app/(app)/orders/orders-ops.module.css'
+import { ORDER_OPERATION_STATUS_LIST, type OrderOperationStatus } from '@/types/order'
 
-interface Filters { from: string; to: string; status: string; order_status: string; customer_id: string }
+interface Filters { from: string; to: string; status: string; order_status: OrderOperationStatus | ''; customer_id: string }
 interface Customer { id: string; name: string }
 
 interface Props {
@@ -53,7 +54,7 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
       : '',
   )
   const [opsTab, setOpsTab] = useState<OpsTab>('all')
-  const [orderStatus, setOrderStatus] = useState(filters.order_status ?? '')
+  const [orderStatus, setOrderStatus] = useState<OrderOperationStatus | ''>(filters.order_status ?? '')
 
   const preset: Preset = useMemo(() => {
     if (from === monthStartStr() && to === kstTodayStr()) return 'month'
@@ -77,7 +78,7 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
     return () => {
       if (debounce.current) window.clearTimeout(debounce.current)
     }
-  }, [from, to, customerId, status, router])
+  }, [from, to, customerId, status, orderStatus, router])
 
   const todayStr = useMemo(() => kstTodayStr(), [])
 
@@ -233,11 +234,11 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
           <select
             className={styles.select}
             value={orderStatus}
-            onChange={(e) => setOrderStatus(e.target.value)}
+            onChange={(e) => setOrderStatus((e.target.value || '') as OrderOperationStatus | '')}
             aria-label="주문상태"
           >
             <option value="">주문상태 전체</option>
-            {['접수', '확인', '출고준비', '출고완료', '납품완료', '취소'].map((s) => (
+            {ORDER_OPERATION_STATUS_LIST.map((s) => (
               <option key={s} value={s}>
                 {s}
               </option>

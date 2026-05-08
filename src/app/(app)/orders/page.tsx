@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import { getOrderList } from '@/actions/order-query'
 import OrdersClient from '@/components/order/OrdersClient'
+import { ORDER_OPERATION_STATUS_LIST, type OrderOperationStatus } from '@/types/order'
 import styles from './orders-ops.module.css'
 
 export const metadata = { title: '주문 목록 — RealMyOS' }
@@ -24,6 +25,11 @@ export default async function OrdersPage({
   const order_status = sp.order_status ?? ''
   const customerId = sp.customer_id ?? ''
 
+  const opStatus: OrderOperationStatus | undefined =
+    order_status && (ORDER_OPERATION_STATUS_LIST as readonly string[]).includes(order_status)
+      ? (order_status as OrderOperationStatus)
+      : undefined
+
   const supabase = await createSupabaseServer()
   const ctx = await getAuthCtx(supabase)
   if (!ctx) notFound()
@@ -34,7 +40,7 @@ export default async function OrdersPage({
       from,
       to,
       status: status || undefined,
-      order_status: order_status || undefined,
+      order_status: opStatus,
       customer_id: customerId || undefined,
     }),
     supabase
@@ -51,7 +57,7 @@ export default async function OrdersPage({
       <OrdersClient
         orders={ordersResult.data ?? []}
         customers={customers ?? []}
-        filters={{ from, to, status, order_status, customer_id: customerId }}
+        filters={{ from, to, status, order_status: opStatus ?? '', customer_id: customerId }}
       />
     </main>
   )
