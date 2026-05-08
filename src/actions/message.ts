@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { smsByteLength } from '@/lib/sms-byte-length'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import type { ActionResult } from '@/types/order'
+import { getAdminSettingNumber } from '@/actions/admin/policy-console'
 
 export interface AligoSettings {
   aligo_user_id: string
@@ -19,6 +20,28 @@ function isSafeNumber(receiverDigits: string): boolean {
   // PRODUCT: contact_status=safe_number 기반이 이상적이지만,
   // 현재 실행센터는 phone만 있으므로 050 계열을 안심번호로 간주(운영 관행).
   return receiverDigits.startsWith('050')
+}
+
+function kstDayStartIso(): { start: string; end: string } {
+  // KST 기준 오늘 00:00 ~ 내일 00:00
+  const kstNow = new Date(Date.now() + 9 * 3600000)
+  const y = kstNow.getUTCFullYear()
+  const m = String(kstNow.getUTCMonth() + 1).padStart(2, '0')
+  const d = String(kstNow.getUTCDate()).padStart(2, '0')
+  const day = `${y}-${m}-${d}`
+  const start = new Date(`${day}T00:00:00+09:00`)
+  const end = new Date(start.getTime() + 24 * 3600000)
+  return { start: start.toISOString(), end: end.toISOString() }
+}
+
+async function getSmsDailyLimit(): Promise<number> {
+  // POLICY: sms_daily_limit (없으면 100)
+  try {
+    const n = await getAdminSettingNumber('sms_daily_limit', { min: 1, max: 10000 })
+    return Number.isFinite(n) && n > 0 ? n : 100
+  } catch {
+    return 100
+  }
 }
 
 async function getSettingMap(keys: string[]): Promise<ActionResult<Map<string, string>>> {
@@ -122,6 +145,43 @@ export async function sendAligo(input: {
   const msg = (input.msg ?? '').trim()
   if (!msg) return { success: false, error: '메시지 내용이 비어있습니다.' }
 
+  // ============================================================
+  // SMS Rate limit (cost control)
+  // 1) 테넌트별 일일 발송 한도 (admin_settings.sms_daily_limit, default 100)
+  // 2) 동일 수신번호 + 동일 내용 1시간 내 재발송 차단
+  // ============================================================
+
+  const dailyLimit = await getSmsDailyLimit()
+  const { start, end } = kstDayStartIso()
+
+  const { count: sentTodayCount, error: countErr } = await supabase
+    .from('message_logs')
+    .select('id', { count: 'exact', head: true })
+    .eq('tenant_id', ctx.tenant_id)
+    .eq('status', 'sent')
+    .gte('sent_at', start)
+    .lt('sent_at', end)
+
+  if (!countErr && (sentTodayCount ?? 0) >= dailyLimit) {
+    return { success: false, error: `일일 SMS 발송 한도(${dailyLimit}건)에 도달했습니다` }
+  }
+
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+  const { data: dup, error: dupErr } = await supabase
+    .from('message_logs')
+    .select('id')
+    .eq('tenant_id', ctx.tenant_id)
+    .eq('status', 'sent')
+    .eq('receiver', receiverDigits)
+    .eq('content', msg)
+    .gte('sent_at', oneHourAgo)
+    .limit(1)
+    .maybeSingle()
+
+  if (!dupErr && dup?.id) {
+    return { success: false, error: '같은 번호에 1시간 내 동일 내용 재발송은 차단됩니다' }
+  }
+
   // settings load
   const settingsRes = await getAligoSettings()
   const s = settingsRes.data ?? {}
@@ -180,6 +240,7 @@ export async function sendAligo(input: {
       tenant_id: ctx.tenant_id,
       customer_id: input.customer_id,
       channel: 'sms',
+      receiver: receiverDigits,
       content: msg,
       status,
       aligo_response,
