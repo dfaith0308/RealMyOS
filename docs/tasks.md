@@ -66,7 +66,7 @@
 - **연계**: **`DB-DANGER-004`**, `docs/FORENSIC.md` §6.
 - **작업 이력 (2026-05-08)**: FORENSIC-001 customer_stats current_balance 사용 제거 — worklog: [`docs/worklogs/2026-05-08_forensic-001-customer-stats.md`](./worklogs/2026-05-08_forensic-001-customer-stats.md)
 
-#### [FORENSIC-002] §10-10 정책 오케스트레이션 미구현
+#### [FORENSIC-002] §10-10 정책 오케스트레이션 미구현 — **부분 완료 (2026-05-08)**
 - **판정**: **HIGH** — PRODUCT 대비 구현 범위 좁음.
 - **현행**: 키-값 편집 + 이력(`ADM-MISSING-007` / 정책 콘솔) 중심.
 - **미구현**: 정책 충돌 감지 / A/B 생명주기 / 성과 평가 / 롤백 등 §10-10 전 범위.
@@ -74,8 +74,9 @@
 - **연계**: **`ADM-MISSING-007`**, `docs/PRODUCT.md` §10-10.
 
 **MVP (지금 구현 가능)**:
-- **[FORENSIC-002-A] 정책 충돌 감지**: 같은 키를 두 번 설정하려 할 때 경고 표시
-- **[FORENSIC-002-B] 정책 변경 시 영향 범위 표시**: `"이 값을 바꾸면 N개 거래처에 영향"` — `admin_settings` 변경 전 미리보기
+- **[FORENSIC-002-A] 정책 충돌 감지 — 완료 (2026-05-08)**: 같은 키를 두 번 설정하려 할 때 경고 표시
+- **[FORENSIC-002-B] 정책 변경 시 영향 범위 표시 — 완료 (2026-05-08)**: `"이 값을 바꾸면 N개 거래처에 영향"` — `admin_settings` 변경 전 미리보기
+  - **작업 이력 (2026-05-08)**: FORENSIC-002-A,B 정책 충돌 감지 + 영향 범위 미리보기 — worklog: [`docs/worklogs/2026-05-08_forensic-002ab-policy-conflict.md`](./worklogs/2026-05-08_forensic-002ab-policy-conflict.md)
 
 **중기 (데이터 쌓인 후)**:
 - **[FORENSIC-002-C] A/B 테스트 생명주기**: 정책 A vs 정책 B 효과 비교

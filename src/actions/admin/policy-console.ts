@@ -394,3 +394,158 @@ export async function getAdminSettingNumber(
     return clamp(fallback)
   }
 }
+
+export async function checkPolicyConflict(
+  key: string,
+  newValue: string,
+): Promise<ActionResult<{ hasConflict: boolean; message: string | null }>> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+  if (!key?.trim()) return { success: false, error: 'key가 올바르지 않습니다.' }
+  if (!(key in POLICY_SETTING_DEFAULTS)) return { success: false, error: '허용되지 않은 설정 키입니다.' }
+
+  await ensurePolicyDefaults(supabase, { adminUserId: auth.ctx.user_id })
+
+  const norm = normalizeNumericPolicyValue(key, newValue)
+  if (!norm.success || norm.data == null) return { success: false, error: norm.error ?? '유효하지 않은 값' }
+  const nextVal = norm.data
+
+  const wantNum = (k: string) => (k === key ? Number(nextVal) : null)
+  const readNum = async (k: string) => {
+    if (k === key) return Number(nextVal)
+    const meta = POLICY_SETTING_DEFAULTS[k]
+    const fallback = meta ? Number(meta.value) : 0
+    const { data } = await supabase.from('admin_settings').select('value').eq('key', k).maybeSingle()
+    const raw = data?.value != null ? Number((data as any).value) : fallback
+    return Number.isFinite(raw) ? raw : fallback
+  }
+
+  let hasConflict = false
+  let message: string | null = null
+
+  // 규칙 1) rfq_open_duration_hours < delivery_signal_window
+  if (key === 'rfq_open_duration_hours' || key === 'delivery_signal_window') {
+    const rfqOpenH = await readNum('rfq_open_duration_hours')
+    const deliveryWinDays = await readNum('delivery_signal_window')
+    // units mismatch in rule text, but intent is "window must not exceed open time"
+    if (Number.isFinite(rfqOpenH) && Number.isFinite(deliveryWinDays) && rfqOpenH < deliveryWinDays) {
+      hasConflict = true
+      message = '입찰 공개 시간이 납기 윈도우보다 짧습니다'
+    }
+  }
+
+  // 규칙 2~3) trust supplier thresholds ordering
+  if (!hasConflict && (key === 'trust_supplier_level1' || key === 'trust_supplier_level2' || key === 'trust_supplier_level3')) {
+    const l1 = await readNum('trust_supplier_level1')
+    const l2 = await readNum('trust_supplier_level2')
+    const l3 = await readNum('trust_supplier_level3')
+    if (l3 > l2) {
+      hasConflict = true
+      message = 'Level3 기준이 Level2보다 높습니다'
+    } else if (l2 > l1) {
+      hasConflict = true
+      message = 'Level2 기준이 Level1보다 높습니다'
+    }
+  }
+
+  // 규칙 4) settlement_cycle_days < 7
+  if (!hasConflict && key === 'settlement_cycle_days') {
+    const n = wantNum(key) ?? Number(nextVal)
+    if (Number.isFinite(n) && n < 7) {
+      hasConflict = true
+      message = '정산 주기가 너무 짧습니다 (최소 7일)'
+    }
+  }
+
+  // 규칙 5) order_cycle_calculation_count < 2
+  if (!hasConflict && key === 'order_cycle_calculation_count') {
+    const n = wantNum(key) ?? Number(nextVal)
+    if (Number.isFinite(n) && n < 2) {
+      hasConflict = true
+      message = '주문주기 계산 기준이 너무 낮습니다 (최소 2건)'
+    }
+  }
+
+  const logRes = await insertAdminLog(supabase, {
+    admin_id: auth.ctx.user_id,
+    action_type: 'policy_conflict_check',
+    target_table: 'admin_settings',
+    target_id: key,
+    new_value: { key, new_value: nextVal, hasConflict, message },
+  })
+  if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
+
+  return { success: true, data: { hasConflict, message } }
+}
+
+export async function getPolicyImpactPreview(
+  key: string,
+  newValue: string,
+): Promise<ActionResult<{ count: number; message: string }>> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+  if (!key?.trim()) return { success: false, error: 'key가 올바르지 않습니다.' }
+  if (!(key in POLICY_SETTING_DEFAULTS)) return { success: false, error: '허용되지 않은 설정 키입니다.' }
+
+  await ensurePolicyDefaults(supabase, { adminUserId: auth.ctx.user_id })
+
+  const norm = normalizeNumericPolicyValue(key, newValue)
+  if (!norm.success || norm.data == null) return { success: false, error: norm.error ?? '유효하지 않은 값' }
+  const nextVal = norm.data
+
+  let count = 0
+  let message = ''
+
+  // trust supplier thresholds: "현재 해당 Level인 공급자 수"
+  if (key === 'trust_supplier_level1' || key === 'trust_supplier_level2' || key === 'trust_supplier_level3') {
+    const level = key === 'trust_supplier_level1' ? 1 : key === 'trust_supplier_level2' ? 2 : 3
+    const { count: c, error } = await supabase
+      .from('trust_scores')
+      .select('id', { count: 'exact', head: true })
+      .eq('role', 'supplier')
+      .eq('level', level)
+    if (error) return { success: false, error: error.message }
+    count = c ?? 0
+    message = `${count}명의 공급자 신뢰 등급이 변경될 수 있습니다`
+  } else if (key === 'rfq_open_duration_hours') {
+    const { count: c, error } = await supabase
+      .from('rfq_requests')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'open')
+    if (error) return { success: false, error: error.message }
+    count = c ?? 0
+    message = `현재 진행 중인 발주요청 ${count}건에 즉시 적용됩니다`
+  } else if (key === 'order_cycle_calculation_count') {
+    const { count: c, error } = await supabase
+      .from('customer_stats')
+      .select('customer_id', { count: 'exact', head: true })
+    if (error) return { success: false, error: error.message }
+    count = c ?? 0
+    message = `${count}개 거래처의 주문주기가 재계산됩니다`
+  } else if (key === 'signal_suppression_days') {
+    const { count: c, error } = await supabase
+      .from('sales_schedules')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'pending')
+    if (error) return { success: false, error: error.message }
+    count = c ?? 0
+    message = `대기 중인 영업스케줄 ${count}건에 영향을 줍니다`
+  } else {
+    count = 0
+    message = '영향 범위 미리보기 대상이 아닙니다'
+  }
+
+  const logRes = await insertAdminLog(supabase, {
+    admin_id: auth.ctx.user_id,
+    action_type: 'policy_impact_preview',
+    target_table: 'admin_settings',
+    target_id: key,
+    reason: 'policy preview',
+    new_value: { key, new_value: nextVal, count, message },
+  })
+  if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
+
+  return { success: true, data: { count, message } }
+}

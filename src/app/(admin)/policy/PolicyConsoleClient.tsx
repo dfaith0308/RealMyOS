@@ -3,7 +3,9 @@
 import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import {
+  checkPolicyConflict,
   getAdminSettingHistory,
+  getPolicyImpactPreview,
   sendPolicyConsoleAligoTest,
   updateAdminSetting,
   type AdminSettingHistoryRow,
@@ -47,6 +49,9 @@ export default function PolicyConsoleClient({ initial }: { initial: GroupedPolic
   const [applyOpen, setApplyOpen] = useState(false)
   const [applyPayload, setApplyPayload] = useState<{ key: string; value: string } | null>(null)
   const [applyErr, setApplyErr] = useState<string | null>(null)
+  const [applyPreviewLoading, setApplyPreviewLoading] = useState(false)
+  const [applyConflictMsg, setApplyConflictMsg] = useState<string | null>(null)
+  const [applyImpactMsg, setApplyImpactMsg] = useState<string | null>(null)
 
   const [histOpen, setHistOpen] = useState(false)
   const [histKey, setHistKey] = useState<string | null>(null)
@@ -70,7 +75,32 @@ export default function PolicyConsoleClient({ initial }: { initial: GroupedPolic
     if (!editKey) return
     setApplyPayload({ key: editKey, value: editDraft })
     setApplyErr(null)
+    setApplyConflictMsg(null)
+    setApplyImpactMsg(null)
     setApplyOpen(true)
+
+    setApplyPreviewLoading(true)
+    startTransition(async () => {
+      const [conf, impact] = await Promise.all([
+        checkPolicyConflict(editKey, editDraft),
+        getPolicyImpactPreview(editKey, editDraft),
+      ])
+      setApplyPreviewLoading(false)
+
+      if (conf.success) {
+        setApplyConflictMsg(conf.data?.message ?? null)
+      } else {
+        setApplyConflictMsg(null)
+        setApplyErr(conf.error ?? '충돌 감지 실패')
+      }
+
+      if (impact.success) {
+        setApplyImpactMsg(impact.data?.message ?? null)
+      } else {
+        setApplyImpactMsg(null)
+        setApplyErr((prev) => prev ?? impact.error ?? '영향 범위 미리보기 실패')
+      }
+    })
   }
 
   function confirmApply() {
@@ -211,6 +241,17 @@ export default function PolicyConsoleClient({ initial }: { initial: GroupedPolic
             <p className={s.modalBody}>
               이 값을 변경하면 <strong>즉시 적용</strong>됩니다. (캐시 없음)
             </p>
+            {applyPreviewLoading && <p className={s.loadingHint}>충돌/영향 미리보기 계산 중…</p>}
+            {!applyPreviewLoading && applyConflictMsg && (
+              <p className={s.modalAlert} role="alert">
+                경고: {applyConflictMsg}
+              </p>
+            )}
+            {!applyPreviewLoading && applyImpactMsg && (
+              <p className={s.modalMuted}>
+                {applyImpactMsg}
+              </p>
+            )}
             <p className={s.modalMuted}>
               키: <code className={s.code}>{applyPayload.key}</code>
             </p>
