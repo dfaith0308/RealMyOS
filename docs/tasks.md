@@ -58,14 +58,13 @@
 
 ### 🔎 후속 과제 (FORENSIC-*)
 
-#### [FORENSIC-001] customer_stats 계산값 저장 문제
-- **판정**: **MEDIUM** — RLS는 해결됨 (`docs/FORENSIC.md` §6); **계산값 저장**은 미해결.
-- **현황**: `current_balance` / `total_sales` 등 **계산값 DB 저장** 유지.
-- **RULE**: **RULE-02 위반** (원장 단일 소스 원칙).
+#### [FORENSIC-001] customer_stats 계산값 저장 문제 — **종료 (2026-05-08)**
+- **판정**: **MEDIUM** — RLS는 해결됨 (`docs/FORENSIC.md` §6); **계산값 저장 구조 자체는 유지(즉시 수정 금지)**.
+- **검증**: 운영 DB에서 customer_stats vs 원장 불일치 확인 — **표본 10개 전부 불일치**, 최대 **1,535,800원** → `current_balance` **신뢰 불가**.
+- **조치 (2026-05-08)**: 코드에서 `customer_stats.current_balance` **사용 금지**(조회/사용 제거) + 미수금은 **원장 기반(getAccountsReceivable 등)** 계산만 사용.
 - **금지**: 즉시 수정·DROP (**데이터 손실 위험**).
-- **방향**: **원장 SSOT** 전환 로드맵 수립.
-- **선행 조건**: 원장 계산값과 캐시값 **불일치 여부 먼저 검증**.
 - **연계**: **`DB-DANGER-004`**, `docs/FORENSIC.md` §6.
+- **작업 이력 (2026-05-08)**: FORENSIC-001 customer_stats current_balance 사용 제거 — worklog: [`docs/worklogs/2026-05-08_forensic-001-customer-stats.md`](./worklogs/2026-05-08_forensic-001-customer-stats.md)
 
 #### [FORENSIC-002] §10-10 정책 오케스트레이션 미구현
 - **판정**: **HIGH** — PRODUCT 대비 구현 범위 좁음.

@@ -649,7 +649,8 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
       .select('id, name, phone, payment_terms_days, target_monthly_revenue, opening_balance')
       .eq('tenant_id', ctx.tenant_id).is('deleted_at', null).order('name'),
     supabase.from('customer_stats')
-      .select('customer_id, current_balance, total_sales, last_payment_date')
+      // NOTE(FORENSIC-001): customer_stats.current_balance는 운영 검증에서 원장과 전부 불일치 → 사용 금지
+      .select('customer_id, total_sales, last_payment_date')
       .eq('tenant_id', ctx.tenant_id),
     supabase.from('orders')
       .select('customer_id, final_amount, total_amount, order_date')

@@ -139,11 +139,20 @@
 
 **✅ RLS 적용 완료 (2026-05-08)** — 소급 migration `supabase/migrations/20260508030000_fix_customer_stats_rls.sql`: `ENABLE ROW LEVEL SECURITY` + 정책 `customer_stats_tenant` (`USING`·`WITH CHECK`: `tenant_id = get_my_tenant_id()`). 운영 DB 적용 완료.
 
+### 검증 (FORENSIC-001)
+
+**✅ current_balance 불일치 검증 완료 (2026-05-08)** — 운영 DB에서 **customer_stats vs 원장(AR) 비교** 결과:
+
+- 표본 10개 거래처 **전부 불일치**
+- 최대 차이 **1,535,800원**
+- 결론: `customer_stats.current_balance`는 **신뢰 불가** → **사용 금지**
+
 ### 판정
 
 - **CRITICAL (이력)** — RLS 없음 + 계산값 저장 구조의 조합.
 - **RLS** — **✅ 완료 (2026-05-08)** (위 migration).
-- **계산값(`current_balance` / `total_sales` 등) 저장** — **MEDIUM**: 장기적으로는 **원장 SSOT** 로 정합·전환 권장. **당장 스키마·데이터 대량 변경 시 데이터 손실·불일치 위험** → 별도 설계·마이그레이션 단계에서 처리.
+- **계산값(`current_balance` / `total_sales` 등) 저장** — **MEDIUM**: 장기적으로는 **원장 SSOT** 로 정합·전환 권장. **당장 스키마·데이터 대량 변경 시 데이터 손실·불일치 위험** → 별도 설계·마이그레이션 단계에서 처리.  
+  단, `current_balance`는 위 검증으로 **사용 금지 확정**(코드에서는 원장 기반 계산 사용).
 
 ### 추가 RLS·테이블 정합 (forensic 배치)
 
