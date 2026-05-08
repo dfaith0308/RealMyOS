@@ -2,6 +2,7 @@ import { createSupabaseServer } from '@/lib/supabase-server'
 import { getCategories } from '@/actions/category'
 import { getProductById } from '@/actions/product'
 import ProductCreateForm from '@/components/product/ProductCreateForm'
+import { getAuthCtx } from '@/lib/supabase-server'
 
 export const metadata = { title: '상품 등록 — RealMyOS' }
 
@@ -11,12 +12,13 @@ export default async function ProductNewPage({
   searchParams: { copyId?: string }
 }) {
   const supabase = await createSupabaseServer()
-  const { data: { user } } = await supabase.auth.getUser()
+  const ctx = await getAuthCtx(supabase)
 
   const [catResult, { data: suppliers }, copyResult] = await Promise.all([
     getCategories(),
-    user
+    ctx
       ? supabase.from('customers').select('id, name')
+          .eq('tenant_id', ctx.tenant_id)
           .eq('is_supplier', true).is('deleted_at', null).order('name')
       : Promise.resolve({ data: [] }),
     searchParams.copyId

@@ -3,6 +3,23 @@
  */
 
 const FOOD_SAFETY_OPENAPI = 'https://openapi.foodsafetykorea.go.kr/api'
+const DEFAULT_TIMEOUT_MS = 5000
+
+async function fetchJsonWithTimeout(url: string, timeoutMs: number): Promise<{ ok: boolean; json?: unknown }> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const res = await fetch(url, { cache: 'no-store', signal: controller.signal })
+    if (!res.ok) return { ok: false }
+    const json = await res.json().catch(() => null)
+    if (json == null) return { ok: false }
+    return { ok: true, json }
+  } catch {
+    return { ok: false }
+  } finally {
+    clearTimeout(timeout)
+  }
+}
 
 export type BarcodeLookupParsed = {
   name: string | null
@@ -96,15 +113,9 @@ export async function fetchFoodSafetyC005(apiKey: string, barcode: string): Prom
   if (!bc || !apiKey.trim()) return null
   const key = encodeURIComponent(apiKey.trim())
   const url = `${FOOD_SAFETY_OPENAPI}/${key}/C005/json/1/5/BAR_CD=${encodeURIComponent(bc)}`
-  const res = await fetch(url, { cache: 'no-store' })
-  if (!res.ok) return null
-  let json: unknown
-  try {
-    json = await res.json()
-  } catch {
-    return null
-  }
-  return parseC005(json, bc)
+  const out = await fetchJsonWithTimeout(url, DEFAULT_TIMEOUT_MS)
+  if (!out.ok) return null
+  return parseC005(out.json, bc)
 }
 
 /** I2570 유통바코드 */
@@ -113,15 +124,9 @@ export async function fetchFoodSafetyI2570(apiKey: string, barcode: string): Pro
   if (!bc || !apiKey.trim()) return null
   const key = encodeURIComponent(apiKey.trim())
   const url = `${FOOD_SAFETY_OPENAPI}/${key}/I2570/json/1/5/BAR_CD=${encodeURIComponent(bc)}`
-  const res = await fetch(url, { cache: 'no-store' })
-  if (!res.ok) return null
-  let json: unknown
-  try {
-    json = await res.json()
-  } catch {
-    return null
-  }
-  return parseI2570(json, bc)
+  const out = await fetchJsonWithTimeout(url, DEFAULT_TIMEOUT_MS)
+  if (!out.ok) return null
+  return parseI2570(out.json, bc)
 }
 
 function nutritionRowToText(row: Record<string, unknown>): string | null {
@@ -164,14 +169,9 @@ export async function fetchFoodNutritionDb(
   if (name) url.searchParams.set('FOOD_NM_KR', name)
   if (report) url.searchParams.set('ITEM_REPORT_NO', report)
 
-  const res = await fetch(url.toString(), { cache: 'no-store' })
-  if (!res.ok) return null
-  let json: unknown
-  try {
-    json = await res.json()
-  } catch {
-    return null
-  }
+  const out = await fetchJsonWithTimeout(url.toString(), DEFAULT_TIMEOUT_MS)
+  if (!out.ok) return null
+  const json = out.json
   const body = json as Record<string, unknown>
   const resp = body?.response as Record<string, unknown> | undefined
   const items = resp?.body as Record<string, unknown> | undefined

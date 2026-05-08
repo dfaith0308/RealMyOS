@@ -219,7 +219,10 @@ export async function getDashboardData(): Promise<ActionResult<DashboardData>> {
   }
 }
 
-export async function getAiInsight(ctx: DashboardData['ai_context']): Promise<string> {
+export async function getAiInsight(ctx: DashboardData['ai_context']): Promise<string | null> {
+  const apiKey = process.env.ANTHROPIC_API_KEY?.trim() ?? ''
+  if (!apiKey) return null
+
   try {
     const prompt = `당신은 한국 식품 도매 유통업 사장의 비서입니다.
 아래 데이터를 보고 딱 1문장으로 오늘의 핵심 행동을 알려주세요.
@@ -231,11 +234,14 @@ export async function getAiInsight(ctx: DashboardData['ai_context']): Promise<st
 - 총 미수금: ${Math.round(ctx.receivable_amount / 10000)}만원
 규칙: 반드시 1문장, 50자 이내, 구체적인 행동 포함`
 
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 10000)
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
+      signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY ?? '',
+        'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
@@ -243,11 +249,15 @@ export async function getAiInsight(ctx: DashboardData['ai_context']): Promise<st
         max_tokens: 120,
         messages: [{ role: 'user', content: prompt }],
       }),
-    })
-    const data = await res.json()
-    return data.content?.[0]?.text?.trim() ?? fallbackMessage(ctx)
+    }).catch(() => null)
+    clearTimeout(timeout)
+    if (!res) return null
+    if (!res.ok) return null
+
+    const data = await res.json().catch(() => null) as any
+    return data?.content?.[0]?.text?.trim() ?? null
   } catch {
-    return fallbackMessage(ctx)
+    return null
   }
 }
 

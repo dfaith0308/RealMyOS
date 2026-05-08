@@ -4,10 +4,16 @@ import { cookies } from 'next/headers'
 export async function createSupabaseServer() {
   const cookieStore = await cookies()
   const schema = process.env.SUPABASE_DB_SCHEMA ?? 'public'
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!url || !key) {
+    throw new Error('Supabase 환경변수가 설정되지 않았습니다')
+  }
 
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    url,
+    key,
     {
       db: { schema },
       cookies: {
@@ -47,7 +53,9 @@ export async function getAuthCtx(supabase: any): Promise<AuthCtx | null> {
   const _t = Date.now()
 
   const { data: { user }, error } = await supabase.auth.getUser()
-  console.error(`[PERF:AUTH] getUser: ${Date.now() - _t}ms`)
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`[PERF:AUTH] getUser: ${Date.now() - _t}ms`)
+  }
 
   if (error || !user) return null
 
@@ -62,20 +70,23 @@ export async function getAuthCtx(supabase: any): Promise<AuthCtx | null> {
     .maybeSingle()
 
   if (userRowErr) {
-    console.error('[PERF:AUTH] users 테이블 조회 실패:', userRowErr)
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[PERF:AUTH] users 테이블 조회 실패')
+    }
   }
 
   if (!role) role = (userRow as any)?.role ?? undefined
 
   // fallback: user_metadata에 없으면 users 테이블에서 조회
   if (!tenant_id) {
-    console.error('[PERF:AUTH] tenant_id missing in user_metadata — fallback to users table, user:', user.id)
     tenant_id = (userRow as any)?.tenant_id ?? undefined
 
     // fallback 성공 시 user_metadata 비동기 동기화 (다음 요청부터 빠르게)
     if (tenant_id) {
       supabase.auth.updateUser({ data: { tenant_id } }).catch((e: unknown) => {
-        console.error('[PERF:AUTH] user_metadata 동기화 실패:', e)
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[PERF:AUTH] user_metadata 동기화 실패')
+        }
       })
     }
   }
@@ -91,7 +102,6 @@ export async function getAuthCtx(supabase: any): Promise<AuthCtx | null> {
   }
 
   if (!tenant_id) {
-    console.error('[PERF:AUTH] tenant_id 최종 없음 — user:', user.id)
     return null
   }
 

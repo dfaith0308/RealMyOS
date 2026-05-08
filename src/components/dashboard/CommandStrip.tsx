@@ -86,6 +86,6 @@ export function DashboardCommandStrip({ d }: { d: DashboardData }) {
 
 async function AiLine({ context }: { context: Parameters<typeof getAiInsight>[0] }) {
   const msg = await getAiInsight(context)
-  return <div className={styles.sub}>{msg}</div>
+  return <div className={styles.sub}>{msg ?? fallbackMessage(context)}</div>
 }
 
