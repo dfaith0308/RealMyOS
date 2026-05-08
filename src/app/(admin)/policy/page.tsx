@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { getAdminSettings } from '@/actions/admin/policy-console'
 import PolicyConsoleClient from './PolicyConsoleClient'
+import ExperimentsClient from './ExperimentsClient'
 import s from '../admin-shared.module.css'
 
 export default async function AdminPolicyPage() {
@@ -30,6 +31,8 @@ export default async function AdminPolicyPage() {
       </header>
 
       <PolicyConsoleClient initial={res.data.grouped} />
+
+      <ExperimentsClient />
     </main>
   )
 }

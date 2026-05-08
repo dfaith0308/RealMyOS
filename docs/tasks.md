@@ -79,7 +79,7 @@
   - **작업 이력 (2026-05-08)**: FORENSIC-002-A,B 정책 충돌 감지 + 영향 범위 미리보기 — worklog: [`docs/worklogs/2026-05-08_forensic-002ab-policy-conflict.md`](./worklogs/2026-05-08_forensic-002ab-policy-conflict.md)
 
 **중기 (데이터 쌓인 후)**:
-- **[FORENSIC-002-C] A/B 테스트 생명주기**: 정책 A vs 정책 B 효과 비교
+- **[FORENSIC-002-C] A/B 테스트 생명주기 — 구조 구현 (2026-05-08)**: 정책 A vs 정책 B 효과 비교
 - **[FORENSIC-002-D] 성과 평가 루프**: 정책 변경 → 결과 측정 → 자동 제안
 
 #### [FORENSIC-003] §10-9 금융 통제 범위 좁음 — **부분 완료 (2026-05-08)**
@@ -95,8 +95,8 @@
   - **작업 이력 (2026-05-08)**: FORENSIC-003-A,B — worklog: [`docs/worklogs/2026-05-08_forensic-003ab-settlement.md`](./worklogs/2026-05-08_forensic-003ab-settlement.md)
 
 **중기**:
-- **[FORENSIC-003-C] 선지급(Credit Line) 시스템**: 신뢰도 기반 선지급 한도 설정 (credit_line 테이블 필요)
-- **[FORENSIC-003-D] 자동 정산 조건 처리**: 조건 충족 시 자동 정산 제안 (자동 실행 금지 / 제안만)
+- **[FORENSIC-003-C] 선지급(Credit Line) 시스템 — 구조 구현 (2026-05-08)**: 신뢰도 기반 선지급 한도 설정 (credit_line 테이블 필요)
+- **[FORENSIC-003-D] 자동 정산 조건 처리 — 구조 구현 (2026-05-08)**: 조건 충족 시 자동 정산 제안 (자동 실행 금지 / 제안만)
 
 #### [FORENSIC-004] 신뢰도 산식·운영 데이터 정합성 미흡 — **부분 완료 (2026-05-08)**
 - **판정**: **HIGH**.
@@ -115,7 +115,11 @@
   - **작업 이력 (2026-05-08)**: FORENSIC-004 신뢰도 동기화 배치 + 정책키 추가 — worklog: [`docs/worklogs/2026-05-08_forensic-004-trust-sync.md`](./worklogs/2026-05-08_forensic-004-trust-sync.md)
 
 **중기**:
-- **[FORENSIC-004-C] 신뢰도 이력 추적**: `trust_score_logs` 테이블 신설, 점수 변화 추이 시각화
+- **[FORENSIC-004-C] 신뢰도 이력 추적 — 완료 (2026-05-08)**: `trust_score_logs` 테이블 신설, 점수 변화 추이 시각화
+  - DB 적용 완료: `trust_score_logs` (admin-only RLS)
+  - 점수 변경 시 log 기록: `sync_from_real_data`
+  - UI: `/admin/participants/[id]` 상세 + 이력 표
+  - **작업 이력 (2026-05-08)**: FORENSIC 중기 항목 구조 — worklog: [`docs/worklogs/2026-05-08_forensic-mid-term-structure.md`](./worklogs/2026-05-08_forensic-mid-term-structure.md)
 
 #### [FORENSIC-005] 거래 단위 end-to-end 추적 UI 미구현 — **종료 (2026-05-08)**
 - **판정**: **MEDIUM**.

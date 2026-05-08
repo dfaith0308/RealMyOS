@@ -529,6 +529,8 @@ export async function syncTrustScoreFromRealData(tenant_id: string): Promise<Act
   const metrics = await computeMetricsForTenant(supabase, tenant_id, role)
   const computedScore = calcScoreFromRow({ ...(before ?? { tenant_id, role } as any), ...metrics })
   const level = resolveTrustLevel(role, computedScore, thresholds)
+  const beforeScore = before?.score ?? null
+  const beforeLevel = before?.level ?? null
 
   const payload: any = {
     tenant_id,
@@ -550,6 +552,28 @@ export async function syncTrustScoreFromRealData(tenant_id: string): Promise<Act
     .single()
 
   if (uErr) return { success: false, error: uErr.message }
+
+  // FORENSIC-004-C: score change log (best-effort DB exists; admin-only RLS)
+  const changed =
+    beforeScore == null ||
+    beforeLevel == null ||
+    Number(beforeScore) !== Number(computedScore) ||
+    Number(beforeLevel) !== Number(level)
+  if (changed) {
+    const { error: lErr } = await supabase.from('trust_score_logs').insert({
+      tenant_id,
+      role,
+      before_score: beforeScore,
+      after_score: computedScore,
+      before_level: beforeLevel,
+      after_level: level,
+      reason: 'sync_from_real_data',
+      changed_by: null,
+    })
+    if (lErr) {
+      // log insert 실패는 동기화 실패로 간주하지 않음 (RLS/권한/테이블 미적용 등)
+    }
+  }
 
   const logRes = await insertAdminLog(supabase, {
     admin_id: auth.ctx.user_id,
@@ -618,5 +642,78 @@ export async function runTrustSyncBatch(): Promise<ActionResult<{ updated_tenant
   if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
 
   return { success: true, data: { updated_tenants: updated, skipped, errors } }
+}
+
+export interface TrustScoreLogRow {
+  id: string
+  created_at: string
+  tenant_id: string
+  role: TrustRole
+  before_score: number | null
+  after_score: number | null
+  before_level: number | null
+  after_level: number | null
+  reason: string | null
+  changed_by: string | null
+}
+
+export async function getTrustDetail(tenant_id: string, role?: TrustRole): Promise<ActionResult<TrustScoreRow[]>> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+  if (!tenant_id?.trim()) return { success: false, error: 'tenant_id가 올바르지 않습니다.' }
+
+  let q = supabase
+    .from('trust_scores')
+    .select('*')
+    .eq('tenant_id', tenant_id)
+    .limit(5)
+
+  if (role) q = q.eq('role', role)
+
+  const { data, error } = await q
+  if (error) return { success: false, error: error.message }
+
+  await insertAdminLog(supabase, {
+    admin_id: auth.ctx.user_id,
+    action_type: 'trust_detail_view',
+    target_table: 'trust_scores',
+    target_id: tenant_id,
+    new_value: { tenant_id, role: role ?? null },
+  }).catch(() => {})
+
+  return { success: true, data: (data ?? []) as TrustScoreRow[] }
+}
+
+export async function getTrustScoreLogs(
+  tenant_id: string,
+  role?: TrustRole,
+): Promise<ActionResult<TrustScoreLogRow[]>> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+  if (!tenant_id?.trim()) return { success: false, error: 'tenant_id가 올바르지 않습니다.' }
+
+  let q = supabase
+    .from('trust_score_logs')
+    .select('id, created_at, tenant_id, role, before_score, after_score, before_level, after_level, reason, changed_by')
+    .eq('tenant_id', tenant_id)
+    .order('created_at', { ascending: false })
+    .limit(200)
+
+  if (role) q = q.eq('role', role)
+
+  const { data, error } = await q
+  if (error) return { success: false, error: error.message }
+
+  await insertAdminLog(supabase, {
+    admin_id: auth.ctx.user_id,
+    action_type: 'trust_score_logs_view',
+    target_table: 'trust_score_logs',
+    target_id: tenant_id,
+    new_value: { tenant_id, role: role ?? null },
+  }).catch(() => {})
+
+  return { success: true, data: (data ?? []) as TrustScoreLogRow[] }
 }
 

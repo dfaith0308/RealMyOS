@@ -161,6 +161,27 @@ export interface UnifiedSettlementCustomerGroup {
   orders: UnifiedSettlementOrderRow[]
 }
 
+export interface CreditLineRow {
+  tenant_id: string
+  tenant_name: string | null
+  role: 'restaurant' | 'supplier'
+  score: number
+  computed_credit_line: number
+  override_credit_line: number | null
+  effective_credit_line: number
+}
+
+export interface SettlementSuggestionRow {
+  order_id: string
+  order_number: string
+  order_date: string
+  customer_id: string
+  customer_name: string
+  seller_tenant_id: string
+  amount: number
+  days_pending: number
+}
+
 export async function getPlatformRevenue(): Promise<ActionResult<PlatformRevenue>> {
   const supabase = await createSupabaseServer()
   const auth = await requireAdmin(supabase)
@@ -503,6 +524,164 @@ export async function getUnifiedSettlementView(): Promise<ActionResult<{ rows: U
   }).catch(() => {})
 
   return { success: true, data: { rows, by_customer: groups } }
+}
+
+export async function getCreditLines(): Promise<ActionResult<CreditLineRow[]>> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const { data: ts, error } = await supabase
+    .from('trust_scores')
+    .select('tenant_id, role, score, updated_at')
+    .in('role', ['restaurant', 'supplier'])
+    .limit(2000)
+  if (error) return { success: false, error: error.message }
+
+  const tenantIds = [...new Set((ts ?? []).map((r: any) => String(r.tenant_id)).filter(Boolean))]
+  const { data: tenants } = tenantIds.length
+    ? await supabase.from('tenants').select('id, name').in('id', tenantIds).limit(3000)
+    : { data: [] as any[] }
+  const nameMap = new Map((tenants ?? []).map((t: any) => [String(t.id), t.name ?? null]))
+
+  // overrides: admin_settings.credit_line_{tenant_id}
+  const overrideKeys = tenantIds.map((id) => `credit_line_${id}`)
+  const { data: overrides } = overrideKeys.length
+    ? await supabase.from('admin_settings').select('key, value').in('key', overrideKeys).limit(3000)
+    : { data: [] as any[] }
+  const ovMap = new Map((overrides ?? []).map((r: any) => [String(r.key), String(r.value ?? '')]))
+
+  const out: CreditLineRow[] = (ts ?? []).map((r: any) => {
+    const score = typeof r.score === 'number' ? r.score : 0
+    const computed = Math.max(0, Math.round(score * 10000))
+    const k = `credit_line_${String(r.tenant_id)}`
+    const ovRaw = ovMap.get(k)
+    const ovNum = ovRaw != null && ovRaw.trim() ? Math.floor(Number(ovRaw)) : NaN
+    const override_credit_line = Number.isFinite(ovNum) ? Math.max(0, ovNum) : null
+    const effective = override_credit_line ?? computed
+    return {
+      tenant_id: String(r.tenant_id),
+      tenant_name: nameMap.get(String(r.tenant_id)) ?? null,
+      role: r.role === 'supplier' ? 'supplier' : 'restaurant',
+      score,
+      computed_credit_line: computed,
+      override_credit_line,
+      effective_credit_line: effective,
+    }
+  })
+
+  await insertAdminLog(supabase, {
+    admin_id: auth.ctx.user_id,
+    action_type: 'credit_line_view',
+    target_table: 'trust_scores/admin_settings',
+    new_value: { rows: out.length },
+  }).catch(() => {})
+
+  return { success: true, data: out }
+}
+
+export async function setCreditLineOverride(tenant_id: string, value: string): Promise<ActionResult> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+  if (!tenant_id?.trim()) return { success: false, error: 'tenant_id가 올바르지 않습니다.' }
+
+  const n = Math.floor(Number((value ?? '').replace(/[^0-9]/g, '')))
+  if (!Number.isFinite(n) || n < 0) return { success: false, error: '유효한 금액(숫자)을 입력해 주세요.' }
+
+  const key = `credit_line_${tenant_id}`
+  const { data: beforeRow } = await supabase.from('admin_settings').select('value').eq('key', key).maybeSingle()
+  const beforeVal = beforeRow?.value != null ? String((beforeRow as any).value) : null
+
+  const nowIso = new Date().toISOString()
+  const { error } = await supabase.from('admin_settings').upsert(
+    {
+      key,
+      value: String(n),
+      description: '신용한도 override (FORENSIC-003-C)',
+      updated_at: nowIso,
+      updated_by: auth.ctx.user_id,
+    },
+    { onConflict: 'key' },
+  )
+  if (error) return { success: false, error: error.message }
+
+  const logRes = await insertAdminLog(supabase, {
+    admin_id: auth.ctx.user_id,
+    action_type: 'credit_line_override_set',
+    target_table: 'admin_settings',
+    target_id: key,
+    old_value: { key, before_value: beforeVal },
+    new_value: { key, after_value: String(n) },
+  })
+  if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
+
+  revalidatePath('/admin/settlements')
+  return { success: true }
+}
+
+export async function getAutoSettlementSuggestions(): Promise<ActionResult<SettlementSuggestionRow[]>> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const today = kstTodayDateString()
+
+  const { data: settledRows, error: sErr } = await supabase
+    .from('payments')
+    .select('order_id')
+    .eq('type', 'settlement')
+    .eq('status', 'confirmed')
+    .not('order_id', 'is', null)
+    .limit(25000)
+  if (sErr) return { success: false, error: sErr.message }
+
+  const settled = new Set((settledRows ?? []).map((r: any) => r.order_id).filter(Boolean))
+
+  const { data: orders, error: oErr } = await supabase
+    .from('orders')
+    .select('id, order_number, order_date, customer_id, tenant_id, seller_tenant_id, final_amount, total_amount')
+    .eq('status', 'confirmed')
+    .is('deleted_at', null)
+    .order('order_date', { ascending: false })
+    .limit(1500)
+  if (oErr) return { success: false, error: oErr.message }
+
+  const candidates = (orders ?? []).filter((o: any) => !settled.has(o.id))
+  const over30: any[] = []
+  for (const o of candidates) {
+    const od = String(o.order_date).slice(0, 10)
+    let days = Math.floor((new Date(today).getTime() - new Date(od).getTime()) / 86400000)
+    if (!Number.isFinite(days) || days < 0) days = 0
+    if (days > 30) over30.push({ ...o, _days: days })
+  }
+
+  const custIds = [...new Set(over30.map((o) => o.customer_id).filter(Boolean))]
+  const nameMap = new Map<string, string>()
+  if (custIds.length) {
+    const { data: cn } = await supabase.from('customers').select('id, name').in('id', custIds).limit(5000)
+    for (const c of (cn ?? []) as any[]) nameMap.set(String(c.id), c.name ?? '-')
+  }
+
+  const rows: SettlementSuggestionRow[] = over30.map((o: any) => ({
+    order_id: o.id,
+    order_number: o.order_number,
+    order_date: String(o.order_date).slice(0, 10),
+    customer_id: o.customer_id,
+    customer_name: nameMap.get(String(o.customer_id)) ?? '-',
+    seller_tenant_id: String(o.seller_tenant_id ?? o.tenant_id ?? ''),
+    amount: orderAmount(o),
+    days_pending: o._days,
+  }))
+
+  await insertAdminLog(supabase, {
+    admin_id: auth.ctx.user_id,
+    action_type: 'settlement_suggestions_view',
+    target_table: 'orders/payments',
+    new_value: { count: rows.length },
+  }).catch(() => {})
+
+  return { success: true, data: rows }
 }
 
 async function completeRelatedActionQueue(supabase: any, adminId: string, orderId: string) {

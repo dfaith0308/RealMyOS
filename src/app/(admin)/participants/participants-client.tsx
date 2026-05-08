@@ -168,6 +168,9 @@ export default function ParticipantsClient({
                   <td className={s.td}>{fmtDate(r.updated_at)}</td>
                   <td className={s.td}>
                     <div className={s.actionsRow}>
+                      <Link href={`/admin/participants/${r.tenant_id}?role=${r.role}`} className={s.ghostBtnSm}>
+                        상세
+                      </Link>
                       <button type="button" onClick={() => recalc(r.tenant_id, r.role)} disabled={pending} className={s.ghostBtnSm}>
                         재계산
                       </button>

@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { getPendingSettlements, getPlatformRevenue, getSettlementHistory, getUnifiedSettlementView } from '@/actions/admin/settlement-control'
+import { getAutoSettlementSuggestions, getCreditLines, getPendingSettlements, getPlatformRevenue, getSettlementHistory, getUnifiedSettlementView } from '@/actions/admin/settlement-control'
 import SettleOrderButton from './SettleOrderButton'
 import s from '../admin-shared.module.css'
 
@@ -10,6 +10,7 @@ export default async function AdminSettlementsPage() {
     getUnifiedSettlementView(),
     getSettlementHistory(),
   ])
+  const [creditLines, suggestions] = await Promise.all([getCreditLines(), getAutoSettlementSuggestions()])
 
   return (
     <main className={s.main}>
@@ -53,6 +54,90 @@ export default async function AdminSettlementsPage() {
         <div className={s.alert}>{pend.error ?? '미정산 목록을 불러오지 못했습니다.'}</div>
       ) : (
         <>
+          <section className={s.panel}>
+            <div className={s.panelHeader}>
+              <h2 className={s.panelTitle}>신용한도 관리 (구조)</h2>
+              <span className={s.inlineMuted}>FORENSIC-003-C · 기본 공식: score × 10,000원 · override는 admin_settings.credit_line_{`{tenant_id}`}</span>
+            </div>
+            {!creditLines.success || !creditLines.data ? (
+              <div className={s.alert}>{creditLines.error ?? '조회 실패'}</div>
+            ) : creditLines.data.length === 0 ? (
+              <div className={s.empty}>신뢰도 배치 실행 후 신용한도가 계산됩니다</div>
+            ) : (
+              <div className={s.tableWrap}>
+                <table className={s.table}>
+                  <thead>
+                    <tr className={s.theadRow}>
+                      {['role', 'tenant', 'score', 'computed', 'override', 'effective'].map((h) => (
+                        <th key={h} className={s.th}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {creditLines.data.slice(0, 50).map((r) => (
+                      <tr key={`${r.role}:${r.tenant_id}`}>
+                        <td className={s.td}>{r.role}</td>
+                        <td className={s.td}>
+                          <div className={s.cellStrong}>{r.tenant_name ?? r.tenant_id.slice(0, 8)}</div>
+                          <div className={s.cellMutedXs}>{r.tenant_id}</div>
+                        </td>
+                        <td className={s.td}>{r.score}</td>
+                        <td className={s.td}>{r.computed_credit_line.toLocaleString()}원</td>
+                        <td className={s.td}>{r.override_credit_line != null ? `${r.override_credit_line.toLocaleString()}원` : '—'}</td>
+                        <td className={s.td}>{r.effective_credit_line.toLocaleString()}원</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div className={s.panelPadded}>
+              <div className={s.inlineMuted}>
+                override 저장 UI는 후속(수동 입력)로 연결합니다. 현재는 구조/데이터 조회만 제공합니다.
+              </div>
+            </div>
+          </section>
+
+          <section className={s.panel}>
+            <div className={s.panelHeader}>
+              <h2 className={s.panelTitle}>자동 정산 제안 (구조)</h2>
+              <span className={s.inlineMuted}>FORENSIC-003-D · 자동 실행 금지 · 조건: confirmed + settlement 미처리 + 30일 초과</span>
+            </div>
+            {!suggestions.success || !suggestions.data ? (
+              <div className={s.alert}>{suggestions.error ?? '조회 실패'}</div>
+            ) : suggestions.data.length === 0 ? (
+              <div className={s.empty}>정산 제안 항목이 없습니다</div>
+            ) : (
+              <div className={s.tableWrap}>
+                <table className={s.table}>
+                  <thead>
+                    <tr className={s.theadRow}>
+                      {['주문', '일자', '거래처', '금액', '경과일', '작업'].map((h) => (
+                        <th key={h} className={s.th}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {suggestions.data.slice(0, 100).map((r) => (
+                      <tr key={r.order_id}>
+                        <td className={s.td}>{r.order_number}</td>
+                        <td className={s.td}>{r.order_date}</td>
+                        <td className={s.td}>{r.customer_name}</td>
+                        <td className={s.td}>{r.amount.toLocaleString()}원</td>
+                        <td className={s.td}>
+                          <span className={s.riskLabel}>⚠ {r.days_pending}일</span>
+                        </td>
+                        <td className={s.td}>
+                          <SettleOrderButton orderId={r.order_id} orderNumber={r.order_number} amount={r.amount} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
           <section className={s.panel}>
             <div className={s.panelHeader}>
               <h2 className={s.panelTitle}>정산 상태 통합 뷰 (거래처별)</h2>
