@@ -728,7 +728,7 @@ export async function deleteContactLog(id: string): Promise<ActionResult> {
   // 3. 이력 삭제
   const { error } = await supabase
     .from('contact_logs')
-    .delete()
+    .update({ is_active: false })
     .eq('id', id)
     .eq('tenant_id', ctx.tenant_id)
 
