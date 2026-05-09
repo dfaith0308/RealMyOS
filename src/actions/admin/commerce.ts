@@ -147,7 +147,8 @@ export type ProductPickRow = {
   name: string | null
   category_id: string | null
   tenant_id: string
-  selling_price: number | null
+  /** 플랫폼 Listing 판매가(products.selling_price 없음 — commerce_price만 사용) */
+  listing_commerce_price: number | null
   /** 플랫폼(owner_type=platform) listing 이 있으면 true — 검색 결과에는 포함되나 신규 등록 불가 */
   already_listed: boolean
 }
@@ -754,21 +755,30 @@ export async function getProducts(search?: string): Promise<ActionResult<{ produ
 
   const { data: listedRows, error: lErr } = await supabase
     .from('commerce_product_listings')
-    .select('product_id')
+    .select('product_id, commerce_price')
     .eq('owner_type', 'platform')
     .is('deleted_at', null)
 
   if (lErr) return { success: false, error: lErr.message }
 
-  const listedIds = new Set(
-    (listedRows ?? []).map((r: { product_id: string | null }) => r.product_id).filter(Boolean) as string[],
-  )
+  const listedIds = new Set<string>()
+  const listingPriceByProductId = new Map<string, number>()
+  for (const r of listedRows ?? []) {
+    const row = r as { product_id: string | null; commerce_price: unknown }
+    const pid = row.product_id
+    if (!pid) continue
+    listedIds.add(pid)
+    const cp = row.commerce_price
+    if (typeof cp === 'number' && Number.isFinite(cp) && !listingPriceByProductId.has(pid)) {
+      listingPriceByProductId.set(pid, Math.round(cp))
+    }
+  }
 
   const term = search?.trim()
 
   let q = supabase
     .from('products')
-    .select('id, name, category_id, tenant_id, selling_price')
+    .select('id, name, category_id, tenant_id')
     .is('deleted_at', null)
 
   if (term) {
@@ -788,7 +798,7 @@ export async function getProducts(search?: string): Promise<ActionResult<{ produ
       name: (p.name as string | null) ?? null,
       category_id: (p.category_id as string | null) ?? null,
       tenant_id: p.tenant_id as string,
-      selling_price: (p.selling_price as number | null) ?? null,
+      listing_commerce_price: listingPriceByProductId.get(id) ?? null,
       already_listed: listedIds.has(id),
     }
   })

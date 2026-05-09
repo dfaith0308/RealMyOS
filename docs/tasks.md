@@ -1148,6 +1148,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **작업 이력 (2026-05-09)**: 상품 등록 모달 `getProducts` 검색 결과가 비어 보이던 문제 수정(이미 listing 있는 상품도 검색 노출·`already_listed` 처리, 쿼리 순서·limit, 모달 로딩/빈 상태) — worklog: [`docs/worklogs/2026-05-09_hotfix_admin-commerce-product-search.md`](./worklogs/2026-05-09_hotfix_admin-commerce-product-search.md)
 - **작업 이력 (2026-05-09)**: 상품 등록 UX(데이터 품질) — `getCategories`·필수 카테고리·정상가 검증·배송 뱃지·목록 컬럼 — worklog: [`docs/worklogs/2026-05-09_feat_admin-commerce-listing-dq.md`](./worklogs/2026-05-09_feat_admin-commerce-listing-dq.md)
 - **작업 이력 (2026-05-10)**: 관리자OS 카테고리 관리 `/admin/commerce/categories`·CRUD·2-depth 제한·`CategoriesClient` — worklog: [`docs/worklogs/2026-05-10_feat_admin-commerce-categories.md`](./worklogs/2026-05-10_feat_admin-commerce-categories.md)
+- **작업 이력 (2026-05-10)**: `getProducts` — 존재하지 않는 `products.selling_price` 제거, 플랫폼 `commerce_price`로 참고가 표시 — worklog: [`docs/worklogs/2026-05-10_hotfix_admin-commerce-products-selling-price.md`](./worklogs/2026-05-10_hotfix_admin-commerce-products-selling-price.md)
 
 #### [COMMERCE-003] 관리자OS 주문 처리 화면
 - **우선순위**: HIGH

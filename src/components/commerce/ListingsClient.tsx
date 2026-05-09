@@ -417,7 +417,11 @@ export default function ListingsClient({
                         onClick={() => {
                           if (p.already_listed) return
                           setSelected(p)
-                          setNewPrice(p.selling_price && p.selling_price > 0 ? String(p.selling_price) : '')
+                          setNewPrice(
+                            p.listing_commerce_price && p.listing_commerce_price > 0
+                              ? String(p.listing_commerce_price)
+                              : '',
+                          )
                         }}
                         className={s.ghostBtn}
                         style={{
@@ -432,8 +436,8 @@ export default function ListingsClient({
                         }}
                       >
                         <span className={s.cellStrong}>{p.name ?? p.id}</span>
-                        {p.selling_price != null && p.selling_price > 0 ? (
-                          <span className={s.cellMutedSm}> · 참고가 {formatKRW(p.selling_price)}</span>
+                        {p.listing_commerce_price != null && p.listing_commerce_price > 0 ? (
+                          <span className={s.cellMutedSm}> · 참고가 {formatKRW(p.listing_commerce_price)}</span>
                         ) : null}
                         {p.already_listed ? (
                           <span className={s.cellMutedSm}> · 이미 등록됨</span>
