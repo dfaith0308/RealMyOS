@@ -77,6 +77,8 @@ export type ProductPickRow = {
   category_id: string | null
   tenant_id: string
   selling_price: number | null
+  /** 플랫폼(owner_type=platform) listing 이 있으면 true — 검색 결과에는 포함되나 신규 등록 불가 */
+  already_listed: boolean
 }
 
 export async function getListings(filters?: {
@@ -320,22 +322,41 @@ export async function getProducts(search?: string): Promise<ActionResult<{ produ
     (listedRows ?? []).map((r: { product_id: string | null }) => r.product_id).filter(Boolean) as string[],
   )
 
+  const term = search?.trim()
+
   let q = supabase
     .from('products')
     .select('id, name, category_id, tenant_id, selling_price')
     .is('deleted_at', null)
-    .order('name', { ascending: true })
-    .limit(500)
 
-  const term = search?.trim()
-  if (term) q = q.ilike('name', `%${term}%`)
+  if (term) {
+    q = q.ilike('name', `%${term}%`)
+  }
+
+  const limit = term ? 2000 : 500
+  q = q.order('name', { ascending: true }).limit(limit)
 
   const { data: products, error: pErr } = await q
   if (pErr) return { success: false, error: pErr.message }
 
-  const filtered = (products ?? []).filter((p: { id: string }) => !listedIds.has(p.id)) as ProductPickRow[]
+  const rows: ProductPickRow[] = (products ?? []).map((p: Record<string, unknown>) => {
+    const id = p.id as string
+    return {
+      id,
+      name: (p.name as string | null) ?? null,
+      category_id: (p.category_id as string | null) ?? null,
+      tenant_id: p.tenant_id as string,
+      selling_price: (p.selling_price as number | null) ?? null,
+      already_listed: listedIds.has(id),
+    }
+  })
 
-  return { success: true, data: { products: filtered } }
+  rows.sort((a, b) => {
+    if (a.already_listed !== b.already_listed) return a.already_listed ? 1 : -1
+    return String(a.name ?? '').localeCompare(String(b.name ?? ''), 'ko')
+  })
+
+  return { success: true, data: { products: rows } }
 }
 
 // --- COMMERCE-003: 주문 처리 ---

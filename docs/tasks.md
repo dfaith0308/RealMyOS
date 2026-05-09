@@ -1138,6 +1138,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **상태**: **완료 (2026-05-09)** — `/admin/commerce/products`, `src/actions/admin/commerce.ts`, `ListingsClient.tsx`, `COMMERCE-FLOW` 전이·`is_visible` 동기화·`admin_logs`·중복 방지
 - **작업 이력 (2026-05-09)**: Listing 관리 UI·서버 액션·상품 등록 모달·AdminSidebar 상품관리 — worklog: [`docs/worklogs/2026-05-09_feat_commerce-002-listings-admin.md`](./worklogs/2026-05-09_feat_commerce-002-listings-admin.md)
 - **작업 이력 (2026-05-09)**: 상품 등록 시 썸네일 URL·설명 입력, 목록 썸네일 컬럼·`getListings`/`createListing` 필드 반영 — worklog: [`docs/worklogs/2026-05-09_feat_commerce-listing-images.md`](./worklogs/2026-05-09_feat_commerce-listing-images.md)
+- **작업 이력 (2026-05-09)**: 상품 등록 모달 `getProducts` 검색 결과가 비어 보이던 문제 수정(이미 listing 있는 상품도 검색 노출·`already_listed` 처리, 쿼리 순서·limit, 모달 로딩/빈 상태) — worklog: [`docs/worklogs/2026-05-09_hotfix_admin-commerce-product-search.md`](./worklogs/2026-05-09_hotfix_admin-commerce-product-search.md)
 
 #### [COMMERCE-003] 관리자OS 주문 처리 화면
 - **우선순위**: HIGH

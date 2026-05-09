@@ -56,22 +56,30 @@ export default function ListingsClient({
   useEffect(() => {
     if (!modalOpen) return
     let cancelled = false
+    setPickLoading(true)
     const t = setTimeout(() => {
-      setPickLoading(true)
-      getProducts(search.trim() || undefined).then((res) => {
-        if (cancelled) return
-        setPickLoading(false)
-        if (!res.success) {
-          setError(res.error ?? '목록 조회 실패')
+      getProducts(search.trim() || undefined)
+        .then((res) => {
+          if (cancelled) return
+          setPickLoading(false)
+          if (!res.success) {
+            setError(res.error ?? '목록 조회 실패')
+            setPickList([])
+            return
+          }
+          setPickList(res.data?.products ?? [])
+        })
+        .catch(() => {
+          if (cancelled) return
+          setPickLoading(false)
+          setError('목록 조회 실패')
           setPickList([])
-          return
-        }
-        setPickList(res.data?.products ?? [])
-      })
+        })
     }, 280)
     return () => {
       cancelled = true
       clearTimeout(t)
+      setPickLoading(false)
     }
   }, [modalOpen, search])
 
@@ -82,12 +90,18 @@ export default function ListingsClient({
     setNewPrice('')
     setThumbnailUrl('')
     setListingDescription('')
+    setPickList([])
+    setPickLoading(true)
     setModalOpen(true)
   }
 
   async function submitCreate() {
     if (!selected) {
       setError('상품을 선택해 주세요')
+      return
+    }
+    if (selected.already_listed) {
+      setError('이미 플랫폼에 등록된 상품입니다')
       return
     }
     const price = parseInt(newPrice.replace(/[^\d]/g, ''), 10)
@@ -281,7 +295,7 @@ export default function ListingsClient({
               </button>
             </div>
             <p className={s.cellMutedSm} style={{ marginBottom: 12 }}>
-              아직 플랫폼 Listing 이 없는 상품만 표시됩니다. 검색 후 선택하고 판매가를 입력하세요.
+              상품명으로 검색합니다. 이미 플랫폼에 등록된 항목은 선택할 수 없습니다. 미등록 상품만 선택 후 판매가를 입력하세요.
             </p>
             <input
               className={s.input}
@@ -293,13 +307,17 @@ export default function ListingsClient({
             <div style={{ minHeight: 160, marginBottom: 12 }}>
               {pickLoading ? (
                 <div className={s.empty}>불러오는 중…</div>
+              ) : pickList.length === 0 ? (
+                <div className={s.empty}>검색 결과가 없습니다. 다른 검색어를 입력해 보세요.</div>
               ) : (
                 <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {pickList.map((p) => (
                     <li key={p.id}>
                       <button
                         type="button"
+                        disabled={p.already_listed}
                         onClick={() => {
+                          if (p.already_listed) return
                           setSelected(p)
                           setNewPrice(p.selling_price && p.selling_price > 0 ? String(p.selling_price) : '')
                         }}
@@ -307,6 +325,8 @@ export default function ListingsClient({
                         style={{
                           width: '100%',
                           textAlign: 'left',
+                          opacity: p.already_listed ? 0.55 : 1,
+                          cursor: p.already_listed ? 'not-allowed' : 'pointer',
                           border:
                             selected?.id === p.id
                               ? '2px solid var(--color-primary, #0f766e)'
@@ -316,6 +336,9 @@ export default function ListingsClient({
                         <span className={s.cellStrong}>{p.name ?? p.id}</span>
                         {p.selling_price != null && p.selling_price > 0 ? (
                           <span className={s.cellMutedSm}> · 참고가 {formatKRW(p.selling_price)}</span>
+                        ) : null}
+                        {p.already_listed ? (
+                          <span className={s.cellMutedSm}> · 이미 등록됨</span>
                         ) : null}
                       </button>
                     </li>
