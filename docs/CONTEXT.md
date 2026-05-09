@@ -2075,3 +2075,143 @@ validation_result = fail
 검증 없는 성공은 실패다.
 데이터가 맞지 않으면 시스템은 틀린 것이다.
 ```
+
+---
+
+## [ARCH-09] 커머스 도메인 경계 정의
+
+### buy란 무엇인가
+
+buy = 이미 확보된 상품을 가장 빠르게 다시 구매하는 공간
+
+buy는 재주문 중심이지만
+카테고리/검색/상품 탐색 기능도 제공한다.
+식당 사장님에게 익숙한 쇼핑몰 UX를 제공하되
+그 위에 운영 데이터 엔진이 결합된 구조다.
+
+buy의 목적:
+- 재주문 (핵심)
+- 빠른 구매
+- 운영 기반 추천
+- 자동발주 진입
+- RFQ 자연 연결
+- 상품 탐색 (카테고리/검색)
+
+buy가 아닌 것:
+- 오픈마켓
+- 최저가 경쟁 플랫폼
+- 쿠폰/타임세일/이벤트 중심 쇼핑몰
+- 광고 배너 중심 홈 화면
+
+buy는 식당OS 운영 흐름(/today)을 보조하는
+구매 인터페이스다.
+buy가 식당OS의 최상위 허브가 되어선 안 된다.
+
+---
+
+### 상품 등록 주체
+
+상품 등록 가능한 주체:
+- 운영자 (관리자OS)
+- 승인된 공급자
+
+불특정 사용자 상품 등록 금지.
+셀러 마켓플레이스 구조 금지.
+
+이유:
+식식이OS는 검증된 공급 SKU 저장소다.
+오픈마켓으로 변질되면 운영 통제력을 잃는다.
+
+---
+
+### buy ↔ RFQ ↔ commerce_orders 경계
+
+| 도메인 | 역할 | 테이블 |
+|--------|------|--------|
+| buy | 확보된 상품 즉시 구매 | commerce_orders / cart_items |
+| rfq | 없는 상품 요청 / 공급 탐색 | rfq_requests / rfq_bids |
+| orders | 기존 공급자 납품 주문 | orders / order_lines |
+
+경계 원칙:
+- buy ≠ rfq (역할 다름 / 테이블 분리)
+- commerce_orders ≠ orders (흐름 다름 / 테이블 분리)
+- RFQ → commerce_order 전환 가능
+  (rfq_request_id 보존 필수 / traceability 유지)
+
+---
+
+### commerce_orders 구조
+
+RFQ orders와 분리된 별도 테이블.
+
+이유:
+RFQ: 견적/입찰/협상/공급 탐색 포함
+Commerce: 즉시 구매/장바구니/결제/재주문
+
+필수 필드:
+- tenant_id (RULE-01)
+- source: 'direct' | 'rfq'
+- rfq_request_id: uuid | null (RFQ 기원 추적)
+- status: 'pending' | 'confirmed' | 'cancelled'
+- payment_method: 'card' | 'bank_transfer' | 'kakao'
+- payment_status: 'unpaid' | 'paid' | 'refunded'
+
+RFQ traceability:
+RFQ에서 시작된 commerce_order는
+반드시 rfq_request_id를 보존한다.
+
+이유:
+- 어떤 RFQ에서 시작됐는지 추적 가능
+- 어떤 sourcing이었는지 추적 가능
+- 추천/공급 분석/반복 구매 데이터 연결
+
+---
+
+### /buy 라우트 구조
+
+경로: resturant_os/src/app/(app)/buy/
+
+/buy                   → 상품 홈 (추천/재주문/카테고리)
+/buy/search            → 검색
+/buy/category/[id]     → 카테고리
+/buy/product/[id]      → 상품 상세
+/buy/cart              → 장바구니
+/buy/checkout          → 결제
+/buy/orders            → 커머스 구매내역
+
+하단 탭: 추가하지 않음 (초기)
+진입점:
+- /today 카드에서 자연 진입
+- /rfq/new에서 "상품 먼저 보기" 연결
+
+---
+
+### 커머스 MVP 테이블 목록
+
+초기 구현 대상:
+- commerce_products (상품)
+- commerce_product_categories (카테고리)
+- cart_items (장바구니)
+- commerce_orders (커머스 주문)
+- commerce_order_items (주문 상품)
+
+초기 구현 제외:
+- recommendation_logs (나중)
+- review_logs (나중)
+- promotion_logs (나중)
+
+---
+
+### 커머스 구현 금지 사항
+
+(RULE-27~30 참조)
+
+- 오픈마켓 구조
+- 쿠폰/타임세일/광고배너/이벤트 남발
+- AI 추천 엔진 (초기)
+- 자동 주문 생성
+- /buy 하단 탭 즉시 추가
+- commerce_orders ↔ orders 혼용
+- RFQ 기원 commerce_order에서 rfq_request_id 누락
+- 불특정 사용자 상품 등록
+- buy가 today를 덮는 구조
