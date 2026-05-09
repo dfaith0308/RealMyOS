@@ -1125,6 +1125,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **작업 이력 (2026-05-10)**: `commerce_product_listings.original_price`(정상가·절감 UI용) 컬럼 migration 추가 — [`supabase/migrations/20260510110000_add_listing_original_price.sql`](../supabase/migrations/20260510110000_add_listing_original_price.sql) — worklog: [`docs/worklogs/2026-05-10_feat_commerce-listing-original-price.md`](./worklogs/2026-05-10_feat_commerce-listing-original-price.md)
 - **작업 이력 (2026-05-09)**: listing 전용 `brand_name` / `shipping_type` / `category_id` 컬럼 migration — [`supabase/migrations/20260510120000_add_listing_brand_shipping.sql`](../supabase/migrations/20260510120000_add_listing_brand_shipping.sql) — worklog: [`docs/worklogs/2026-05-09_feat_admin-commerce-listing-dq.md`](./worklogs/2026-05-09_feat_admin-commerce-listing-dq.md)
 - **작업 이력 (2026-05-10)**: `20260510120000` 헤더 주석 운영 DB 적용 완료(2026-05-10)로 갱신 — worklog: [`docs/worklogs/2026-05-10_docs_listing-brand-shipping-migration-applied.md`](./worklogs/2026-05-10_docs_listing-brand-shipping-migration-applied.md)
+- **작업 이력 (2026-05-10)**: `product_categories` 운영 컬럼 `slug` / `sort_order` / `is_active` migration(저장소만, 미적용) — [`supabase/migrations/20260510130000_add_category_columns.sql`](../supabase/migrations/20260510130000_add_category_columns.sql) — worklog: [`docs/worklogs/2026-05-10_feat_admin-commerce-categories.md`](./worklogs/2026-05-10_feat_admin-commerce-categories.md)
 
 #### [COMMERCE-002] 관리자OS Listing 관리 화면
 - **우선순위**: HIGH
@@ -1144,6 +1145,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **작업 이력 (2026-05-09)**: 상품 등록 시 썸네일 URL·설명 입력, 목록 썸네일 컬럼·`getListings`/`createListing` 필드 반영 — worklog: [`docs/worklogs/2026-05-09_feat_commerce-listing-images.md`](./worklogs/2026-05-09_feat_commerce-listing-images.md)
 - **작업 이력 (2026-05-09)**: 상품 등록 모달 `getProducts` 검색 결과가 비어 보이던 문제 수정(이미 listing 있는 상품도 검색 노출·`already_listed` 처리, 쿼리 순서·limit, 모달 로딩/빈 상태) — worklog: [`docs/worklogs/2026-05-09_hotfix_admin-commerce-product-search.md`](./worklogs/2026-05-09_hotfix_admin-commerce-product-search.md)
 - **작업 이력 (2026-05-09)**: 상품 등록 UX(데이터 품질) — `getCategories`·필수 카테고리·정상가 검증·배송 뱃지·목록 컬럼 — worklog: [`docs/worklogs/2026-05-09_feat_admin-commerce-listing-dq.md`](./worklogs/2026-05-09_feat_admin-commerce-listing-dq.md)
+- **작업 이력 (2026-05-10)**: 관리자OS 카테고리 관리 `/admin/commerce/categories`·CRUD·2-depth 제한·`CategoriesClient` — worklog: [`docs/worklogs/2026-05-10_feat_admin-commerce-categories.md`](./worklogs/2026-05-10_feat_admin-commerce-categories.md)
 
 #### [COMMERCE-003] 관리자OS 주문 처리 화면
 - **우선순위**: HIGH
@@ -1169,11 +1171,13 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **설명**: `AdminSidebar.tsx`에 커머스 메뉴 추가
 - **추가 메뉴**:
   - 상품관리 → `/admin/commerce/products`
+  - 카테고리 → `/admin/commerce/categories`
   - 주문처리 → `/admin/commerce/orders`
 - **migration 필요**: NO
 - **완료 기준**: 사이드바에서 두 경로로 진입 가능
 - **작업 이력 (2026-05-09)**: 상품관리 메뉴·경로 추가(주문처리는 `COMMERCE-003` 대기) — worklog: [`docs/worklogs/2026-05-09_feat_commerce-002-listings-admin.md`](./worklogs/2026-05-09_feat_commerce-002-listings-admin.md)
 - **작업 이력 (2026-05-09)**: 주문처리 메뉴(`/admin/commerce/orders`) — `COMMERCE-003`과 함께 반영 — worklog: [`docs/worklogs/2026-05-09_feat_commerce-003-admin-orders.md`](./worklogs/2026-05-09_feat_commerce-003-admin-orders.md)
+- **작업 이력 (2026-05-10)**: 카테고리 메뉴(`/admin/commerce/categories`) — worklog: [`docs/worklogs/2026-05-10_feat_admin-commerce-categories.md`](./worklogs/2026-05-10_feat_admin-commerce-categories.md)
 
 #### [COMMERCE-005] 식당OS `/buy/*` 구현
 - **우선순위**: HIGH

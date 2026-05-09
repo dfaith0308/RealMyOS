@@ -21,6 +21,7 @@ const MENU: MenuItem[] = [
   { label: '정책/실험 콘솔', icon: '⚙️', href: '/admin/policy' },
   { label: '테넌트관리', icon: '🏢', href: '/admin/tenants' },
   { label: '상품관리', icon: '🛍️', href: '/admin/commerce/products' },
+  { label: '카테고리', icon: '📂', href: '/admin/commerce/categories' },
   { label: '주문처리', icon: '📦', href: '/admin/commerce/orders' },
   { label: '로그', icon: '🧾', href: '/admin/logs' },
 ]

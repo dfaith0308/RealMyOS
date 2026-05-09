@@ -85,6 +85,62 @@ export type PlatformCommerceCategory = {
   parent_id: string | null
 }
 
+const CATEGORY_NAME_MAX = 24
+const CATEGORY_SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+
+export type AdminCategoryRow = {
+  id: string
+  name: string
+  slug: string | null
+  parent_id: string | null
+  sort_order: number
+  is_active: boolean
+}
+
+export type AdminCategoryNode = AdminCategoryRow & {
+  children: AdminCategoryNode[]
+}
+
+function validateCategoryName(name: string): string | null {
+  const t = name.trim()
+  if (!t) return '이름을 입력해 주세요'
+  if (t.length > CATEGORY_NAME_MAX) return `이름은 최대 ${CATEGORY_NAME_MAX}자입니다`
+  return null
+}
+
+function normalizeCategorySlug(slug: string): string {
+  return slug.trim().toLowerCase()
+}
+
+function validateCategorySlug(slug: string): string | null {
+  const t = normalizeCategorySlug(slug)
+  if (!t) return 'slug를 입력해 주세요'
+  if (!CATEGORY_SLUG_RE.test(t)) {
+    return 'slug는 영문 소문자, 숫자, 하이픈(-)만 사용할 수 있습니다'
+  }
+  return null
+}
+
+function buildAdminCategoryTree(rows: AdminCategoryRow[]): AdminCategoryNode[] {
+  const byParent = new Map<string | null, AdminCategoryRow[]>()
+  for (const r of rows) {
+    const k = r.parent_id
+    if (!byParent.has(k)) byParent.set(k, [])
+    byParent.get(k)!.push(r)
+  }
+  for (const [, list] of byParent) {
+    list.sort((a, b) => {
+      if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order
+      return a.name.localeCompare(b.name, 'ko')
+    })
+  }
+  function toNode(r: AdminCategoryRow): AdminCategoryNode {
+    const children = (byParent.get(r.id) ?? []).map(toNode)
+    return { ...r, children }
+  }
+  return (byParent.get(null) ?? []).map(toNode)
+}
+
 export type ProductPickRow = {
   id: string
   name: string | null
@@ -163,6 +219,8 @@ export async function getCategories(): Promise<ActionResult<{ categories: Platfo
     .select('id, name, parent_id')
     .eq('tenant_id', PLATFORM_OWNER_TENANT)
     .is('parent_id', null)
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
     .order('name', { ascending: true })
 
   if (error) return { success: false, error: error.message }
@@ -172,6 +230,298 @@ export async function getCategories(): Promise<ActionResult<{ categories: Platfo
       categories: (data ?? []) as PlatformCommerceCategory[],
     },
   }
+}
+
+/**
+ * 관리자 카테고리 화면용 전체 트리 (플랫폼 테넌트).
+ * 비활성 항목도 노출해야 하므로 `is_active`로 필터하지 않습니다.
+ * (상품 등록용 `getCategories()`는 활성 대분류만 조회합니다.)
+ */
+export async function getAdminCategories(): Promise<ActionResult<{ tree: AdminCategoryNode[] }>> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const { data, error } = await supabase
+    .from('product_categories')
+    .select('id, name, slug, parent_id, sort_order, is_active')
+    .eq('tenant_id', PLATFORM_OWNER_TENANT)
+    .order('sort_order', { ascending: true })
+    .order('name', { ascending: true })
+
+  if (error) return { success: false, error: error.message }
+
+  const rows: AdminCategoryRow[] = (data ?? []).map((r: Record<string, unknown>) => ({
+    id: r.id as string,
+    name: (r.name as string) ?? '',
+    slug: (r.slug as string | null) ?? null,
+    parent_id: (r.parent_id as string | null) ?? null,
+    sort_order: typeof r.sort_order === 'number' && Number.isFinite(r.sort_order) ? Math.round(r.sort_order) : 0,
+    is_active: r.is_active !== false,
+  }))
+
+  return { success: true, data: { tree: buildAdminCategoryTree(rows) } }
+}
+
+export async function createCategory(input: {
+  name: string
+  slug: string
+  parent_id: string | null
+  sort_order?: number
+}): Promise<ActionResult<{ id: string }>> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const nameErr = validateCategoryName(input.name)
+  if (nameErr) return { success: false, error: nameErr }
+
+  const slugErr = validateCategorySlug(input.slug)
+  if (slugErr) return { success: false, error: slugErr }
+
+  const name = input.name.trim()
+  const slug = normalizeCategorySlug(input.slug)
+
+  const rawParent = input.parent_id != null ? String(input.parent_id).trim() : ''
+  const parent_id = rawParent || null
+
+  if (parent_id) {
+    const { data: parentRow, error: pErr } = await supabase
+      .from('product_categories')
+      .select('id, parent_id')
+      .eq('id', parent_id)
+      .eq('tenant_id', PLATFORM_OWNER_TENANT)
+      .maybeSingle()
+
+    if (pErr) return { success: false, error: pErr.message }
+    if (!parentRow) return { success: false, error: '상위 카테고리를 찾을 수 없습니다' }
+    if (parentRow.parent_id != null) {
+      return { success: false, error: '2단계까지만 카테고리를 만들 수 있습니다' }
+    }
+  }
+
+  const sort_order =
+    input.sort_order != null && Number.isFinite(input.sort_order) && Number.isInteger(input.sort_order)
+      ? input.sort_order
+      : 0
+
+  const { data: inserted, error: insErr } = await supabase
+    .from('product_categories')
+    .insert({
+      tenant_id: PLATFORM_OWNER_TENANT,
+      name,
+      slug,
+      parent_id,
+      sort_order,
+      is_active: true,
+    })
+    .select('id')
+    .single()
+
+  if (insErr) return { success: false, error: insErr.message }
+  const id = inserted.id as string
+
+  const logRes = await insertAdminLog(supabase, {
+    admin_id: auth.ctx.user_id,
+    tenant_id: PLATFORM_OWNER_TENANT,
+    action_type: 'category_created',
+    target_table: 'product_categories',
+    target_id: id,
+    new_value: { name, slug, parent_id },
+  })
+  if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
+
+  revalidatePath('/admin/commerce/categories')
+  return { success: true, data: { id } }
+}
+
+export async function updateCategory(
+  id: string,
+  input: {
+    name?: string
+    slug?: string
+    sort_order?: number
+  },
+): Promise<ActionResult<void>> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const cid = String(id ?? '').trim()
+  if (!cid) return { success: false, error: '카테고리 ID가 필요합니다' }
+
+  const { data: row, error: fErr } = await supabase
+    .from('product_categories')
+    .select('id, name, slug, sort_order')
+    .eq('id', cid)
+    .eq('tenant_id', PLATFORM_OWNER_TENANT)
+    .maybeSingle()
+
+  if (fErr) return { success: false, error: fErr.message }
+  if (!row) return { success: false, error: '카테고리를 찾을 수 없습니다' }
+
+  const before_name = String(row.name ?? '')
+  const before_slug = row.slug != null ? String(row.slug) : null
+  const before_sort =
+    typeof row.sort_order === 'number' && Number.isFinite(row.sort_order) ? Math.round(row.sort_order) : 0
+
+  const patch: Record<string, unknown> = {}
+  let after_name = before_name
+  let after_slug = before_slug
+  let after_sort = before_sort
+
+  if (input.name !== undefined) {
+    const ne = validateCategoryName(input.name)
+    if (ne) return { success: false, error: ne }
+    after_name = input.name.trim()
+    patch.name = after_name
+  }
+  if (input.slug !== undefined) {
+    const se = validateCategorySlug(input.slug)
+    if (se) return { success: false, error: se }
+    after_slug = normalizeCategorySlug(input.slug)
+    patch.slug = after_slug
+  }
+  if (input.sort_order !== undefined) {
+    const so = input.sort_order
+    if (!Number.isFinite(so) || !Number.isInteger(so)) {
+      return { success: false, error: '정렬 순서는 정수여야 합니다' }
+    }
+    after_sort = so
+    patch.sort_order = after_sort
+  }
+
+  if (Object.keys(patch).length === 0) {
+    return { success: false, error: '변경할 내용이 없습니다' }
+  }
+
+  const { error: uErr } = await supabase.from('product_categories').update(patch).eq('id', cid)
+
+  if (uErr) return { success: false, error: uErr.message }
+
+  const logRes = await insertAdminLog(supabase, {
+    admin_id: auth.ctx.user_id,
+    tenant_id: PLATFORM_OWNER_TENANT,
+    action_type: 'category_updated',
+    target_table: 'product_categories',
+    target_id: cid,
+    old_value: { before_name, before_slug, before_sort_order: before_sort },
+    new_value: {
+      before_name,
+      after_name,
+      before_slug,
+      after_slug,
+      before_sort_order: before_sort,
+      after_sort_order: after_sort,
+    },
+  })
+  if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
+
+  revalidatePath('/admin/commerce/categories')
+  return { success: true }
+}
+
+export async function toggleCategoryActive(id: string): Promise<ActionResult<{ is_active: boolean }>> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const cid = String(id ?? '').trim()
+  if (!cid) return { success: false, error: '카테고리 ID가 필요합니다' }
+
+  const { data: row, error: fErr } = await supabase
+    .from('product_categories')
+    .select('id, is_active, name')
+    .eq('id', cid)
+    .eq('tenant_id', PLATFORM_OWNER_TENANT)
+    .maybeSingle()
+
+  if (fErr) return { success: false, error: fErr.message }
+  if (!row) return { success: false, error: '카테고리를 찾을 수 없습니다' }
+
+  const before = row.is_active !== false
+  const after = !before
+
+  const { error: uErr } = await supabase
+    .from('product_categories')
+    .update({ is_active: after })
+    .eq('id', cid)
+
+  if (uErr) return { success: false, error: uErr.message }
+
+  const logRes = await insertAdminLog(supabase, {
+    admin_id: auth.ctx.user_id,
+    tenant_id: PLATFORM_OWNER_TENANT,
+    action_type: 'category_active_toggled',
+    target_table: 'product_categories',
+    target_id: cid,
+    old_value: { is_active: before, name: row.name },
+    new_value: { is_active: after, name: row.name },
+  })
+  if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
+
+  revalidatePath('/admin/commerce/categories')
+  return { success: true, data: { is_active: after } }
+}
+
+export async function deleteCategory(id: string): Promise<ActionResult<void>> {
+  // 향후 soft delete 구조 전환 예정
+  // 카테고리 이동 기능 추후 추가 예정
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const cid = String(id ?? '').trim()
+  if (!cid) return { success: false, error: '카테고리 ID가 필요합니다' }
+
+  const { data: row, error: fErr } = await supabase
+    .from('product_categories')
+    .select('id, name, slug')
+    .eq('id', cid)
+    .eq('tenant_id', PLATFORM_OWNER_TENANT)
+    .maybeSingle()
+
+  if (fErr) return { success: false, error: fErr.message }
+  if (!row) return { success: false, error: '카테고리를 찾을 수 없습니다' }
+
+  const { count: childCount, error: cErr } = await supabase
+    .from('product_categories')
+    .select('id', { count: 'exact', head: true })
+    .eq('parent_id', cid)
+    .eq('tenant_id', PLATFORM_OWNER_TENANT)
+
+  if (cErr) return { success: false, error: cErr.message }
+  if ((childCount ?? 0) > 0) {
+    return { success: false, error: '소분류가 있는 카테고리는 삭제할 수 없습니다' }
+  }
+
+  const { count: listingCount, error: lErr } = await supabase
+    .from('commerce_product_listings')
+    .select('id', { count: 'exact', head: true })
+    .eq('category_id', cid)
+    .is('deleted_at', null)
+
+  if (lErr) return { success: false, error: lErr.message }
+  if ((listingCount ?? 0) > 0) {
+    return { success: false, error: '이 카테고리의 상품을 먼저 이동해주세요' }
+  }
+
+  const { error: dErr } = await supabase.from('product_categories').delete().eq('id', cid)
+
+  if (dErr) return { success: false, error: dErr.message }
+
+  const logRes = await insertAdminLog(supabase, {
+    admin_id: auth.ctx.user_id,
+    tenant_id: PLATFORM_OWNER_TENANT,
+    action_type: 'category_deleted',
+    target_table: 'product_categories',
+    target_id: cid,
+    old_value: { name: row.name, slug: row.slug },
+  })
+  if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
+
+  revalidatePath('/admin/commerce/categories')
+  return { success: true }
 }
 
 export async function updateListingStatus(
