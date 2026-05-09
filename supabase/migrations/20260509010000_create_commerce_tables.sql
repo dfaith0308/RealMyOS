@@ -1,5 +1,5 @@
 -- COMMERCE-001: 커머스 관련 테이블 생성
--- 운영 DB 적용 전 (미적용 상태)
+-- 운영 DB 적용 완료 (2026-05-09)
 -- 상태값은 docs/commerce/COMMERCE-FLOW.md 참조
 -- Supabase에서 정무님이 직접 실행
 

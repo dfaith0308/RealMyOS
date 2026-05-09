@@ -55,6 +55,7 @@
 - **작업 이력 (2026-05-09)**: CONTEXT.md ARCH-09 커머스 도메인 경계 정의 추가 — worklog: [`docs/worklogs/2026-05-09_docs_context-arch-09-commerce-boundary.md`](./worklogs/2026-05-09_docs_context-arch-09-commerce-boundary.md)
 - **작업 이력 (2026-05-09)**: `tasks.md`에 커머스 실행 과제 `COMMERCE-000`~`007` 등록·집계·로드맵 반영 — worklog: [`docs/worklogs/2026-05-09_docs_tasks-commerce-000-007.md`](./worklogs/2026-05-09_docs_tasks-commerce-000-007.md)
 - **작업 이력 (2026-05-09)**: `COMMERCE-FLOW.md` SSOT + `20260509010000_create_commerce_tables.sql` 저장소 추가(DB 미실행) — worklog: [`docs/worklogs/2026-05-09_docs_commerce-flow-and-migration-sql.md`](./worklogs/2026-05-09_docs_commerce-flow-and-migration-sql.md)
+- **작업 이력 (2026-05-09)**: `COMMERCE-001` migration 파일 주석 운영 적용 완료(2026-05-09)로 갱신 — worklog: [`docs/worklogs/2026-05-09_docs_commerce-migration-applied-comment.md`](./worklogs/2026-05-09_docs_commerce-migration-applied-comment.md)
 
 ---
 
@@ -1115,8 +1116,9 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
      - **주의**: `unit_price`는 주문 시점 스냅샷. 이후 listing 가격 변경되어도 과거 주문 금액 불변. RULE-03(과거 데이터 불변) 원칙 적용.
 - **migration 필요**: YES — `realmyos/supabase/migrations/` incremental (거버넌스·승인 흐름 준수)
 - **완료 기준**: 4테이블 DDL·RLS·필수 인덱스가 migration으로 저장소에 존재하고 적용 이력이 추적 가능
-- **저장소 migration (운영 미적용)**: [`supabase/migrations/20260509010000_create_commerce_tables.sql`](../supabase/migrations/20260509010000_create_commerce_tables.sql) — 상태값·RLS는 `docs/commerce/COMMERCE-FLOW.md`와 병행 검토
+- **저장소 migration**: [`supabase/migrations/20260509010000_create_commerce_tables.sql`](../supabase/migrations/20260509010000_create_commerce_tables.sql) — 상태값·RLS는 `docs/commerce/COMMERCE-FLOW.md`와 병행 검토; 파일 헤더 주석 **운영 DB 적용 완료 (2026-05-09)**
 - **작업 이력 (2026-05-09)**: 커머스 4테이블 DDL·RLS 초안 SQL 파일 추가(저장소만, DB 미실행) — worklog: [`docs/worklogs/2026-05-09_docs_commerce-flow-and-migration-sql.md`](./worklogs/2026-05-09_docs_commerce-flow-and-migration-sql.md)
+- **작업 이력 (2026-05-09)**: migration 헤더 주석을 운영 적용 완료 일자로 갱신 — worklog: [`docs/worklogs/2026-05-09_docs_commerce-migration-applied-comment.md`](./worklogs/2026-05-09_docs_commerce-migration-applied-comment.md)
 
 #### [COMMERCE-002] 관리자OS Listing 관리 화면
 - **우선순위**: HIGH
