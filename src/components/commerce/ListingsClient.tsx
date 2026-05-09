@@ -4,10 +4,13 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState, useTransition } from 'react'
 import {
   createListing,
+  getCategories,
   getProducts,
   updateListingPrice,
   updateListingStatus,
   type CommerceListingRow,
+  type ListingShippingType,
+  type PlatformCommerceCategory,
   type ProductPickRow,
 } from '@/actions/admin/commerce'
 import { formatKRW } from '@/lib/calc'
@@ -33,6 +36,12 @@ export default function ListingsClient({
   const [newPrice, setNewPrice] = useState('')
   const [thumbnailUrl, setThumbnailUrl] = useState('')
   const [listingDescription, setListingDescription] = useState('')
+  const [brandName, setBrandName] = useState('')
+  const [categoryId, setCategoryId] = useState('')
+  const [originalPriceInput, setOriginalPriceInput] = useState('')
+  const [shippingType, setShippingType] = useState<ListingShippingType>('free')
+  const [categories, setCategories] = useState<PlatformCommerceCategory[]>([])
+  const [successToast, setSuccessToast] = useState<string | null>(null)
 
   const refresh = useCallback(() => {
     router.refresh()
@@ -83,14 +92,45 @@ export default function ListingsClient({
     }
   }, [modalOpen, search])
 
-  function openModal() {
-    setError(null)
+  useEffect(() => {
+    if (!modalOpen) return
+    let cancelled = false
+    getCategories()
+      .then((res) => {
+        if (cancelled) return
+        if (!res.success) {
+          setError(res.error ?? '카테고리 조회 실패')
+          setCategories([])
+          return
+        }
+        setCategories(res.data?.categories ?? [])
+      })
+      .catch(() => {
+        if (cancelled) return
+        setError('카테고리 조회 실패')
+        setCategories([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [modalOpen])
+
+  function resetModalForm() {
     setSearch('')
     setSelected(null)
     setNewPrice('')
     setThumbnailUrl('')
     setListingDescription('')
+    setBrandName('')
+    setCategoryId('')
+    setOriginalPriceInput('')
+    setShippingType('free')
     setPickList([])
+  }
+
+  function openModal() {
+    setError(null)
+    resetModalForm()
     setPickLoading(true)
     setModalOpen(true)
   }
@@ -109,11 +149,27 @@ export default function ListingsClient({
       setError('판매 가격은 1원 이상 정수로 입력해 주세요')
       return
     }
+    if (!categoryId.trim()) {
+      setError('카테고리를 선택해 주세요 (필수)')
+      return
+    }
+    const opRaw = originalPriceInput.replace(/[^\d]/g, '')
+    const opParsed = opRaw ? parseInt(opRaw, 10) : null
+    const original_price =
+      opParsed != null && Number.isFinite(opParsed) && opParsed > 0
+        ? opParsed > price
+          ? opParsed
+          : null
+        : null
     setError(null)
     startTransition(async () => {
       const r = await createListing({
         product_id: selected.id,
         commerce_price: price,
+        category_id: categoryId.trim(),
+        brand_name: brandName.trim() || null,
+        original_price,
+        shipping_type: shippingType,
         thumbnail_url: thumbnailUrl.trim() || null,
         description: listingDescription.trim() || null,
       })
@@ -122,6 +178,9 @@ export default function ListingsClient({
         return
       }
       setModalOpen(false)
+      resetModalForm()
+      setSuccessToast('상품이 등록되었습니다.')
+      window.setTimeout(() => setSuccessToast(null), 3200)
       refresh()
     })
   }
@@ -142,6 +201,28 @@ export default function ListingsClient({
 
   return (
     <>
+      {successToast ? (
+        <div
+          role="status"
+          style={{
+            position: 'fixed',
+            bottom: 24,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 100,
+            padding: '12px 20px',
+            borderRadius: 10,
+            background: '#15803d',
+            color: '#fff',
+            fontSize: 14,
+            fontWeight: 600,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+          }}
+        >
+          {successToast}
+        </div>
+      ) : null}
+
       <div className={s.actionsRow} style={{ justifyContent: 'space-between', width: '100%' }}>
         <span className={s.inlineMuted}>
           필터: {statusFilter} · {listings.length}건
@@ -167,7 +248,7 @@ export default function ListingsClient({
           <table className={s.table}>
             <thead>
               <tr className={s.theadRow}>
-                {['썸네일', '상품명', '가격', '상태', '등록일', '액션'].map((h) => (
+                {['썸네일', '상품명', '브랜드', '배송', '정상가', '가격', '상태', '등록일', '액션'].map((h) => (
                   <th key={h} className={s.th}>
                     {h}
                   </th>
@@ -192,6 +273,23 @@ export default function ListingsClient({
                   </td>
                   <td className={s.tdWide}>
                     <div className={s.cellStrong}>{row.products?.name ?? '(상품 정보 없음)'}</div>
+                  </td>
+                  <td className={s.tdNowrap}>
+                    {row.brand_name?.trim() ? (
+                      <span className={s.cellMutedSm}>{row.brand_name.trim()}</span>
+                    ) : (
+                      <span className={s.cellMutedSm}>—</span>
+                    )}
+                  </td>
+                  <td className={s.tdNowrap}>
+                    <ShippingTypeBadge type={row.shipping_type} />
+                  </td>
+                  <td className={s.tdNowrap} style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    {row.original_price != null && row.original_price > 0 ? (
+                      formatKRW(row.original_price)
+                    ) : (
+                      <span className={s.cellMutedSm}>—</span>
+                    )}
                   </td>
                   <td className={s.tdNowrap} style={{ fontVariantNumeric: 'tabular-nums' }}>
                     {formatKRW(row.commerce_price)}
@@ -347,6 +445,38 @@ export default function ListingsClient({
               )}
             </div>
             <label className={s.cellMutedSm} style={{ display: 'block', marginBottom: 6 }}>
+              브랜드명 (선택)
+            </label>
+            <input
+              className={s.input}
+              placeholder="예: 해표, 백설, 오뚜기"
+              value={brandName}
+              onChange={(e) => setBrandName(e.target.value)}
+              style={{ width: '100%', marginBottom: 4 }}
+            />
+            <p className={s.cellMutedSm} style={{ margin: '0 0 12px', fontSize: 12 }}>
+              브랜드가 있는 경우에만 입력
+            </p>
+
+            <label className={s.cellMutedSm} style={{ display: 'block', marginBottom: 6 }}>
+              카테고리 (필수)
+            </label>
+            <select
+              className={s.input}
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+              style={{ width: '100%', marginBottom: 12 }}
+              required
+            >
+              <option value="">카테고리를 선택하세요 (필수)</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+
+            <label className={s.cellMutedSm} style={{ display: 'block', marginBottom: 6 }}>
               커머스 판매가 (원)
             </label>
             <input
@@ -357,6 +487,37 @@ export default function ListingsClient({
               onChange={(e) => setNewPrice(e.target.value)}
               style={{ width: '100%', marginBottom: 12 }}
             />
+
+            <label className={s.cellMutedSm} style={{ display: 'block', marginBottom: 6 }}>
+              정상가/시중가 (선택)
+            </label>
+            <input
+              className={s.input}
+              inputMode="numeric"
+              placeholder="예: 25000"
+              value={originalPriceInput}
+              onChange={(e) => setOriginalPriceInput(e.target.value)}
+              style={{ width: '100%', marginBottom: 4 }}
+            />
+            <p className={s.cellMutedSm} style={{ margin: '0 0 12px', fontSize: 12 }}>
+              판매가보다 클 때만 절감액이 표시됩니다. 같거나 작으면 저장되지 않습니다.
+            </p>
+
+            <label className={s.cellMutedSm} style={{ display: 'block', marginBottom: 6 }}>
+              배송유형 (필수)
+            </label>
+            <select
+              className={s.input}
+              value={shippingType}
+              onChange={(e) => setShippingType(e.target.value as ListingShippingType)}
+              style={{ width: '100%', marginBottom: 12 }}
+            >
+              <option value="free">무료배송</option>
+              <option value="paid">유료배송</option>
+              <option value="cold">냉장배송</option>
+              <option value="same_day">오늘출고</option>
+            </select>
+
             <label className={s.cellMutedSm} style={{ display: 'block', marginBottom: 6 }}>
               썸네일 URL
             </label>
@@ -401,4 +562,38 @@ function statusBadgeClass(status: string, mod: typeof s): string {
   if (status === 'sold_out') return mod.badgeHigh
   if (status === 'discontinued') return mod.badgeCritical
   return mod.badgeNormal
+}
+
+function shippingBadgeStyle(type: string): { label: string; bg: string; color: string } {
+  switch (type) {
+    case 'paid':
+      return { label: '유료배송', bg: '#f3f4f6', color: '#888888' }
+    case 'cold':
+      return { label: '냉장배송', bg: '#dbeafe', color: '#2563eb' }
+    case 'same_day':
+      return { label: '오늘출고', bg: '#ffedd5', color: '#ea580c' }
+    case 'free':
+    default:
+      return { label: '무료배송', bg: '#1f5d3a', color: '#ffffff' }
+  }
+}
+
+function ShippingTypeBadge({ type }: { type: string }) {
+  const cfg = shippingBadgeStyle(type)
+  return (
+    <span
+      style={{
+        display: 'inline-block',
+        fontSize: 11,
+        fontWeight: 600,
+        padding: '2px 8px',
+        borderRadius: 6,
+        background: cfg.bg,
+        color: cfg.color,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {cfg.label}
+    </span>
+  )
 }

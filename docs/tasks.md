@@ -1123,6 +1123,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **작업 이력 (2026-05-09)**: Listing `thumbnail_url` / `image_urls` / `description` 컬럼 migration 소급 — [`supabase/migrations/20260509030000_add_commerce_listings_image.sql`](../supabase/migrations/20260509030000_add_commerce_listings_image.sql) — worklog: [`docs/worklogs/2026-05-09_feat_commerce-listing-images.md`](./worklogs/2026-05-09_feat_commerce-listing-images.md)
 - **작업 이력 (2026-05-09)**: 플랫폼 테넌트(`00000000-0000-0000-0000-000000000000`)용 `product_categories` 시드 SQL 추가 — [`supabase/seeds/commerce_categories.sql`](../supabase/seeds/commerce_categories.sql) — worklog: [`docs/worklogs/2026-05-09_chore_commerce-categories-seed.md`](./worklogs/2026-05-09_chore_commerce-categories-seed.md)
 - **작업 이력 (2026-05-10)**: `commerce_product_listings.original_price`(정상가·절감 UI용) 컬럼 migration 추가 — [`supabase/migrations/20260510110000_add_listing_original_price.sql`](../supabase/migrations/20260510110000_add_listing_original_price.sql) — worklog: [`docs/worklogs/2026-05-10_feat_commerce-listing-original-price.md`](./worklogs/2026-05-10_feat_commerce-listing-original-price.md)
+- **작업 이력 (2026-05-09)**: listing 전용 `brand_name` / `shipping_type` / `category_id` 컬럼 migration(저장소만, 미적용) — [`supabase/migrations/20260510120000_add_listing_brand_shipping.sql`](../supabase/migrations/20260510120000_add_listing_brand_shipping.sql) — worklog: [`docs/worklogs/2026-05-09_feat_admin-commerce-listing-dq.md`](./worklogs/2026-05-09_feat_admin-commerce-listing-dq.md)
 
 #### [COMMERCE-002] 관리자OS Listing 관리 화면
 - **우선순위**: HIGH
@@ -1141,6 +1142,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **작업 이력 (2026-05-09)**: Listing 관리 UI·서버 액션·상품 등록 모달·AdminSidebar 상품관리 — worklog: [`docs/worklogs/2026-05-09_feat_commerce-002-listings-admin.md`](./worklogs/2026-05-09_feat_commerce-002-listings-admin.md)
 - **작업 이력 (2026-05-09)**: 상품 등록 시 썸네일 URL·설명 입력, 목록 썸네일 컬럼·`getListings`/`createListing` 필드 반영 — worklog: [`docs/worklogs/2026-05-09_feat_commerce-listing-images.md`](./worklogs/2026-05-09_feat_commerce-listing-images.md)
 - **작업 이력 (2026-05-09)**: 상품 등록 모달 `getProducts` 검색 결과가 비어 보이던 문제 수정(이미 listing 있는 상품도 검색 노출·`already_listed` 처리, 쿼리 순서·limit, 모달 로딩/빈 상태) — worklog: [`docs/worklogs/2026-05-09_hotfix_admin-commerce-product-search.md`](./worklogs/2026-05-09_hotfix_admin-commerce-product-search.md)
+- **작업 이력 (2026-05-09)**: 상품 등록 UX(데이터 품질) — `getCategories`·필수 카테고리·정상가 검증·배송 뱃지·목록 컬럼 — worklog: [`docs/worklogs/2026-05-09_feat_admin-commerce-listing-dq.md`](./worklogs/2026-05-09_feat_admin-commerce-listing-dq.md)
 
 #### [COMMERCE-003] 관리자OS 주문 처리 화면
 - **우선순위**: HIGH

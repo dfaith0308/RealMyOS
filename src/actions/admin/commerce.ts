@@ -12,6 +12,9 @@ import type { ActionResult } from '@/types/order'
 
 const PLATFORM_OWNER_TENANT = '00000000-0000-0000-0000-000000000000'
 
+export const LISTING_SHIPPING_TYPES = ['free', 'paid', 'cold', 'same_day'] as const
+export type ListingShippingType = (typeof LISTING_SHIPPING_TYPES)[number]
+
 const LISTING_STATUSES = ['draft', 'visible', 'hidden', 'sold_out', 'discontinued'] as const
 export type ListingStatus = (typeof LISTING_STATUSES)[number]
 
@@ -62,6 +65,10 @@ export type CommerceListingRow = {
   tenant_id: string
   product_id: string | null
   commerce_price: number
+  brand_name: string | null
+  original_price: number | null
+  shipping_type: string
+  category_id: string | null
   status: ListingStatus
   is_visible: boolean
   created_at: string
@@ -69,6 +76,13 @@ export type CommerceListingRow = {
   image_urls: string[] | null
   description: string | null
   products: { name: string | null; category_id: string | null } | null
+}
+
+/** 플랫폼 커머스 대분류 (parent_id IS NULL) */
+export type PlatformCommerceCategory = {
+  id: string
+  name: string
+  parent_id: string | null
 }
 
 export type ProductPickRow = {
@@ -96,6 +110,10 @@ export async function getListings(filters?: {
       tenant_id,
       product_id,
       commerce_price,
+      brand_name,
+      original_price,
+      shipping_type,
+      category_id,
       status,
       is_visible,
       created_at,
@@ -117,8 +135,15 @@ export async function getListings(filters?: {
 
   if (error) return { success: false, error: error.message }
 
-  const listings = (data ?? []).map((row: any) => ({
+  const listings = (data ?? []).map((row: Record<string, unknown>) => ({
     ...row,
+    brand_name: (row.brand_name as string | null) ?? null,
+    original_price:
+      typeof row.original_price === 'number' && Number.isFinite(row.original_price)
+        ? Math.round(row.original_price)
+        : null,
+    shipping_type: (row.shipping_type as string) || 'free',
+    category_id: (row.category_id as string | null) ?? null,
     thumbnail_url: row.thumbnail_url ?? null,
     image_urls: row.image_urls ?? null,
     description: row.description ?? null,
@@ -126,6 +151,27 @@ export async function getListings(filters?: {
   })) as CommerceListingRow[]
 
   return { success: true, data: { listings } }
+}
+
+export async function getCategories(): Promise<ActionResult<{ categories: PlatformCommerceCategory[] }>> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const { data, error } = await supabase
+    .from('product_categories')
+    .select('id, name, parent_id')
+    .eq('tenant_id', PLATFORM_OWNER_TENANT)
+    .is('parent_id', null)
+    .order('name', { ascending: true })
+
+  if (error) return { success: false, error: error.message }
+  return {
+    success: true,
+    data: {
+      categories: (data ?? []) as PlatformCommerceCategory[],
+    },
+  }
 }
 
 export async function updateListingStatus(
@@ -234,6 +280,10 @@ export async function updateListingPrice(id: string, price: number): Promise<Act
 export async function createListing(input: {
   product_id: string
   commerce_price: number
+  category_id: string
+  brand_name?: string | null
+  original_price?: number | null
+  shipping_type?: ListingShippingType
   thumbnail_url?: string | null
   description?: string | null
 }): Promise<ActionResult<{ listing_id: string }>> {
@@ -244,10 +294,38 @@ export async function createListing(input: {
   const product_id = String(input.product_id ?? '').trim()
   if (!product_id) return { success: false, error: '상품을 선택해 주세요' }
 
+  const category_id = String(input.category_id ?? '').trim()
+  if (!category_id) return { success: false, error: '카테고리를 선택해 주세요' }
+
   const price = input.commerce_price
   if (!Number.isFinite(price) || !Number.isInteger(price) || price <= 0) {
     return { success: false, error: '가격은 1원 이상의 정수여야 합니다' }
   }
+
+  const { data: catRow, error: cErr } = await supabase
+    .from('product_categories')
+    .select('id')
+    .eq('id', category_id)
+    .eq('tenant_id', PLATFORM_OWNER_TENANT)
+    .is('parent_id', null)
+    .maybeSingle()
+
+  if (cErr) return { success: false, error: cErr.message }
+  if (!catRow) return { success: false, error: '유효한 카테고리(대분류)가 아닙니다' }
+
+  const brand_name = String(input.brand_name ?? '').trim() || null
+
+  let original_price: number | null = null
+  const opIn = input.original_price
+  if (opIn != null && Number.isFinite(opIn) && Number.isInteger(opIn) && opIn > 0) {
+    if (opIn > price) original_price = opIn
+  }
+
+  const stIn = input.shipping_type ?? 'free'
+  if (!(LISTING_SHIPPING_TYPES as readonly string[]).includes(stIn)) {
+    return { success: false, error: '유효하지 않은 배송 유형입니다' }
+  }
+  const shipping_type = stIn as ListingShippingType
 
   const thumbnail_url = String(input.thumbnail_url ?? '').trim() || null
   const description = String(input.description ?? '').trim() || null
@@ -280,6 +358,10 @@ export async function createListing(input: {
       owner_type: 'platform',
       owner_tenant_id: PLATFORM_OWNER_TENANT,
       commerce_price: price,
+      brand_name,
+      original_price,
+      shipping_type,
+      category_id,
       status: 'draft',
       is_visible: false,
       thumbnail_url,
@@ -297,7 +379,16 @@ export async function createListing(input: {
     action_type: 'listing_created',
     target_table: 'commerce_product_listings',
     target_id: listing_id,
-    new_value: { listing_id, product_id, thumbnail_url, description },
+    new_value: {
+      listing_id,
+      product_id,
+      category_id,
+      brand_name,
+      original_price,
+      shipping_type,
+      thumbnail_url,
+      description,
+    },
   })
   if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
 
