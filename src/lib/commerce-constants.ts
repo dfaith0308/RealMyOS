@@ -15,3 +15,8 @@ export type CommerceOrderStatus = (typeof COMMERCE_ORDER_STATUSES)[number]
 export const COMMERCE_PAYMENT_METHODS = ['card', 'bank_transfer', 'kakao_manual'] as const
 
 export type CommercePaymentMethod = (typeof COMMERCE_PAYMENT_METHODS)[number]
+
+/** commerce_product_listings.shipping_type — Server Action 파일 밖에서도 사용 */
+export const LISTING_SHIPPING_TYPES = ['free', 'paid', 'cold', 'same_day'] as const
+
+export type ListingShippingType = (typeof LISTING_SHIPPING_TYPES)[number]

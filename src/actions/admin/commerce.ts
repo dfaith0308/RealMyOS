@@ -5,15 +5,16 @@ import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import {
   COMMERCE_ORDER_STATUSES,
   COMMERCE_PAYMENT_METHODS,
+  LISTING_SHIPPING_TYPES,
   type CommerceOrderStatus,
   type CommercePaymentMethod,
+  type ListingShippingType,
 } from '@/lib/commerce-constants'
 import type { ActionResult } from '@/types/order'
 
-const PLATFORM_OWNER_TENANT = '00000000-0000-0000-0000-000000000000'
+export type { ListingShippingType } from '@/lib/commerce-constants'
 
-export const LISTING_SHIPPING_TYPES = ['free', 'paid', 'cold', 'same_day'] as const
-export type ListingShippingType = (typeof LISTING_SHIPPING_TYPES)[number]
+const PLATFORM_OWNER_TENANT = '00000000-0000-0000-0000-000000000000'
 
 const LISTING_STATUSES = ['draft', 'visible', 'hidden', 'sold_out', 'discontinued'] as const
 export type ListingStatus = (typeof LISTING_STATUSES)[number]

@@ -57,6 +57,7 @@
 - **작업 이력 (2026-05-09)**: `COMMERCE-FLOW.md` SSOT + `20260509010000_create_commerce_tables.sql` 저장소 추가(DB 미실행) — worklog: [`docs/worklogs/2026-05-09_docs_commerce-flow-and-migration-sql.md`](./worklogs/2026-05-09_docs_commerce-flow-and-migration-sql.md)
 - **작업 이력 (2026-05-09)**: `COMMERCE-001` migration 파일 주석 운영 적용 완료(2026-05-09)로 갱신 — worklog: [`docs/worklogs/2026-05-09_docs_commerce-migration-applied-comment.md`](./worklogs/2026-05-09_docs_commerce-migration-applied-comment.md)
 - **작업 이력 (2026-05-09)**: COMMERCE-002 Listing 관리·COMMERCE-004 상품관리 메뉴 선반영 — worklog: [`docs/worklogs/2026-05-09_feat_commerce-002-listings-admin.md`](./worklogs/2026-05-09_feat_commerce-002-listings-admin.md)
+- **작업 이력 (2026-05-10)**: `realmyos`·`resturant_os` `src/actions/` `'use server'` export 전수 점검 — `LISTING_SHIPPING_TYPES` → `commerce-constants.ts` 분리 — worklog: [`docs/worklogs/2026-05-10_fix_use-server-actions-audit.md`](./worklogs/2026-05-10_fix_use-server-actions-audit.md)
 
 ---
 
