@@ -56,6 +56,7 @@
 - **작업 이력 (2026-05-09)**: `tasks.md`에 커머스 실행 과제 `COMMERCE-000`~`007` 등록·집계·로드맵 반영 — worklog: [`docs/worklogs/2026-05-09_docs_tasks-commerce-000-007.md`](./worklogs/2026-05-09_docs_tasks-commerce-000-007.md)
 - **작업 이력 (2026-05-09)**: `COMMERCE-FLOW.md` SSOT + `20260509010000_create_commerce_tables.sql` 저장소 추가(DB 미실행) — worklog: [`docs/worklogs/2026-05-09_docs_commerce-flow-and-migration-sql.md`](./worklogs/2026-05-09_docs_commerce-flow-and-migration-sql.md)
 - **작업 이력 (2026-05-09)**: `COMMERCE-001` migration 파일 주석 운영 적용 완료(2026-05-09)로 갱신 — worklog: [`docs/worklogs/2026-05-09_docs_commerce-migration-applied-comment.md`](./worklogs/2026-05-09_docs_commerce-migration-applied-comment.md)
+- **작업 이력 (2026-05-09)**: COMMERCE-002 Listing 관리·COMMERCE-004 상품관리 메뉴 선반영 — worklog: [`docs/worklogs/2026-05-09_feat_commerce-002-listings-admin.md`](./worklogs/2026-05-09_feat_commerce-002-listings-admin.md)
 
 ---
 
@@ -1133,6 +1134,8 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
   - 상태 변경 이력 (`admin_logs` 기록 필수)
 - **migration 필요**: 🔍 (앱·RLS; 스키마는 `COMMERCE-001`)
 - **완료 기준**: 관리자 role로 위 기능이 동작하고 Listing 상태·가격 변경이 DB·감사 로그에 남음
+- **상태**: **완료 (2026-05-09)** — `/admin/commerce/products`, `src/actions/admin/commerce.ts`, `ListingsClient.tsx`, `COMMERCE-FLOW` 전이·`is_visible` 동기화·`admin_logs`·중복 방지
+- **작업 이력 (2026-05-09)**: Listing 관리 UI·서버 액션·상품 등록 모달·AdminSidebar 상품관리 — worklog: [`docs/worklogs/2026-05-09_feat_commerce-002-listings-admin.md`](./worklogs/2026-05-09_feat_commerce-002-listings-admin.md)
 
 #### [COMMERCE-003] 관리자OS 주문 처리 화면
 - **우선순위**: HIGH
@@ -1151,13 +1154,14 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 
 #### [COMMERCE-004] 관리자OS 사이드바 커머스 메뉴 추가
 - **우선순위**: HIGH
-- **선행 조건**: `COMMERCE-002`, `COMMERCE-003` 완료
+- **선행 조건**: `COMMERCE-002`, `COMMERCE-003` 완료 *(상품관리 링크는 2026-05-09 COMMERCE-002에서 선반영)*
 - **설명**: `AdminSidebar.tsx`에 커머스 메뉴 추가
 - **추가 메뉴**:
   - 상품관리 → `/admin/commerce/products`
   - 주문처리 → `/admin/commerce/orders`
 - **migration 필요**: NO
 - **완료 기준**: 사이드바에서 두 경로로 진입 가능
+- **작업 이력 (2026-05-09)**: 상품관리 메뉴·경로 추가(주문처리는 `COMMERCE-003` 대기) — worklog: [`docs/worklogs/2026-05-09_feat_commerce-002-listings-admin.md`](./worklogs/2026-05-09_feat_commerce-002-listings-admin.md)
 
 #### [COMMERCE-005] 식당OS `/buy/*` 구현
 - **우선순위**: HIGH

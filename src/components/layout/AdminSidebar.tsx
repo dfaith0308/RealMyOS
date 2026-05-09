@@ -20,6 +20,7 @@ const MENU: MenuItem[] = [
   { label: '수익/정산 통제', icon: '💹', href: '/admin/settlements' },
   { label: '정책/실험 콘솔', icon: '⚙️', href: '/admin/policy' },
   { label: '테넌트관리', icon: '🏢', href: '/admin/tenants' },
+  { label: '상품관리', icon: '🛍️', href: '/admin/commerce/products' },
   { label: '로그', icon: '🧾', href: '/admin/logs' },
 ]
 
