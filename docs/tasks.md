@@ -1153,6 +1153,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **완료 기준**: 수동 결제 확인·상태 전이가 규칙 내에서만 가능하고 감사 로그에 남음
 - **상태**: **완료 (2026-05-09)** — `/admin/commerce/orders`, `OrdersClient`, `getCommerceOrders`·`getCommerceOrderDetail`·`updateCommerceOrderStatus`, 미처리 큐·필터·race 방지·`commerce_order_status_changed` 로그
 - **작업 이력 (2026-05-09)**: 관리자OS 주문 처리 화면·사이드바 주문처리 메뉴·COMMERCE-003 migration 소급 파일 — worklog: [`docs/worklogs/2026-05-09_feat_commerce-003-admin-orders.md`](./worklogs/2026-05-09_feat_commerce-003-admin-orders.md)
+- **작업 이력 (2026-05-09)**: `commerce.ts` `use server` 규약 — 주문 상태·결제 상수 `src/lib/commerce-constants.ts` 분리 — worklog: [`docs/worklogs/2026-05-09_chore_use-server-commerce-constants.md`](./worklogs/2026-05-09_chore_use-server-commerce-constants.md)
 
 #### [COMMERCE-004] 관리자OS 사이드바 커머스 메뉴 추가
 - **우선순위**: HIGH

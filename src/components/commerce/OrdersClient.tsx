@@ -6,9 +6,9 @@ import {
   getCommerceOrderDetail,
   updateCommerceOrderStatus,
   type CommerceOrderDetail,
-  type CommerceOrderStatus,
   type CommerceOrderSummaryRow,
 } from '@/actions/admin/commerce'
+import type { CommerceOrderStatus } from '@/lib/commerce-constants'
 import { formatKRW } from '@/lib/calc'
 import s from '@/app/(admin)/admin-shared.module.css'
 

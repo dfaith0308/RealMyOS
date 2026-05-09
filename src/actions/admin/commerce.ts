@@ -2,6 +2,12 @@
 
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
+import {
+  COMMERCE_ORDER_STATUSES,
+  COMMERCE_PAYMENT_METHODS,
+  type CommerceOrderStatus,
+  type CommercePaymentMethod,
+} from '@/lib/commerce-constants'
 import type { ActionResult } from '@/types/order'
 
 const PLATFORM_OWNER_TENANT = '00000000-0000-0000-0000-000000000000'
@@ -317,20 +323,6 @@ export async function getProducts(search?: string): Promise<ActionResult<{ produ
 }
 
 // --- COMMERCE-003: 주문 처리 ---
-
-export const COMMERCE_ORDER_STATUSES = [
-  'pending_payment',
-  'paid',
-  'preparing',
-  'shipped',
-  'completed',
-  'cancelled',
-  'refunded',
-] as const
-export type CommerceOrderStatus = (typeof COMMERCE_ORDER_STATUSES)[number]
-
-export const COMMERCE_PAYMENT_METHODS = ['card', 'bank_transfer', 'kakao_manual'] as const
-export type CommercePaymentMethod = (typeof COMMERCE_PAYMENT_METHODS)[number]
 
 export type CommerceOrderSummaryRow = {
   id: string
