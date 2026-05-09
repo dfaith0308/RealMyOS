@@ -40,7 +40,9 @@ export default async function AdminCommerceProductsPage(props: {
       <header className={s.headerBetween}>
         <div>
           <h1 className={s.title}>상품 관리</h1>
-          <p className={s.subtitle}>플랫폼 Listing 노출·상태·가격 관리 (COMMERCE-FLOW 준수)</p>
+          <p className={s.subtitle}>
+            플랫폼 Listing 노출·상태·가격·썸네일 관리 (COMMERCE-FLOW 준수). 목록 테이블은 아래에서 확인합니다.
+          </p>
         </div>
         <div className={s.actionsRow}>
           <Link href="/admin/dashboard" className={s.ghostBtn}>

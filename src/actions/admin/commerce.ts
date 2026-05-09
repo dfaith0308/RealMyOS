@@ -65,6 +65,9 @@ export type CommerceListingRow = {
   status: ListingStatus
   is_visible: boolean
   created_at: string
+  thumbnail_url: string | null
+  image_urls: string[] | null
+  description: string | null
   products: { name: string | null; category_id: string | null } | null
 }
 
@@ -94,6 +97,9 @@ export async function getListings(filters?: {
       status,
       is_visible,
       created_at,
+      thumbnail_url,
+      image_urls,
+      description,
       products ( name, category_id )
     `,
     )
@@ -111,6 +117,9 @@ export async function getListings(filters?: {
 
   const listings = (data ?? []).map((row: any) => ({
     ...row,
+    thumbnail_url: row.thumbnail_url ?? null,
+    image_urls: row.image_urls ?? null,
+    description: row.description ?? null,
     products: Array.isArray(row.products) ? row.products[0] ?? null : row.products ?? null,
   })) as CommerceListingRow[]
 
@@ -223,6 +232,8 @@ export async function updateListingPrice(id: string, price: number): Promise<Act
 export async function createListing(input: {
   product_id: string
   commerce_price: number
+  thumbnail_url?: string | null
+  description?: string | null
 }): Promise<ActionResult<{ listing_id: string }>> {
   const supabase = await createSupabaseServer()
   const auth = await requireAdmin(supabase)
@@ -235,6 +246,9 @@ export async function createListing(input: {
   if (!Number.isFinite(price) || !Number.isInteger(price) || price <= 0) {
     return { success: false, error: '가격은 1원 이상의 정수여야 합니다' }
   }
+
+  const thumbnail_url = String(input.thumbnail_url ?? '').trim() || null
+  const description = String(input.description ?? '').trim() || null
 
   const { data: product, error: pErr } = await supabase
     .from('products')
@@ -266,6 +280,8 @@ export async function createListing(input: {
       commerce_price: price,
       status: 'draft',
       is_visible: false,
+      thumbnail_url,
+      description,
     })
     .select('id')
     .single()
@@ -279,7 +295,7 @@ export async function createListing(input: {
     action_type: 'listing_created',
     target_table: 'commerce_product_listings',
     target_id: listing_id,
-    new_value: { listing_id, product_id },
+    new_value: { listing_id, product_id, thumbnail_url, description },
   })
   if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
 

@@ -1120,6 +1120,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **저장소 migration**: [`supabase/migrations/20260509010000_create_commerce_tables.sql`](../supabase/migrations/20260509010000_create_commerce_tables.sql) — 상태값·RLS는 `docs/commerce/COMMERCE-FLOW.md`와 병행 검토; 파일 헤더 주석 **운영 DB 적용 완료 (2026-05-09)**
 - **작업 이력 (2026-05-09)**: 커머스 4테이블 DDL·RLS 초안 SQL 파일 추가(저장소만, DB 미실행) — worklog: [`docs/worklogs/2026-05-09_docs_commerce-flow-and-migration-sql.md`](./worklogs/2026-05-09_docs_commerce-flow-and-migration-sql.md)
 - **작업 이력 (2026-05-09)**: migration 헤더 주석을 운영 적용 완료 일자로 갱신 — worklog: [`docs/worklogs/2026-05-09_docs_commerce-migration-applied-comment.md`](./worklogs/2026-05-09_docs_commerce-migration-applied-comment.md)
+- **작업 이력 (2026-05-09)**: Listing `thumbnail_url` / `image_urls` / `description` 컬럼 migration 소급 — [`supabase/migrations/20260509030000_add_commerce_listings_image.sql`](../supabase/migrations/20260509030000_add_commerce_listings_image.sql) — worklog: [`docs/worklogs/2026-05-09_feat_commerce-listing-images.md`](./worklogs/2026-05-09_feat_commerce-listing-images.md)
 
 #### [COMMERCE-002] 관리자OS Listing 관리 화면
 - **우선순위**: HIGH
@@ -1136,6 +1137,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **완료 기준**: 관리자 role로 위 기능이 동작하고 Listing 상태·가격 변경이 DB·감사 로그에 남음
 - **상태**: **완료 (2026-05-09)** — `/admin/commerce/products`, `src/actions/admin/commerce.ts`, `ListingsClient.tsx`, `COMMERCE-FLOW` 전이·`is_visible` 동기화·`admin_logs`·중복 방지
 - **작업 이력 (2026-05-09)**: Listing 관리 UI·서버 액션·상품 등록 모달·AdminSidebar 상품관리 — worklog: [`docs/worklogs/2026-05-09_feat_commerce-002-listings-admin.md`](./worklogs/2026-05-09_feat_commerce-002-listings-admin.md)
+- **작업 이력 (2026-05-09)**: 상품 등록 시 썸네일 URL·설명 입력, 목록 썸네일 컬럼·`getListings`/`createListing` 필드 반영 — worklog: [`docs/worklogs/2026-05-09_feat_commerce-listing-images.md`](./worklogs/2026-05-09_feat_commerce-listing-images.md)
 
 #### [COMMERCE-003] 관리자OS 주문 처리 화면
 - **우선순위**: HIGH
@@ -1185,6 +1187,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **주의**: 하단 탭 추가 없음 (RULE-27)
 - **migration 필요**: `COMMERCE-001` 선행; 앱은 `resturant_os`
 - **완료 기준**: 위 라우트·진입점이 동작하고 Listing 노출은 `visible` 등 정책과 정합
+- **작업 이력 (2026-05-09)**: `/buy`·상품 상세에 `thumbnail_url`·`description` 표시, `getListings`/`getListing` 필드 확장 — worklog: [`docs/worklogs/2026-05-09_feat_commerce-listing-images.md`](./worklogs/2026-05-09_feat_commerce-listing-images.md) (`resturant_os`)
 
 #### [COMMERCE-006] 결제 연동
 - **우선순위**: MEDIUM

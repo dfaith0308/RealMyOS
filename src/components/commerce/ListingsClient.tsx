@@ -31,6 +31,8 @@ export default function ListingsClient({
   const [pickLoading, setPickLoading] = useState(false)
   const [selected, setSelected] = useState<ProductPickRow | null>(null)
   const [newPrice, setNewPrice] = useState('')
+  const [thumbnailUrl, setThumbnailUrl] = useState('')
+  const [listingDescription, setListingDescription] = useState('')
 
   const refresh = useCallback(() => {
     router.refresh()
@@ -78,6 +80,8 @@ export default function ListingsClient({
     setSearch('')
     setSelected(null)
     setNewPrice('')
+    setThumbnailUrl('')
+    setListingDescription('')
     setModalOpen(true)
   }
 
@@ -93,7 +97,12 @@ export default function ListingsClient({
     }
     setError(null)
     startTransition(async () => {
-      const r = await createListing({ product_id: selected.id, commerce_price: price })
+      const r = await createListing({
+        product_id: selected.id,
+        commerce_price: price,
+        thumbnail_url: thumbnailUrl.trim() || null,
+        description: listingDescription.trim() || null,
+      })
       if (!r.success) {
         setError(r.error ?? '등록 실패')
         return
@@ -144,7 +153,7 @@ export default function ListingsClient({
           <table className={s.table}>
             <thead>
               <tr className={s.theadRow}>
-                {['상품명', '가격', '상태', '등록일', '액션'].map((h) => (
+                {['썸네일', '상품명', '가격', '상태', '등록일', '액션'].map((h) => (
                   <th key={h} className={s.th}>
                     {h}
                   </th>
@@ -154,6 +163,19 @@ export default function ListingsClient({
             <tbody>
               {listings.map((row) => (
                 <tr key={row.id}>
+                  <td className={s.tdNowrap}>
+                    {row.thumbnail_url?.trim() ? (
+                      <img
+                        src={row.thumbnail_url.trim()}
+                        alt=""
+                        width={40}
+                        height={40}
+                        style={{ objectFit: 'cover', borderRadius: 8, display: 'block' }}
+                      />
+                    ) : (
+                      <span className={s.cellMutedSm}>이미지 없음</span>
+                    )}
+                  </td>
                   <td className={s.tdWide}>
                     <div className={s.cellStrong}>{row.products?.name ?? '(상품 정보 없음)'}</div>
                   </td>
@@ -311,6 +333,28 @@ export default function ListingsClient({
               value={newPrice}
               onChange={(e) => setNewPrice(e.target.value)}
               style={{ width: '100%', marginBottom: 12 }}
+            />
+            <label className={s.cellMutedSm} style={{ display: 'block', marginBottom: 6 }}>
+              썸네일 URL
+            </label>
+            <input
+              className={s.input}
+              type="url"
+              placeholder="이미지 URL 입력 (예: https://...)"
+              value={thumbnailUrl}
+              onChange={(e) => setThumbnailUrl(e.target.value)}
+              style={{ width: '100%', marginBottom: 12 }}
+            />
+            <label className={s.cellMutedSm} style={{ display: 'block', marginBottom: 6 }}>
+              상품 설명
+            </label>
+            <textarea
+              className={s.input}
+              placeholder="상품 설명을 입력하세요"
+              value={listingDescription}
+              onChange={(e) => setListingDescription(e.target.value)}
+              rows={3}
+              style={{ width: '100%', marginBottom: 12, resize: 'vertical' }}
             />
             <div className={s.actionsRow}>
               <button type="button" className={s.primaryBtn} disabled={pending} onClick={submitCreate}>
