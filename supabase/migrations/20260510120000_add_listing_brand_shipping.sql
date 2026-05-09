@@ -1,5 +1,5 @@
 -- 브랜드명/배송유형/플랫폼 카테고리(listing 전용) 컬럼 추가
--- 운영 DB 적용 전 — 저장소만 반영, 실행은 배포 절차에 따름.
+-- 운영 DB 적용 완료 (2026-05-10)
 -- products 원본은 변경하지 않음. category_id 는 commerce_product_listings 전용.
 --
 -- 향후 shipping_badges text[] 구조로 확장 예정
