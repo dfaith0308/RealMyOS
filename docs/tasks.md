@@ -1149,8 +1149,10 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
   - 주문 상태 변경 (`COMMERCE-000` 전이 규칙 준수)
   - 주문 상세 (품목/금액/배송지/결제방식)
   - 상태 변경 이력 (`admin_logs` 기록 필수)
-- **migration 필요**: 🔍 (앱·RLS; 스키마는 `COMMERCE-001`)
+- **migration 필요**: `20260509020000_add_commerce_orders_columns.sql` (`order_number`, `refund_required`, `refund_pending_at`, `generate_order_number`) — 저장소 반영; 운영 적용 여부는 배포 시 확인
 - **완료 기준**: 수동 결제 확인·상태 전이가 규칙 내에서만 가능하고 감사 로그에 남음
+- **상태**: **완료 (2026-05-09)** — `/admin/commerce/orders`, `OrdersClient`, `getCommerceOrders`·`getCommerceOrderDetail`·`updateCommerceOrderStatus`, 미처리 큐·필터·race 방지·`commerce_order_status_changed` 로그
+- **작업 이력 (2026-05-09)**: 관리자OS 주문 처리 화면·사이드바 주문처리 메뉴·COMMERCE-003 migration 소급 파일 — worklog: [`docs/worklogs/2026-05-09_feat_commerce-003-admin-orders.md`](./worklogs/2026-05-09_feat_commerce-003-admin-orders.md)
 
 #### [COMMERCE-004] 관리자OS 사이드바 커머스 메뉴 추가
 - **우선순위**: HIGH
@@ -1162,6 +1164,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **migration 필요**: NO
 - **완료 기준**: 사이드바에서 두 경로로 진입 가능
 - **작업 이력 (2026-05-09)**: 상품관리 메뉴·경로 추가(주문처리는 `COMMERCE-003` 대기) — worklog: [`docs/worklogs/2026-05-09_feat_commerce-002-listings-admin.md`](./worklogs/2026-05-09_feat_commerce-002-listings-admin.md)
+- **작업 이력 (2026-05-09)**: 주문처리 메뉴(`/admin/commerce/orders`) — `COMMERCE-003`과 함께 반영 — worklog: [`docs/worklogs/2026-05-09_feat_commerce-003-admin-orders.md`](./worklogs/2026-05-09_feat_commerce-003-admin-orders.md)
 
 #### [COMMERCE-005] 식당OS `/buy/*` 구현
 - **우선순위**: HIGH
