@@ -724,6 +724,111 @@ migration.sql / fix.sql / new.sql / temp.sql
 migration 없는 DB 변경 작업은 실행 금지.
 ```
 
+### [RULE-27] 커머스 금지 원칙 — HARD
+
+식식이OS 커머스는 운영 보조 시스템이다.
+아래 방향으로 가면 즉시 중단한다.
+
+금지:
+⛔ 오픈마켓 구조 (불특정 다수 상품 등록)
+⛔ 최저가 경쟁 구조
+⛔ AI 추천 엔진 초기 구현
+⛔ 자동 주문 생성 (사장님 승인 없는 주문)
+⛔ 추천 과잉 (한 화면에 3개 초과 추천)
+⛔ RFQ 엔진 구조 변경
+⛔ commerce_orders와 orders 혼용
+⛔ /buy를 하단 탭에 즉시 추가
+⛔ 쿠폰/타임세일 중심 구조
+⛔ 광고 배너 중심 홈 화면
+⛔ 이벤트 남발 구조
+
+허용:
+✅ 상품 노출 / 장바구니 / 결제
+✅ 재주문
+✅ RFQ 자연 연결 (Loose Input → Structured RFQ)
+✅ /today와 /rfq/new에서 /buy 진입
+✅ 무통장입금 + 카카오톡 주문 전달
+✅ 장바구니 기반 묶음 할인
+
+---
+
+### [RULE-28] commerce_orders 분리 원칙 — HARD
+
+커머스 주문은 반드시 commerce_orders 테이블로 분리한다.
+기존 orders 테이블과 혼용 금지.
+
+이유:
+RFQ 주문 흐름 ≠ 커머스 주문 흐름
+
+RFQ orders: 견적/입찰/협상 포함
+commerce_orders: 즉시 구매/장바구니/결제
+
+혼용 시 즉시 중단.
+
+RFQ → commerce_order 전환은 허용:
+(RFQ 확보 상품이 /buy에 등록된 후
+반복 구매 시 commerce_order 생성)
+
+RFQ traceability 유지 필수:
+RFQ에서 시작된 commerce_order는
+반드시 원본 rfq_request_id를 보존한다.
+
+이유:
+- 어떤 RFQ에서 시작됐는지 추적 가능
+- 어떤 sourcing이었는지 추적 가능
+- 추천/공급 분석/반복 구매 데이터 연결
+
+```typescript
+// ✅ 올바름
+commerce_orders: {
+  rfq_request_id: uuid | null  // RFQ 기원 추적
+  source: 'direct' | 'rfq'    // 구매 경로 분류
+}
+
+// ⛔ 금지
+// rfq_request_id 없이 commerce_order 생성
+// (RFQ 기원인 경우)
+```
+
+---
+
+### [RULE-29] 식당OS 정체성 유지 원칙 — HARD
+
+식식이OS는 운영 OS다.
+쇼핑몰은 그 안의 행동 레이어다.
+이 순서가 뒤집히면 즉시 중단.
+
+오늘운영(/today)은 식당OS의 최상위 운영 허브다.
+모든 커머스 흐름은 today 운영 흐름을 보조해야 한다.
+buy가 today를 덮으면 안 된다.
+
+금지:
+⛔ 커머스 기능이 오늘운영(/today) 구조를 덮는 것
+⛔ 쇼핑몰 중심 UI로 전환
+⛔ 운영 데이터 없는 단순 상품 나열
+⛔ buy가 today보다 강조되는 구조
+
+허용:
+✅ /today 카드에서 /buy 자연 진입
+✅ /rfq/new에서 /buy 연결
+✅ 운영 데이터 기반 추천 (메뉴/식자재 등록 기반)
+
+---
+
+### [RULE-30] 자동발주 금지 원칙 — HARD
+
+사장님 승인 없는 자동 주문 생성 절대 금지.
+
+허용:
+✅ 발주 시기 추천 알림
+✅ 추천 리스트 생성
+✅ 체크박스 선택 후 사장님 승인
+✅ 반자동 발주 (추천 + 체크 + 승인)
+
+금지:
+⛔ 자동으로 주문 생성
+⛔ 자동으로 결제 실행
+⛔ 사장님 확인 없는 어떠한 주문도 금지
 
 ---
 
@@ -767,6 +872,14 @@ migration 없는 DB 변경 작업은 실행 금지.
 ⛔ Dashboard에서만 직접 DB 수정                       [RULE-26]
 ⛔ 파일명 규칙 위반 migration (fix.sql 등)            [RULE-26]
 ⛔ migration 파일에 seed 데이터 혼용                  [RULE-26]
+⛔ 오픈마켓 구조 구현                         [RULE-27]
+⛔ 쿠폰/타임세일/광고배너 중심 구조            [RULE-27]
+⛔ 자동 주문 생성 (승인 없이)                 [RULE-30]
+⛔ commerce_orders와 orders 혼용             [RULE-28]
+⛔ RFQ 기원 commerce_order에 rfq_request_id 누락  [RULE-28]
+⛔ /buy 하단 탭 즉시 추가                    [RULE-27]
+⛔ 커머스로 오늘운영 구조 덮기                [RULE-29]
+⛔ buy가 today보다 강조되는 구조             [RULE-29]
 ```
 
 ---

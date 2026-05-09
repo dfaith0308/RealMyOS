@@ -51,6 +51,7 @@
 - **작업 이력 (2026-05-08)**: Next `'use server'` 규약 준수 — policy/contact 유틸·상수 lib 분리, 관리자 `/dashboard` 충돌 해소(`/admin/dashboard`) — worklog: [`docs/worklogs/2026-05-08_fix-use-server-exports-build.md`](./worklogs/2026-05-08_fix-use-server-exports-build.md)
 - **작업 이력 (2026-05-09)**: PRODUCT.md §13 자동발주 전략 추가 — worklog: [`docs/worklogs/2026-05-09_docs_product-13-auto-ordering.md`](./worklogs/2026-05-09_docs_product-13-auto-ordering.md)
 - **작업 이력 (2026-05-09)**: PRODUCT.md §12 커머스 구조 원칙(쇼핑몰 UX·buy 정의·commerce_orders 분리) 추가 — worklog: [`docs/worklogs/2026-05-09_docs_product-12-commerce-principles.md`](./worklogs/2026-05-09_docs_product-12-commerce-principles.md)
+- **작업 이력 (2026-05-09)**: rules.md 커머스·자동발주 통제 RULE-27~30 + FORBIDDEN 보강 — worklog: [`docs/worklogs/2026-05-09_docs_rules-commerce-rules-27-30.md`](./worklogs/2026-05-09_docs_rules-commerce-rules-27-30.md)
 
 ---
 
