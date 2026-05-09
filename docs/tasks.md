@@ -53,6 +53,7 @@
 - **작업 이력 (2026-05-09)**: PRODUCT.md §12 커머스 구조 원칙(쇼핑몰 UX·buy 정의·commerce_orders 분리) 추가 — worklog: [`docs/worklogs/2026-05-09_docs_product-12-commerce-principles.md`](./worklogs/2026-05-09_docs_product-12-commerce-principles.md)
 - **작업 이력 (2026-05-09)**: rules.md 커머스·자동발주 통제 RULE-27~30 + FORBIDDEN 보강 — worklog: [`docs/worklogs/2026-05-09_docs_rules-commerce-rules-27-30.md`](./worklogs/2026-05-09_docs_rules-commerce-rules-27-30.md)
 - **작업 이력 (2026-05-09)**: CONTEXT.md ARCH-09 커머스 도메인 경계 정의 추가 — worklog: [`docs/worklogs/2026-05-09_docs_context-arch-09-commerce-boundary.md`](./worklogs/2026-05-09_docs_context-arch-09-commerce-boundary.md)
+- **작업 이력 (2026-05-09)**: `tasks.md`에 커머스 실행 과제 `COMMERCE-000`~`007` 등록·집계·로드맵 반영 — worklog: [`docs/worklogs/2026-05-09_docs_tasks-commerce-000-007.md`](./worklogs/2026-05-09_docs_tasks-commerce-000-007.md)
 
 ---
 
@@ -1022,6 +1023,175 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 
 ---
 
+## [커머스] 플랫폼 Listing·주문·식당OS `/buy` (COMMERCE-*)
+
+> **SSOT 연계**: `docs/PRODUCT.md` §12·§13, `docs/CONTEXT.md` ARCH-09, `docs/rules.md` RULE-27~30·RULE-01·RULE-03·RULE-17 등.  
+> **집계**: `COMMERCE-*`는 `DB-*`/`SUP-*`/`ADM-*`/`RES-*` 유형별 표와 **별도 축** — 아래 **`#### [COMMERCE-…]`** 개수만 접두사별 합산에 포함.
+
+### 📋 실행 과제 (미착수)
+
+#### [COMMERCE-000] 커머스 운영 상태 플로우 문서화
+- **우선순위**: CRITICAL
+- **선행 조건**: 없음 (DB 설계 전 선행 필수)
+- **설명**: 상태 전이 규칙을 문서화한다. DB 설계 전에 상태머신을 확정하지 않으면 이후 상태가 꼬일 수 있다.
+- **Listing 상태 전이 규칙**:
+  - `draft` → `visible` (관리자 승인/공개)
+  - `visible` → `hidden` (일시 숨김)
+  - `visible` → `sold_out` (품절)
+  - `visible` → `discontinued` (판매 중단)
+  - `hidden` → `visible` (재공개)
+  - `sold_out` → `visible` (재입고)
+  - `discontinued` → 어떤 상태로도 복귀 불가
+- **주문 상태 전이 규칙**:
+  - `pending_payment` → `paid` (결제 확인)
+  - `paid` → `preparing` (준비 시작)
+  - `preparing` → `shipped` (배송 시작)
+  - `shipped` → `completed` (수령 확인)
+  - `pending_payment` → `cancelled` (결제 전 취소)
+  - `paid` → `cancelled` (결제 후 취소, 환불 트리거)
+  - `cancelled` → `refunded` (환불 완료)
+  - `shipped` → `cancelled` 불가 (배송 중 취소 금지)
+  - `completed` → 어떤 상태로도 변경 불가
+- **결제 방식별 `pending_payment` 처리**:
+  - `card`: PG 콜백으로 자동 `paid` 전환
+  - `bank_transfer`: 관리자 입금 확인 후 수동 `paid` 전환
+  - `kakao_manual`: 관리자 카카오 확인 후 수동 `paid` 전환
+- **timeout 정책 (초기)**: `pending_payment` 24시간 초과 시 자동 `cancelled`
+- **migration 필요**: NO (문서만)
+- **완료 기준**: 위 규칙이 단일 문서(SSOT)에 반영되고, `COMMERCE-001` DDL·앱 전이 로직이 본 ID와 정합 검증 가능
+
+#### [COMMERCE-001] 커머스 DB migration
+- **우선순위**: CRITICAL
+- **선행 조건**: `COMMERCE-000` 완료
+- **설명**: 커머스 관련 테이블 4개 생성
+- **테이블 목록**:
+  1. **`commerce_product_listings`**
+     - `id`: uuid
+     - `tenant_id`: uuid (RULE-01)
+     - `product_id`: uuid → `products` 참조
+     - `owner_type`: `'platform' | 'approved_supplier'`
+     - `owner_tenant_id`: uuid
+     - `commerce_price`: integer (RULE-17 금액 정수)
+     - `status`: `'draft' | 'visible' | 'hidden' | 'sold_out' | 'discontinued'`
+     - `is_visible`: boolean
+     - `approved_by`: uuid
+     - `approved_at`: timestamptz
+     - `created_at` / `updated_at` / `deleted_at`
+  2. **`cart_items`**
+     - `id`: uuid
+     - `tenant_id`: uuid (RULE-01)
+     - `listing_id`: uuid → `commerce_product_listings` 참조
+     - `quantity`: integer
+     - `cart_group_id`: uuid (세션/다중 사용자 장바구니 구분)
+     - `created_at` / `updated_at`
+     - **주의**: `cart_group_id` 없으면 동일 tenant 다중 세션 시 장바구니 merge 문제 발생 가능
+  3. **`commerce_orders`**
+     - `id`: uuid
+     - `tenant_id`: uuid (RULE-01)
+     - `source`: `'direct' | 'rfq'`
+     - `rfq_request_id`: uuid | null (RFQ traceability)
+     - `status`: `'pending_payment' | 'paid' | 'preparing' | 'shipped' | 'completed' | 'cancelled' | 'refunded'`
+     - `payment_method`: `'card' | 'bank_transfer' | 'kakao_manual'`
+     - `payment_status`: `'unpaid' | 'paid' | 'refunded'`
+     - `total_amount`: integer
+     - `shipping_name`: text
+     - `shipping_phone`: text
+     - `shipping_address`: text
+     - `delivery_memo`: text | null
+     - `created_at` / `updated_at`
+     - **주의**: shipping 정보 없으면 checkout 설계 다시 뜯음
+  4. **`commerce_order_items`**
+     - `id`: uuid
+     - `order_id`: uuid → `commerce_orders` 참조
+     - `listing_id`: uuid → `commerce_product_listings` 참조
+     - `quantity`: integer
+     - `unit_price`: integer (주문 시점 가격 스냅샷 — RULE-03)
+     - `total_price`: integer (주문 시점 확정값)
+     - `listing_title`: text (주문 시점 상품명 스냅샷)
+     - `created_at`
+     - **주의**: `unit_price`는 주문 시점 스냅샷. 이후 listing 가격 변경되어도 과거 주문 금액 불변. RULE-03(과거 데이터 불변) 원칙 적용.
+- **migration 필요**: YES — `realmyos/supabase/migrations/` incremental (거버넌스·승인 흐름 준수)
+- **완료 기준**: 4테이블 DDL·RLS·필수 인덱스가 migration으로 저장소에 존재하고 적용 이력이 추적 가능
+
+#### [COMMERCE-002] 관리자OS Listing 관리 화면
+- **우선순위**: HIGH
+- **선행 조건**: `COMMERCE-001` 완료
+- **설명**: `/admin/commerce/products` 구현. 플랫폼 관리자가 코드 없이 상품 노출 관리.
+- **화면 기능**:
+  - Listing 목록 (상태 필터)
+  - 상태 변경 (`COMMERCE-000` 전이 규칙 준수)
+  - 가격 수정
+  - 공개/비공개 토글
+  - 상품 등록 (`products` 테이블에서 선택)
+  - 상태 변경 이력 (`admin_logs` 기록 필수)
+- **migration 필요**: 🔍 (앱·RLS; 스키마는 `COMMERCE-001`)
+- **완료 기준**: 관리자 role로 위 기능이 동작하고 Listing 상태·가격 변경이 DB·감사 로그에 남음
+
+#### [COMMERCE-003] 관리자OS 주문 처리 화면
+- **우선순위**: HIGH
+- **선행 조건**: `COMMERCE-001` 완료
+- **설명**: `/admin/commerce/orders` 구현. 무통장/카카오 주문 수동 처리 콘솔.
+- **화면 기능**:
+  - 주문 목록 (상태/결제방식 필터)
+  - 미처리 큐 (`pending_payment` + `bank_transfer` / `kakao_manual`)
+  - 무통장입금 확인 후 `paid` 수동 처리
+  - 카카오 주문 확인 후 `paid` 수동 처리
+  - 주문 상태 변경 (`COMMERCE-000` 전이 규칙 준수)
+  - 주문 상세 (품목/금액/배송지/결제방식)
+  - 상태 변경 이력 (`admin_logs` 기록 필수)
+- **migration 필요**: 🔍 (앱·RLS; 스키마는 `COMMERCE-001`)
+- **완료 기준**: 수동 결제 확인·상태 전이가 규칙 내에서만 가능하고 감사 로그에 남음
+
+#### [COMMERCE-004] 관리자OS 사이드바 커머스 메뉴 추가
+- **우선순위**: HIGH
+- **선행 조건**: `COMMERCE-002`, `COMMERCE-003` 완료
+- **설명**: `AdminSidebar.tsx`에 커머스 메뉴 추가
+- **추가 메뉴**:
+  - 상품관리 → `/admin/commerce/products`
+  - 주문처리 → `/admin/commerce/orders`
+- **migration 필요**: NO
+- **완료 기준**: 사이드바에서 두 경로로 진입 가능
+
+#### [COMMERCE-005] 식당OS `/buy/*` 구현
+- **우선순위**: HIGH
+- **선행 조건**: `COMMERCE-001`~`004` 완료
+- **설명**: 식당OS `resturant_os` `/buy` 라우트 구현
+- **라우트**:
+  - `/buy` — 상품 홈 (재주문/추천/카테고리)
+  - `/buy/search` — 검색
+  - `/buy/category/[id]` — 카테고리
+  - `/buy/product/[id]` — 상품 상세
+  - `/buy/cart` — 장바구니
+  - `/buy/checkout` — 결제
+  - `/buy/orders` — 구매내역
+- **진입점**:
+  - `/today` 카드에서 자연 진입
+  - `/rfq/new`에서 「상품 먼저 보기」 연결
+- **주의**: 하단 탭 추가 없음 (RULE-27)
+- **migration 필요**: `COMMERCE-001` 선행; 앱은 `resturant_os`
+- **완료 기준**: 위 라우트·진입점이 동작하고 Listing 노출은 `visible` 등 정책과 정합
+
+#### [COMMERCE-006] 결제 연동
+- **우선순위**: MEDIUM
+- **선행 조건**: `COMMERCE-005` 완료
+- **설명**: 결제 방식별 처리 구현
+- **범위**:
+  - 카드결제: PortOne 또는 토스페이먼츠 연동
+  - 무통장입금: 주문 생성 → 관리자OS 확인 → `paid` 처리
+  - 카카오 전달: 장바구니 → 주문 요약 → 카카오 전달 버튼
+- **migration 필요**: 🔍 (PG·외부 연동에 따름)
+- **완료 기준**: `COMMERCE-000` 결제 분기·`commerce_orders` 상태와 운영 플로우가 일치
+
+#### [COMMERCE-007] `/today` 커머스 진입 연결
+- **우선순위**: MEDIUM
+- **선행 조건**: `COMMERCE-005` 완료
+- **설명**: `/today` 카드에서 `/buy` 자연 진입 추가. 운영 흐름 안에서 쇼핑 경험 시작.
+- **주의**: today 카드 3개 제한 유지 (RULE-29). `buy`가 today를 덮으면 안 됨.
+- **migration 필요**: NO
+- **완료 기준**: 카드 한 칸(또는 기존 카드 내 링크)으로 `/buy` 진입이 가능하고 RULE-29 위반 없음
+
+---
+
 ## [식당OS] resturant_os/src/app/(app)/
 
 > 코드베이스 경로: `resturant_os/` (폴더 철자 주의). 감사 범위: `src/actions/*.ts`, `src/lib/supabase-*`, `src/app/(app)/**/page.tsx`, 핵심 클라이언트 컴포넌트(today/money/orders/rfq). **DB·RLS 실사·DDL 불일치는 `## [공통 DB]`** (`DB-DANGER-002`·`DB-CHECK-003`~**`006`**).
@@ -1286,7 +1456,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 
 ## 감사 요약 (집계)
 
-> **집계 규칙**: 아래 숫자는 `tasks.md` 본문에 **제목이 한 번씩 등장하는 ID**만 센다. `SUP-CHECK-001` 등 **이관 스텁**은 원 소속(공급자OS)에 포함, 상세는 `DB-CHECK-*` 참조. **`SUP-CHECK-002`**는 **`## 비-DB 운영 확인`**에 두었으나 접두사 `SUP-`이므로 **공급자OS 행의 확인필요 건수**에 포함된다. **`FORENSIC-*`**는 **`## [FORENSIC]`** 교차 축으로 **유형별 표(DB/SUP/ADM/RES)** 에는 넣지 않고, **접두사별·교차 검증**에서만 합산한다.
+> **집계 규칙**: 아래 숫자는 `tasks.md` 본문에 **제목이 한 번씩 등장하는 ID**만 센다. `SUP-CHECK-001` 등 **이관 스텁**은 원 소속(공급자OS)에 포함, 상세는 `DB-CHECK-*` 참조. **`SUP-CHECK-002`**는 **`## 비-DB 운영 확인`**에 두었으나 접두사 `SUP-`이므로 **공급자OS 행의 확인필요 건수**에 포함된다. **`FORENSIC-*`**는 **`## [FORENSIC]`** 교차 축으로 **유형별 표(DB/SUP/ADM/RES)** 에는 넣지 않고, **접두사별·교차 검증**에서만 합산한다. **`COMMERCE-*`**는 **`## [커머스]`** 교차 축으로 **유형별 표**에는 넣지 않고 **접두사별·교차 검증**에서만 합산한다.
 
 ### 유형별 건수
 
@@ -1310,7 +1480,10 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 | RES- | 19 |
 | *(소계 `DB`/`SUP`/`ADM`/`RES`)* | **65** |
 | FORENSIC- | **9** |
-| **본문 ID 합계** | **74** |
+| COMMERCE- | **8** |
+| **본문 ID 합계** | **82** |
+
+> **`COMMERCE-*` 8건**은 `## [커머스]` 블록의 `#### [COMMERCE-000]`~`007`에 대응한다.
 
 ### 교차 검증 (운영 DB forensic 반영 후, 본문 `#### [접두사-…]` 개수)
 
@@ -1321,9 +1494,10 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 | ADM- | 2 | ✅ |
 | RES- | 19 | ✅ |
 | FORENSIC- | 9 | ✅ |
-| **합계** | **74** | ✅ |
+| COMMERCE- | 8 | ✅ |
+| **합계** | **82** | ✅ |
 
-유형 합(`DB`/`SUP`/`ADM`/`RES` 표만): 구조위험 14 + 가짜 4 + 부분 15 + 미구현 7 + 확인 14 + 완료 11 = **65** ✅ — **`FORENSIC-*` 9건은 별도 축** (`## [FORENSIC]`).
+유형 합(`DB`/`SUP`/`ADM`/`RES` 표만): 구조위험 14 + 가짜 4 + 부분 15 + 미구현 7 + 확인 14 + 완료 11 = **65** ✅ — **`FORENSIC-*` 9건·`COMMERCE-*` 8건은 별도 축** (`## [FORENSIC]`, `## [커머스]`).
 
 ---
 
@@ -1386,6 +1560,10 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 
 **비-DB 운영 확인** (`## 비-DB 운영 확인` 참조)  
 - **`SUP-CHECK-002`** — 언제든 병렬 가능 (Phase 0~6과 독립, 단 **운영/환경 접근** 필요)
+
+**Phase 8 — 커머스 (`COMMERCE-*`, `## [커머스]`)** — **미착수**  
+- **순서**: **`COMMERCE-000`** (상태 플로우 문서 SSOT) → **`COMMERCE-001`** (DDL·RLS) → **`COMMERCE-002`**·**`003`** (관리자OS Listing·주문) → **`COMMERCE-004`** (사이드바) → **`COMMERCE-005`** (식당OS `/buy/*`) → **`COMMERCE-006`** (결제 연동) → **`COMMERCE-007`** (`/today` 진입, RULE-29 유지).  
+- **원칙**: 관리자OS·DB·운영 플로우 우선, 식당OS 쇼핑 UX·결제·today 연결은 후속.
 
 ---
 
