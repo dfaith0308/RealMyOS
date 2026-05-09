@@ -54,6 +54,7 @@
 - **작업 이력 (2026-05-09)**: rules.md 커머스·자동발주 통제 RULE-27~30 + FORBIDDEN 보강 — worklog: [`docs/worklogs/2026-05-09_docs_rules-commerce-rules-27-30.md`](./worklogs/2026-05-09_docs_rules-commerce-rules-27-30.md)
 - **작업 이력 (2026-05-09)**: CONTEXT.md ARCH-09 커머스 도메인 경계 정의 추가 — worklog: [`docs/worklogs/2026-05-09_docs_context-arch-09-commerce-boundary.md`](./worklogs/2026-05-09_docs_context-arch-09-commerce-boundary.md)
 - **작업 이력 (2026-05-09)**: `tasks.md`에 커머스 실행 과제 `COMMERCE-000`~`007` 등록·집계·로드맵 반영 — worklog: [`docs/worklogs/2026-05-09_docs_tasks-commerce-000-007.md`](./worklogs/2026-05-09_docs_tasks-commerce-000-007.md)
+- **작업 이력 (2026-05-09)**: `COMMERCE-FLOW.md` SSOT + `20260509010000_create_commerce_tables.sql` 저장소 추가(DB 미실행) — worklog: [`docs/worklogs/2026-05-09_docs_commerce-flow-and-migration-sql.md`](./worklogs/2026-05-09_docs_commerce-flow-and-migration-sql.md)
 
 ---
 
@@ -1059,6 +1060,8 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **timeout 정책 (초기)**: `pending_payment` 24시간 초과 시 자동 `cancelled`
 - **migration 필요**: NO (문서만)
 - **완료 기준**: 위 규칙이 단일 문서(SSOT)에 반영되고, `COMMERCE-001` DDL·앱 전이 로직이 본 ID와 정합 검증 가능
+- **SSOT 문서**: [`docs/commerce/COMMERCE-FLOW.md`](./commerce/COMMERCE-FLOW.md)
+- **작업 이력 (2026-05-09)**: 커머스 운영 상태 플로우 SSOT 문서 `COMMERCE-FLOW.md` 추가 — worklog: [`docs/worklogs/2026-05-09_docs_commerce-flow-and-migration-sql.md`](./worklogs/2026-05-09_docs_commerce-flow-and-migration-sql.md)
 
 #### [COMMERCE-001] 커머스 DB migration
 - **우선순위**: CRITICAL
@@ -1112,6 +1115,8 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
      - **주의**: `unit_price`는 주문 시점 스냅샷. 이후 listing 가격 변경되어도 과거 주문 금액 불변. RULE-03(과거 데이터 불변) 원칙 적용.
 - **migration 필요**: YES — `realmyos/supabase/migrations/` incremental (거버넌스·승인 흐름 준수)
 - **완료 기준**: 4테이블 DDL·RLS·필수 인덱스가 migration으로 저장소에 존재하고 적용 이력이 추적 가능
+- **저장소 migration (운영 미적용)**: [`supabase/migrations/20260509010000_create_commerce_tables.sql`](../supabase/migrations/20260509010000_create_commerce_tables.sql) — 상태값·RLS는 `docs/commerce/COMMERCE-FLOW.md`와 병행 검토
+- **작업 이력 (2026-05-09)**: 커머스 4테이블 DDL·RLS 초안 SQL 파일 추가(저장소만, DB 미실행) — worklog: [`docs/worklogs/2026-05-09_docs_commerce-flow-and-migration-sql.md`](./worklogs/2026-05-09_docs_commerce-flow-and-migration-sql.md)
 
 #### [COMMERCE-002] 관리자OS Listing 관리 화면
 - **우선순위**: HIGH
