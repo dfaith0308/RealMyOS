@@ -1189,6 +1189,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **migration 필요**: `COMMERCE-001` 선행; 앱은 `resturant_os`
 - **완료 기준**: 위 라우트·진입점이 동작하고 Listing 노출은 `visible` 등 정책과 정합
 - **작업 이력 (2026-05-09)**: `/buy`·상품 상세에 `thumbnail_url`·`description` 표시, `getListings`/`getListing` 필드 확장 — worklog: [`docs/worklogs/2026-05-09_feat_commerce-listing-images.md`](./worklogs/2026-05-09_feat_commerce-listing-images.md) (`resturant_os`)
+- **작업 이력 (2026-05-09)**: `/buy` 운영형 UX 강화(카테고리 칩·장바구니 상태 블록·카드 설명·푸터·상품명 normalize)·`products` embed용 RLS(`20260510100000_…`)·mock listing seed SQL — worklog: [`docs/worklogs/2026-05-09_design_restaurant-buy-ux-strengthen.md`](./worklogs/2026-05-09_design_restaurant-buy-ux-strengthen.md)
 
 #### [COMMERCE-006] 결제 연동
 - **우선순위**: MEDIUM
