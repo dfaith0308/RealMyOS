@@ -1174,7 +1174,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
   - 카테고리 → `/admin/commerce/categories`
   - 주문처리 → `/admin/commerce/orders`
 - **migration 필요**: NO
-- **완료 기준**: 사이드바에서 두 경로로 진입 가능
+- **완료 기준**: 사이드바에서 상품관리·카테고리·주문처리 경로로 진입 가능
 - **작업 이력 (2026-05-09)**: 상품관리 메뉴·경로 추가(주문처리는 `COMMERCE-003` 대기) — worklog: [`docs/worklogs/2026-05-09_feat_commerce-002-listings-admin.md`](./worklogs/2026-05-09_feat_commerce-002-listings-admin.md)
 - **작업 이력 (2026-05-09)**: 주문처리 메뉴(`/admin/commerce/orders`) — `COMMERCE-003`과 함께 반영 — worklog: [`docs/worklogs/2026-05-09_feat_commerce-003-admin-orders.md`](./worklogs/2026-05-09_feat_commerce-003-admin-orders.md)
 - **작업 이력 (2026-05-10)**: 카테고리 메뉴(`/admin/commerce/categories`) — worklog: [`docs/worklogs/2026-05-10_feat_admin-commerce-categories.md`](./worklogs/2026-05-10_feat_admin-commerce-categories.md)
