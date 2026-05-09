@@ -1121,6 +1121,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **작업 이력 (2026-05-09)**: 커머스 4테이블 DDL·RLS 초안 SQL 파일 추가(저장소만, DB 미실행) — worklog: [`docs/worklogs/2026-05-09_docs_commerce-flow-and-migration-sql.md`](./worklogs/2026-05-09_docs_commerce-flow-and-migration-sql.md)
 - **작업 이력 (2026-05-09)**: migration 헤더 주석을 운영 적용 완료 일자로 갱신 — worklog: [`docs/worklogs/2026-05-09_docs_commerce-migration-applied-comment.md`](./worklogs/2026-05-09_docs_commerce-migration-applied-comment.md)
 - **작업 이력 (2026-05-09)**: Listing `thumbnail_url` / `image_urls` / `description` 컬럼 migration 소급 — [`supabase/migrations/20260509030000_add_commerce_listings_image.sql`](../supabase/migrations/20260509030000_add_commerce_listings_image.sql) — worklog: [`docs/worklogs/2026-05-09_feat_commerce-listing-images.md`](./worklogs/2026-05-09_feat_commerce-listing-images.md)
+- **작업 이력 (2026-05-09)**: 플랫폼 테넌트(`00000000-0000-0000-0000-000000000000`)용 `product_categories` 시드 SQL 추가 — [`supabase/seeds/commerce_categories.sql`](../supabase/seeds/commerce_categories.sql) — worklog: [`docs/worklogs/2026-05-09_chore_commerce-categories-seed.md`](./worklogs/2026-05-09_chore_commerce-categories-seed.md)
 
 #### [COMMERCE-002] 관리자OS Listing 관리 화면
 - **우선순위**: HIGH
