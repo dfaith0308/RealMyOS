@@ -22,7 +22,8 @@ import mod from './listing-new-client.module.css'
 
 const MAX_DETAIL_IMAGES = 20
 const MAX_IMAGE_FILE_BYTES = 8 * 1024 * 1024
-const ACCEPT_IMAGE = 'image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp'
+const ACCEPT_IMAGE =
+  'image/jpeg,image/jpg,image/pjpeg,image/png,image/webp,image/gif,image/bmp,image/avif,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.gif,.bmp,.avif,.heic,.heif'
 const MAX_THUMB_BADGES = 2
 const THUMB_H = 160
 
@@ -64,11 +65,12 @@ function validateImageFile(file: File): string | null {
   if (file.size > MAX_IMAGE_FILE_BYTES) {
     return '8MB 이하 이미지만 업로드 가능합니다'
   }
-  const ok =
-    /image\/(jpeg|png|webp)/i.test(file.type) ||
-    /\.(jpe?g|png|webp)$/i.test(file.name)
-  if (!ok) return 'JPG/PNG/WebP만 업로드 가능합니다'
-  return null
+  const extOk = /\.(jpe?g|png|webp|gif|bmp|avif|heic|heif)$/i.test(file.name)
+  const mimeOk =
+    /image\/(jpeg|jpg|pjpeg|png|webp|gif|bmp|avif|heic|heif|x-png)/i.test(file.type)
+  const octetOk = file.type === 'application/octet-stream' && extOk
+  if (mimeOk || extOk || octetOk) return null
+  return '지원 이미지 형식이 아닙니다(JPG/PNG/WebP/GIF/BMP/AVIF/HEIC 등, 확장자 또는 MIME 필요)'
 }
 
 function blocksToSavedUrls(blocks: DetailImageBlock[]): string[] {
@@ -252,11 +254,16 @@ export default function ListingNewClient() {
   const [detailDebugLastUrl, setDetailDebugLastUrl] = useState<string>('-')
   const [detailDebugLastError, setDetailDebugLastError] = useState<string | null>(null)
   const [listingDescription, setListingDescription] = useState(empty.listingDescription)
+
+  useEffect(() => {
+    detailBlocksRef.current = detailBlocks
+  }, [detailBlocks])
   const [adminMemo, setAdminMemo] = useState(empty.adminMemo)
   const [visibility, setVisibility] = useState<'draft' | 'visible'>(empty.visibility)
 
   const thumbFileRef = useRef<HTMLInputElement>(null)
   const detailFilesRef = useRef<HTMLInputElement>(null)
+  const detailBlocksRef = useRef<DetailImageBlock[]>([])
 
   const [previewTab, setPreviewTab] = useState<'card' | 'detail'>('card')
 
@@ -530,13 +537,22 @@ export default function ListingNewClient() {
     if (process.env.NODE_ENV === 'development') {
       setDetailDebugLastFiles(fileArr.length)
       setDetailDebugLastError(null)
+      console.log(
+        'FILES',
+        fileArr.length,
+        fileArr.map((f) => ({ name: f.name, type: f.type || '(empty)', size: f.size })),
+      )
+      console.log('BEFORE APPEND (ref)', detailBlocksRef.current.length)
     }
 
     const pairs: { file: File; block: DetailImageBlock }[] = []
+    const rejectSamples: string[] = []
     for (const file of fileArr) {
       const err = validateImageFile(file)
       if (err) {
-        showToast(err)
+        if (rejectSamples.length < 5) {
+          rejectSamples.push(`${file.name} [${file.type || 'no-mime'}]: ${err}`)
+        }
         continue
       }
       try {
@@ -553,15 +569,42 @@ export default function ListingNewClient() {
         const msg = e instanceof Error ? e.message : String(e)
         if (process.env.NODE_ENV === 'development') {
           setDetailDebugLastError(`newBlock: ${msg}`)
+          console.log('newBlock throw', msg)
         }
         showToast('상세 이미지 블록을 만들 수 없습니다. 페이지를 새로고침 후 다시 시도해 주세요.')
         return
       }
     }
-    if (pairs.length === 0) return
+
+    if (pairs.length === 0) {
+      const summary =
+        rejectSamples.length > 0
+          ? `검증 탈락 ${fileArr.length}건(블록 미추가). 예: ${rejectSamples.join(' | ')}`
+          : `pairs=0 (파일 ${fileArr.length}개, 원인 불명)`
+      if (process.env.NODE_ENV === 'development') {
+        setDetailDebugLastError(summary)
+        console.log('NEW BLOCKS', 0, 'pairs empty; samples:', rejectSamples)
+      }
+      showToast(
+        rejectSamples[0] ??
+          `선택한 ${fileArr.length}개를 상세 이미지로 추가할 수 없습니다(형식·용량 확인).`,
+      )
+      return
+    }
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log(
+        'NEW BLOCKS',
+        pairs.length,
+        pairs.map((p) => ({ id: p.block.id, name: p.file.name })),
+      )
+    }
 
     let uploadJobs: { file: File; id: string }[] = []
     const appendReducer = (prev: DetailImageBlock[]) => {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('appendReducer IN prev.length', prev.length, 'pairs', pairs.length)
+      }
       const room = Math.max(0, MAX_DETAIL_IMAGES - prev.length)
       const slice = pairs.slice(0, room)
       uploadJobs = slice.map((p) => ({ file: p.file, id: p.block.id }))
@@ -573,6 +616,12 @@ export default function ListingNewClient() {
       flushSync(() => {
         setDetailBlocks(appendReducer)
       })
+      if (process.env.NODE_ENV === 'development') {
+        console.log('AFTER flushSync uploadJobs', uploadJobs.length)
+        queueMicrotask(() => {
+          console.log('STATE AFTER MICROTASK (ref.length)', detailBlocksRef.current.length)
+        })
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       if (process.env.NODE_ENV === 'development') {
@@ -1723,6 +1772,29 @@ export default function ListingNewClient() {
                   <div>lastFiles: {detailDebugLastFiles}</div>
                   <div>lastUrl: {detailDebugLastUrl}</div>
                   {detailDebugLastError ? <div style={{ color: '#b91c1c' }}>err: {detailDebugLastError}</div> : null}
+                  <div style={{ marginTop: 10 }}>
+                    <button
+                      type="button"
+                      className={mod.btnMuted}
+                      onClick={() => {
+                        setDetailDebugLastError(null)
+                        setDetailBlocks([
+                          {
+                            id: 'debug-test-block',
+                            url: 'https://picsum.photos/200',
+                            blockKind: 'file',
+                            uploadStatus: 'done_upload',
+                            fileName: 'debug-test.jpg',
+                            errorMessage: undefined,
+                          },
+                        ])
+                        showToast('DEBUG TEST BLOCK: 블록 1개 주입')
+                        console.log('DEBUG TEST BLOCK clicked → setDetailBlocks 1')
+                      }}
+                    >
+                      DEBUG TEST BLOCK
+                    </button>
+                  </div>
                 </div>
               ) : null}
 
