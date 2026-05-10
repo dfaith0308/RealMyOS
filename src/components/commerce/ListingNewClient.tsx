@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
+import { flushSync } from 'react-dom'
 import {
   createListingFull,
   createShippingGroup,
@@ -394,13 +395,28 @@ export default function ListingNewClient() {
       })
       return
     }
-    setDetailBlocks((prev) =>
-      prev.map((b) =>
+    setDetailBlocks((prev) => {
+      const idx = prev.findIndex((x) => x.id === blockId)
+      if (idx === -1) {
+        if (prev.length >= MAX_DETAIL_IMAGES) return prev
+        return [
+          ...prev,
+          {
+            id: blockId,
+            url: '',
+            blockKind: 'file' as const,
+            uploadStatus: 'uploading' as const,
+            fileName: file.name,
+            errorMessage: undefined,
+          },
+        ]
+      }
+      return prev.map((b) =>
         b.id === blockId
           ? { ...b, uploadStatus: 'uploading' as const, errorMessage: undefined }
           : b,
-      ),
-    )
+      )
+    })
     const fd = new FormData()
     fd.set('file', file)
     try {
@@ -450,6 +466,9 @@ export default function ListingNewClient() {
             : b,
         )
       })
+      if (url.trim()) {
+        showToast(file.name ? `업로드 완료 · ${file.name}` : '상세 이미지 업로드 완료')
+      }
     } catch {
       const errMsg = '네트워크 오류로 업로드에 실패했습니다. 잠시 후 다시 시도해 주세요.'
       setDetailBlocks((prev) => {
@@ -496,13 +515,21 @@ export default function ListingNewClient() {
         continue
       }
       const b = newBlock({ url: '', blockKind: 'file', uploadStatus: 'uploading' })
-      setDetailBlocks((prev) => {
-        if (prev.length >= MAX_DETAIL_IMAGES) return prev
-        return [...prev, b]
+      let skippedFull = false
+      flushSync(() => {
+        setDetailBlocks((prev) => {
+          if (prev.length >= MAX_DETAIL_IMAGES) {
+            skippedFull = true
+            return prev
+          }
+          skippedFull = false
+          return [...prev, b]
+        })
       })
-      await new Promise<void>((resolve) => {
-        window.setTimeout(resolve, 0)
-      })
+      if (skippedFull) {
+        showToast(`상세 이미지는 최대 ${MAX_DETAIL_IMAGES}장까지입니다`)
+        break
+      }
       await uploadDetailBlockFile(b.id, file)
     }
   }
@@ -681,8 +708,14 @@ export default function ListingNewClient() {
   const thumb = thumbnailUrl.trim()
   const descPreview = listingDescription.trim()
   const detailUrlsForPreview = blocksToSavedUrls(detailBlocks)
-  const detailSavedCount = useMemo(
-    () => detailBlocks.filter((b) => b.url.trim() && b.uploadStatus !== 'uploading').length,
+  /** 업로드 중인 슬롯·저장 가능한 URL이 있는 블록(오류만 제외). 빈 URL 행(idle)은 제외 */
+  const detailRegisteredCount = useMemo(
+    () =>
+      detailBlocks.filter((b) => {
+        if (b.uploadStatus === 'error') return false
+        if (b.uploadStatus === 'uploading') return true
+        return Boolean(b.url.trim())
+      }).length,
     [detailBlocks],
   )
   const marginModeDisabled = cost <= 0
@@ -1396,9 +1429,9 @@ export default function ListingNewClient() {
               <h2 className={mod.sectionTitle}>상품 상세페이지 제작</h2>
               <p className={mod.detailCountLine}>
                 <strong>
-                  {detailSavedCount} / {MAX_DETAIL_IMAGES}장
+                  {detailRegisteredCount} / {MAX_DETAIL_IMAGES}장
                 </strong>{' '}
-                등록됨 · 드래그(⋮⋮)로 순서 변경
+                등록됨(업로드 중 포함) · 드래그(⋮⋮)로 순서 변경
               </p>
               <div className={mod.specCallout}>
                 <strong>권장 규격</strong>
@@ -1452,6 +1485,11 @@ export default function ListingNewClient() {
                 </button>
               </div>
               <div className={mod.detailBlockList}>
+                {detailBlocks.length === 0 ? (
+                  <p className={mod.hint} style={{ margin: 0 }}>
+                    아직 상세 이미지가 없습니다. &quot;+ 이미지 추가&quot;로 올리면 이 영역에 카드·미리보기가 나타납니다.
+                  </p>
+                ) : null}
                 {detailBlocks.map((block, index) => (
                   <div
                     key={block.id}
