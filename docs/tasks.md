@@ -1154,6 +1154,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **작업 이력 (2026-05-10)**: 상품 등록 전용 `/admin/commerce/products/new`·`createListingFull`·`getSubCategories`·Storage 업로드·목록에서 모달 제거 — worklog: [`docs/worklogs/2026-05-10_feat_admin-commerce-listing-new-page.md`](./worklogs/2026-05-10_feat_admin-commerce-listing-new-page.md)
 - **작업 이력 (2026-05-09)**: 상품 등록 `/new` UI UX(섹션 카드·sticky 미리보기/CTA·이미지 업로드·미리보기 강화·반응형) — worklog: [`docs/worklogs/2026-05-09_design_admin-commerce-listing-new-ux.md`](./worklogs/2026-05-09_design_admin-commerce-listing-new-ux.md)
 - **작업 이력 (2026-05-09)**: 상품 등록 `/new` 구조(카테고리 우선·`getAdminCategories` 클라이언트 필터·상세 설명·절감액·미리보기) + `createListingFull` `description` 저장 연결 — worklog: [`docs/worklogs/2026-05-09_design_admin-commerce-listing-new-structure.md`](./worklogs/2026-05-09_design_admin-commerce-listing-new-structure.md)
+- **작업 이력 (2026-05-09)**: 관리자OS 상품 등록 스튜디오 재설계(Listing 중심 카피·가격/마진·배송 배지·상세 이미지 카드·미리보기 탭·`image_urls` 저장) — worklog: [`docs/worklogs/2026-05-09_feat_admin-commerce-listing-studio.md`](./worklogs/2026-05-09_feat_admin-commerce-listing-studio.md)
 
 #### [COMMERCE-003] 관리자OS 주문 처리 화면
 - **우선순위**: HIGH

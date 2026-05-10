@@ -11,8 +11,58 @@ import {
   type AdminCategoryRow,
   type ListingShippingType,
 } from '@/actions/admin/commerce'
-import { formatKRW } from '@/lib/calc'
+import { calcMarginRate, formatKRW } from '@/lib/calc'
 import mod from './listing-new-client.module.css'
+
+const MAX_DETAIL_IMAGES = 5
+const THUMB_H = 160
+
+/** 향후 "상품 복제" 등에서 초기 상태를 재사용할 수 있도록 묶음 */
+export type ListingStudioFormState = {
+  rootCategoryId: string
+  subCategoryId: string
+  brandName: string
+  productName: string
+  spec: string
+  supplyPrice: string
+  commercePrice: string
+  originalPrice: string
+  marginMode: 'price' | 'margin'
+  marginInput: string
+  shippingType: ListingShippingType
+  shippingFee: string
+  freeShippingThreshold: string
+  bundleShipping: boolean
+  thumbnailUrl: string
+  detailImageUrls: string[]
+  listingDescription: string
+  adminMemo: string
+  visibility: 'draft' | 'visible'
+}
+
+export function createEmptyListingStudioForm(): ListingStudioFormState {
+  return {
+    rootCategoryId: '',
+    subCategoryId: '',
+    brandName: '',
+    productName: '',
+    spec: '',
+    supplyPrice: '',
+    commercePrice: '',
+    originalPrice: '',
+    marginMode: 'price',
+    marginInput: '',
+    shippingType: 'free',
+    shippingFee: '',
+    freeShippingThreshold: '',
+    bundleShipping: false,
+    thumbnailUrl: '',
+    detailImageUrls: [],
+    listingDescription: '',
+    adminMemo: '',
+    visibility: 'draft',
+  }
+}
 
 function flattenAdminCategoryTree(nodes: AdminCategoryNode[]): AdminCategoryRow[] {
   const out: AdminCategoryRow[] = []
@@ -29,21 +79,54 @@ function sortCategoryRows(rows: AdminCategoryRow[]): AdminCategoryRow[] {
   return [...rows].sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, 'ko'))
 }
 
-function shippingBadgeStyle(type: string): { label: string; bg: string; color: string } {
-  switch (type) {
-    case 'paid':
-      return { label: '유료배송', bg: '#f3f4f6', color: '#888888' }
+type PreviewBadge = { label: string; bg: string; color: string }
+
+function buildPreviewBadges(
+  shippingType: ListingShippingType,
+  shippingFeeStr: string,
+  freeThresholdStr: string,
+  bundleShipping: boolean,
+): PreviewBadge[] {
+  const badges: PreviewBadge[] = []
+  const feeNum = parseInt(shippingFeeStr.replace(/[^\d]/g, ''), 10)
+  const thrNum = parseInt(freeThresholdStr.replace(/[^\d]/g, ''), 10)
+
+  switch (shippingType) {
+    case 'paid': {
+      const feeOk = Number.isFinite(feeNum) && feeNum > 0
+      badges.push({
+        label: feeOk ? `유료배송 ${formatKRW(feeNum)}` : '유료배송',
+        bg: '#888888',
+        color: '#ffffff',
+      })
+      break
+    }
     case 'cold':
-      return { label: '냉장배송', bg: '#dbeafe', color: '#2563eb' }
+      badges.push({ label: '냉장배송', bg: '#2563eb', color: '#ffffff' })
+      break
     case 'same_day':
-      return { label: '오늘출고', bg: '#ffedd5', color: '#ea580c' }
+      badges.push({ label: '오늘출고', bg: '#ea580c', color: '#ffffff' })
+      break
     case 'free':
     default:
-      return { label: '무료배송', bg: '#1f5d3a', color: '#ffffff' }
+      badges.push({ label: '무료배송', bg: '#1f5d3a', color: '#ffffff' })
+      break
   }
-}
 
-const THUMB_H = 160
+  if (Number.isFinite(thrNum) && thrNum > 0) {
+    badges.push({
+      label: `${formatKRW(thrNum)} 이상 무료`,
+      bg: '#5a5a5a',
+      color: '#ffffff',
+    })
+  }
+
+  if (bundleShipping) {
+    badges.push({ label: '묶음가능', bg: '#6b7280', color: '#ffffff' })
+  }
+
+  return badges
+}
 
 function productNameInitial(name: string): string {
   const t = name.trim()
@@ -59,26 +142,41 @@ export default function ListingNewClient() {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
 
+  const empty = useMemo(() => createEmptyListingStudioForm(), [])
+
   const [error, setError] = useState<string | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
 
   const [categoryFlat, setCategoryFlat] = useState<AdminCategoryRow[]>([])
-  const [rootCategoryId, setRootCategoryId] = useState('')
-  const [subCategoryId, setSubCategoryId] = useState('')
+  const [rootCategoryId, setRootCategoryId] = useState(empty.rootCategoryId)
+  const [subCategoryId, setSubCategoryId] = useState(empty.subCategoryId)
 
-  const [brandName, setBrandName] = useState('')
-  const [productName, setProductName] = useState('')
-  const [spec, setSpec] = useState('')
-  const [thumbnailUrl, setThumbnailUrl] = useState('')
+  const [brandName, setBrandName] = useState(empty.brandName)
+  const [productName, setProductName] = useState(empty.productName)
+  const [spec, setSpec] = useState(empty.spec)
+
+  const [supplyPrice, setSupplyPrice] = useState(empty.supplyPrice)
+  const [commercePrice, setCommercePrice] = useState(empty.commercePrice)
+  const [originalPrice, setOriginalPrice] = useState(empty.originalPrice)
+  const [marginMode, setMarginMode] = useState<'price' | 'margin'>(empty.marginMode)
+  const [marginInput, setMarginInput] = useState(empty.marginInput)
+
+  const [shippingType, setShippingType] = useState<ListingShippingType>(empty.shippingType)
+  const [shippingFee, setShippingFee] = useState(empty.shippingFee)
+  const [freeShippingThreshold, setFreeShippingThreshold] = useState(empty.freeShippingThreshold)
+  const [bundleShipping, setBundleShipping] = useState(empty.bundleShipping)
+
+  const [thumbnailUrl, setThumbnailUrl] = useState(empty.thumbnailUrl)
+  const [detailImageUrls, setDetailImageUrls] = useState<string[]>(empty.detailImageUrls)
+  const [listingDescription, setListingDescription] = useState(empty.listingDescription)
+  const [adminMemo, setAdminMemo] = useState(empty.adminMemo)
+  const [visibility, setVisibility] = useState<'draft' | 'visible'>(empty.visibility)
+
   const [uploadBusy, setUploadBusy] = useState(false)
+  const [previewTab, setPreviewTab] = useState<'card' | 'detail'>('card')
 
-  const [commercePrice, setCommercePrice] = useState('')
-  const [originalPrice, setOriginalPrice] = useState('')
-  const [shippingType, setShippingType] = useState<ListingShippingType>('free')
-  const [listingDescription, setListingDescription] = useState('')
-  const [adminMemo, setAdminMemo] = useState('')
-  const [visibility, setVisibility] = useState<'draft' | 'visible'>('draft')
+  const cost = parseInt(supplyPrice.replace(/\D/g, ''), 10) || 0
 
   const showToast = useCallback((msg: string) => {
     setToast(msg)
@@ -134,6 +232,26 @@ export default function ListingNewClient() {
       ? previewOriginal - previewPrice
       : null
 
+  const marginRateDisplay = (() => {
+    if (previewPrice == null || cost <= 0) return null
+    const rate = calcMarginRate(previewPrice, cost)
+    if (!isFinite(rate) || isNaN(rate)) return null
+    return rate
+  })()
+
+  function handleMarginInput(v: string) {
+    setMarginInput(v)
+    const m = Number(v) / 100
+    if (cost > 0 && m > 0 && m < 1) {
+      setCommercePrice(String(Math.round(cost / (1 - m))))
+    }
+  }
+
+  const previewBadges = useMemo(
+    () => buildPreviewBadges(shippingType, shippingFee, freeShippingThreshold, bundleShipping),
+    [shippingType, shippingFee, freeShippingThreshold, bundleShipping],
+  )
+
   async function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     e.target.value = ''
@@ -164,6 +282,42 @@ export default function ListingNewClient() {
     return n
   }
 
+  function addDetailImageSlot() {
+    setDetailImageUrls((prev) => (prev.length >= MAX_DETAIL_IMAGES ? prev : [...prev, '']))
+  }
+
+  function removeDetailImageSlot(index: number) {
+    setDetailImageUrls((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  function setDetailImageUrl(index: number, url: string) {
+    setDetailImageUrls((prev) => prev.map((u, i) => (i === index ? url : u)))
+  }
+
+  function applyResetForm() {
+    const base = createEmptyListingStudioForm()
+    setRootCategoryId(base.rootCategoryId)
+    setSubCategoryId(base.subCategoryId)
+    setBrandName(base.brandName)
+    setProductName(base.productName)
+    setSpec(base.spec)
+    setSupplyPrice(base.supplyPrice)
+    setCommercePrice(base.commercePrice)
+    setOriginalPrice(base.originalPrice)
+    setMarginMode(base.marginMode)
+    setMarginInput(base.marginInput)
+    setShippingType(base.shippingType)
+    setShippingFee(base.shippingFee)
+    setFreeShippingThreshold(base.freeShippingThreshold)
+    setBundleShipping(base.bundleShipping)
+    setThumbnailUrl(base.thumbnailUrl)
+    setDetailImageUrls(base.detailImageUrls)
+    setListingDescription(base.listingDescription)
+    setAdminMemo(base.adminMemo)
+    setVisibility(base.visibility)
+    setUploadError(null)
+  }
+
   function submitWithStatus(status: 'draft' | 'visible', andReset: boolean) {
     setError(null)
     const pn = productName.trim()
@@ -186,6 +340,7 @@ export default function ListingNewClient() {
     }
 
     const op = parseOriginal()
+    const image_urls = detailImageUrls.map((u) => u.trim()).filter(Boolean)
 
     startTransition(async () => {
       const r = await createListingFull({
@@ -193,6 +348,7 @@ export default function ListingNewClient() {
         product_name: pn,
         spec: spec.trim() || null,
         thumbnail_url: thumbnailUrl.trim() || null,
+        image_urls: image_urls.length > 0 ? image_urls : null,
         category_id: effectiveCategoryId,
         commerce_price: price,
         original_price: op,
@@ -206,19 +362,7 @@ export default function ListingNewClient() {
         return
       }
       if (andReset) {
-        setBrandName('')
-        setProductName('')
-        setSpec('')
-        setThumbnailUrl('')
-        setRootCategoryId('')
-        setSubCategoryId('')
-        setCommercePrice('')
-        setOriginalPrice('')
-        setShippingType('free')
-        setListingDescription('')
-        setAdminMemo('')
-        setVisibility('draft')
-        setUploadError(null)
+        applyResetForm()
         showToast('상품이 저장되었습니다')
         router.refresh()
         return
@@ -228,9 +372,10 @@ export default function ListingNewClient() {
     })
   }
 
-  const shipCfg = shippingBadgeStyle(shippingType)
   const thumb = thumbnailUrl.trim()
   const descPreview = listingDescription.trim()
+  const detailUrlsForPreview = detailImageUrls.map((u) => u.trim()).filter(Boolean)
+  const marginModeDisabled = cost <= 0
 
   return (
     <>
@@ -334,47 +479,69 @@ export default function ListingNewClient() {
             </div>
 
             <div className={mod.card}>
-              <h2 className={mod.sectionTitle}>이미지</h2>
-              <div className={mod.fieldStack}>
-                <label className={`${mod.uploadZone} ${uploadBusy || pending ? mod.uploadZoneDisabled : ''}`}>
-                  이미지를 클릭해서 업로드
-                  <input
-                    type="file"
-                    accept="image/*"
-                    disabled={uploadBusy || pending}
-                    onChange={onPickFile}
-                    style={{ display: 'none' }}
-                  />
-                </label>
-                {uploadBusy ? <p className={mod.hint}>업로드 중…</p> : null}
-                {uploadError ? <p style={{ color: '#b91c1c', fontSize: 13, margin: 0 }}>{uploadError}</p> : null}
-                {thumb ? (
-                  <img src={thumb} alt="" className={mod.uploadPreview} width={140} height={140} />
-                ) : null}
-                <div>
-                  <div className={mod.label}>또는 이미지 URL 직접 입력</div>
-                  <input
-                    className={mod.input}
-                    value={thumbnailUrl}
-                    onChange={(e) => setThumbnailUrl(e.target.value)}
-                    placeholder="https://..."
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className={mod.card}>
-              <h2 className={mod.sectionTitle}>가격</h2>
+              <h2 className={mod.sectionTitle}>가격 · 마진 계산</h2>
               <div className={mod.fieldStack}>
                 <div>
-                  <div className={mod.label}>식식이 판매가 (원) · 필수</div>
+                  <div className={mod.label}>공급가 (원)</div>
                   <input
                     className={mod.input}
                     inputMode="numeric"
-                    value={commercePrice}
-                    onChange={(e) => setCommercePrice(e.target.value)}
-                    placeholder="예: 45000"
+                    value={supplyPrice}
+                    onChange={(e) => setSupplyPrice(e.target.value)}
+                    placeholder="예: 18000"
                   />
+                  <p className={mod.hint}>내부 운영용. 구매자에게 노출 안 됨</p>
+                </div>
+                <div>
+                  <div className={mod.modeBtnRow}>
+                    <button
+                      type="button"
+                      className={`${mod.modeBtn} ${marginMode === 'price' ? mod.modeBtnActive : ''}`}
+                      onClick={() => setMarginMode('price')}
+                    >
+                      판매가 직접 입력
+                    </button>
+                    <button
+                      type="button"
+                      className={`${mod.modeBtn} ${marginMode === 'margin' ? mod.modeBtnActive : ''}`}
+                      onClick={() => setMarginMode('margin')}
+                      disabled={marginModeDisabled}
+                    >
+                      마진율로 판매가 계산
+                    </button>
+                  </div>
+                  {marginMode === 'price' ? (
+                    <div>
+                      <div className={mod.label}>식식이 판매가 (원) · 필수</div>
+                      <input
+                        className={mod.input}
+                        inputMode="numeric"
+                        value={commercePrice}
+                        onChange={(e) => setCommercePrice(e.target.value)}
+                        placeholder="예: 22900"
+                      />
+                    </div>
+                  ) : (
+                    <div>
+                      <div className={mod.label}>마진율 (%)</div>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <input
+                          className={mod.input}
+                          style={{ flex: 1, minWidth: 120 }}
+                          type="number"
+                          value={marginInput}
+                          onChange={(e) => handleMarginInput(e.target.value)}
+                          placeholder="마진율 %"
+                          min={0}
+                          max={99}
+                        />
+                        {commercePrice ? (
+                          <span style={{ fontSize: 13, color: '#6b7280' }}>→ {formatKRW(Number(commercePrice))}</span>
+                        ) : null}
+                      </div>
+                      <p className={mod.hint}>공급가를 먼저 입력한 뒤 사용할 수 있습니다.</p>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <div className={mod.label}>시중 정상가 (원)</div>
@@ -383,17 +550,23 @@ export default function ListingNewClient() {
                     inputMode="numeric"
                     value={originalPrice}
                     onChange={(e) => setOriginalPrice(e.target.value)}
-                    placeholder="예: 52000 (판매가보다 클 때만 절감액 표시)"
+                    placeholder="예: 26000"
                   />
+                  <p className={mod.hint}>판매가보다 클 때만 절감액 표시</p>
                 </div>
+                {marginRateDisplay != null ? (
+                  <p style={{ margin: 0, fontSize: 13, color: '#1f5d3a' }}>
+                    마진율: {marginRateDisplay.toFixed(1)}%
+                  </p>
+                ) : null}
                 {savingsAmount != null && savingsAmount > 0 ? (
-                  <p style={{ margin: 0, fontSize: 12, color: '#1f5d3a' }}>절감액: {formatKRW(savingsAmount)}</p>
+                  <p style={{ margin: 0, fontSize: 13, color: '#1f5d3a' }}>절감액: {formatKRW(savingsAmount)}</p>
                 ) : null}
               </div>
             </div>
 
             <div className={mod.card}>
-              <h2 className={mod.sectionTitle}>배송</h2>
+              <h2 className={mod.sectionTitle}>배송 정책</h2>
               <div className={mod.fieldStack}>
                 <div>
                   <div className={mod.label}>배송 유형 · 필수</div>
@@ -408,30 +581,134 @@ export default function ListingNewClient() {
                     <option value="same_day">오늘출고</option>
                   </select>
                 </div>
+                <div>
+                  <div className={mod.label}>배송비 (원)</div>
+                  <input
+                    className={mod.input}
+                    inputMode="numeric"
+                    value={shippingFee}
+                    onChange={(e) => setShippingFee(e.target.value)}
+                    placeholder="예: 3000"
+                    disabled={shippingType !== 'paid'}
+                  />
+                  {/* TODO: 향후 shipping_fee 컬럼 추가 후 연결 예정 */}
+                  <p className={mod.hint}>미리보기용. 유료배송일 때만 입력합니다.</p>
+                </div>
+                <div>
+                  <div className={mod.label}>무료배송 기준 금액 (원)</div>
+                  <input
+                    className={mod.input}
+                    inputMode="numeric"
+                    value={freeShippingThreshold}
+                    onChange={(e) => setFreeShippingThreshold(e.target.value)}
+                    placeholder="예: 50000 (5만원 이상 무료)"
+                  />
+                  {/* TODO: 향후 free_shipping_threshold 컬럼 추가 후 연결 예정 */}
+                  <p className={mod.hint}>미리보기 배지용입니다.</p>
+                </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#2b2b2b' }}>
+                  <input
+                    type="checkbox"
+                    checked={bundleShipping}
+                    onChange={(e) => setBundleShipping(e.target.checked)}
+                  />
+                  묶음배송 가능
+                </label>
+                {/* TODO: 향후 bundle_shipping 컬럼 추가 후 연결 예정 */}
               </div>
             </div>
 
             <div className={mod.card}>
-              <h2 className={mod.sectionTitle}>상세 설명</h2>
-              <p className={mod.hint}>구매 화면에 노출되는 설명입니다.</p>
+              <h2 className={mod.sectionTitle}>상품 페이지 제작</h2>
+              <p className={mod.hint}>구매자가 상세페이지에서 보는 내용을 만들어요</p>
               <div className={mod.fieldStack}>
                 <div>
+                  <div className={mod.label}>대표 이미지</div>
+                  <label className={`${mod.uploadZone} ${uploadBusy || pending ? mod.uploadZoneDisabled : ''}`}>
+                    대표 이미지 업로드
+                    <input
+                      type="file"
+                      accept="image/*"
+                      disabled={uploadBusy || pending}
+                      onChange={onPickFile}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
+                  {uploadBusy ? <p className={mod.hint}>업로드 중…</p> : null}
+                  {uploadError ? <p style={{ color: '#b91c1c', fontSize: 13, margin: 0 }}>{uploadError}</p> : null}
+                  {thumb ? (
+                    <img src={thumb} alt="" className={mod.uploadPreviewHero} width={120} height={120} />
+                  ) : null}
+                  <div>
+                    <div className={mod.label}>또는 URL 직접 입력</div>
+                    <input
+                      className={mod.input}
+                      value={thumbnailUrl}
+                      onChange={(e) => setThumbnailUrl(e.target.value)}
+                      placeholder="https://..."
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className={mod.label}>상세 이미지</div>
+                  <p className={mod.hint}>상품 상세페이지에 순서대로 표시됩니다 (최대 5개)</p>
+                  <div className={mod.fieldStack}>
+                    {detailImageUrls.map((url, index) => (
+                      <div key={index} className={mod.detailImageCard}>
+                        <div className={mod.detailImageCardMain}>
+                          <input
+                            className={mod.input}
+                            value={url}
+                            onChange={(e) => setDetailImageUrl(index, e.target.value)}
+                            placeholder="https://..."
+                          />
+                          {url.trim() ? (
+                            <img src={url.trim()} alt="" className={mod.detailThumb} width={60} height={60} />
+                          ) : (
+                            <div className={mod.detailThumb} aria-hidden />
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          className={mod.btnGhost}
+                          onClick={() => removeDetailImageSlot(index)}
+                        >
+                          삭제
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      className={mod.btnAddImage}
+                      onClick={addDetailImageSlot}
+                      disabled={detailImageUrls.length >= MAX_DETAIL_IMAGES}
+                    >
+                      + 이미지 추가
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <div className={mod.label}>상세 설명</div>
                   <textarea
                     className={`${mod.textarea} ${mod.textareaNoResize}`}
                     value={listingDescription}
                     onChange={(e) => setListingDescription(e.target.value)}
-                    placeholder="원산지, 보관법, 배송 안내, 구성 등"
-                    rows={6}
+                    placeholder={
+                      '원산지, 보관법, 유통기한, 사용법, 배송 안내 등\n예) 원산지: 국내산 / 보관: 냉장 / 유통기한: 제조일로부터 12개월'
+                    }
+                    rows={5}
                   />
                 </div>
                 <div>
-                  <div className={mod.label}>운영 메모 (내부용, 선택)</div>
+                  <div className={mod.label}>내부 메모 (선택)</div>
                   <textarea
                     className={`${mod.textarea} ${mod.textareaNoResize}`}
                     value={adminMemo}
                     onChange={(e) => setAdminMemo(e.target.value)}
                     placeholder="구매자에게 보이지 않습니다"
-                    rows={3}
+                    rows={2}
                   />
                 </div>
               </div>
@@ -457,103 +734,146 @@ export default function ListingNewClient() {
 
           <div className={mod.previewColumn}>
             <div className={mod.previewSticky}>
-              <div className={mod.previewCard}>
-                <div style={{ position: 'relative', width: '100%' }}>
-                  <span
-                    style={{
-                      position: 'absolute',
-                      top: 6,
-                      left: 6,
-                      zIndex: 1,
-                      fontSize: 11,
-                      fontWeight: 600,
-                      padding: '2px 6px',
-                      borderRadius: 4,
-                      background: shipCfg.bg,
-                      color: shipCfg.color,
-                      lineHeight: 1.25,
-                    }}
-                  >
-                    {shipCfg.label}
-                  </span>
-                  {thumb ? (
-                    <img
-                      src={thumb}
-                      alt=""
-                      width={280}
-                      height={THUMB_H}
-                      style={{
-                        width: '100%',
-                        height: THUMB_H,
-                        objectFit: 'cover',
-                        display: 'block',
-                        background: '#f5f5f5',
-                      }}
-                    />
-                  ) : (
-                    <div
-                      style={{
-                        width: '100%',
-                        height: THUMB_H,
-                        background: '#eef4f0',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: 28,
-                        color: '#1f5d3a',
-                        fontWeight: 700,
-                      }}
-                      aria-hidden
-                    >
-                      {productNameInitial(productName)}
-                    </div>
-                  )}
-                </div>
-                <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {brandName.trim() ? (
-                    <div style={{ fontSize: 11, color: '#1f5d3a', fontWeight: 600 }}>{brandName.trim()}</div>
-                  ) : (
-                    <PhBar width="40%" />
-                  )}
-                  {productName.trim() ? (
-                    <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.35, color: '#111' }}>
-                      {productName.trim()}
-                    </div>
-                  ) : (
-                    <PhBar width="90%" />
-                  )}
-                  {spec.trim() ? (
-                    <div style={{ fontSize: 12, color: '#6b7280' }}>{spec.trim()}</div>
-                  ) : (
-                    <PhBar width="55%" />
-                  )}
-                  {previewPrice != null ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4 }}>
-                      <span style={{ fontSize: 11, color: '#888' }}>식식이가</span>
-                      <span style={{ fontSize: 17, fontWeight: 700, color: '#111' }}>{formatKRW(previewPrice)}</span>
-                      {savingsAmount != null && savingsAmount > 0 ? (
-                        <span style={{ fontSize: 12, color: '#1f5d3a', fontWeight: 600 }}>
-                          {formatKRW(savingsAmount)} 절감
-                        </span>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <div style={{ marginTop: 4 }}>
-                      <span style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 4 }}>식식이가</span>
-                      <PhBar width="70%" />
-                    </div>
-                  )}
-                  <div className={mod.previewDescBlock}>
-                    <p className={mod.previewDescTitle}>상세 설명 미리보기</p>
-                    {descPreview ? (
-                      <p className={mod.previewDescBody}>{listingDescription}</p>
-                    ) : (
-                      <PhBar width="100%" />
-                    )}
-                  </div>
-                </div>
+              <div className={mod.previewTabs}>
+                <button
+                  type="button"
+                  className={`${mod.previewTab} ${previewTab === 'card' ? mod.previewTabActive : ''}`}
+                  onClick={() => setPreviewTab('card')}
+                >
+                  카드 미리보기
+                </button>
+                <button
+                  type="button"
+                  className={`${mod.previewTab} ${previewTab === 'detail' ? mod.previewTabActive : ''}`}
+                  onClick={() => setPreviewTab('detail')}
+                >
+                  상세페이지
+                </button>
               </div>
-              <p className={mod.previewFoot}>실제 구매 화면에서 이렇게 보입니다</p>
+
+              {previewTab === 'card' ? (
+                <>
+                  <div className={mod.previewCard}>
+                    <div style={{ position: 'relative', width: '100%' }}>
+                      <div className={mod.badgeRow}>
+                        {previewBadges.map((b, i) => (
+                          <span
+                            key={`${b.label}-${i}`}
+                            className={mod.badgePill}
+                            style={{ background: b.bg, color: b.color }}
+                          >
+                            {b.label}
+                          </span>
+                        ))}
+                      </div>
+                      {thumb ? (
+                        <img
+                          src={thumb}
+                          alt=""
+                          width={280}
+                          height={THUMB_H}
+                          style={{
+                            width: '100%',
+                            height: THUMB_H,
+                            objectFit: 'cover',
+                            display: 'block',
+                            background: '#f5f5f5',
+                          }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            width: '100%',
+                            height: THUMB_H,
+                            background: '#eef4f0',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: 28,
+                            color: '#1f5d3a',
+                            fontWeight: 700,
+                          }}
+                          aria-hidden
+                        >
+                          {productNameInitial(productName)}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {brandName.trim() ? (
+                        <div style={{ fontSize: 11, color: '#1f5d3a', fontWeight: 600 }}>{brandName.trim()}</div>
+                      ) : (
+                        <PhBar width="40%" />
+                      )}
+                      {productName.trim() ? (
+                        <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.35, color: '#111' }}>
+                          {productName.trim()}
+                        </div>
+                      ) : (
+                        <PhBar width="90%" />
+                      )}
+                      {spec.trim() ? (
+                        <div style={{ fontSize: 12, color: '#6b7280' }}>{spec.trim()}</div>
+                      ) : (
+                        <PhBar width="55%" />
+                      )}
+                      {previewPrice != null ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4 }}>
+                          <span style={{ fontSize: 11, color: '#888' }}>식식이가</span>
+                          <span style={{ fontSize: 17, fontWeight: 700, color: '#111' }}>{formatKRW(previewPrice)}</span>
+                          {savingsAmount != null && savingsAmount > 0 ? (
+                            <span style={{ fontSize: 12, color: '#1f5d3a', fontWeight: 600 }}>
+                              {formatKRW(savingsAmount)} 절감
+                            </span>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <div style={{ marginTop: 4 }}>
+                          <span style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 4 }}>식식이가</span>
+                          <PhBar width="70%" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <p className={mod.previewFoot}>목록·검색에서 보이는 카드 형태입니다</p>
+                </>
+              ) : (
+                <>
+                  <div className={mod.previewCard} style={{ maxWidth: 280 }}>
+                    <div className={mod.detailPreviewWrap}>
+                      {thumb ? (
+                        <img src={thumb} alt="" className={mod.detailPreviewHero} />
+                      ) : (
+                        <div
+                          className={mod.detailPreviewHero}
+                          style={{ minHeight: 120, display: 'flex', alignItems: 'center', padding: 16, boxSizing: 'border-box' }}
+                          aria-hidden
+                        >
+                          <PhBar width="100%" />
+                        </div>
+                      )}
+                      <div className={mod.detailPreviewGrid}>
+                        {detailUrlsForPreview.length > 0 ? (
+                          detailUrlsForPreview.map((u, i) => (
+                            <img key={`${i}-${u.slice(0, 24)}`} src={u} alt="" className={mod.detailPreviewImg} />
+                          ))
+                        ) : (
+                          <PhBar width="100%" />
+                        )}
+                      </div>
+                      <p className={mod.previewDescLabel} style={{ marginTop: 16 }}>
+                        상세 설명
+                      </p>
+                      {descPreview ? (
+                        <p className={mod.previewDescBody}>{listingDescription}</p>
+                      ) : (
+                        <PhBar width="100%" />
+                      )}
+                    </div>
+                  </div>
+                  <p className={mod.previewFoot}>상세페이지에 가까운 흐름입니다</p>
+                </>
+              )}
             </div>
           </div>
         </div>

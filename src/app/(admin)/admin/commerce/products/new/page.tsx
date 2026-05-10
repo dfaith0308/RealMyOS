@@ -9,7 +9,7 @@ export default function AdminCommerceProductNewPage() {
         <div>
           <h1 className={s.title}>상품 등록</h1>
           <p className={s.subtitle}>
-            플랫폼 커머스 전용 상품·Listing을 한 번에 등록합니다. (products + commerce_product_listings)
+            쇼핑몰에 보일 카드와 상세 페이지를 만들고 한 번에 저장합니다.
           </p>
         </div>
         <Link href="/admin/commerce/products" className={s.ghostBtn}>

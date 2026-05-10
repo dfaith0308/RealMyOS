@@ -872,6 +872,7 @@ export async function createListingFull(input: {
   product_name: string
   spec: string | null
   thumbnail_url: string | null
+  image_urls?: string[] | null
   category_id: string
   commerce_price: number
   original_price: number | null
@@ -921,6 +922,13 @@ export async function createListingFull(input: {
   const admin_memo = String(input.admin_memo ?? '').trim() || null
   const thumbnail_url = String(input.thumbnail_url ?? '').trim() || null
   const listing_description = String(input.description ?? '').trim() || null
+
+  const rawUrls = input.image_urls
+  const image_urls =
+    Array.isArray(rawUrls) && rawUrls.length > 0
+      ? rawUrls.map((u) => String(u ?? '').trim()).filter(Boolean).slice(0, 5)
+      : []
+  const image_urls_db = image_urls.length > 0 ? image_urls : null
 
   let original_price: number | null = null
   const opIn = input.original_price
@@ -999,6 +1007,7 @@ export async function createListingFull(input: {
       status: listingStatus,
       is_visible,
       thumbnail_url,
+      image_urls: image_urls_db,
       description: listing_description,
       spec,
       admin_memo,
@@ -1029,6 +1038,7 @@ export async function createListingFull(input: {
       commerce_price: price,
       status: statusIn,
       description: listing_description,
+      image_urls: image_urls_db,
     },
   })
   if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
