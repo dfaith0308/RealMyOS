@@ -22,8 +22,9 @@ import mod from './listing-new-client.module.css'
 
 const MAX_DETAIL_IMAGES = 20
 const MAX_IMAGE_FILE_BYTES = 8 * 1024 * 1024
+/** 피커 필터(실제 허용은 validateImageFile과 동일 계열) */
 const ACCEPT_IMAGE =
-  'image/jpeg,image/jpg,image/pjpeg,image/png,image/webp,image/gif,image/bmp,image/avif,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.gif,.bmp,.avif,.heic,.heif'
+  'image/jpeg,image/jpg,image/pjpeg,image/png,image/webp,image/heic,image/heif,application/octet-stream,.jpg,.jpeg,.png,.webp,.heic,.heif'
 const MAX_THUMB_BADGES = 2
 const THUMB_H = 160
 
@@ -65,12 +66,30 @@ function validateImageFile(file: File): string | null {
   if (file.size > MAX_IMAGE_FILE_BYTES) {
     return '8MB 이하 이미지만 업로드 가능합니다'
   }
-  const extOk = /\.(jpe?g|png|webp|gif|bmp|avif|heic|heif)$/i.test(file.name)
+
+  const mimeRaw = (file.type ?? '').trim()
+  const mime = mimeRaw.toLowerCase()
+
+  const extOk = /\.(jpe?g|png|webp|heic|heif)$/i.test(file.name)
+
   const mimeOk =
-    /image\/(jpeg|jpg|pjpeg|png|webp|gif|bmp|avif|heic|heif|x-png)/i.test(file.type)
-  const octetOk = file.type === 'application/octet-stream' && extOk
-  if (mimeOk || extOk || octetOk) return null
-  return '지원 이미지 형식이 아닙니다(JPG/PNG/WebP/GIF/BMP/AVIF/HEIC 등, 확장자 또는 MIME 필요)'
+    mime === 'image/jpeg' ||
+    mime === 'image/jpg' ||
+    mime === 'image/pjpeg' ||
+    mime === 'image/png' ||
+    mime === 'image/webp' ||
+    mime === 'image/heic' ||
+    mime === 'image/heif' ||
+    /^image\/heic/i.test(mime) ||
+    /^image\/heif/i.test(mime)
+
+  const octetOk = mime === 'application/octet-stream' && extOk
+
+  if (extOk) return null
+  if (mimeOk) return null
+  if (octetOk) return null
+
+  return 'JPG/PNG/WebP/HEIC·HEIF만 가능합니다(허용 확장자 또는 image/jpeg·png·webp·heic·heif, octet-stream은 확장자 필요)'
 }
 
 function blocksToSavedUrls(blocks: DetailImageBlock[]): string[] {
@@ -550,8 +569,16 @@ export default function ListingNewClient() {
     for (const file of fileArr) {
       const err = validateImageFile(file)
       if (err) {
-        if (rejectSamples.length < 5) {
-          rejectSamples.push(`${file.name} [${file.type || 'no-mime'}]: ${err}`)
+        if (process.env.NODE_ENV === 'development') {
+          console.log('VALIDATION FAIL', {
+            name: file.name,
+            type: file.type,
+            size: file.size,
+            reason: err,
+          })
+        }
+        if (rejectSamples.length < MAX_DETAIL_IMAGES) {
+          rejectSamples.push(`${file.name} | MIME:${file.type || '(empty)'} | ${err}`)
         }
         continue
       }
