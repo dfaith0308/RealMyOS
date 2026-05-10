@@ -1,0 +1,224 @@
+.shell {
+  width: 100%;
+  box-sizing: border-box;
+  padding-bottom: 96px;
+}
+
+.layout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.formColumn {
+  flex: 1 1 60%;
+  min-width: 0;
+}
+
+.previewColumn {
+  flex: 1 1 calc(40% - 16px);
+  min-width: 280px;
+  max-width: 100%;
+}
+
+.previewSticky {
+  position: sticky;
+  top: 24px;
+}
+
+@media (max-width: 1024px) {
+  .layout {
+    flex-direction: column;
+  }
+
+  .formColumn,
+  .previewColumn {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  .previewSticky {
+    position: static;
+  }
+}
+
+.card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 20px 24px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  margin-bottom: 16px;
+}
+
+.sectionTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: #2b2b2b;
+  margin: 0 0 12px;
+}
+
+.fieldStack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #2b2b2b;
+}
+
+.hint {
+  font-size: 12px;
+  color: #888;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.input,
+.select,
+.textarea {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 14px;
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  border-color: #1f5d3a;
+  outline: none;
+}
+
+.uploadZone {
+  border: 2px dashed #e0e0e0;
+  border-radius: 8px;
+  padding: 32px;
+  text-align: center;
+  cursor: pointer;
+  color: #888;
+  font-size: 14px;
+}
+
+.uploadZoneDisabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.uploadPreview {
+  width: 140px;
+  height: 140px;
+  object-fit: cover;
+  border-radius: 8px;
+  display: block;
+  margin: 16px auto 0;
+  background: #f5f5f5;
+}
+
+.errorCard {
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  font-size: 14px;
+}
+
+.ctaBar {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  background: #fff;
+  border-top: 1px solid #e8e4dc;
+  padding: 16px 24px;
+  margin: 8px -24px -24px;
+  box-sizing: border-box;
+}
+
+@media (max-width: 1024px) {
+  .ctaBar {
+    margin-left: 0;
+    margin-right: 0;
+  }
+}
+
+.ctaInner {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.btn {
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  border: 1px solid transparent;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btnCancel {
+  border: 1px solid #ddd;
+  color: #888;
+  background: #fff;
+}
+
+.btnDraft {
+  border: 1px solid #2b2b2b;
+  color: #2b2b2b;
+  background: #fff;
+}
+
+.btnNext {
+  border: 1px solid #1f5d3a;
+  color: #1f5d3a;
+  background: #fff;
+}
+
+.btnPrimary {
+  border: 1px solid #1f5d3a;
+  background: #1f5d3a;
+  color: #fff;
+}
+
+.previewCard {
+  border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  background: #fff;
+  overflow: hidden;
+  max-width: 280px;
+}
+
+.previewFoot {
+  font-size: 11px;
+  color: #aaa;
+  margin: 12px 0 0;
+  line-height: 1.4;
+}
+
+.phBar {
+  height: 12px;
+  border-radius: 4px;
+  background: #e8e8e8;
+}

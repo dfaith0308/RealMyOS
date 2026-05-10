@@ -4,7 +4,7 @@ import s from '../../../../admin-shared.module.css'
 
 export default function AdminCommerceProductNewPage() {
   return (
-    <main className={s.main}>
+    <main className={s.main} style={{ maxWidth: 1100, margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
       <header className={s.headerBetween}>
         <div>
           <h1 className={s.title}>상품 등록</h1>

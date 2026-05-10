@@ -1152,6 +1152,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **작업 이력 (2026-05-10)**: 관리자OS 카테고리 관리 `/admin/commerce/categories`·CRUD·2-depth 제한·`CategoriesClient` — worklog: [`docs/worklogs/2026-05-10_feat_admin-commerce-categories.md`](./worklogs/2026-05-10_feat_admin-commerce-categories.md)
 - **작업 이력 (2026-05-10)**: `getProducts` — 존재하지 않는 `products.selling_price` 제거, 플랫폼 `commerce_price`로 참고가 표시 — worklog: [`docs/worklogs/2026-05-10_hotfix_admin-commerce-products-selling-price.md`](./worklogs/2026-05-10_hotfix_admin-commerce-products-selling-price.md)
 - **작업 이력 (2026-05-10)**: 상품 등록 전용 `/admin/commerce/products/new`·`createListingFull`·`getSubCategories`·Storage 업로드·목록에서 모달 제거 — worklog: [`docs/worklogs/2026-05-10_feat_admin-commerce-listing-new-page.md`](./worklogs/2026-05-10_feat_admin-commerce-listing-new-page.md)
+- **작업 이력 (2026-05-09)**: 상품 등록 `/new` UI UX(섹션 카드·sticky 미리보기/CTA·이미지 업로드·미리보기 강화·반응형) — worklog: [`docs/worklogs/2026-05-09_design_admin-commerce-listing-new-ux.md`](./worklogs/2026-05-09_design_admin-commerce-listing-new-ux.md)
 
 #### [COMMERCE-003] 관리자OS 주문 처리 화면
 - **우선순위**: HIGH
