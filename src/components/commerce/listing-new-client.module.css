@@ -494,3 +494,110 @@
   margin: 0 0 8px;
   font-weight: 500;
 }
+
+.shippingGroupToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.shippingGroupSelect {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+.shippingGroupInlineAdd {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.shippingGroupInlineAdd .input {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.modalPanel {
+  background: #fff;
+  border-radius: 12px;
+  max-width: 420px;
+  width: 100%;
+  max-height: min(80vh, 520px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.modalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid #eee;
+}
+
+.modalTitle {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #2b2b2b;
+}
+
+.modalBody {
+  padding: 12px 18px 18px;
+  overflow-y: auto;
+}
+
+.modalGroupRowView {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.modalGroupRow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.modalGroupRow:last-child {
+  border-bottom: none;
+}
+
+.modalGroupSummary {
+  font-size: 13px;
+  color: #2b2b2b;
+}
+
+.modalGroupEdit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.modalRowActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

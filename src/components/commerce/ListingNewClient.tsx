@@ -5,11 +5,16 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
 import {
   createListingFull,
+  createShippingGroup,
+  deleteShippingGroup,
   getAdminCategories,
+  getShippingGroups,
+  updateShippingGroup,
   uploadListingImage,
   type AdminCategoryNode,
   type AdminCategoryRow,
   type ListingShippingType,
+  type ShippingGroupListItem,
 } from '@/actions/admin/commerce'
 import { calcMarginRate, formatDigitsForInput, formatKRW } from '@/lib/calc'
 import mod from './listing-new-client.module.css'
@@ -56,7 +61,7 @@ export type ListingStudioFormState = {
   shippingBoxQty: string
   shippingBoxFee: string
   conditionalFreeThreshold: string
-  shippingGroup: string
+  shippingGroupId: string
   thumbnailBadges: string[]
   thumbnailUrl: string
   detailImageUrls: string[]
@@ -81,7 +86,7 @@ export function createEmptyListingStudioForm(): ListingStudioFormState {
     shippingBoxQty: '',
     shippingBoxFee: '',
     conditionalFreeThreshold: '',
-    shippingGroup: '',
+    shippingGroupId: '',
     thumbnailBadges: [],
     thumbnailUrl: '',
     detailImageUrls: [],
@@ -104,37 +109,6 @@ function flattenAdminCategoryTree(nodes: AdminCategoryNode[]): AdminCategoryRow[
 
 function sortCategoryRows(rows: AdminCategoryRow[]): AdminCategoryRow[] {
   return [...rows].sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, 'ko'))
-}
-
-type PreviewBadge = { label: string; bg: string; color: string }
-
-/** 배송 정책 전용 뱃지 (썸네일 커스텀 뱃지와 분리) */
-function buildShippingPolicyBadges(
-  shippingType: ListingShippingType,
-  boxFeeStr: string,
-  condThresholdStr: string,
-): PreviewBadge[] {
-  switch (shippingType) {
-    case 'paid': {
-      const fee = parseInt(boxFeeStr.replace(/\D/g, ''), 10)
-      const ok = Number.isFinite(fee) && fee > 0
-      return [
-        {
-          label: ok ? `배송비 ${formatKRW(fee)}/박스` : '배송비 /박스',
-          bg: '#888888',
-          color: '#ffffff',
-        },
-      ]
-    }
-    case 'conditional_free': {
-      const thr = parseInt(condThresholdStr.replace(/\D/g, ''), 10)
-      const ok = Number.isFinite(thr) && thr > 0
-      return [{ label: ok ? `${formatKRW(thr)} 이상 무료` : '조건부 무료', bg: '#1f5d3a', color: '#ffffff' }]
-    }
-    case 'free':
-    default:
-      return [{ label: '무료배송', bg: '#1f5d3a', color: '#ffffff' }]
-  }
 }
 
 function buildBoxShippingTierPreview(boxQtyStr: string, boxFeeStr: string): string {
@@ -189,7 +163,16 @@ export default function ListingNewClient() {
   const [shippingBoxQty, setShippingBoxQty] = useState(empty.shippingBoxQty)
   const [shippingBoxFee, setShippingBoxFee] = useState(empty.shippingBoxFee)
   const [conditionalFreeThreshold, setConditionalFreeThreshold] = useState(empty.conditionalFreeThreshold)
-  const [shippingGroup, setShippingGroup] = useState(empty.shippingGroup)
+  const [shippingGroupId, setShippingGroupId] = useState(empty.shippingGroupId)
+
+  const [shippingGroups, setShippingGroups] = useState<ShippingGroupListItem[]>([])
+  const [showAddShippingGroup, setShowAddShippingGroup] = useState(false)
+  const [newShippingGroupName, setNewShippingGroupName] = useState('')
+  const [shippingGroupActionBusy, setShippingGroupActionBusy] = useState(false)
+  const [manageShippingModal, setManageShippingModal] = useState(false)
+  const [modalEditGroupId, setModalEditGroupId] = useState<string | null>(null)
+  const [modalEditName, setModalEditName] = useState('')
+  const [modalEditDescription, setModalEditDescription] = useState('')
 
   const [thumbnailBadges, setThumbnailBadges] = useState<string[]>(empty.thumbnailBadges)
 
@@ -209,6 +192,16 @@ export default function ListingNewClient() {
     window.setTimeout(() => setToast(null), 2800)
   }, [])
 
+  const refreshShippingGroups = useCallback(async () => {
+    const res = await getShippingGroups()
+    if (!res.success) {
+      showToast(res.error ?? '묶음배송 그룹 조회 실패')
+      setShippingGroups([])
+      return
+    }
+    setShippingGroups(res.data?.groups ?? [])
+  }, [showToast])
+
   useEffect(() => {
     let cancelled = false
     getAdminCategories().then((res) => {
@@ -224,6 +217,10 @@ export default function ListingNewClient() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    void refreshShippingGroups()
+  }, [refreshShippingGroups])
 
   useEffect(() => {
     setSubCategoryId('')
@@ -277,11 +274,6 @@ export default function ListingNewClient() {
       setCommercePrice(String(Math.round(cost / (1 - m))))
     }
   }
-
-  const shippingPolicyBadges = useMemo(
-    () => buildShippingPolicyBadges(shippingType, shippingBoxFee, conditionalFreeThreshold),
-    [shippingType, shippingBoxFee, conditionalFreeThreshold],
-  )
 
   const boxTierPreview = useMemo(
     () => buildBoxShippingTierPreview(shippingBoxQty, shippingBoxFee),
@@ -346,7 +338,11 @@ export default function ListingNewClient() {
     setShippingBoxQty(base.shippingBoxQty)
     setShippingBoxFee(base.shippingBoxFee)
     setConditionalFreeThreshold(base.conditionalFreeThreshold)
-    setShippingGroup(base.shippingGroup)
+    setShippingGroupId(base.shippingGroupId)
+    setShowAddShippingGroup(false)
+    setNewShippingGroupName('')
+    setManageShippingModal(false)
+    setModalEditGroupId(null)
     setThumbnailBadges(base.thumbnailBadges)
     setThumbnailUrl(base.thumbnailUrl)
     setDetailImageUrls(base.detailImageUrls)
@@ -393,6 +389,7 @@ export default function ListingNewClient() {
         commerce_price: price,
         original_price: op,
         shipping_type: shippingType,
+        shipping_group_id: shippingGroupId.trim() || null,
         admin_memo: adminMemo.trim() || null,
         description: listingDescription.trim() || null,
         status,
@@ -418,29 +415,85 @@ export default function ListingNewClient() {
   const marginModeDisabled = cost <= 0
 
   function renderImageOverlays() {
+    if (thumbnailBadges.length === 0) return null
     return (
       <div className={mod.badgeStack}>
-        {thumbnailBadges.length > 0 ? (
-          <div className={mod.badgeRow}>
-            {thumbnailBadges.map((lbl) => {
-              const st = thumbBadgeStyle(lbl)
-              return (
-                <span key={lbl} className={mod.badgePill} style={{ background: st.bg, color: st.color }}>
-                  {lbl}
-                </span>
-              )
-            })}
-          </div>
-        ) : null}
         <div className={mod.badgeRow}>
-          {shippingPolicyBadges.map((b, i) => (
-            <span key={`${b.label}-${i}`} className={mod.badgePill} style={{ background: b.bg, color: b.color }}>
-              {b.label}
-            </span>
-          ))}
+          {thumbnailBadges.map((lbl) => {
+            const st = thumbBadgeStyle(lbl)
+            return (
+              <span key={lbl} className={mod.badgePill} style={{ background: st.bg, color: st.color }}>
+                {lbl}
+              </span>
+            )
+          })}
         </div>
       </div>
     )
+  }
+
+  async function submitNewShippingGroup() {
+    const n = newShippingGroupName.trim()
+    if (!n) {
+      showToast('그룹명을 입력해 주세요')
+      return
+    }
+    setShippingGroupActionBusy(true)
+    const res = await createShippingGroup({ name: n })
+    setShippingGroupActionBusy(false)
+    if (!res.success) {
+      showToast(res.error ?? '그룹 추가 실패')
+      return
+    }
+    await refreshShippingGroups()
+    setShippingGroupId(res.data?.id ?? '')
+    setNewShippingGroupName('')
+    setShowAddShippingGroup(false)
+    showToast('묶음배송 그룹이 추가되었습니다')
+  }
+
+  async function saveModalGroupEdit() {
+    if (!modalEditGroupId) return
+    setShippingGroupActionBusy(true)
+    const res = await updateShippingGroup(modalEditGroupId, {
+      name: modalEditName,
+      description: modalEditDescription,
+    })
+    setShippingGroupActionBusy(false)
+    if (!res.success) {
+      showToast(res.error ?? '저장 실패')
+      return
+    }
+    setModalEditGroupId(null)
+    await refreshShippingGroups()
+    showToast('저장했습니다')
+  }
+
+  async function removeShippingGroup(id: string) {
+    if (
+      !window.confirm(
+        '이 묶음배송 그룹을 비활성화할까요? (사용 중인 상품이 있으면 삭제되지 않습니다)',
+      )
+    ) {
+      return
+    }
+    setShippingGroupActionBusy(true)
+    const res = await deleteShippingGroup(id)
+    setShippingGroupActionBusy(false)
+    if (!res.success) {
+      showToast(res.error ?? '삭제 실패')
+      return
+    }
+    if (shippingGroupId === id) setShippingGroupId('')
+    setModalEditGroupId(null)
+    await refreshShippingGroups()
+    showToast('그룹을 비활성화했습니다')
+  }
+
+  function openManageShippingModal() {
+    setModalEditGroupId(null)
+    setManageShippingModal(true)
+    void refreshShippingGroups()
   }
 
   return (
@@ -463,6 +516,113 @@ export default function ListingNewClient() {
           }}
         >
           {toast}
+        </div>
+      ) : null}
+
+      {manageShippingModal ? (
+        <div
+          className={mod.modalBackdrop}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="shipping-group-manage-title"
+          onClick={() => {
+            if (!shippingGroupActionBusy) setManageShippingModal(false)
+          }}
+        >
+          <div className={mod.modalPanel} onClick={(e) => e.stopPropagation()}>
+            <div className={mod.modalHeader}>
+              <h3 id="shipping-group-manage-title" className={mod.modalTitle}>
+                묶음배송 그룹 관리
+              </h3>
+              <button
+                type="button"
+                className={mod.btnGhost}
+                onClick={() => setManageShippingModal(false)}
+                disabled={shippingGroupActionBusy}
+              >
+                닫기
+              </button>
+            </div>
+            <div className={mod.modalBody}>
+              {shippingGroups.length === 0 ? (
+                <p className={mod.hint}>등록된 그룹이 없습니다</p>
+              ) : (
+                shippingGroups.map((g) => (
+                  <div key={g.id} className={mod.modalGroupRow}>
+                    {modalEditGroupId === g.id ? (
+                      <div className={mod.modalGroupEdit}>
+                        <input
+                          className={mod.input}
+                          value={modalEditName}
+                          onChange={(e) => setModalEditName(e.target.value)}
+                          placeholder="그룹명"
+                          disabled={shippingGroupActionBusy}
+                        />
+                        <input
+                          className={mod.input}
+                          value={modalEditDescription}
+                          onChange={(e) => setModalEditDescription(e.target.value)}
+                          placeholder="설명 (선택)"
+                          disabled={shippingGroupActionBusy}
+                        />
+                        <div className={mod.modalRowActions}>
+                          <button
+                            type="button"
+                            className={mod.btnGhost}
+                            onClick={() => void saveModalGroupEdit()}
+                            disabled={shippingGroupActionBusy}
+                          >
+                            저장
+                          </button>
+                          <button
+                            type="button"
+                            className={mod.btnGhost}
+                            onClick={() => setModalEditGroupId(null)}
+                            disabled={shippingGroupActionBusy}
+                          >
+                            취소
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className={mod.modalGroupRowView}>
+                        <div className={mod.modalGroupSummary}>
+                          <strong>{g.name}</strong>
+                          {g.description ? (
+                            <span className={mod.hint} style={{ display: 'block', marginTop: 4 }}>
+                              {g.description}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className={mod.modalRowActions}>
+                          <button
+                            type="button"
+                            className={mod.btnGhost}
+                            onClick={() => {
+                              setModalEditGroupId(g.id)
+                              setModalEditName(g.name)
+                              setModalEditDescription(g.description ?? '')
+                            }}
+                            disabled={shippingGroupActionBusy}
+                          >
+                            수정
+                          </button>
+                          <button
+                            type="button"
+                            className={mod.btnGhost}
+                            onClick={() => void removeShippingGroup(g.id)}
+                            disabled={shippingGroupActionBusy}
+                          >
+                            삭제
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
       ) : null}
 
@@ -719,15 +879,67 @@ export default function ListingNewClient() {
                 <div>
                   <div className={mod.label}>묶음배송 그룹 (선택)</div>
                   <p className={mod.hint}>같은 그룹 상품끼리 묶음배송 가능합니다</p>
-                  <input
-                    className={mod.input}
-                    type="text"
-                    value={shippingGroup}
-                    onChange={(e) => setShippingGroup(e.target.value)}
-                    placeholder="예: 부평창고, 계양창고, A공장배송"
-                  />
-                  {/* TODO: 향후 shipping_group 컬럼 추가 후 DB 연결 예정 */}
-                  {/* 묶음배송 그룹별 박스 계산 엔진은 다음 단계에서 별도 설계 */}
+                  <div className={mod.shippingGroupToolbar}>
+                    <select
+                      className={`${mod.select} ${mod.shippingGroupSelect}`}
+                      value={shippingGroupId}
+                      onChange={(e) => setShippingGroupId(e.target.value)}
+                      disabled={pending || shippingGroupActionBusy}
+                    >
+                      <option value="">선택 안 함</option>
+                      {shippingGroups.map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className={mod.btnGhost}
+                      onClick={() => setShowAddShippingGroup((v) => !v)}
+                      disabled={pending || shippingGroupActionBusy}
+                    >
+                      + 그룹 추가
+                    </button>
+                    <button
+                      type="button"
+                      className={mod.btnGhost}
+                      onClick={openManageShippingModal}
+                      disabled={pending || shippingGroupActionBusy}
+                    >
+                      관리
+                    </button>
+                  </div>
+                  {showAddShippingGroup ? (
+                    <div className={mod.shippingGroupInlineAdd}>
+                      <input
+                        className={mod.input}
+                        value={newShippingGroupName}
+                        onChange={(e) => setNewShippingGroupName(e.target.value)}
+                        placeholder="그룹명"
+                        disabled={shippingGroupActionBusy}
+                      />
+                      <button
+                        type="button"
+                        className={mod.btnGhost}
+                        onClick={() => void submitNewShippingGroup()}
+                        disabled={shippingGroupActionBusy}
+                      >
+                        추가
+                      </button>
+                      <button
+                        type="button"
+                        className={mod.btnGhost}
+                        onClick={() => {
+                          setShowAddShippingGroup(false)
+                          setNewShippingGroupName('')
+                        }}
+                        disabled={shippingGroupActionBusy}
+                      >
+                        취소
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </div>

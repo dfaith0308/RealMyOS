@@ -883,6 +883,183 @@ export async function uploadListingImage(formData: FormData): Promise<ActionResu
   return { success: true, data: { url: pub.publicUrl } }
 }
 
+export type ShippingGroupListItem = {
+  id: string
+  name: string
+  description: string | null
+}
+
+/** 플랫폼 테넌트 묶음배송 그룹 (활성만) */
+export async function getShippingGroups(): Promise<ActionResult<{ groups: ShippingGroupListItem[] }>> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const { data, error } = await supabase
+    .from('shipping_groups')
+    .select('id, name, description')
+    .eq('tenant_id', PLATFORM_OWNER_TENANT)
+    .eq('is_active', true)
+    .order('name', { ascending: true })
+
+  if (error) return { success: false, error: error.message }
+  return { success: true, data: { groups: (data ?? []) as ShippingGroupListItem[] } }
+}
+
+export async function createShippingGroup(input: {
+  name: string
+  description?: string | null
+}): Promise<ActionResult<{ id: string }>> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const name = String(input.name ?? '').trim()
+  if (!name) return { success: false, error: '그룹명을 입력해 주세요' }
+
+  const description =
+    input.description != null && String(input.description).trim()
+      ? String(input.description).trim()
+      : null
+
+  const { data: row, error } = await supabase
+    .from('shipping_groups')
+    .insert({
+      tenant_id: PLATFORM_OWNER_TENANT,
+      name,
+      description,
+      is_active: true,
+    })
+    .select('id')
+    .single()
+
+  if (error || !row) return { success: false, error: error?.message ?? '그룹 생성 실패' }
+
+  const id = row.id as string
+  const logRes = await insertAdminLog(supabase, {
+    admin_id: auth.ctx.user_id,
+    tenant_id: PLATFORM_OWNER_TENANT,
+    action_type: 'shipping_group_created',
+    target_table: 'shipping_groups',
+    target_id: id,
+    new_value: { name, description },
+  })
+  if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
+
+  revalidatePath('/admin/commerce/products/new')
+  return { success: true, data: { id } }
+}
+
+export async function updateShippingGroup(
+  id: string,
+  input: { name?: string; description?: string },
+): Promise<ActionResult<{ id: string }>> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const gid = String(id ?? '').trim()
+  if (!gid) return { success: false, error: '그룹 ID가 없습니다' }
+
+  const { data: existing, error: fetchErr } = await supabase
+    .from('shipping_groups')
+    .select('id, name, description, tenant_id')
+    .eq('id', gid)
+    .maybeSingle()
+
+  if (fetchErr) return { success: false, error: fetchErr.message }
+  if (!existing || (existing as { tenant_id: string }).tenant_id !== PLATFORM_OWNER_TENANT) {
+    return { success: false, error: '그룹을 찾을 수 없습니다' }
+  }
+
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
+  if (input.name !== undefined) {
+    const n = String(input.name).trim()
+    if (!n) return { success: false, error: '그룹명을 입력해 주세요' }
+    patch.name = n
+  }
+  if (input.description !== undefined) {
+    patch.description = String(input.description).trim() || null
+  }
+
+  if (Object.keys(patch).length === 1) {
+    return { success: false, error: '변경할 내용이 없습니다' }
+  }
+
+  const { error: upErr } = await supabase.from('shipping_groups').update(patch).eq('id', gid)
+  if (upErr) return { success: false, error: upErr.message }
+
+  const logRes = await insertAdminLog(supabase, {
+    admin_id: auth.ctx.user_id,
+    tenant_id: PLATFORM_OWNER_TENANT,
+    action_type: 'shipping_group_updated',
+    target_table: 'shipping_groups',
+    target_id: gid,
+    old_value: { name: existing.name, description: existing.description },
+    new_value: patch,
+  })
+  if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
+
+  revalidatePath('/admin/commerce/products/new')
+  return { success: true, data: { id: gid } }
+}
+
+export async function deleteShippingGroup(id: string): Promise<ActionResult> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const gid = String(id ?? '').trim()
+  if (!gid) return { success: false, error: '그룹 ID가 없습니다' }
+
+  const { data: existing, error: fetchErr } = await supabase
+    .from('shipping_groups')
+    .select('id, tenant_id, name')
+    .eq('id', gid)
+    .maybeSingle()
+
+  if (fetchErr) return { success: false, error: fetchErr.message }
+  if (!existing || (existing as { tenant_id: string }).tenant_id !== PLATFORM_OWNER_TENANT) {
+    return { success: false, error: '그룹을 찾을 수 없습니다' }
+  }
+
+  const { count, error: cntErr } = await supabase
+    .from('commerce_product_listings')
+    .select('id', { count: 'exact', head: true })
+    .eq('shipping_group_id', gid)
+    .is('deleted_at', null)
+
+  if (cntErr) return { success: false, error: cntErr.message }
+  if ((count ?? 0) > 0) {
+    return {
+      success: false,
+      error:
+        '이 그룹을 사용 중인 상품이 있습니다. 먼저 상품의 배송 그룹을 변경해주세요.',
+    }
+  }
+
+  const { error: upErr } = await supabase
+    .from('shipping_groups')
+    .update({ is_active: false, updated_at: new Date().toISOString() })
+    .eq('id', gid)
+
+  if (upErr) return { success: false, error: upErr.message }
+
+  const logRes = await insertAdminLog(supabase, {
+    admin_id: auth.ctx.user_id,
+    tenant_id: PLATFORM_OWNER_TENANT,
+    action_type: 'shipping_group_deactivated',
+    target_table: 'shipping_groups',
+    target_id: gid,
+    old_value: { is_active: true, name: (existing as { name: string }).name },
+    new_value: { is_active: false },
+  })
+  if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
+
+  revalidatePath('/admin/commerce/products/new')
+  return { success: true }
+}
+
 export async function createListingFull(input: {
   brand_name: string | null
   product_name: string
@@ -894,6 +1071,7 @@ export async function createListingFull(input: {
   commerce_price: number
   original_price: number | null
   shipping_type: ListingShippingType
+  shipping_group_id?: string | null
   admin_memo: string | null
   description?: string | null
   status: 'draft' | 'visible'
@@ -927,6 +1105,22 @@ export async function createListingFull(input: {
   const st = input.shipping_type
   if (!(LISTING_SHIPPING_TYPES as readonly string[]).includes(st)) {
     return { success: false, error: '유효하지 않은 배송 유형입니다' }
+  }
+
+  let shipping_group_id: string | null = null
+  const sgRaw = input.shipping_group_id
+  if (sgRaw != null && String(sgRaw).trim()) {
+    const sgId = String(sgRaw).trim()
+    const { data: sgRow, error: sgErr } = await supabase
+      .from('shipping_groups')
+      .select('id')
+      .eq('id', sgId)
+      .eq('tenant_id', PLATFORM_OWNER_TENANT)
+      .eq('is_active', true)
+      .maybeSingle()
+    if (sgErr) return { success: false, error: sgErr.message }
+    if (!sgRow) return { success: false, error: '유효한 묶음배송 그룹이 아닙니다' }
+    shipping_group_id = sgId
   }
 
   const statusIn = input.status
@@ -1036,6 +1230,7 @@ export async function createListingFull(input: {
       description: listing_description,
       spec,
       admin_memo,
+      shipping_group_id,
     })
     .select('id')
     .single()
@@ -1065,6 +1260,7 @@ export async function createListingFull(input: {
       description: listing_description,
       image_urls: image_urls_db,
       badge_labels: badge_labels_db,
+      shipping_group_id,
     },
   })
   if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
