@@ -1128,7 +1128,8 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **작업 이력 (2026-05-10)**: `20260510120000` 헤더 주석 운영 DB 적용 완료(2026-05-10)로 갱신 — worklog: [`docs/worklogs/2026-05-10_docs_listing-brand-shipping-migration-applied.md`](./worklogs/2026-05-10_docs_listing-brand-shipping-migration-applied.md)
 - **작업 이력 (2026-05-10)**: `product_categories` 운영 컬럼 `slug` / `sort_order` / `is_active` migration — [`supabase/migrations/20260510130000_add_category_columns.sql`](../supabase/migrations/20260510130000_add_category_columns.sql) — worklog: [`docs/worklogs/2026-05-10_feat_admin-commerce-categories.md`](./worklogs/2026-05-10_feat_admin-commerce-categories.md)
 - **작업 이력 (2026-05-10)**: `20260510130000` 헤더 주석 운영 DB 적용 완료(2026-05-10)로 갱신 — worklog: [`docs/worklogs/2026-05-10_docs_category-columns-migration-applied.md`](./worklogs/2026-05-10_docs_category-columns-migration-applied.md)
-- **작업 이력 (2026-05-10)**: `commerce_product_listings` `admin_memo` / `spec` migration(저장소만, 미적용) — [`supabase/migrations/20260510140000_add_listing_admin_memo.sql`](../supabase/migrations/20260510140000_add_listing_admin_memo.sql) — worklog: [`docs/worklogs/2026-05-10_feat_admin-commerce-listing-new-page.md`](./worklogs/2026-05-10_feat_admin-commerce-listing-new-page.md)
+- **작업 이력 (2026-05-10)**: `commerce_product_listings` `admin_memo` / `spec` migration — [`supabase/migrations/20260510140000_add_listing_admin_memo.sql`](../supabase/migrations/20260510140000_add_listing_admin_memo.sql) — worklog: [`docs/worklogs/2026-05-10_feat_admin-commerce-listing-new-page.md`](./worklogs/2026-05-10_feat_admin-commerce-listing-new-page.md)
+- **작업 이력 (2026-05-10)**: `20260510140000` 헤더 주석 운영 DB 적용 완료(2026-05-10)로 갱신 — worklog: [`docs/worklogs/2026-05-10_docs_listing-admin-memo-migration-applied.md`](./worklogs/2026-05-10_docs_listing-admin-memo-migration-applied.md)
 
 #### [COMMERCE-002] 관리자OS Listing 관리 화면
 - **우선순위**: HIGH
