@@ -11,11 +11,34 @@ import {
   type AdminCategoryRow,
   type ListingShippingType,
 } from '@/actions/admin/commerce'
-import { calcMarginRate, formatKRW } from '@/lib/calc'
+import { calcMarginRate, formatDigitsForInput, formatKRW } from '@/lib/calc'
 import mod from './listing-new-client.module.css'
 
 const MAX_DETAIL_IMAGES = 5
+const MAX_THUMB_BADGES = 2
 const THUMB_H = 160
+
+/** 하드코딩 썸네일 뱃지 (향후 뱃지 관리 화면에서 확장) */
+// TODO: 향후 뱃지 관리 화면에서 추가/수정/삭제 가능하게 확장 예정
+const THUMBNAIL_BADGE_OPTIONS: { label: string; bg: string; color: string }[] = [
+  { label: '오늘출발', bg: '#ea580c', color: '#ffffff' },
+  { label: '무료배송', bg: '#1f5d3a', color: '#ffffff' },
+  { label: '추천상품', bg: '#1f5d3a', color: '#ffffff' },
+  { label: '일시품절', bg: '#888888', color: '#ffffff' },
+  { label: '가격네고', bg: '#2563eb', color: '#ffffff' },
+  { label: 'BEST', bg: '#ea580c', color: '#ffffff' },
+]
+
+function thumbBadgeStyle(label: string): { bg: string; color: string } {
+  const o = THUMBNAIL_BADGE_OPTIONS.find((x) => x.label === label)
+  return o ? { bg: o.bg, color: o.color } : { bg: '#6b7280', color: '#ffffff' }
+}
+
+function toggleThumbBadge(current: string[], label: string): string[] {
+  if (current.includes(label)) return current.filter((x) => x !== label)
+  if (current.length >= MAX_THUMB_BADGES) return current
+  return [...current, label]
+}
 
 /** 향후 "상품 복제" 등에서 초기 상태를 재사용할 수 있도록 묶음 */
 export type ListingStudioFormState = {
@@ -30,9 +53,11 @@ export type ListingStudioFormState = {
   marginMode: 'price' | 'margin'
   marginInput: string
   shippingType: ListingShippingType
-  shippingFee: string
-  freeShippingThreshold: string
-  bundleShipping: boolean
+  shippingBoxQty: string
+  shippingBoxFee: string
+  conditionalFreeThreshold: string
+  shippingGroup: string
+  thumbnailBadges: string[]
   thumbnailUrl: string
   detailImageUrls: string[]
   listingDescription: string
@@ -53,9 +78,11 @@ export function createEmptyListingStudioForm(): ListingStudioFormState {
     marginMode: 'price',
     marginInput: '',
     shippingType: 'free',
-    shippingFee: '',
-    freeShippingThreshold: '',
-    bundleShipping: false,
+    shippingBoxQty: '',
+    shippingBoxFee: '',
+    conditionalFreeThreshold: '',
+    shippingGroup: '',
+    thumbnailBadges: [],
     thumbnailUrl: '',
     detailImageUrls: [],
     listingDescription: '',
@@ -81,51 +108,47 @@ function sortCategoryRows(rows: AdminCategoryRow[]): AdminCategoryRow[] {
 
 type PreviewBadge = { label: string; bg: string; color: string }
 
-function buildPreviewBadges(
+/** 배송 정책 전용 뱃지 (썸네일 커스텀 뱃지와 분리) */
+function buildShippingPolicyBadges(
   shippingType: ListingShippingType,
-  shippingFeeStr: string,
-  freeThresholdStr: string,
-  bundleShipping: boolean,
+  boxFeeStr: string,
+  condThresholdStr: string,
 ): PreviewBadge[] {
-  const badges: PreviewBadge[] = []
-  const feeNum = parseInt(shippingFeeStr.replace(/[^\d]/g, ''), 10)
-  const thrNum = parseInt(freeThresholdStr.replace(/[^\d]/g, ''), 10)
-
   switch (shippingType) {
     case 'paid': {
-      const feeOk = Number.isFinite(feeNum) && feeNum > 0
-      badges.push({
-        label: feeOk ? `유료배송 ${formatKRW(feeNum)}` : '유료배송',
-        bg: '#888888',
-        color: '#ffffff',
-      })
-      break
+      const fee = parseInt(boxFeeStr.replace(/\D/g, ''), 10)
+      const ok = Number.isFinite(fee) && fee > 0
+      return [
+        {
+          label: ok ? `배송비 ${formatKRW(fee)}/박스` : '배송비 /박스',
+          bg: '#888888',
+          color: '#ffffff',
+        },
+      ]
     }
-    case 'cold':
-      badges.push({ label: '냉장배송', bg: '#2563eb', color: '#ffffff' })
-      break
-    case 'same_day':
-      badges.push({ label: '오늘출고', bg: '#ea580c', color: '#ffffff' })
-      break
+    case 'conditional_free': {
+      const thr = parseInt(condThresholdStr.replace(/\D/g, ''), 10)
+      const ok = Number.isFinite(thr) && thr > 0
+      return [{ label: ok ? `${formatKRW(thr)} 이상 무료` : '조건부 무료', bg: '#1f5d3a', color: '#ffffff' }]
+    }
     case 'free':
     default:
-      badges.push({ label: '무료배송', bg: '#1f5d3a', color: '#ffffff' })
-      break
+      return [{ label: '무료배송', bg: '#1f5d3a', color: '#ffffff' }]
   }
+}
 
-  if (Number.isFinite(thrNum) && thrNum > 0) {
-    badges.push({
-      label: `${formatKRW(thrNum)} 이상 무료`,
-      bg: '#5a5a5a',
-      color: '#ffffff',
-    })
+function buildBoxShippingTierPreview(boxQtyStr: string, boxFeeStr: string): string {
+  const q = parseInt(boxQtyStr.replace(/\D/g, ''), 10)
+  const fee = parseInt(boxFeeStr.replace(/\D/g, ''), 10)
+  if (!Number.isFinite(q) || q <= 0 || !Number.isFinite(fee) || fee <= 0) return ''
+  const parts: string[] = []
+  parts.push(`${q}개까지 ${formatKRW(fee)}`)
+  for (let b = 2; b <= 3; b++) {
+    const lo = (b - 1) * q + 1
+    const hi = b * q
+    parts.push(`${lo}~${hi}개 ${formatKRW(b * fee)}`)
   }
-
-  if (bundleShipping) {
-    badges.push({ label: '묶음가능', bg: '#6b7280', color: '#ffffff' })
-  }
-
-  return badges
+  return parts.join(' / ')
 }
 
 function productNameInitial(name: string): string {
@@ -163,9 +186,12 @@ export default function ListingNewClient() {
   const [marginInput, setMarginInput] = useState(empty.marginInput)
 
   const [shippingType, setShippingType] = useState<ListingShippingType>(empty.shippingType)
-  const [shippingFee, setShippingFee] = useState(empty.shippingFee)
-  const [freeShippingThreshold, setFreeShippingThreshold] = useState(empty.freeShippingThreshold)
-  const [bundleShipping, setBundleShipping] = useState(empty.bundleShipping)
+  const [shippingBoxQty, setShippingBoxQty] = useState(empty.shippingBoxQty)
+  const [shippingBoxFee, setShippingBoxFee] = useState(empty.shippingBoxFee)
+  const [conditionalFreeThreshold, setConditionalFreeThreshold] = useState(empty.conditionalFreeThreshold)
+  const [shippingGroup, setShippingGroup] = useState(empty.shippingGroup)
+
+  const [thumbnailBadges, setThumbnailBadges] = useState<string[]>(empty.thumbnailBadges)
 
   const [thumbnailUrl, setThumbnailUrl] = useState(empty.thumbnailUrl)
   const [detailImageUrls, setDetailImageUrls] = useState<string[]>(empty.detailImageUrls)
@@ -208,6 +234,11 @@ export default function ListingNewClient() {
     [categoryFlat],
   )
 
+  const selectedRoot = useMemo(
+    () => rootOptions.find((r) => r.id === rootCategoryId),
+    [rootOptions, rootCategoryId],
+  )
+
   const subCategoryOptions = useMemo(() => {
     if (!rootCategoryId) return []
     return sortCategoryRows(
@@ -218,12 +249,12 @@ export default function ListingNewClient() {
   const effectiveCategoryId = subCategoryId || rootCategoryId
 
   const previewPrice = (() => {
-    const n = parseInt(commercePrice.replace(/[^\d]/g, ''), 10)
+    const n = parseInt(commercePrice.replace(/\D/g, ''), 10)
     return Number.isFinite(n) && n > 0 ? n : null
   })()
 
   const previewOriginal = (() => {
-    const n = parseInt(originalPrice.replace(/[^\d]/g, ''), 10)
+    const n = parseInt(originalPrice.replace(/\D/g, ''), 10)
     return Number.isFinite(n) && n > 0 ? n : null
   })()
 
@@ -247,9 +278,14 @@ export default function ListingNewClient() {
     }
   }
 
-  const previewBadges = useMemo(
-    () => buildPreviewBadges(shippingType, shippingFee, freeShippingThreshold, bundleShipping),
-    [shippingType, shippingFee, freeShippingThreshold, bundleShipping],
+  const shippingPolicyBadges = useMemo(
+    () => buildShippingPolicyBadges(shippingType, shippingBoxFee, conditionalFreeThreshold),
+    [shippingType, shippingBoxFee, conditionalFreeThreshold],
+  )
+
+  const boxTierPreview = useMemo(
+    () => buildBoxShippingTierPreview(shippingBoxQty, shippingBoxFee),
+    [shippingBoxQty, shippingBoxFee],
   )
 
   async function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -275,7 +311,7 @@ export default function ListingNewClient() {
   }
 
   function parseOriginal(): number | null {
-    const raw = originalPrice.replace(/[^\d]/g, '')
+    const raw = originalPrice.replace(/\D/g, '')
     if (!raw) return null
     const n = parseInt(raw, 10)
     if (!Number.isFinite(n) || n <= 0) return null
@@ -307,9 +343,11 @@ export default function ListingNewClient() {
     setMarginMode(base.marginMode)
     setMarginInput(base.marginInput)
     setShippingType(base.shippingType)
-    setShippingFee(base.shippingFee)
-    setFreeShippingThreshold(base.freeShippingThreshold)
-    setBundleShipping(base.bundleShipping)
+    setShippingBoxQty(base.shippingBoxQty)
+    setShippingBoxFee(base.shippingBoxFee)
+    setConditionalFreeThreshold(base.conditionalFreeThreshold)
+    setShippingGroup(base.shippingGroup)
+    setThumbnailBadges(base.thumbnailBadges)
     setThumbnailUrl(base.thumbnailUrl)
     setDetailImageUrls(base.detailImageUrls)
     setListingDescription(base.listingDescription)
@@ -333,7 +371,7 @@ export default function ListingNewClient() {
       setError('카테고리를 선택해 주세요')
       return
     }
-    const price = parseInt(commercePrice.replace(/[^\d]/g, ''), 10)
+    const price = parseInt(commercePrice.replace(/\D/g, ''), 10)
     if (!Number.isFinite(price) || price <= 0) {
       setError('식식이 판매가는 1원 이상 정수로 입력해 주세요')
       return
@@ -341,6 +379,7 @@ export default function ListingNewClient() {
 
     const op = parseOriginal()
     const image_urls = detailImageUrls.map((u) => u.trim()).filter(Boolean)
+    const badge_labels = thumbnailBadges.length > 0 ? thumbnailBadges : null
 
     startTransition(async () => {
       const r = await createListingFull({
@@ -349,6 +388,7 @@ export default function ListingNewClient() {
         spec: spec.trim() || null,
         thumbnail_url: thumbnailUrl.trim() || null,
         image_urls: image_urls.length > 0 ? image_urls : null,
+        badge_labels,
         category_id: effectiveCategoryId,
         commerce_price: price,
         original_price: op,
@@ -376,6 +416,32 @@ export default function ListingNewClient() {
   const descPreview = listingDescription.trim()
   const detailUrlsForPreview = detailImageUrls.map((u) => u.trim()).filter(Boolean)
   const marginModeDisabled = cost <= 0
+
+  function renderImageOverlays() {
+    return (
+      <div className={mod.badgeStack}>
+        {thumbnailBadges.length > 0 ? (
+          <div className={mod.badgeRow}>
+            {thumbnailBadges.map((lbl) => {
+              const st = thumbBadgeStyle(lbl)
+              return (
+                <span key={lbl} className={mod.badgePill} style={{ background: st.bg, color: st.color }}>
+                  {lbl}
+                </span>
+              )
+            })}
+          </div>
+        ) : null}
+        <div className={mod.badgeRow}>
+          {shippingPolicyBadges.map((b, i) => (
+            <span key={`${b.label}-${i}`} className={mod.badgePill} style={{ background: b.bg, color: b.color }}>
+              {b.label}
+            </span>
+          ))}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <>
@@ -406,22 +472,35 @@ export default function ListingNewClient() {
             {error ? <div className={mod.errorCard}>{error}</div> : null}
 
             <div className={mod.card}>
-              <h2 className={mod.sectionTitle}>카테고리</h2>
+              <div className={mod.sectionHeaderRow}>
+                <h2 className={mod.sectionTitle}>카테고리</h2>
+                <Link href="/admin/commerce/categories" className={mod.linkMuted}>
+                  카테고리 관리
+                </Link>
+              </div>
               <div className={mod.fieldStack}>
                 <div>
                   <div className={mod.label}>대분류 · 필수</div>
-                  <select
-                    className={mod.select}
-                    value={rootCategoryId}
-                    onChange={(e) => setRootCategoryId(e.target.value)}
-                  >
-                    <option value="">선택</option>
-                    {rootOptions.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
+                  <div className={mod.categorySelectRow}>
+                    {selectedRoot?.icon_url?.trim() ? (
+                      <img src={selectedRoot.icon_url.trim()} alt="" className={mod.catOptionIcon} />
+                    ) : (
+                      <span className={mod.catIconSpacer} aria-hidden />
+                    )}
+                    <select
+                      className={`${mod.select} ${mod.selectGrow}`}
+                      value={rootCategoryId}
+                      onChange={(e) => setRootCategoryId(e.target.value)}
+                    >
+                      <option value="">선택</option>
+                      {rootOptions.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <p className={mod.hint}>아이콘이 있는 대분류는 선택 시 왼쪽에 표시됩니다.</p>
                 </div>
                 <div>
                   <div className={mod.label}>소분류</div>
@@ -486,9 +565,10 @@ export default function ListingNewClient() {
                   <input
                     className={mod.input}
                     inputMode="numeric"
-                    value={supplyPrice}
-                    onChange={(e) => setSupplyPrice(e.target.value)}
-                    placeholder="예: 18000"
+                    type="text"
+                    value={formatDigitsForInput(supplyPrice)}
+                    onChange={(e) => setSupplyPrice(e.target.value.replace(/\D/g, ''))}
+                    placeholder="예: 18,000"
                   />
                   <p className={mod.hint}>내부 운영용. 구매자에게 노출 안 됨</p>
                 </div>
@@ -516,9 +596,10 @@ export default function ListingNewClient() {
                       <input
                         className={mod.input}
                         inputMode="numeric"
-                        value={commercePrice}
-                        onChange={(e) => setCommercePrice(e.target.value)}
-                        placeholder="예: 22900"
+                        type="text"
+                        value={formatDigitsForInput(commercePrice)}
+                        onChange={(e) => setCommercePrice(e.target.value.replace(/\D/g, ''))}
+                        placeholder="예: 22,900"
                       />
                     </div>
                   ) : (
@@ -536,7 +617,9 @@ export default function ListingNewClient() {
                           max={99}
                         />
                         {commercePrice ? (
-                          <span style={{ fontSize: 13, color: '#6b7280' }}>→ {formatKRW(Number(commercePrice))}</span>
+                          <span style={{ fontSize: 13, color: '#6b7280' }}>
+                            → {formatKRW(Number(commercePrice.replace(/\D/g, '') || 0))}
+                          </span>
                         ) : null}
                       </div>
                       <p className={mod.hint}>공급가를 먼저 입력한 뒤 사용할 수 있습니다.</p>
@@ -548,9 +631,10 @@ export default function ListingNewClient() {
                   <input
                     className={mod.input}
                     inputMode="numeric"
-                    value={originalPrice}
-                    onChange={(e) => setOriginalPrice(e.target.value)}
-                    placeholder="예: 26000"
+                    type="text"
+                    value={formatDigitsForInput(originalPrice)}
+                    onChange={(e) => setOriginalPrice(e.target.value.replace(/\D/g, ''))}
+                    placeholder="예: 26,000"
                   />
                   <p className={mod.hint}>판매가보다 클 때만 절감액 표시</p>
                 </div>
@@ -577,44 +661,101 @@ export default function ListingNewClient() {
                   >
                     <option value="free">무료배송</option>
                     <option value="paid">유료배송</option>
-                    <option value="cold">냉장배송</option>
-                    <option value="same_day">오늘출고</option>
+                    <option value="conditional_free">조건부 무료배송</option>
                   </select>
                 </div>
+
+                {shippingType === 'paid' ? (
+                  <>
+                    <div>
+                      <div className={mod.label}>1박스 기준 수량</div>
+                      <input
+                        className={mod.input}
+                        type="number"
+                        inputMode="numeric"
+                        min={1}
+                        value={shippingBoxQty}
+                        onChange={(e) => setShippingBoxQty(e.target.value.replace(/\D/g, ''))}
+                        placeholder="예: 10 (10개까지 1박스)"
+                      />
+                    </div>
+                    <div>
+                      <div className={mod.label}>박스당 배송비 (원)</div>
+                      <input
+                        className={mod.input}
+                        type="text"
+                        inputMode="numeric"
+                        value={formatDigitsForInput(shippingBoxFee)}
+                        onChange={(e) => setShippingBoxFee(e.target.value.replace(/\D/g, ''))}
+                        placeholder="예: 3,000"
+                      />
+                      {/* TODO: 향후 shipping_fee, shipping_box_qty 컬럼 추가 후 DB 연결 예정 */}
+                      {boxTierPreview ? (
+                        <p className={mod.hint} style={{ color: '#1f5d3a' }}>
+                          {boxTierPreview}
+                        </p>
+                      ) : (
+                        <p className={mod.hint}>박스 수 = ⌈주문수량 ÷ 기준수량⌉ — 미리보기용 계산입니다.</p>
+                      )}
+                    </div>
+                  </>
+                ) : null}
+
+                {shippingType === 'conditional_free' ? (
+                  <div>
+                    <div className={mod.label}>무료배송 기준 금액 (원)</div>
+                    <input
+                      className={mod.input}
+                      type="text"
+                      inputMode="numeric"
+                      value={formatDigitsForInput(conditionalFreeThreshold)}
+                      onChange={(e) => setConditionalFreeThreshold(e.target.value.replace(/\D/g, ''))}
+                      placeholder="예: 50,000 (5만원 이상 무료배송)"
+                    />
+                    {/* TODO: 향후 free_shipping_threshold 컬럼 추가 후 DB 연결 예정 */}
+                  </div>
+                ) : null}
+
                 <div>
-                  <div className={mod.label}>배송비 (원)</div>
+                  <div className={mod.label}>묶음배송 그룹 (선택)</div>
+                  <p className={mod.hint}>같은 그룹 상품끼리 묶음배송 가능합니다</p>
                   <input
                     className={mod.input}
-                    inputMode="numeric"
-                    value={shippingFee}
-                    onChange={(e) => setShippingFee(e.target.value)}
-                    placeholder="예: 3000"
-                    disabled={shippingType !== 'paid'}
+                    type="text"
+                    value={shippingGroup}
+                    onChange={(e) => setShippingGroup(e.target.value)}
+                    placeholder="예: 부평창고, 계양창고, A공장배송"
                   />
-                  {/* TODO: 향후 shipping_fee 컬럼 추가 후 연결 예정 */}
-                  <p className={mod.hint}>미리보기용. 유료배송일 때만 입력합니다.</p>
+                  {/* TODO: 향후 shipping_group 컬럼 추가 후 DB 연결 예정 */}
+                  {/* 묶음배송 그룹별 박스 계산 엔진은 다음 단계에서 별도 설계 */}
                 </div>
-                <div>
-                  <div className={mod.label}>무료배송 기준 금액 (원)</div>
-                  <input
-                    className={mod.input}
-                    inputMode="numeric"
-                    value={freeShippingThreshold}
-                    onChange={(e) => setFreeShippingThreshold(e.target.value)}
-                    placeholder="예: 50000 (5만원 이상 무료)"
-                  />
-                  {/* TODO: 향후 free_shipping_threshold 컬럼 추가 후 연결 예정 */}
-                  <p className={mod.hint}>미리보기 배지용입니다.</p>
+              </div>
+            </div>
+
+            <div className={mod.card}>
+              <h2 className={mod.sectionTitle}>썸네일 뱃지</h2>
+              <p className={mod.hint}>상품 카드 썸네일에 표시됩니다 (최대 2개)</p>
+              <div className={mod.thumbBadgeToggle}>
+                <div className={mod.thumbBadgeRow}>
+                  {THUMBNAIL_BADGE_OPTIONS.map((opt) => {
+                    const checked = thumbnailBadges.includes(opt.label)
+                    const disabled = !checked && thumbnailBadges.length >= MAX_THUMB_BADGES
+                    return (
+                      <label
+                        key={opt.label}
+                        className={`${mod.thumbBadgeLabel} ${disabled ? mod.thumbBadgeLabelDisabled : ''}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={disabled}
+                          onChange={() => setThumbnailBadges((prev) => toggleThumbBadge(prev, opt.label))}
+                        />
+                        {opt.label}
+                      </label>
+                    )
+                  })}
                 </div>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#2b2b2b' }}>
-                  <input
-                    type="checkbox"
-                    checked={bundleShipping}
-                    onChange={(e) => setBundleShipping(e.target.checked)}
-                  />
-                  묶음배송 가능
-                </label>
-                {/* TODO: 향후 bundle_shipping 컬럼 추가 후 연결 예정 */}
               </div>
             </div>
 
@@ -719,13 +860,23 @@ export default function ListingNewClient() {
                   다음 단계에서 별도 작업 예정 */}
               <h2 className={mod.sectionTitle}>공개 설정</h2>
               <div className={mod.fieldStack}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#2b2b2b' }}>
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, color: '#2b2b2b' }}>
                   <input type="radio" name="vis" checked={visibility === 'draft'} onChange={() => setVisibility('draft')} />
-                  초안 기본
+                  <span>
+                    <strong>비공개</strong>
+                    <span className={mod.hint} style={{ display: 'block', marginTop: 4 }}>
+                      등록 후 직접 공개 처리합니다
+                    </span>
+                  </span>
                 </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#2b2b2b' }}>
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, color: '#2b2b2b' }}>
                   <input type="radio" name="vis" checked={visibility === 'visible'} onChange={() => setVisibility('visible')} />
-                  즉시 공개 선호
+                  <span>
+                    <strong>공개</strong>
+                    <span className={mod.hint} style={{ display: 'block', marginTop: 4 }}>
+                      등록 즉시 구매 화면에 표시됩니다
+                    </span>
+                  </span>
                 </label>
                 <p className={mod.hint}>하단 버튼이 실제 저장 방식을 결정합니다.</p>
               </div>
@@ -755,17 +906,7 @@ export default function ListingNewClient() {
                 <>
                   <div className={mod.previewCard}>
                     <div style={{ position: 'relative', width: '100%' }}>
-                      <div className={mod.badgeRow}>
-                        {previewBadges.map((b, i) => (
-                          <span
-                            key={`${b.label}-${i}`}
-                            className={mod.badgePill}
-                            style={{ background: b.bg, color: b.color }}
-                          >
-                            {b.label}
-                          </span>
-                        ))}
-                      </div>
+                      {renderImageOverlays()}
                       {thumb ? (
                         <img
                           src={thumb}
@@ -841,17 +982,26 @@ export default function ListingNewClient() {
                 <>
                   <div className={mod.previewCard} style={{ maxWidth: 280 }}>
                     <div className={mod.detailPreviewWrap}>
-                      {thumb ? (
-                        <img src={thumb} alt="" className={mod.detailPreviewHero} />
-                      ) : (
-                        <div
-                          className={mod.detailPreviewHero}
-                          style={{ minHeight: 120, display: 'flex', alignItems: 'center', padding: 16, boxSizing: 'border-box' }}
-                          aria-hidden
-                        >
-                          <PhBar width="100%" />
-                        </div>
-                      )}
+                      <div style={{ position: 'relative', width: '100%' }}>
+                        {renderImageOverlays()}
+                        {thumb ? (
+                          <img src={thumb} alt="" className={mod.detailPreviewHero} />
+                        ) : (
+                          <div
+                            className={mod.detailPreviewHero}
+                            style={{
+                              minHeight: 120,
+                              display: 'flex',
+                              alignItems: 'center',
+                              padding: 16,
+                              boxSizing: 'border-box',
+                            }}
+                            aria-hidden
+                          >
+                            <PhBar width="100%" />
+                          </div>
+                        )}
+                      </div>
                       <div className={mod.detailPreviewGrid}>
                         {detailUrlsForPreview.length > 0 ? (
                           detailUrlsForPreview.map((u, i) => (

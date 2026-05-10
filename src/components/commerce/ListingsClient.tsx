@@ -215,10 +215,12 @@ function shippingBadgeStyle(type: string): { label: string; bg: string; color: s
   switch (type) {
     case 'paid':
       return { label: '유료배송', bg: '#f3f4f6', color: '#888888' }
+    case 'conditional_free':
+      return { label: '조건부 무료', bg: '#1f5d3a', color: '#ffffff' }
     case 'cold':
-      return { label: '냉장배송', bg: '#dbeafe', color: '#2563eb' }
+      return { label: '냉장(구)', bg: '#dbeafe', color: '#2563eb' }
     case 'same_day':
-      return { label: '오늘출고', bg: '#ffedd5', color: '#ea580c' }
+      return { label: '당일(구)', bg: '#ffedd5', color: '#ea580c' }
     case 'free':
     default:
       return { label: '무료배송', bg: '#1f5d3a', color: '#ffffff' }

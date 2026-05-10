@@ -75,6 +75,7 @@ export type CommerceListingRow = {
   created_at: string
   thumbnail_url: string | null
   image_urls: string[] | null
+  badge_labels: string[] | null
   description: string | null
   spec: string | null
   admin_memo: string | null
@@ -86,6 +87,7 @@ export type PlatformCommerceCategory = {
   id: string
   name: string
   parent_id: string | null
+  icon_url: string | null
 }
 
 const CATEGORY_NAME_MAX = 24
@@ -98,6 +100,7 @@ export type AdminCategoryRow = {
   parent_id: string | null
   sort_order: number
   is_active: boolean
+  icon_url: string | null
 }
 
 export type AdminCategoryNode = AdminCategoryRow & {
@@ -179,6 +182,7 @@ export async function getListings(filters?: {
       created_at,
       thumbnail_url,
       image_urls,
+      badge_labels,
       description,
       spec,
       admin_memo,
@@ -208,6 +212,7 @@ export async function getListings(filters?: {
     category_id: (row.category_id as string | null) ?? null,
     thumbnail_url: row.thumbnail_url ?? null,
     image_urls: row.image_urls ?? null,
+    badge_labels: (row.badge_labels as string[] | null) ?? null,
     description: row.description ?? null,
     spec: (row.spec as string | null) ?? null,
     admin_memo: (row.admin_memo as string | null) ?? null,
@@ -224,7 +229,7 @@ export async function getCategories(): Promise<ActionResult<{ categories: Platfo
 
   const { data, error } = await supabase
     .from('product_categories')
-    .select('id, name, parent_id')
+    .select('id, name, parent_id, icon_url')
     .eq('tenant_id', PLATFORM_OWNER_TENANT)
     .is('parent_id', null)
     .eq('is_active', true)
@@ -232,11 +237,15 @@ export async function getCategories(): Promise<ActionResult<{ categories: Platfo
     .order('name', { ascending: true })
 
   if (error) return { success: false, error: error.message }
+  const categories = (data ?? []).map((r: Record<string, unknown>) => ({
+    id: r.id as string,
+    name: (r.name as string) ?? '',
+    parent_id: (r.parent_id as string | null) ?? null,
+    icon_url: (r.icon_url as string | null) ?? null,
+  })) as PlatformCommerceCategory[]
   return {
     success: true,
-    data: {
-      categories: (data ?? []) as PlatformCommerceCategory[],
-    },
+    data: { categories },
   }
 }
 
@@ -264,7 +273,7 @@ export async function getSubCategories(
 
   const { data, error } = await supabase
     .from('product_categories')
-    .select('id, name, parent_id')
+    .select('id, name, parent_id, icon_url')
     .eq('tenant_id', PLATFORM_OWNER_TENANT)
     .eq('parent_id', pid)
     .eq('is_active', true)
@@ -272,7 +281,13 @@ export async function getSubCategories(
     .order('name', { ascending: true })
 
   if (error) return { success: false, error: error.message }
-  return { success: true, data: { categories: (data ?? []) as PlatformCommerceCategory[] } }
+  const categories = (data ?? []).map((r: Record<string, unknown>) => ({
+    id: r.id as string,
+    name: (r.name as string) ?? '',
+    parent_id: (r.parent_id as string | null) ?? null,
+    icon_url: (r.icon_url as string | null) ?? null,
+  })) as PlatformCommerceCategory[]
+  return { success: true, data: { categories } }
 }
 
 /**
@@ -287,7 +302,7 @@ export async function getAdminCategories(): Promise<ActionResult<{ tree: AdminCa
 
   const { data, error } = await supabase
     .from('product_categories')
-    .select('id, name, slug, parent_id, sort_order, is_active')
+    .select('id, name, slug, parent_id, sort_order, is_active, icon_url')
     .eq('tenant_id', PLATFORM_OWNER_TENANT)
     .order('sort_order', { ascending: true })
     .order('name', { ascending: true })
@@ -301,6 +316,7 @@ export async function getAdminCategories(): Promise<ActionResult<{ tree: AdminCa
     parent_id: (r.parent_id as string | null) ?? null,
     sort_order: typeof r.sort_order === 'number' && Number.isFinite(r.sort_order) ? Math.round(r.sort_order) : 0,
     is_active: r.is_active !== false,
+    icon_url: (r.icon_url as string | null) ?? null,
   }))
 
   return { success: true, data: { tree: buildAdminCategoryTree(rows) } }
@@ -873,6 +889,7 @@ export async function createListingFull(input: {
   spec: string | null
   thumbnail_url: string | null
   image_urls?: string[] | null
+  badge_labels?: string[] | null
   category_id: string
   commerce_price: number
   original_price: number | null
@@ -929,6 +946,13 @@ export async function createListingFull(input: {
       ? rawUrls.map((u) => String(u ?? '').trim()).filter(Boolean).slice(0, 5)
       : []
   const image_urls_db = image_urls.length > 0 ? image_urls : null
+
+  const rawBadges = input.badge_labels
+  const badge_labels =
+    Array.isArray(rawBadges) && rawBadges.length > 0
+      ? rawBadges.map((b) => String(b ?? '').trim()).filter(Boolean).slice(0, 2)
+      : []
+  const badge_labels_db = badge_labels.length > 0 ? badge_labels : null
 
   let original_price: number | null = null
   const opIn = input.original_price
@@ -1008,6 +1032,7 @@ export async function createListingFull(input: {
       is_visible,
       thumbnail_url,
       image_urls: image_urls_db,
+      badge_labels: badge_labels_db,
       description: listing_description,
       spec,
       admin_memo,
@@ -1039,6 +1064,7 @@ export async function createListingFull(input: {
       status: statusIn,
       description: listing_description,
       image_urls: image_urls_db,
+      badge_labels: badge_labels_db,
     },
   })
   if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }

@@ -1130,6 +1130,8 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **작업 이력 (2026-05-10)**: `20260510130000` 헤더 주석 운영 DB 적용 완료(2026-05-10)로 갱신 — worklog: [`docs/worklogs/2026-05-10_docs_category-columns-migration-applied.md`](./worklogs/2026-05-10_docs_category-columns-migration-applied.md)
 - **작업 이력 (2026-05-10)**: `commerce_product_listings` `admin_memo` / `spec` migration — [`supabase/migrations/20260510140000_add_listing_admin_memo.sql`](../supabase/migrations/20260510140000_add_listing_admin_memo.sql) — worklog: [`docs/worklogs/2026-05-10_feat_admin-commerce-listing-new-page.md`](./worklogs/2026-05-10_feat_admin-commerce-listing-new-page.md)
 - **작업 이력 (2026-05-10)**: `20260510140000` 헤더 주석 운영 DB 적용 완료(2026-05-10)로 갱신 — worklog: [`docs/worklogs/2026-05-10_docs_listing-admin-memo-migration-applied.md`](./worklogs/2026-05-10_docs_listing-admin-memo-migration-applied.md)
+- **작업 이력 (2026-05-09)**: `product_categories.icon_url` — [`supabase/migrations/20260510150000_add_category_icon.sql`](../supabase/migrations/20260510150000_add_category_icon.sql) — worklog: [`docs/worklogs/2026-05-09_feat_commerce-listing-studio-ux-restructure.md`](./worklogs/2026-05-09_feat_commerce-listing-studio-ux-restructure.md)
+- **작업 이력 (2026-05-09)**: `commerce_product_listings.badge_labels` + `shipping_type` CHECK(`free`|`paid`|`conditional_free`)·레거시 이관 — [`supabase/migrations/20260510160000_listing_badge_labels_shipping_types.sql`](../supabase/migrations/20260510160000_listing_badge_labels_shipping_types.sql) — worklog: [`docs/worklogs/2026-05-09_feat_commerce-listing-studio-ux-restructure.md`](./worklogs/2026-05-09_feat_commerce-listing-studio-ux-restructure.md)
 
 #### [COMMERCE-002] 관리자OS Listing 관리 화면
 - **우선순위**: HIGH
@@ -1155,6 +1157,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **작업 이력 (2026-05-09)**: 상품 등록 `/new` UI UX(섹션 카드·sticky 미리보기/CTA·이미지 업로드·미리보기 강화·반응형) — worklog: [`docs/worklogs/2026-05-09_design_admin-commerce-listing-new-ux.md`](./worklogs/2026-05-09_design_admin-commerce-listing-new-ux.md)
 - **작업 이력 (2026-05-09)**: 상품 등록 `/new` 구조(카테고리 우선·`getAdminCategories` 클라이언트 필터·상세 설명·절감액·미리보기) + `createListingFull` `description` 저장 연결 — worklog: [`docs/worklogs/2026-05-09_design_admin-commerce-listing-new-structure.md`](./worklogs/2026-05-09_design_admin-commerce-listing-new-structure.md)
 - **작업 이력 (2026-05-09)**: 관리자OS 상품 등록 스튜디오 재설계(Listing 중심 카피·가격/마진·배송 배지·상세 이미지 카드·미리보기 탭·`image_urls` 저장) — worklog: [`docs/worklogs/2026-05-09_feat_admin-commerce-listing-studio.md`](./worklogs/2026-05-09_feat_admin-commerce-listing-studio.md)
+- **작업 이력 (2026-05-09)**: 상품 등록 스튜디오 UX 구조 개선 — 카테고리 `icon_url`·카테고리 관리 링크, 가격 쉼표 입력, 배송 3유형·박스 단가 UI·묶음 그룹(표시만), 썸네일 뱃지(최대 2)·`badge_labels` 저장, 공개 설정 문구 단순화, 목록 `conditional_free` 배지 — worklog: [`docs/worklogs/2026-05-09_feat_commerce-listing-studio-ux-restructure.md`](./worklogs/2026-05-09_feat_commerce-listing-studio-ux-restructure.md)
 
 #### [COMMERCE-003] 관리자OS 주문 처리 화면
 - **우선순위**: HIGH
