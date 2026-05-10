@@ -385,11 +385,13 @@ export default function ListingNewClient() {
   async function uploadDetailBlockFile(blockId: string, file: File) {
     const v = validateImageFile(file)
     if (v) {
-      setDetailBlocks((prev) =>
-        prev.map((b) =>
+      setDetailBlocks((prev) => {
+        const idx = prev.findIndex((x) => x.id === blockId)
+        if (idx === -1) return prev
+        return prev.map((b) =>
           b.id === blockId ? { ...b, uploadStatus: 'error' as const, errorMessage: v } : b,
-        ),
-      )
+        )
+      })
       return
     }
     setDetailBlocks((prev) =>
@@ -404,45 +406,64 @@ export default function ListingNewClient() {
     try {
       const res = await uploadListingImage(fd)
       if (!res.success) {
-        setDetailBlocks((prev) =>
-          prev.map((b) =>
+        const errMsg = res.error ?? '이미지 업로드에 실패했습니다.'
+        setDetailBlocks((prev) => {
+          const idx = prev.findIndex((x) => x.id === blockId)
+          if (idx === -1) {
+            queueMicrotask(() => showToast(errMsg))
+            return prev
+          }
+          return prev.map((b) =>
             b.id === blockId
-              ? {
-                  ...b,
-                  uploadStatus: 'error' as const,
-                  errorMessage: res.error ?? '이미지 업로드에 실패했습니다.',
-                }
+              ? { ...b, uploadStatus: 'error' as const, errorMessage: errMsg }
               : b,
-          ),
-        )
+          )
+        })
         return
       }
-      setDetailBlocks((prev) =>
-        prev.map((b) =>
+      const url = res.data?.url ?? ''
+      setDetailBlocks((prev) => {
+        const idx = prev.findIndex((x) => x.id === blockId)
+        if (idx === -1) {
+          if (prev.length >= MAX_DETAIL_IMAGES) return prev
+          return [
+            ...prev,
+            {
+              id: blockId,
+              url,
+              blockKind: 'file' as const,
+              uploadStatus: 'done_upload' as const,
+              fileName: file.name,
+              errorMessage: undefined,
+            },
+          ]
+        }
+        return prev.map((b) =>
           b.id === blockId
             ? {
                 ...b,
-                url: res.data?.url ?? '',
+                url,
                 uploadStatus: 'done_upload' as const,
                 fileName: file.name,
                 errorMessage: undefined,
               }
             : b,
-        ),
-      )
+        )
+      })
     } catch {
-      setDetailBlocks((prev) =>
-        prev.map((b) =>
+      const errMsg = '네트워크 오류로 업로드에 실패했습니다. 잠시 후 다시 시도해 주세요.'
+      setDetailBlocks((prev) => {
+        const idx = prev.findIndex((x) => x.id === blockId)
+        if (idx === -1) {
+          queueMicrotask(() => showToast(errMsg))
+          return prev
+        }
+        return prev.map((b) =>
           b.id === blockId
-            ? {
-                ...b,
-                uploadStatus: 'error' as const,
-                errorMessage:
-                  '네트워크 오류로 업로드에 실패했습니다. 잠시 후 다시 시도해 주세요.',
-              }
+            ? { ...b, uploadStatus: 'error' as const, errorMessage: errMsg }
             : b,
-        ),
-      )
+        )
+      })
     }
   }
 
@@ -457,10 +478,16 @@ export default function ListingNewClient() {
     const files = e.target.files
     e.target.value = ''
     if (!files?.length) return
-    ingestDetailFiles(files)
+    void ingestDetailFiles(files)
   }
 
-  function ingestDetailFiles(files: FileList) {
+  /**
+   * 블록 append 직후 microtask에서 uploadDetailBlockFile을 돌리면,
+   * React가 아직 state를 커밋하지 않아 prev에 blockId가 없고
+   * map 기반 setState가 전부 no-op → 업로드는 되어도 UI/저장 URL이 반영되지 않는다.
+   * macrotask(setTimeout 0)로 한 틀 뒤에 업로드를 시작한다.
+   */
+  async function ingestDetailFiles(files: FileList) {
     const arr = Array.from(files)
     for (const file of arr) {
       const err = validateImageFile(file)
@@ -473,7 +500,10 @@ export default function ListingNewClient() {
         if (prev.length >= MAX_DETAIL_IMAGES) return prev
         return [...prev, b]
       })
-      void Promise.resolve().then(() => uploadDetailBlockFile(b.id, file))
+      await new Promise<void>((resolve) => {
+        window.setTimeout(resolve, 0)
+      })
+      await uploadDetailBlockFile(b.id, file)
     }
   }
 
@@ -482,7 +512,7 @@ export default function ListingNewClient() {
     e.stopPropagation()
     if (pending) return
     const files = e.dataTransfer.files
-    if (files?.length) ingestDetailFiles(files)
+    if (files?.length) void ingestDetailFiles(files)
   }
 
   function parseOriginal(): number | null {
