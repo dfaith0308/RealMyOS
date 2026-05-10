@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import {
   createListingFull,
   createShippingGroup,
@@ -19,9 +19,43 @@ import {
 import { calcMarginRate, formatDigitsForInput, formatKRW } from '@/lib/calc'
 import mod from './listing-new-client.module.css'
 
-const MAX_DETAIL_IMAGES = 5
+const MAX_DETAIL_IMAGES = 20
+const MAX_IMAGE_FILE_BYTES = 8 * 1024 * 1024
+const ACCEPT_IMAGE = 'image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp'
 const MAX_THUMB_BADGES = 2
 const THUMB_H = 160
+
+export type DetailImageBlock = {
+  id: string
+  url: string
+  uploadStatus: 'ready' | 'uploading' | 'error'
+}
+
+function newBlock(partial?: Partial<DetailImageBlock>): DetailImageBlock {
+  return {
+    id: crypto.randomUUID(),
+    url: partial?.url ?? '',
+    uploadStatus: partial?.uploadStatus ?? 'ready',
+  }
+}
+
+function validateImageFile(file: File): string | null {
+  if (file.size === 0) return '빈 파일입니다'
+  if (file.size > MAX_IMAGE_FILE_BYTES) {
+    return `파일당 최대 ${Math.round(MAX_IMAGE_FILE_BYTES / (1024 * 1024))}MB까지 업로드할 수 있습니다`
+  }
+  const ok =
+    /image\/(jpeg|png|webp)/i.test(file.type) ||
+    /\.(jpe?g|png|webp)$/i.test(file.name)
+  if (!ok) return 'JPG, PNG, WebP 이미지만 업로드할 수 있습니다'
+  return null
+}
+
+function blocksToSavedUrls(blocks: DetailImageBlock[]): string[] {
+  return blocks
+    .filter((b) => b.uploadStatus !== 'uploading' && b.url.trim())
+    .map((b) => b.url.trim())
+}
 
 /** 하드코딩 썸네일 뱃지 (향후 뱃지 관리 화면에서 확장) */
 // TODO: 향후 뱃지 관리 화면에서 추가/수정/삭제 가능하게 확장 예정
@@ -64,7 +98,7 @@ export type ListingStudioFormState = {
   shippingGroupId: string
   thumbnailBadges: string[]
   thumbnailUrl: string
-  detailImageUrls: string[]
+  detailBlocks: DetailImageBlock[]
   listingDescription: string
   adminMemo: string
   visibility: 'draft' | 'visible'
@@ -89,7 +123,7 @@ export function createEmptyListingStudioForm(): ListingStudioFormState {
     shippingGroupId: '',
     thumbnailBadges: [],
     thumbnailUrl: '',
-    detailImageUrls: [],
+    detailBlocks: [],
     listingDescription: '',
     adminMemo: '',
     visibility: 'draft',
@@ -177,12 +211,16 @@ export default function ListingNewClient() {
   const [thumbnailBadges, setThumbnailBadges] = useState<string[]>(empty.thumbnailBadges)
 
   const [thumbnailUrl, setThumbnailUrl] = useState(empty.thumbnailUrl)
-  const [detailImageUrls, setDetailImageUrls] = useState<string[]>(empty.detailImageUrls)
+  const [showThumbUrlField, setShowThumbUrlField] = useState(false)
+  const [thumbUploadState, setThumbUploadState] = useState<'idle' | 'uploading' | 'error'>('idle')
+  const [detailBlocks, setDetailBlocks] = useState<DetailImageBlock[]>(empty.detailBlocks)
   const [listingDescription, setListingDescription] = useState(empty.listingDescription)
   const [adminMemo, setAdminMemo] = useState(empty.adminMemo)
   const [visibility, setVisibility] = useState<'draft' | 'visible'>(empty.visibility)
 
-  const [uploadBusy, setUploadBusy] = useState(false)
+  const thumbFileRef = useRef<HTMLInputElement>(null)
+  const detailFilesRef = useRef<HTMLInputElement>(null)
+
   const [previewTab, setPreviewTab] = useState<'card' | 'detail'>('card')
 
   const cost = parseInt(supplyPrice.replace(/\D/g, ''), 10) || 0
@@ -280,26 +318,123 @@ export default function ListingNewClient() {
     [shippingBoxQty, shippingBoxFee],
   )
 
-  async function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file) return
+  async function uploadHeroFile(file: File) {
+    const v = validateImageFile(file)
+    if (v) {
+      setUploadError(v)
+      setThumbUploadState('error')
+      return
+    }
     setUploadError(null)
-    setUploadBusy(true)
+    setThumbUploadState('uploading')
     const fd = new FormData()
     fd.set('file', file)
     try {
       const res = await uploadListingImage(fd)
       if (!res.success) {
         setUploadError(res.error ?? '업로드 실패')
+        setThumbUploadState('error')
         return
       }
       setThumbnailUrl(res.data?.url ?? '')
+      setThumbUploadState('idle')
     } catch {
       setUploadError('업로드 실패')
-    } finally {
-      setUploadBusy(false)
+      setThumbUploadState('error')
     }
+  }
+
+  function onHeroFileInput(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    void uploadHeroFile(file)
+  }
+
+  function onHeroDrop(e: React.DragEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (pending || thumbUploadState === 'uploading') return
+    const file = e.dataTransfer.files?.[0]
+    if (!file) return
+    void uploadHeroFile(file)
+  }
+
+  async function uploadDetailBlockFile(blockId: string, file: File) {
+    const v = validateImageFile(file)
+    if (v) {
+      setDetailBlocks((prev) =>
+        prev.map((b) => (b.id === blockId ? { ...b, uploadStatus: 'error' as const } : b)),
+      )
+      showToast(v)
+      return
+    }
+    setDetailBlocks((prev) =>
+      prev.map((b) => (b.id === blockId ? { ...b, uploadStatus: 'uploading' as const } : b)),
+    )
+    const fd = new FormData()
+    fd.set('file', file)
+    try {
+      const res = await uploadListingImage(fd)
+      if (!res.success) {
+        setDetailBlocks((prev) =>
+          prev.map((b) => (b.id === blockId ? { ...b, uploadStatus: 'error' as const } : b)),
+        )
+        showToast(res.error ?? '업로드 실패')
+        return
+      }
+      setDetailBlocks((prev) =>
+        prev.map((b) =>
+          b.id === blockId
+            ? { ...b, url: res.data?.url ?? '', uploadStatus: 'ready' as const }
+            : b,
+        ),
+      )
+    } catch {
+      setDetailBlocks((prev) =>
+        prev.map((b) => (b.id === blockId ? { ...b, uploadStatus: 'error' as const } : b)),
+      )
+      showToast('업로드 실패')
+    }
+  }
+
+  function addDetailUrlRow() {
+    setDetailBlocks((prev) => {
+      if (prev.length >= MAX_DETAIL_IMAGES) return prev
+      return [...prev, newBlock({ url: '', uploadStatus: 'ready' })]
+    })
+  }
+
+  function addDetailFilesFromPicker(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files
+    e.target.value = ''
+    if (!files?.length) return
+    ingestDetailFiles(files)
+  }
+
+  function ingestDetailFiles(files: FileList) {
+    const arr = Array.from(files)
+    for (const file of arr) {
+      const err = validateImageFile(file)
+      if (err) {
+        showToast(err)
+        continue
+      }
+      const b = newBlock({ url: '', uploadStatus: 'uploading' })
+      setDetailBlocks((prev) => {
+        if (prev.length >= MAX_DETAIL_IMAGES) return prev
+        return [...prev, b]
+      })
+      void Promise.resolve().then(() => uploadDetailBlockFile(b.id, file))
+    }
+  }
+
+  function onDetailListDrop(e: React.DragEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (pending) return
+    const files = e.dataTransfer.files
+    if (files?.length) ingestDetailFiles(files)
   }
 
   function parseOriginal(): number | null {
@@ -310,16 +445,47 @@ export default function ListingNewClient() {
     return n
   }
 
-  function addDetailImageSlot() {
-    setDetailImageUrls((prev) => (prev.length >= MAX_DETAIL_IMAGES ? prev : [...prev, '']))
+  const [retryDetailId, setRetryDetailId] = useState<string | null>(null)
+  const retryDetailFileRef = useRef<HTMLInputElement>(null)
+
+  function removeDetailBlock(id: string) {
+    setDetailBlocks((prev) => prev.filter((b) => b.id !== id))
   }
 
-  function removeDetailImageSlot(index: number) {
-    setDetailImageUrls((prev) => prev.filter((_, i) => i !== index))
+  function clearAllDetailImages() {
+    if (!detailBlocks.length) return
+    if (!window.confirm('상세 이미지를 모두 삭제할까요?')) return
+    setDetailBlocks([])
   }
 
-  function setDetailImageUrl(index: number, url: string) {
-    setDetailImageUrls((prev) => prev.map((u, i) => (i === index ? url : u)))
+  function reorderDetailBlocks(fromIndex: number, toIndex: number) {
+    if (fromIndex === toIndex) return
+    setDetailBlocks((prev) => {
+      const next = [...prev]
+      const [removed] = next.splice(fromIndex, 1)
+      next.splice(toIndex, 0, removed)
+      return next
+    })
+  }
+
+  function setDetailBlockUrl(id: string, url: string) {
+    setDetailBlocks((prev) =>
+      prev.map((b) => (b.id === id ? { ...b, url, uploadStatus: 'ready' as const } : b)),
+    )
+  }
+
+  function startRetryDetailUpload(blockId: string) {
+    setRetryDetailId(blockId)
+    retryDetailFileRef.current?.click()
+  }
+
+  function onRetryDetailFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    const id = retryDetailId
+    e.target.value = ''
+    setRetryDetailId(null)
+    if (!file || !id) return
+    void uploadDetailBlockFile(id, file)
   }
 
   function applyResetForm() {
@@ -345,11 +511,14 @@ export default function ListingNewClient() {
     setModalEditGroupId(null)
     setThumbnailBadges(base.thumbnailBadges)
     setThumbnailUrl(base.thumbnailUrl)
-    setDetailImageUrls(base.detailImageUrls)
+    setShowThumbUrlField(false)
+    setThumbUploadState('idle')
+    setDetailBlocks(base.detailBlocks)
     setListingDescription(base.listingDescription)
     setAdminMemo(base.adminMemo)
     setVisibility(base.visibility)
     setUploadError(null)
+    setRetryDetailId(null)
   }
 
   function submitWithStatus(status: 'draft' | 'visible', andReset: boolean) {
@@ -374,7 +543,7 @@ export default function ListingNewClient() {
     }
 
     const op = parseOriginal()
-    const image_urls = detailImageUrls.map((u) => u.trim()).filter(Boolean)
+    const image_urls = blocksToSavedUrls(detailBlocks)
     const badge_labels = thumbnailBadges.length > 0 ? thumbnailBadges : null
 
     startTransition(async () => {
@@ -411,7 +580,7 @@ export default function ListingNewClient() {
 
   const thumb = thumbnailUrl.trim()
   const descPreview = listingDescription.trim()
-  const detailUrlsForPreview = detailImageUrls.map((u) => u.trim()).filter(Boolean)
+  const detailUrlsForPreview = blocksToSavedUrls(detailBlocks)
   const marginModeDisabled = cost <= 0
 
   function renderImageOverlays() {
@@ -972,98 +1141,265 @@ export default function ListingNewClient() {
             </div>
 
             <div className={mod.card}>
-              <h2 className={mod.sectionTitle}>상품 페이지 제작</h2>
-              <p className={mod.hint}>구매자가 상세페이지에서 보는 내용을 만들어요</p>
-              <div className={mod.fieldStack}>
-                <div>
-                  <div className={mod.label}>대표 이미지</div>
-                  <label className={`${mod.uploadZone} ${uploadBusy || pending ? mod.uploadZoneDisabled : ''}`}>
-                    대표 이미지 업로드
-                    <input
-                      type="file"
-                      accept="image/*"
-                      disabled={uploadBusy || pending}
-                      onChange={onPickFile}
-                      style={{ display: 'none' }}
-                    />
-                  </label>
-                  {uploadBusy ? <p className={mod.hint}>업로드 중…</p> : null}
-                  {uploadError ? <p style={{ color: '#b91c1c', fontSize: 13, margin: 0 }}>{uploadError}</p> : null}
-                  {thumb ? (
-                    <img src={thumb} alt="" className={mod.uploadPreviewHero} width={120} height={120} />
-                  ) : null}
-                  <div>
-                    <div className={mod.label}>또는 URL 직접 입력</div>
-                    <input
-                      className={mod.input}
-                      value={thumbnailUrl}
-                      onChange={(e) => setThumbnailUrl(e.target.value)}
-                      placeholder="https://..."
-                    />
+              <h2 className={mod.sectionTitle}>대표 썸네일 (목록·카드용)</h2>
+              <p className={mod.hint}>
+                목록·검색·카드에서 클릭을 유도하는 대표 이미지입니다. 아래 &quot;상세페이지&quot; 설명 이미지와 역할이
+                다릅니다.
+              </p>
+              <input
+                ref={thumbFileRef}
+                type="file"
+                accept={ACCEPT_IMAGE}
+                className={mod.visuallyHidden}
+                onChange={onHeroFileInput}
+              />
+              <div
+                className={`${mod.heroThumbDrop} ${thumbUploadState === 'uploading' ? mod.heroThumbDropBusy : ''} ${pending ? mod.heroThumbDropDisabled : ''}`}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                }}
+                onDrop={onHeroDrop}
+                onClick={() => {
+                  if (!pending && thumbUploadState !== 'uploading') thumbFileRef.current?.click()
+                }}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    if (!pending && thumbUploadState !== 'uploading') thumbFileRef.current?.click()
+                  }
+                }}
+              >
+                {thumb ? (
+                  <img src={thumb} alt="" className={mod.heroThumbPreviewImg} />
+                ) : (
+                  <div className={mod.heroThumbPlaceholder}>
+                    <span className={mod.heroThumbPlaceholderTitle}>이미지를 올려주세요</span>
+                    <span className={mod.heroThumbPlaceholderSub}>
+                      클릭 또는 드래그 · JPG, PNG, WebP · 파일당 최대{' '}
+                      {Math.round(MAX_IMAGE_FILE_BYTES / (1024 * 1024))}MB
+                    </span>
                   </div>
+                )}
+                {thumbUploadState === 'uploading' ? (
+                  <div className={mod.progressIndeterminateWrap} aria-busy aria-label="업로드 중">
+                    <div className={mod.progressIndeterminate} />
+                  </div>
+                ) : null}
+              </div>
+              {uploadError && thumbUploadState === 'error' ? (
+                <p className={mod.uploadErrText}>{uploadError}</p>
+              ) : null}
+              {thumbUploadState === 'error' ? (
+                <button
+                  type="button"
+                  className={mod.btnGhost}
+                  onClick={() => {
+                    setThumbUploadState('idle')
+                    setUploadError(null)
+                    thumbFileRef.current?.click()
+                  }}
+                >
+                  다시 시도
+                </button>
+              ) : null}
+              <div className={mod.heroThumbActions}>
+                <button
+                  type="button"
+                  className={mod.btnEmphasis}
+                  disabled={pending || thumbUploadState === 'uploading'}
+                  onClick={() => thumbFileRef.current?.click()}
+                >
+                  이미지 업로드
+                </button>
+                <button
+                  type="button"
+                  className={mod.btnMuted}
+                  onClick={() => setShowThumbUrlField((v) => !v)}
+                >
+                  {showThumbUrlField ? 'URL 입력 닫기' : 'URL 입력 사용'}
+                </button>
+              </div>
+              {showThumbUrlField ? (
+                <div className={mod.thumbUrlSecondary}>
+                  <div className={mod.label}>외부 이미지 URL (보조)</div>
+                  <input
+                    className={mod.input}
+                    value={thumbnailUrl}
+                    onChange={(e) => setThumbnailUrl(e.target.value)}
+                    placeholder="CDN 등 외부 주소 붙여넣기"
+                  />
                 </div>
+              ) : null}
+            </div>
 
-                <div>
-                  <div className={mod.label}>상세 이미지</div>
-                  <p className={mod.hint}>상품 상세페이지에 순서대로 표시됩니다 (최대 5개)</p>
-                  <div className={mod.fieldStack}>
-                    {detailImageUrls.map((url, index) => (
-                      <div key={index} className={mod.detailImageCard}>
-                        <div className={mod.detailImageCardMain}>
+            <div
+              className={mod.card}
+              onDragOver={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+              }}
+              onDrop={onDetailListDrop}
+            >
+              <h2 className={mod.sectionTitle}>상품 상세페이지 제작</h2>
+              <p className={mod.hint}>구매자가 상품 상세페이지에서 보는 내용을 구성합니다</p>
+
+              <input
+                ref={detailFilesRef}
+                type="file"
+                accept={ACCEPT_IMAGE}
+                multiple
+                className={mod.visuallyHidden}
+                onChange={addDetailFilesFromPicker}
+              />
+              <input
+                ref={retryDetailFileRef}
+                type="file"
+                accept={ACCEPT_IMAGE}
+                className={mod.visuallyHidden}
+                onChange={onRetryDetailFile}
+              />
+
+              <div className={mod.detailToolbar}>
+                <button
+                  type="button"
+                  className={mod.btnEmphasis}
+                  disabled={pending || detailBlocks.length >= MAX_DETAIL_IMAGES}
+                  onClick={() => detailFilesRef.current?.click()}
+                >
+                  + 이미지 추가
+                </button>
+                <button
+                  type="button"
+                  className={mod.btnMuted}
+                  disabled={pending || detailBlocks.length >= MAX_DETAIL_IMAGES}
+                  onClick={addDetailUrlRow}
+                >
+                  URL 추가
+                </button>
+                <button
+                  type="button"
+                  className={mod.btnDangerQuiet}
+                  disabled={pending || detailBlocks.length === 0}
+                  onClick={clearAllDetailImages}
+                >
+                  전체 삭제
+                </button>
+              </div>
+              <p className={mod.hint}>
+                이미지 블록을 드래그하여 순서를 바꿀 수 있습니다 · 최대 {MAX_DETAIL_IMAGES}장 · 파일당 최대{' '}
+                {Math.round(MAX_IMAGE_FILE_BYTES / (1024 * 1024))}MB
+              </p>
+
+              <div className={mod.detailBlockList}>
+                {detailBlocks.map((block, index) => (
+                  <div
+                    key={block.id}
+                    className={mod.detailBlock}
+                    onDragOver={(e) => {
+                      e.preventDefault()
+                      e.dataTransfer.dropEffect = 'move'
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      const from = parseInt(e.dataTransfer.getData('text/plain'), 10)
+                      if (Number.isNaN(from)) return
+                      reorderDetailBlocks(from, index)
+                    }}
+                  >
+                    <div className={mod.detailBlockHeader}>
+                      <span
+                        className={mod.dragHandle}
+                        draggable={block.uploadStatus !== 'uploading'}
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData('text/plain', String(index))
+                          e.dataTransfer.effectAllowed = 'move'
+                        }}
+                        aria-label="순서 변경"
+                      >
+                        ⋮⋮
+                      </span>
+                      <span className={mod.detailBlockOrder}>{index + 1}</span>
+                      <button
+                        type="button"
+                        className={mod.btnGhost}
+                        disabled={block.uploadStatus === 'uploading'}
+                        onClick={() => removeDetailBlock(block.id)}
+                      >
+                        삭제
+                      </button>
+                    </div>
+                    <div className={mod.detailBlockBody}>
+                      {block.uploadStatus === 'uploading' ? (
+                        <div className={mod.detailBlockStatus}>
+                          <p className={mod.hint} style={{ margin: '0 0 8px' }}>
+                            업로드 중…
+                          </p>
+                          <div className={mod.progressIndeterminateWrap} aria-busy>
+                            <div className={mod.progressIndeterminate} />
+                          </div>
+                        </div>
+                      ) : null}
+                      {block.uploadStatus === 'error' ? (
+                        <div className={mod.detailBlockStatus}>
+                          <p className={mod.uploadErrText} style={{ margin: '0 0 8px' }}>
+                            업로드에 실패했습니다
+                          </p>
+                          <button
+                            type="button"
+                            className={mod.btnGhost}
+                            onClick={() => startRetryDetailUpload(block.id)}
+                          >
+                            다시 시도
+                          </button>
+                        </div>
+                      ) : null}
+                      {!block.url.trim() && block.uploadStatus === 'ready' ? (
+                        <div>
+                          <div className={mod.label}>외부 이미지 URL</div>
                           <input
                             className={mod.input}
-                            value={url}
-                            onChange={(e) => setDetailImageUrl(index, e.target.value)}
-                            placeholder="https://..."
+                            value={block.url}
+                            onChange={(e) => setDetailBlockUrl(block.id, e.target.value)}
+                            placeholder="https://… (CDN 등)"
                           />
-                          {url.trim() ? (
-                            <img src={url.trim()} alt="" className={mod.detailThumb} width={60} height={60} />
-                          ) : (
-                            <div className={mod.detailThumb} aria-hidden />
-                          )}
                         </div>
-                        <button
-                          type="button"
-                          className={mod.btnGhost}
-                          onClick={() => removeDetailImageSlot(index)}
-                        >
-                          삭제
-                        </button>
-                      </div>
-                    ))}
-                    <button
-                      type="button"
-                      className={mod.btnAddImage}
-                      onClick={addDetailImageSlot}
-                      disabled={detailImageUrls.length >= MAX_DETAIL_IMAGES}
-                    >
-                      + 이미지 추가
-                    </button>
+                      ) : null}
+                      {block.url.trim() && block.uploadStatus !== 'uploading' ? (
+                        <img src={block.url.trim()} alt="" className={mod.detailBlockPreview} />
+                      ) : null}
+                    </div>
                   </div>
-                </div>
+                ))}
+              </div>
 
-                <div>
-                  <div className={mod.label}>상세 설명</div>
-                  <textarea
-                    className={`${mod.textarea} ${mod.textareaNoResize}`}
-                    value={listingDescription}
-                    onChange={(e) => setListingDescription(e.target.value)}
-                    placeholder={
-                      '원산지, 보관법, 유통기한, 사용법, 배송 안내 등\n예) 원산지: 국내산 / 보관: 냉장 / 유통기한: 제조일로부터 12개월'
-                    }
-                    rows={5}
-                  />
-                </div>
-                <div>
-                  <div className={mod.label}>내부 메모 (선택)</div>
-                  <textarea
-                    className={`${mod.textarea} ${mod.textareaNoResize}`}
-                    value={adminMemo}
-                    onChange={(e) => setAdminMemo(e.target.value)}
-                    placeholder="구매자에게 보이지 않습니다"
-                    rows={2}
-                  />
-                </div>
+              <div className={mod.descBlockCard}>
+                <div className={mod.label}>상세 설명 (하단 텍스트 블록)</div>
+                <p className={mod.hint}>
+                  상세 이미지 아래에 노출되는 안내 문구입니다. 원산지, 보관, 배송, 유통기한 등을 적어 주세요.
+                </p>
+                <textarea
+                  className={`${mod.textarea} ${mod.textareaNoResize}`}
+                  value={listingDescription}
+                  onChange={(e) => setListingDescription(e.target.value)}
+                  placeholder={
+                    '예시)\n원산지: 국내산\n보관법: 냉장 보관 (0~10℃)\n유통기한: 제조일로부터 12개월\n배송: 평일 영업일 기준 순차 출고\n조리 팁: 해동 후 바로 조리하면 육즙이 살아 있습니다'
+                  }
+                  rows={7}
+                />
+              </div>
+
+              <div>
+                <div className={mod.label}>내부 메모 (선택)</div>
+                <textarea
+                  className={`${mod.textarea} ${mod.textareaNoResize}`}
+                  value={adminMemo}
+                  onChange={(e) => setAdminMemo(e.target.value)}
+                  placeholder="구매자에게 보이지 않습니다"
+                  rows={2}
+                />
               </div>
             </div>
 
@@ -1192,48 +1528,81 @@ export default function ListingNewClient() {
                 </>
               ) : (
                 <>
-                  <div className={mod.previewCard} style={{ maxWidth: 280 }}>
-                    <div className={mod.detailPreviewWrap}>
+                  <div className={mod.phoneDetailShell}>
+                    <div className={mod.phoneDetailInner}>
+                      <p className={mod.phoneDetailEyebrow}>상세페이지 미리보기</p>
                       <div style={{ position: 'relative', width: '100%' }}>
                         {renderImageOverlays()}
                         {thumb ? (
-                          <img src={thumb} alt="" className={mod.detailPreviewHero} />
+                          <img src={thumb} alt="" className={mod.phoneDetailHero} />
                         ) : (
-                          <div
-                            className={mod.detailPreviewHero}
-                            style={{
-                              minHeight: 120,
-                              display: 'flex',
-                              alignItems: 'center',
-                              padding: 16,
-                              boxSizing: 'border-box',
-                            }}
-                            aria-hidden
-                          >
-                            <PhBar width="100%" />
+                          <div className={mod.phoneDetailHeroPlaceholder} aria-hidden>
+                            {productNameInitial(productName)}
                           </div>
                         )}
                       </div>
-                      <div className={mod.detailPreviewGrid}>
-                        {detailUrlsForPreview.length > 0 ? (
-                          detailUrlsForPreview.map((u, i) => (
-                            <img key={`${i}-${u.slice(0, 24)}`} src={u} alt="" className={mod.detailPreviewImg} />
-                          ))
+                      <div className={mod.phoneDetailProduct}>
+                        {brandName.trim() ? (
+                          <div className={mod.phoneDetailBrand}>{brandName.trim()}</div>
                         ) : (
-                          <PhBar width="100%" />
+                          <PhBar width="36%" />
+                        )}
+                        {productName.trim() ? (
+                          <h3 className={mod.phoneDetailTitle}>{productName.trim()}</h3>
+                        ) : (
+                          <PhBar width="92%" />
+                        )}
+                        {spec.trim() ? (
+                          <p className={mod.phoneDetailSpec}>{spec.trim()}</p>
+                        ) : (
+                          <PhBar width="55%" />
+                        )}
+                        {previewPrice != null ? (
+                          <div className={mod.phoneDetailPriceRow}>
+                            <span className={mod.phoneDetailPriceLabel}>식식이가</span>
+                            <span className={mod.phoneDetailPrice}>{formatKRW(previewPrice)}</span>
+                            {savingsAmount != null && savingsAmount > 0 ? (
+                              <span className={mod.phoneDetailSave}>{formatKRW(savingsAmount)} 절감</span>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <PhBar width="72%" />
                         )}
                       </div>
-                      <p className={mod.previewDescLabel} style={{ marginTop: 16 }}>
-                        상세 설명
-                      </p>
-                      {descPreview ? (
-                        <p className={mod.previewDescBody}>{listingDescription}</p>
-                      ) : (
-                        <PhBar width="100%" />
-                      )}
+                      <div className={mod.phoneDetailSection}>
+                        <p className={mod.phoneDetailSectionTitle}>상세 이미지</p>
+                        <div className={mod.phoneDetailImageStack}>
+                          {detailUrlsForPreview.length > 0 ? (
+                            detailUrlsForPreview.map((u, i) => (
+                              <img
+                                key={`${i}-${u.slice(0, 32)}`}
+                                src={u}
+                                alt=""
+                                className={mod.phoneDetailStackImg}
+                              />
+                            ))
+                          ) : (
+                            <p className={mod.hint} style={{ margin: 0 }}>
+                              상세 이미지를 추가하면 여기에 표시됩니다
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className={mod.phoneDetailSection}>
+                        <p className={mod.phoneDetailSectionTitle}>상품 정보</p>
+                        {descPreview ? (
+                          <p className={mod.phoneDetailDesc}>{listingDescription}</p>
+                        ) : (
+                          <p className={mod.hint} style={{ margin: 0 }}>
+                            하단 설명 텍스트가 여기에 표시됩니다
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </div>
-                  <p className={mod.previewFoot}>상세페이지에 가까운 흐름입니다</p>
+                  <p className={mod.previewFoot}>
+                    대표 썸네일(카드용) → 상세 이미지(구매 설득) → 하단 설명 순입니다
+                  </p>
                 </>
               )}
             </div>

@@ -1137,7 +1137,7 @@ export async function createListingFull(input: {
   const rawUrls = input.image_urls
   const image_urls =
     Array.isArray(rawUrls) && rawUrls.length > 0
-      ? rawUrls.map((u) => String(u ?? '').trim()).filter(Boolean).slice(0, 5)
+      ? rawUrls.map((u) => String(u ?? '').trim()).filter(Boolean).slice(0, 20)
       : []
   const image_urls_db = image_urls.length > 0 ? image_urls : null
 

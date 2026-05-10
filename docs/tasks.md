@@ -1161,6 +1161,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **작업 이력 (2026-05-09)**: 관리자OS 상품 등록 스튜디오 재설계(Listing 중심 카피·가격/마진·배송 배지·상세 이미지 카드·미리보기 탭·`image_urls` 저장) — worklog: [`docs/worklogs/2026-05-09_feat_admin-commerce-listing-studio.md`](./worklogs/2026-05-09_feat_admin-commerce-listing-studio.md)
 - **작업 이력 (2026-05-09)**: 상품 등록 스튜디오 UX 구조 개선 — 카테고리 `icon_url`·카테고리 관리 링크, 가격 쉼표 입력, 배송 3유형·박스 단가 UI·묶음 그룹(표시만), 썸네일 뱃지(최대 2)·`badge_labels` 저장, 공개 설정 문구 단순화, 목록 `conditional_free` 배지 — worklog: [`docs/worklogs/2026-05-09_feat_commerce-listing-studio-ux-restructure.md`](./worklogs/2026-05-09_feat_commerce-listing-studio-ux-restructure.md)
 - **작업 이력 (2026-05-10)**: 상품 등록 스튜디오 — 썸네일 미리보기 배송 뱃지 제거(`badge_labels`만), 묶음배송 그룹 DB 연동·CRUD 액션·인라인 추가/관리 모달·`createListingFull(shipping_group_id)` — worklog: [`docs/worklogs/2026-05-10_feat_commerce-shipping-groups-listing-studio.md`](./worklogs/2026-05-10_feat_commerce-shipping-groups-listing-studio.md)
+- **작업 이력 (2026-05-10)**: 상품 등록 스튜디오 — 상세페이지 제작 UX 재설계(업로드·블록·순서·모바일형 미리보기), `image_urls` 최대 20장 — worklog: [`docs/worklogs/2026-05-10_feat_commerce-listing-detail-page-studio-ux.md`](./worklogs/2026-05-10_feat_commerce-listing-detail-page-studio-ux.md)
 
 #### [COMMERCE-003] 관리자OS 주문 처리 화면
 - **우선순위**: HIGH
