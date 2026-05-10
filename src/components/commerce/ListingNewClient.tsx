@@ -2,17 +2,32 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useState, useTransition } from 'react'
+import { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
 import {
   createListingFull,
-  getCategories,
-  getSubCategories,
+  getAdminCategories,
   uploadListingImage,
+  type AdminCategoryNode,
+  type AdminCategoryRow,
   type ListingShippingType,
-  type PlatformCommerceCategory,
 } from '@/actions/admin/commerce'
 import { formatKRW } from '@/lib/calc'
 import mod from './listing-new-client.module.css'
+
+function flattenAdminCategoryTree(nodes: AdminCategoryNode[]): AdminCategoryRow[] {
+  const out: AdminCategoryRow[] = []
+  function walk(n: AdminCategoryNode) {
+    const { children, ...row } = n
+    out.push(row)
+    for (const c of children) walk(c)
+  }
+  for (const n of nodes) walk(n)
+  return out
+}
+
+function sortCategoryRows(rows: AdminCategoryRow[]): AdminCategoryRow[] {
+  return [...rows].sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, 'ko'))
+}
 
 function shippingBadgeStyle(type: string): { label: string; bg: string; color: string } {
   switch (type) {
@@ -48,20 +63,20 @@ export default function ListingNewClient() {
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
 
+  const [categoryFlat, setCategoryFlat] = useState<AdminCategoryRow[]>([])
+  const [rootCategoryId, setRootCategoryId] = useState('')
+  const [subCategoryId, setSubCategoryId] = useState('')
+
   const [brandName, setBrandName] = useState('')
   const [productName, setProductName] = useState('')
   const [spec, setSpec] = useState('')
   const [thumbnailUrl, setThumbnailUrl] = useState('')
   const [uploadBusy, setUploadBusy] = useState(false)
 
-  const [roots, setRoots] = useState<PlatformCommerceCategory[]>([])
-  const [rootCategoryId, setRootCategoryId] = useState('')
-  const [subCategories, setSubCategories] = useState<PlatformCommerceCategory[]>([])
-  const [subCategoryId, setSubCategoryId] = useState('')
-
   const [commercePrice, setCommercePrice] = useState('')
   const [originalPrice, setOriginalPrice] = useState('')
   const [shippingType, setShippingType] = useState<ListingShippingType>('free')
+  const [listingDescription, setListingDescription] = useState('')
   const [adminMemo, setAdminMemo] = useState('')
   const [visibility, setVisibility] = useState<'draft' | 'visible'>('draft')
 
@@ -72,14 +87,14 @@ export default function ListingNewClient() {
 
   useEffect(() => {
     let cancelled = false
-    getCategories().then((res) => {
+    getAdminCategories().then((res) => {
       if (cancelled) return
       if (!res.success) {
         setError(res.error ?? '카테고리 조회 실패')
-        setRoots([])
+        setCategoryFlat([])
         return
       }
-      setRoots(res.data?.categories ?? [])
+      setCategoryFlat(flattenAdminCategoryTree(res.data?.tree ?? []))
     })
     return () => {
       cancelled = true
@@ -87,27 +102,20 @@ export default function ListingNewClient() {
   }, [])
 
   useEffect(() => {
-    if (!rootCategoryId) {
-      setSubCategories([])
-      setSubCategoryId('')
-      return
-    }
-    let cancelled = false
-    getSubCategories(rootCategoryId).then((res) => {
-      if (cancelled) return
-      if (!res.success) {
-        setError(res.error ?? '소분류 조회 실패')
-        setSubCategories([])
-        setSubCategoryId('')
-        return
-      }
-      setSubCategories(res.data?.categories ?? [])
-      setSubCategoryId('')
-    })
-    return () => {
-      cancelled = true
-    }
+    setSubCategoryId('')
   }, [rootCategoryId])
+
+  const rootOptions = useMemo(
+    () => sortCategoryRows(categoryFlat.filter((r) => r.parent_id == null && r.is_active)),
+    [categoryFlat],
+  )
+
+  const subCategoryOptions = useMemo(() => {
+    if (!rootCategoryId) return []
+    return sortCategoryRows(
+      categoryFlat.filter((r) => r.parent_id === rootCategoryId && r.is_active),
+    )
+  }, [categoryFlat, rootCategoryId])
 
   const effectiveCategoryId = subCategoryId || rootCategoryId
 
@@ -121,7 +129,7 @@ export default function ListingNewClient() {
     return Number.isFinite(n) && n > 0 ? n : null
   })()
 
-  const previewSavings =
+  const savingsAmount =
     previewPrice != null && previewOriginal != null && previewOriginal > previewPrice
       ? previewOriginal - previewPrice
       : null
@@ -190,6 +198,7 @@ export default function ListingNewClient() {
         original_price: op,
         shipping_type: shippingType,
         admin_memo: adminMemo.trim() || null,
+        description: listingDescription.trim() || null,
         status,
       })
       if (!r.success) {
@@ -203,10 +212,10 @@ export default function ListingNewClient() {
         setThumbnailUrl('')
         setRootCategoryId('')
         setSubCategoryId('')
-        setSubCategories([])
         setCommercePrice('')
         setOriginalPrice('')
         setShippingType('free')
+        setListingDescription('')
         setAdminMemo('')
         setVisibility('draft')
         setUploadError(null)
@@ -221,6 +230,7 @@ export default function ListingNewClient() {
 
   const shipCfg = shippingBadgeStyle(shippingType)
   const thumb = thumbnailUrl.trim()
+  const descPreview = listingDescription.trim()
 
   return (
     <>
@@ -251,6 +261,46 @@ export default function ListingNewClient() {
             {error ? <div className={mod.errorCard}>{error}</div> : null}
 
             <div className={mod.card}>
+              <h2 className={mod.sectionTitle}>카테고리</h2>
+              <div className={mod.fieldStack}>
+                <div>
+                  <div className={mod.label}>대분류 · 필수</div>
+                  <select
+                    className={mod.select}
+                    value={rootCategoryId}
+                    onChange={(e) => setRootCategoryId(e.target.value)}
+                  >
+                    <option value="">선택</option>
+                    {rootOptions.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <div className={mod.label}>소분류</div>
+                  <select
+                    className={mod.select}
+                    value={subCategoryId}
+                    disabled={!rootCategoryId}
+                    onChange={(e) => setSubCategoryId(e.target.value)}
+                  >
+                    <option value="">선택 안 함 (대분류만)</option>
+                    {subCategoryOptions.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                  {rootCategoryId && subCategoryOptions.length === 0 ? (
+                    <p className={mod.hint}>등록된 소분류 없음 — 대분류만 적용</p>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+
+            <div className={mod.card}>
               <h2 className={mod.sectionTitle}>기본 정보</h2>
               <div className={mod.fieldStack}>
                 <div>
@@ -259,7 +309,7 @@ export default function ListingNewClient() {
                     className={mod.input}
                     value={brandName}
                     onChange={(e) => setBrandName(e.target.value)}
-                    placeholder="예: 해표, 백설, 오뚜기"
+                    placeholder="예: 해표, 청정원, 오뚜기"
                   />
                 </div>
                 <div>
@@ -268,7 +318,7 @@ export default function ListingNewClient() {
                     className={mod.input}
                     value={productName}
                     onChange={(e) => setProductName(e.target.value)}
-                    placeholder="예: 업소용 식용유"
+                    placeholder="예: 업소용 식용유, 진간장, 냉동 삼겹살"
                   />
                 </div>
                 <div>
@@ -277,10 +327,9 @@ export default function ListingNewClient() {
                     className={mod.input}
                     value={spec}
                     onChange={(e) => setSpec(e.target.value)}
-                    placeholder="예: 18L, 1kg × 5개"
+                    placeholder="예: 18L, 5kg × 2개, 1kg 낱개"
                   />
                 </div>
-                <p className={mod.hint}>저장 시 이름은 브랜드·상품명·규격이 합쳐지고, 규격은 Listing에도 따로 저장됩니다.</p>
               </div>
             </div>
 
@@ -315,47 +364,6 @@ export default function ListingNewClient() {
             </div>
 
             <div className={mod.card}>
-              <h2 className={mod.sectionTitle}>카테고리</h2>
-              <div className={mod.fieldStack}>
-                <div>
-                  <div className={mod.label}>대분류 · 필수</div>
-                  <select
-                    className={mod.select}
-                    value={rootCategoryId}
-                    onChange={(e) => setRootCategoryId(e.target.value)}
-                  >
-                    <option value="">선택</option>
-                    {roots.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                {rootCategoryId ? (
-                  <div>
-                    <div className={mod.label}>소분류</div>
-                    <select
-                      className={mod.select}
-                      value={subCategoryId}
-                      onChange={(e) => setSubCategoryId(e.target.value)}
-                    >
-                      <option value="">대분류만 사용</option>
-                      {subCategories.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
-                    {subCategories.length === 0 ? (
-                      <p className={mod.hint}>등록된 소분류 없음 — 대분류만 적용</p>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-
-            <div className={mod.card}>
               <h2 className={mod.sectionTitle}>가격</h2>
               <div className={mod.fieldStack}>
                 <div>
@@ -375,10 +383,12 @@ export default function ListingNewClient() {
                     inputMode="numeric"
                     value={originalPrice}
                     onChange={(e) => setOriginalPrice(e.target.value)}
-                    placeholder="예: 52000"
+                    placeholder="예: 52000 (판매가보다 클 때만 절감액 표시)"
                   />
                 </div>
-                <p className={mod.hint}>정상가가 판매가보다 클 때만 절감액 노출</p>
+                {savingsAmount != null && savingsAmount > 0 ? (
+                  <p style={{ margin: 0, fontSize: 12, color: '#1f5d3a' }}>절감액: {formatKRW(savingsAmount)}</p>
+                ) : null}
               </div>
             </div>
 
@@ -402,19 +412,34 @@ export default function ListingNewClient() {
             </div>
 
             <div className={mod.card}>
-              <h2 className={mod.sectionTitle}>운영 메모</h2>
+              <h2 className={mod.sectionTitle}>상세 설명</h2>
+              <p className={mod.hint}>구매 화면에 노출되는 설명입니다.</p>
               <div className={mod.fieldStack}>
-                <textarea
-                  className={mod.textarea}
-                  value={adminMemo}
-                  onChange={(e) => setAdminMemo(e.target.value)}
-                  placeholder="내부용 (구매자 비노출)"
-                  rows={3}
-                />
+                <div>
+                  <textarea
+                    className={`${mod.textarea} ${mod.textareaNoResize}`}
+                    value={listingDescription}
+                    onChange={(e) => setListingDescription(e.target.value)}
+                    placeholder="원산지, 보관법, 배송 안내, 구성 등"
+                    rows={6}
+                  />
+                </div>
+                <div>
+                  <div className={mod.label}>운영 메모 (내부용, 선택)</div>
+                  <textarea
+                    className={`${mod.textarea} ${mod.textareaNoResize}`}
+                    value={adminMemo}
+                    onChange={(e) => setAdminMemo(e.target.value)}
+                    placeholder="구매자에게 보이지 않습니다"
+                    rows={3}
+                  />
+                </div>
               </div>
             </div>
 
             <div className={mod.card}>
+              {/* TODO: private / hidden / sold_out 상태 구조는
+                  다음 단계에서 별도 작업 예정 */}
               <h2 className={mod.sectionTitle}>공개 설정</h2>
               <div className={mod.fieldStack}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#2b2b2b' }}>
@@ -425,7 +450,7 @@ export default function ListingNewClient() {
                   <input type="radio" name="vis" checked={visibility === 'visible'} onChange={() => setVisibility('visible')} />
                   즉시 공개 선호
                 </label>
-                <p className={mod.hint}>하단 버튼이 실제 저장 방식을 결정합니다 (임시저장=초안, 나머지=공개).</p>
+                <p className={mod.hint}>하단 버튼이 실제 저장 방식을 결정합니다.</p>
               </div>
             </div>
           </div>
@@ -506,9 +531,9 @@ export default function ListingNewClient() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4 }}>
                       <span style={{ fontSize: 11, color: '#888' }}>식식이가</span>
                       <span style={{ fontSize: 17, fontWeight: 700, color: '#111' }}>{formatKRW(previewPrice)}</span>
-                      {previewSavings != null && previewSavings > 0 ? (
+                      {savingsAmount != null && savingsAmount > 0 ? (
                         <span style={{ fontSize: 12, color: '#1f5d3a', fontWeight: 600 }}>
-                          {formatKRW(previewSavings)} 절감
+                          {formatKRW(savingsAmount)} 절감
                         </span>
                       ) : null}
                     </div>
@@ -518,6 +543,14 @@ export default function ListingNewClient() {
                       <PhBar width="70%" />
                     </div>
                   )}
+                  <div className={mod.previewDescBlock}>
+                    <p className={mod.previewDescTitle}>상세 설명 미리보기</p>
+                    {descPreview ? (
+                      <p className={mod.previewDescBody}>{listingDescription}</p>
+                    ) : (
+                      <PhBar width="100%" />
+                    )}
+                  </div>
                 </div>
               </div>
               <p className={mod.previewFoot}>실제 구매 화면에서 이렇게 보입니다</p>

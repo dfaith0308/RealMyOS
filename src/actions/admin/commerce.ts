@@ -877,6 +877,7 @@ export async function createListingFull(input: {
   original_price: number | null
   shipping_type: ListingShippingType
   admin_memo: string | null
+  description?: string | null
   status: 'draft' | 'visible'
 }): Promise<ActionResult<{ listing_id: string; product_id: string }>> {
   const supabase = await createSupabaseServer()
@@ -919,6 +920,7 @@ export async function createListingFull(input: {
   const spec = String(input.spec ?? '').trim() || null
   const admin_memo = String(input.admin_memo ?? '').trim() || null
   const thumbnail_url = String(input.thumbnail_url ?? '').trim() || null
+  const listing_description = String(input.description ?? '').trim() || null
 
   let original_price: number | null = null
   const opIn = input.original_price
@@ -997,7 +999,7 @@ export async function createListingFull(input: {
       status: listingStatus,
       is_visible,
       thumbnail_url,
-      description: null,
+      description: listing_description,
       spec,
       admin_memo,
     })
@@ -1026,6 +1028,7 @@ export async function createListingFull(input: {
       spec,
       commerce_price: price,
       status: statusIn,
+      description: listing_description,
     },
   })
   if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
