@@ -28,32 +28,39 @@ const THUMB_H = 160
 export type DetailImageBlock = {
   id: string
   url: string
-  uploadStatus: 'ready' | 'uploading' | 'error'
+  /** url: URL 추가 행 / file: 파일 업로드 행 */
+  blockKind: 'url' | 'file'
+  uploadStatus: 'idle' | 'uploading' | 'done_upload' | 'url_linked' | 'error'
+  errorMessage?: string
+  fileName?: string | null
 }
 
 function newBlock(partial?: Partial<DetailImageBlock>): DetailImageBlock {
   return {
     id: crypto.randomUUID(),
     url: partial?.url ?? '',
-    uploadStatus: partial?.uploadStatus ?? 'ready',
+    blockKind: partial?.blockKind ?? 'file',
+    uploadStatus: partial?.uploadStatus ?? 'idle',
+    errorMessage: partial?.errorMessage,
+    fileName: partial?.fileName ?? null,
   }
 }
 
 function validateImageFile(file: File): string | null {
   if (file.size === 0) return '빈 파일입니다'
   if (file.size > MAX_IMAGE_FILE_BYTES) {
-    return `파일당 최대 ${Math.round(MAX_IMAGE_FILE_BYTES / (1024 * 1024))}MB까지 업로드할 수 있습니다`
+    return '8MB 이하 이미지만 업로드 가능합니다'
   }
   const ok =
     /image\/(jpeg|png|webp)/i.test(file.type) ||
     /\.(jpe?g|png|webp)$/i.test(file.name)
-  if (!ok) return 'JPG, PNG, WebP 이미지만 업로드할 수 있습니다'
+  if (!ok) return 'JPG/PNG/WebP만 업로드 가능합니다'
   return null
 }
 
 function blocksToSavedUrls(blocks: DetailImageBlock[]): string[] {
   return blocks
-    .filter((b) => b.uploadStatus !== 'uploading' && b.url.trim())
+    .filter((b) => b.uploadStatus !== 'uploading' && b.uploadStatus !== 'error' && b.url.trim())
     .map((b) => b.url.trim())
 }
 
@@ -212,7 +219,10 @@ export default function ListingNewClient() {
 
   const [thumbnailUrl, setThumbnailUrl] = useState(empty.thumbnailUrl)
   const [showThumbUrlField, setShowThumbUrlField] = useState(false)
-  const [thumbUploadState, setThumbUploadState] = useState<'idle' | 'uploading' | 'error'>('idle')
+  const [thumbUploadState, setThumbUploadState] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle')
+  const [thumbFileMeta, setThumbFileMeta] = useState<{ name: string } | null>(null)
+  const [thumbSource, setThumbSource] = useState<'none' | 'upload' | 'url'>('none')
+  const [thumbPublicWarning, setThumbPublicWarning] = useState(false)
   const [detailBlocks, setDetailBlocks] = useState<DetailImageBlock[]>(empty.detailBlocks)
   const [listingDescription, setListingDescription] = useState(empty.listingDescription)
   const [adminMemo, setAdminMemo] = useState(empty.adminMemo)
@@ -259,6 +269,14 @@ export default function ListingNewClient() {
   useEffect(() => {
     void refreshShippingGroups()
   }, [refreshShippingGroups])
+
+  useEffect(() => {
+    if (thumbnailUrl.trim()) setThumbPublicWarning(false)
+  }, [thumbnailUrl])
+
+  useEffect(() => {
+    if (visibility === 'draft') setThumbPublicWarning(false)
+  }, [visibility])
 
   useEffect(() => {
     setSubCategoryId('')
@@ -327,19 +345,23 @@ export default function ListingNewClient() {
     }
     setUploadError(null)
     setThumbUploadState('uploading')
+    setThumbSource('upload')
     const fd = new FormData()
     fd.set('file', file)
     try {
       const res = await uploadListingImage(fd)
       if (!res.success) {
-        setUploadError(res.error ?? '업로드 실패')
+        setUploadError(res.error ?? '이미지 업로드에 실패했습니다.')
         setThumbUploadState('error')
         return
       }
-      setThumbnailUrl(res.data?.url ?? '')
-      setThumbUploadState('idle')
+      const url = res.data?.url ?? ''
+      setThumbnailUrl(url)
+      setThumbFileMeta({ name: file.name })
+      setThumbUploadState('success')
+      if (url.trim()) setThumbPublicWarning(false)
     } catch {
-      setUploadError('업로드 실패')
+      setUploadError('네트워크 오류로 업로드에 실패했습니다. 잠시 후 다시 시도해 주세요.')
       setThumbUploadState('error')
     }
   }
@@ -364,13 +386,18 @@ export default function ListingNewClient() {
     const v = validateImageFile(file)
     if (v) {
       setDetailBlocks((prev) =>
-        prev.map((b) => (b.id === blockId ? { ...b, uploadStatus: 'error' as const } : b)),
+        prev.map((b) =>
+          b.id === blockId ? { ...b, uploadStatus: 'error' as const, errorMessage: v } : b,
+        ),
       )
-      showToast(v)
       return
     }
     setDetailBlocks((prev) =>
-      prev.map((b) => (b.id === blockId ? { ...b, uploadStatus: 'uploading' as const } : b)),
+      prev.map((b) =>
+        b.id === blockId
+          ? { ...b, uploadStatus: 'uploading' as const, errorMessage: undefined }
+          : b,
+      ),
     )
     const fd = new FormData()
     fd.set('file', file)
@@ -378,30 +405,51 @@ export default function ListingNewClient() {
       const res = await uploadListingImage(fd)
       if (!res.success) {
         setDetailBlocks((prev) =>
-          prev.map((b) => (b.id === blockId ? { ...b, uploadStatus: 'error' as const } : b)),
+          prev.map((b) =>
+            b.id === blockId
+              ? {
+                  ...b,
+                  uploadStatus: 'error' as const,
+                  errorMessage: res.error ?? '이미지 업로드에 실패했습니다.',
+                }
+              : b,
+          ),
         )
-        showToast(res.error ?? '업로드 실패')
         return
       }
       setDetailBlocks((prev) =>
         prev.map((b) =>
           b.id === blockId
-            ? { ...b, url: res.data?.url ?? '', uploadStatus: 'ready' as const }
+            ? {
+                ...b,
+                url: res.data?.url ?? '',
+                uploadStatus: 'done_upload' as const,
+                fileName: file.name,
+                errorMessage: undefined,
+              }
             : b,
         ),
       )
     } catch {
       setDetailBlocks((prev) =>
-        prev.map((b) => (b.id === blockId ? { ...b, uploadStatus: 'error' as const } : b)),
+        prev.map((b) =>
+          b.id === blockId
+            ? {
+                ...b,
+                uploadStatus: 'error' as const,
+                errorMessage:
+                  '네트워크 오류로 업로드에 실패했습니다. 잠시 후 다시 시도해 주세요.',
+              }
+            : b,
+        ),
       )
-      showToast('업로드 실패')
     }
   }
 
   function addDetailUrlRow() {
     setDetailBlocks((prev) => {
       if (prev.length >= MAX_DETAIL_IMAGES) return prev
-      return [...prev, newBlock({ url: '', uploadStatus: 'ready' })]
+      return [...prev, newBlock({ url: '', blockKind: 'url', uploadStatus: 'idle' })]
     })
   }
 
@@ -420,7 +468,7 @@ export default function ListingNewClient() {
         showToast(err)
         continue
       }
-      const b = newBlock({ url: '', uploadStatus: 'uploading' })
+      const b = newBlock({ url: '', blockKind: 'file', uploadStatus: 'uploading' })
       setDetailBlocks((prev) => {
         if (prev.length >= MAX_DETAIL_IMAGES) return prev
         return [...prev, b]
@@ -469,8 +517,20 @@ export default function ListingNewClient() {
   }
 
   function setDetailBlockUrl(id: string, url: string) {
+    const t = url.trim()
     setDetailBlocks((prev) =>
-      prev.map((b) => (b.id === id ? { ...b, url, uploadStatus: 'ready' as const } : b)),
+      prev.map((b) => {
+        if (b.id !== id) return b
+        if (!t) return { ...b, url: '', uploadStatus: 'idle' as const }
+        const linked = /^https?:\/\//i.test(t)
+        return {
+          ...b,
+          url,
+          uploadStatus: linked ? ('url_linked' as const) : ('idle' as const),
+          fileName: null,
+          errorMessage: undefined,
+        }
+      }),
     )
   }
 
@@ -513,6 +573,9 @@ export default function ListingNewClient() {
     setThumbnailUrl(base.thumbnailUrl)
     setShowThumbUrlField(false)
     setThumbUploadState('idle')
+    setThumbFileMeta(null)
+    setThumbSource('none')
+    setThumbPublicWarning(false)
     setDetailBlocks(base.detailBlocks)
     setListingDescription(base.listingDescription)
     setAdminMemo(base.adminMemo)
@@ -523,6 +586,13 @@ export default function ListingNewClient() {
 
   function submitWithStatus(status: 'draft' | 'visible', andReset: boolean) {
     setError(null)
+    if (status === 'draft') {
+      setThumbPublicWarning(false)
+    } else if (status === 'visible' && !thumbnailUrl.trim()) {
+      setThumbPublicWarning(true)
+    } else {
+      setThumbPublicWarning(false)
+    }
     const pn = productName.trim()
     if (!pn) {
       setError('상품명을 입력해 주세요')
@@ -581,6 +651,10 @@ export default function ListingNewClient() {
   const thumb = thumbnailUrl.trim()
   const descPreview = listingDescription.trim()
   const detailUrlsForPreview = blocksToSavedUrls(detailBlocks)
+  const detailSavedCount = useMemo(
+    () => detailBlocks.filter((b) => b.url.trim() && b.uploadStatus !== 'uploading').length,
+    [detailBlocks],
+  )
   const marginModeDisabled = cost <= 0
 
   function renderImageOverlays() {
@@ -799,6 +873,11 @@ export default function ListingNewClient() {
         <div className={mod.layout}>
           <div className={mod.formColumn}>
             {error ? <div className={mod.errorCard}>{error}</div> : null}
+            {thumbPublicWarning ? (
+              <div className={mod.warnBanner} role="status">
+                공개 저장 시 대표 썸네일이 없습니다. 카드·목록 노출이 약해질 수 있습니다. 저장은 계속됩니다.
+              </div>
+            ) : null}
 
             <div className={mod.card}>
               <div className={mod.sectionHeaderRow}>
@@ -1142,9 +1221,17 @@ export default function ListingNewClient() {
 
             <div className={mod.card}>
               <h2 className={mod.sectionTitle}>대표 썸네일 (목록·카드용)</h2>
+              <div className={mod.specCallout}>
+                <strong>권장 규격</strong>
+                <ul className={mod.specList}>
+                  <li>정사각형 이미지 · 1000×1000px 이상</li>
+                  <li>JPG / PNG / WebP · 최대 8MB</li>
+                  <li>상품 카드에서 정사각형으로 잘려 보입니다</li>
+                </ul>
+              </div>
               <p className={mod.hint}>
-                목록·검색·카드에서 클릭을 유도하는 대표 이미지입니다. 아래 &quot;상세페이지&quot; 설명 이미지와 역할이
-                다릅니다.
+                목록·검색·카드용입니다. 아래 &quot;상세페이지&quot; 이미지와 역할이 다릅니다. 미리보기는 저장소에 반영된
+                URL로 표시합니다.
               </p>
               <input
                 ref={thumbFileRef}
@@ -1154,7 +1241,7 @@ export default function ListingNewClient() {
                 onChange={onHeroFileInput}
               />
               <div
-                className={`${mod.heroThumbDrop} ${thumbUploadState === 'uploading' ? mod.heroThumbDropBusy : ''} ${pending ? mod.heroThumbDropDisabled : ''}`}
+                className={`${mod.heroThumbDrop} ${thumbUploadState === 'uploading' ? mod.heroThumbDropBusy : ''} ${thumbUploadState === 'error' ? mod.heroThumbDropError : ''} ${pending ? mod.heroThumbDropDisabled : ''}`}
                 onDragOver={(e) => {
                   e.preventDefault()
                   e.stopPropagation()
@@ -1173,7 +1260,7 @@ export default function ListingNewClient() {
                 }}
               >
                 {thumb ? (
-                  <img src={thumb} alt="" className={mod.heroThumbPreviewImg} />
+                  <img src={thumb} alt="" className={mod.heroThumbPreviewImg} key={thumb} />
                 ) : (
                   <div className={mod.heroThumbPlaceholder}>
                     <span className={mod.heroThumbPlaceholderTitle}>이미지를 올려주세요</span>
@@ -1189,21 +1276,49 @@ export default function ListingNewClient() {
                   </div>
                 ) : null}
               </div>
-              {uploadError && thumbUploadState === 'error' ? (
-                <p className={mod.uploadErrText}>{uploadError}</p>
+              {thumbUploadState === 'uploading' ? (
+                <p className={mod.uploadStatusMuted}>업로드 중… 잠시만 기다려 주세요.</p>
+              ) : null}
+              {thumbUploadState === 'success' && thumbSource === 'upload' && thumb ? (
+                <div className={mod.uploadOkBox}>
+                  <span className={mod.uploadOkIcon} aria-hidden>
+                    ✓
+                  </span>
+                  <div>
+                    <div className={mod.uploadOkTitle}>업로드 완료</div>
+                    {thumbFileMeta?.name ? (
+                      <div className={mod.uploadMeta}>파일: {thumbFileMeta.name}</div>
+                    ) : null}
+                    <div className={mod.uploadMetaUrl} title={thumb}>
+                      저장 URL: {thumb}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+              {thumb && thumbSource === 'url' ? (
+                <div className={mod.uploadInfoBox}>
+                  외부 URL로 지정됨 · 미리보기는 아래 주소 기준입니다.
+                  <div className={mod.uploadMetaUrl} title={thumb}>
+                    {thumb}
+                  </div>
+                </div>
               ) : null}
               {thumbUploadState === 'error' ? (
-                <button
-                  type="button"
-                  className={mod.btnGhost}
-                  onClick={() => {
-                    setThumbUploadState('idle')
-                    setUploadError(null)
-                    thumbFileRef.current?.click()
-                  }}
-                >
-                  다시 시도
-                </button>
+                <div className={mod.uploadErrBox}>
+                  <div className={mod.uploadErrTitle}>업로드 실패</div>
+                  {uploadError ? <p className={mod.uploadErrBody}>{uploadError}</p> : null}
+                  <button
+                    type="button"
+                    className={mod.btnGhost}
+                    onClick={() => {
+                      setThumbUploadState('idle')
+                      setUploadError(null)
+                      thumbFileRef.current?.click()
+                    }}
+                  >
+                    다시 시도
+                  </button>
+                </div>
               ) : null}
               <div className={mod.heroThumbActions}>
                 <button
@@ -1228,7 +1343,12 @@ export default function ListingNewClient() {
                   <input
                     className={mod.input}
                     value={thumbnailUrl}
-                    onChange={(e) => setThumbnailUrl(e.target.value)}
+                    onChange={(e) => {
+                      setThumbnailUrl(e.target.value)
+                      setThumbSource('url')
+                      setThumbFileMeta(null)
+                      setThumbUploadState('idle')
+                    }}
                     placeholder="CDN 등 외부 주소 붙여넣기"
                   />
                 </div>
@@ -1244,7 +1364,20 @@ export default function ListingNewClient() {
               onDrop={onDetailListDrop}
             >
               <h2 className={mod.sectionTitle}>상품 상세페이지 제작</h2>
-              <p className={mod.hint}>구매자가 상품 상세페이지에서 보는 내용을 구성합니다</p>
+              <p className={mod.detailCountLine}>
+                <strong>
+                  {detailSavedCount} / {MAX_DETAIL_IMAGES}장
+                </strong>{' '}
+                등록됨 · 드래그(⋮⋮)로 순서 변경
+              </p>
+              <div className={mod.specCallout}>
+                <strong>권장 규격</strong>
+                <ul className={mod.specList}>
+                  <li>세로형 가능 · 가로 1000px 이상 권장</li>
+                  <li>JPG / PNG / WebP · 파일당 최대 8MB · 최대 {MAX_DETAIL_IMAGES}장</li>
+                </ul>
+              </div>
+              <p className={mod.hint}>구매자가 상세페이지에서 보는 설득용 이미지입니다. 업로드 완료 시 저장소 URL이 블록에 반영됩니다.</p>
 
               <input
                 ref={detailFilesRef}
@@ -1288,11 +1421,6 @@ export default function ListingNewClient() {
                   전체 삭제
                 </button>
               </div>
-              <p className={mod.hint}>
-                이미지 블록을 드래그하여 순서를 바꿀 수 있습니다 · 최대 {MAX_DETAIL_IMAGES}장 · 파일당 최대{' '}
-                {Math.round(MAX_IMAGE_FILE_BYTES / (1024 * 1024))}MB
-              </p>
-
               <div className={mod.detailBlockList}>
                 {detailBlocks.map((block, index) => (
                   <div
@@ -1334,19 +1462,19 @@ export default function ListingNewClient() {
                     <div className={mod.detailBlockBody}>
                       {block.uploadStatus === 'uploading' ? (
                         <div className={mod.detailBlockStatus}>
-                          <p className={mod.hint} style={{ margin: '0 0 8px' }}>
-                            업로드 중…
-                          </p>
+                          <div className={mod.detailSkeleton} aria-hidden />
+                          <p className={mod.uploadStatusMuted}>업로드 중…</p>
                           <div className={mod.progressIndeterminateWrap} aria-busy>
                             <div className={mod.progressIndeterminate} />
                           </div>
                         </div>
                       ) : null}
                       {block.uploadStatus === 'error' ? (
-                        <div className={mod.detailBlockStatus}>
-                          <p className={mod.uploadErrText} style={{ margin: '0 0 8px' }}>
-                            업로드에 실패했습니다
-                          </p>
+                        <div className={mod.uploadErrBox}>
+                          <div className={mod.uploadErrTitle}>업로드 실패</div>
+                          {block.errorMessage ? (
+                            <p className={mod.uploadErrBody}>{block.errorMessage}</p>
+                          ) : null}
                           <button
                             type="button"
                             className={mod.btnGhost}
@@ -1356,7 +1484,9 @@ export default function ListingNewClient() {
                           </button>
                         </div>
                       ) : null}
-                      {!block.url.trim() && block.uploadStatus === 'ready' ? (
+                      {block.blockKind === 'url' &&
+                      !block.url.trim() &&
+                      block.uploadStatus === 'idle' ? (
                         <div>
                           <div className={mod.label}>외부 이미지 URL</div>
                           <input
@@ -1368,7 +1498,31 @@ export default function ListingNewClient() {
                         </div>
                       ) : null}
                       {block.url.trim() && block.uploadStatus !== 'uploading' ? (
-                        <img src={block.url.trim()} alt="" className={mod.detailBlockPreview} />
+                        <>
+                          <img
+                            src={block.url.trim()}
+                            alt=""
+                            className={mod.detailBlockPreview}
+                            key={block.url.trim()}
+                          />
+                          {block.uploadStatus === 'done_upload' ? (
+                            <div className={mod.uploadOkRow}>
+                              <span className={mod.uploadOkIconSm} aria-hidden>
+                                ✓
+                              </span>
+                              <span>업로드 완료</span>
+                              {block.fileName ? (
+                                <span className={mod.uploadMeta}> · {block.fileName}</span>
+                              ) : null}
+                            </div>
+                          ) : null}
+                          {block.uploadStatus === 'url_linked' ? (
+                            <div className={mod.uploadInfoRow}>외부 URL 연결됨 · 저장 시 그대로 저장됩니다</div>
+                          ) : null}
+                          <div className={mod.uploadMetaUrl} title={block.url.trim()}>
+                            {block.url.trim()}
+                          </div>
+                        </>
                       ) : null}
                     </div>
                   </div>
@@ -1461,6 +1615,7 @@ export default function ListingNewClient() {
                           alt=""
                           width={280}
                           height={THUMB_H}
+                          key={thumb}
                           style={{
                             width: '100%',
                             height: THUMB_H,
@@ -1534,7 +1689,7 @@ export default function ListingNewClient() {
                       <div style={{ position: 'relative', width: '100%' }}>
                         {renderImageOverlays()}
                         {thumb ? (
-                          <img src={thumb} alt="" className={mod.phoneDetailHero} />
+                          <img src={thumb} alt="" className={mod.phoneDetailHero} key={thumb} />
                         ) : (
                           <div className={mod.phoneDetailHeroPlaceholder} aria-hidden>
                             {productNameInitial(productName)}

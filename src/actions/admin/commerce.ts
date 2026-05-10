@@ -61,6 +61,34 @@ async function insertAdminLog(
   return { ok: true }
 }
 
+/** Storage/업로드 오류를 운영자용 문구로 통일 */
+function mapListingUploadError(raw: string): string {
+  const msg = (raw ?? '').trim()
+  const low = msg.toLowerCase()
+  if (!msg) return '이미지 업로드에 실패했습니다.'
+  if (low.includes('row-level security') || low.includes('violates row-level security')) {
+    return 'Storage 업로드 권한이 없습니다. commerce-images 버킷 Storage 정책(관리자 INSERT) 적용 여부를 확인해 주세요.'
+  }
+  if (
+    low.includes('not authorized') ||
+    low.includes('unauthorized') ||
+    low.includes('permission denied') ||
+    low.includes('403')
+  ) {
+    return 'Storage 업로드 권한이 없습니다. 로그인·관리자 권한을 확인해 주세요.'
+  }
+  if (low.includes('payload too large') || low.includes('entity too large') || low.includes('file size')) {
+    return '8MB 이하 이미지만 업로드 가능합니다.'
+  }
+  if (low.includes('mime') || low.includes('invalid type') || low.includes('not supported')) {
+    return 'JPG/PNG/WebP만 업로드 가능합니다.'
+  }
+  if (low.includes('network') || low.includes('failed to fetch') || low.includes('econnreset')) {
+    return '네트워크 오류로 업로드에 실패했습니다. 잠시 후 다시 시도해 주세요.'
+  }
+  return msg
+}
+
 export type CommerceListingRow = {
   id: string
   tenant_id: string
@@ -876,7 +904,7 @@ export async function uploadListingImage(formData: FormData): Promise<ActionResu
           'commerce-images 저장소가 없습니다. Supabase Storage에서 commerce-images 버킷을 먼저 생성해주세요.',
       }
     }
-    return { success: false, error: msg || '업로드 실패' }
+    return { success: false, error: mapListingUploadError(msg) }
   }
 
   const { data: pub } = supabase.storage.from('commerce-images').getPublicUrl(data.path)
