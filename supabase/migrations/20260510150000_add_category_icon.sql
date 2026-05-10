@@ -1,5 +1,5 @@
 -- 카테고리 아이콘 컬럼 추가
--- 운영 DB 적용 전 — 저장소만 반영, 실행은 배포 절차에 따름
+-- 운영 DB 적용 완료 (2026-05-10)
 
 ALTER TABLE public.product_categories
   ADD COLUMN IF NOT EXISTS icon_url text;

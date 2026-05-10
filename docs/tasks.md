@@ -1132,6 +1132,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **작업 이력 (2026-05-10)**: `20260510140000` 헤더 주석 운영 DB 적용 완료(2026-05-10)로 갱신 — worklog: [`docs/worklogs/2026-05-10_docs_listing-admin-memo-migration-applied.md`](./worklogs/2026-05-10_docs_listing-admin-memo-migration-applied.md)
 - **작업 이력 (2026-05-09)**: `product_categories.icon_url` — [`supabase/migrations/20260510150000_add_category_icon.sql`](../supabase/migrations/20260510150000_add_category_icon.sql) — worklog: [`docs/worklogs/2026-05-09_feat_commerce-listing-studio-ux-restructure.md`](./worklogs/2026-05-09_feat_commerce-listing-studio-ux-restructure.md)
 - **작업 이력 (2026-05-09)**: `commerce_product_listings.badge_labels` + `shipping_type` CHECK(`free`|`paid`|`conditional_free`)·레거시 이관 — [`supabase/migrations/20260510160000_listing_badge_labels_shipping_types.sql`](../supabase/migrations/20260510160000_listing_badge_labels_shipping_types.sql) — worklog: [`docs/worklogs/2026-05-09_feat_commerce-listing-studio-ux-restructure.md`](./worklogs/2026-05-09_feat_commerce-listing-studio-ux-restructure.md)
+- **작업 이력 (2026-05-10)**: `20260510150000`·`20260510160000` migration 헤더 주석 운영 DB 적용 완료(2026-05-10)로 갱신 — worklog: [`docs/worklogs/2026-05-10_docs_category-icon-badge-migration-applied-comment.md`](./worklogs/2026-05-10_docs_category-icon-badge-migration-applied-comment.md)
 
 #### [COMMERCE-002] 관리자OS Listing 관리 화면
 - **우선순위**: HIGH

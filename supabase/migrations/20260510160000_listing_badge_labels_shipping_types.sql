@@ -1,5 +1,5 @@
 -- 썸네일 뱃지 + shipping_type 값 집합 갱신
--- 운영 DB 적용 전 — 저장소만 반영, 실행은 배포 절차에 따름
+-- 운영 DB 적용 완료 (2026-05-10)
 --
 -- shipping_type: free | paid | conditional_free (cold, same_day 제거)
 -- 기존 cold → paid, same_day → free 로 이관 후 CHECK 교체
