@@ -151,6 +151,13 @@ function blocksToSavedUrls(blocks: DetailImageBlock[]): string[] {
     .map((b) => b.url.trim())
 }
 
+/** CTA 콘솔 계측용 prefix (submitWithStatus 인자로부터) */
+function ctaDebugLabel(status: 'draft' | 'visible', andReset: boolean): 'DRAFT' | 'NEXT' | 'PUBLIC' {
+  if (status === 'draft') return 'DRAFT'
+  if (andReset) return 'NEXT'
+  return 'PUBLIC'
+}
+
 function detailBlockStatusLabel(block: DetailImageBlock): string {
   if (block.uploadStatus === 'uploading') return '상태: 업로드 중'
   if (block.uploadStatus === 'error') return '상태: 업로드 실패'
@@ -281,7 +288,7 @@ export default function ListingNewClient() {
 
   const [error, setError] = useState<string | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
-  const [toast, setToast] = useState<string | null>(null)
+  const [toast, setToast] = useState<{ text: string; variant: 'success' | 'error' } | null>(null)
 
   const [categoryFlat, setCategoryFlat] = useState<AdminCategoryRow[]>([])
   const [rootCategoryId, setRootCategoryId] = useState(empty.rootCategoryId)
@@ -350,15 +357,15 @@ export default function ListingNewClient() {
 
   const cost = parseInt(supplyPrice.replace(/\D/g, ''), 10) || 0
 
-  const showToast = useCallback((msg: string) => {
-    setToast(msg)
+  const showToast = useCallback((text: string, variant: 'success' | 'error' = 'success') => {
+    setToast({ text, variant })
     window.setTimeout(() => setToast(null), 2800)
   }, [])
 
   const refreshShippingGroups = useCallback(async () => {
     const res = await getShippingGroups()
     if (!res.success) {
-      showToast(res.error ?? '묶음배송 그룹 조회 실패')
+      showToast(res.error ?? '묶음배송 그룹 조회 실패', 'error')
       setShippingGroups([])
       return
     }
@@ -555,7 +562,7 @@ export default function ListingNewClient() {
           setDetailBlocks((prev) => {
             const idx = prev.findIndex((x) => x.id === blockId)
             if (idx === -1) {
-              queueMicrotask(() => showToast(errMsg))
+              queueMicrotask(() => showToast(errMsg, 'error'))
               return prev
             }
             return prev.map((b) =>
@@ -613,7 +620,7 @@ export default function ListingNewClient() {
         setDetailBlocks((prev) => {
           const idx = prev.findIndex((x) => x.id === blockId)
           if (idx === -1) {
-            queueMicrotask(() => showToast(errMsg))
+            queueMicrotask(() => showToast(errMsg, 'error'))
             return prev
           }
           return prev.map((b) =>
@@ -705,7 +712,7 @@ export default function ListingNewClient() {
             setDetailDebugLastError(`newBlock: ${msg}`)
             console.error('[DETAIL STEP 7] newBlock throw', msg)
           }
-          showToast('상세 이미지 블록을 만들 수 없습니다. 페이지를 새로고침 후 다시 시도해 주세요.')
+          showToast('상세 이미지 블록을 만들 수 없습니다. 페이지를 새로고침 후 다시 시도해 주세요.', 'error')
           return
         }
       }
@@ -726,6 +733,7 @@ export default function ListingNewClient() {
         showToast(
           rejectSamples[0] ??
             `선택한 ${fileArr.length}개를 상세 이미지로 추가할 수 없습니다(형식·용량 확인).`,
+          'error',
         )
         return
       }
@@ -807,13 +815,13 @@ export default function ListingNewClient() {
           }
         })
         if (uploadJobs.length < pairs.length) {
-          showToast(`상세 이미지는 최대 ${MAX_DETAIL_IMAGES}장까지입니다`)
+          showToast(`상세 이미지는 최대 ${MAX_DETAIL_IMAGES}장까지입니다`, 'error')
         }
         return
       }
 
       if (uploadJobs.length < pairs.length) {
-        showToast(`상세 이미지는 최대 ${MAX_DETAIL_IMAGES}장까지입니다`)
+        showToast(`상세 이미지는 최대 ${MAX_DETAIL_IMAGES}장까지입니다`, 'error')
       }
 
       for (const j of uploadJobs) {
@@ -832,7 +840,7 @@ export default function ListingNewClient() {
         )
         setDetailDebugFlow((p) => ({ ...p, flushSuccess: 'outer-error' }))
       }
-      showToast('상세 이미지 추가 중 오류가 발생했습니다. 콘솔을 확인해 주세요.')
+      showToast('상세 이미지 추가 중 오류가 발생했습니다. 콘솔을 확인해 주세요.', 'error')
     }
   }
 
@@ -970,6 +978,12 @@ export default function ListingNewClient() {
   }
 
   function submitWithStatus(status: 'draft' | 'visible', andReset: boolean) {
+    const isDev = process.env.NODE_ENV === 'development'
+    const cta = ctaDebugLabel(status, andReset)
+    if (isDev) {
+      console.log(`[CTA ${cta} STEP 2] submit start`, { status, andReset, pending })
+    }
+
     setError(null)
     if (status === 'draft') {
       setThumbPublicWarning(false)
@@ -980,56 +994,131 @@ export default function ListingNewClient() {
     }
     const pn = productName.trim()
     if (!pn) {
+      if (isDev) console.log(`[CTA ${cta} STEP 4] validation FAIL: 상품명`)
       setError('상품명을 입력해 주세요')
+      showToast('상품명을 입력해 주세요', 'error')
       return
     }
     if (!rootCategoryId) {
+      if (isDev) console.log(`[CTA ${cta} STEP 4] validation FAIL: 대분류`)
       setError('대분류 카테고리를 선택해 주세요')
+      showToast('대분류 카테고리를 선택해 주세요', 'error')
       return
     }
     if (!effectiveCategoryId) {
+      if (isDev) console.log(`[CTA ${cta} STEP 4] validation FAIL: 카테고리`)
       setError('카테고리를 선택해 주세요')
+      showToast('카테고리를 선택해 주세요', 'error')
       return
     }
     const price = parseInt(commercePrice.replace(/\D/g, ''), 10)
     if (!Number.isFinite(price) || price <= 0) {
+      if (isDev) console.log(`[CTA ${cta} STEP 4] validation FAIL: 판매가`)
       setError('식식이 판매가는 1원 이상 정수로 입력해 주세요')
+      showToast('식식이 판매가는 1원 이상 정수로 입력해 주세요', 'error')
       return
+    }
+
+    if (isDev) {
+      console.log(`[CTA ${cta} STEP 4] validation pass`)
     }
 
     const op = parseOriginal()
     const image_urls = blocksToSavedUrls(detailBlocks)
     const badge_labels = thumbnailBadges.length > 0 ? thumbnailBadges : null
 
-    startTransition(async () => {
-      const r = await createListingFull({
-        brand_name: brandName.trim() || null,
+    if (isDev) {
+      console.log(`[CTA ${cta} STEP 3] payload build`, {
         product_name: pn,
-        spec: spec.trim() || null,
-        thumbnail_url: thumbnailUrl.trim() || null,
-        image_urls: image_urls.length > 0 ? image_urls : null,
-        badge_labels,
         category_id: effectiveCategoryId,
         commerce_price: price,
-        original_price: op,
-        shipping_type: shippingType,
-        shipping_group_id: shippingGroupId.trim() || null,
-        admin_memo: adminMemo.trim() || null,
-        description: listingDescription.trim() || null,
         status,
+        andReset,
+        image_urls_count: image_urls.length,
+        shipping_group_id: shippingGroupId.trim() || null,
       })
-      if (!r.success) {
-        setError(r.error ?? '저장 실패')
-        return
+    }
+
+    startTransition(async () => {
+      if (isDev) {
+        console.log(`[CTA ${cta} STEP 5] createListingFull call (server action)`)
       }
-      if (andReset) {
-        applyResetForm()
-        showToast('상품이 저장되었습니다')
+      try {
+        const r = await createListingFull({
+          brand_name: brandName.trim() || null,
+          product_name: pn,
+          spec: spec.trim() || null,
+          thumbnail_url: thumbnailUrl.trim() || null,
+          image_urls: image_urls.length > 0 ? image_urls : null,
+          badge_labels,
+          category_id: effectiveCategoryId,
+          commerce_price: price,
+          original_price: op,
+          shipping_type: shippingType,
+          shipping_group_id: shippingGroupId.trim() || null,
+          admin_memo: adminMemo.trim() || null,
+          description: listingDescription.trim() || null,
+          status,
+        })
+        if (isDev) {
+          console.log(`[CTA ${cta} STEP 6] createListingFull returned`, {
+            success: r.success,
+            error: r.success ? undefined : r.error,
+            listing_id: r.success ? r.data?.listing_id : undefined,
+            product_id: r.success ? r.data?.product_id : undefined,
+          })
+        }
+        if (!r.success) {
+          const msg = r.error ?? '저장 실패'
+          console.error(`[CTA ${cta} STEP 6] createListingFull success:false`, msg)
+          setError(msg)
+          showToast(msg, 'error')
+          if (isDev) {
+            console.log(`[CTA ${cta} STEP 9] callback end (failed, pending clears)`)
+          }
+          return
+        }
+        const successToast =
+          status === 'draft'
+            ? '임시저장이 완료되었습니다'
+            : '상품이 저장되었습니다 · 스토어에 공개되었습니다'
+        if (andReset) {
+          if (isDev) {
+            console.log(
+              `[CTA ${cta} STEP 7] toast + applyResetForm (저장 후 다음 상품: 동일 페이지, 폼 초기화)`,
+            )
+          }
+          showToast(successToast)
+          applyResetForm()
+          if (isDev) {
+            console.log(`[CTA ${cta} STEP 8] router.refresh (no router.push — 목록 미이동)`)
+          }
+          router.refresh()
+          if (isDev) {
+            console.log(`[CTA ${cta} STEP 9] callback end (success+reset)`)
+          }
+          return
+        }
+        if (isDev) {
+          console.log(`[CTA ${cta} STEP 7] toast (저장 후 공개: 폼 유지)`)
+        }
+        showToast(successToast)
+        if (isDev) {
+          console.log(`[CTA ${cta} STEP 8] router.refresh (no router.push — 목록 미이동)`)
+        }
         router.refresh()
-        return
+        if (isDev) {
+          console.log(`[CTA ${cta} STEP 9] callback end (success)`)
+        }
+      } catch (e) {
+        console.error(`[CTA ${cta} STEP 5-6] createListingFull threw`, e)
+        const msg = e instanceof Error ? e.message : String(e)
+        setError(msg)
+        showToast('저장 중 오류가 발생했습니다. 콘솔을 확인해 주세요.', 'error')
+        if (isDev) {
+          console.log(`[CTA ${cta} STEP 9] callback end (throw)`)
+        }
       }
-      showToast('상품이 저장되었습니다')
-      router.refresh()
     })
   }
 
@@ -1084,14 +1173,14 @@ export default function ListingNewClient() {
   async function submitNewShippingGroup() {
     const n = newShippingGroupName.trim()
     if (!n) {
-      showToast('그룹명을 입력해 주세요')
+      showToast('그룹명을 입력해 주세요', 'error')
       return
     }
     setShippingGroupActionBusy(true)
     const res = await createShippingGroup({ name: n })
     setShippingGroupActionBusy(false)
     if (!res.success) {
-      showToast(res.error ?? '그룹 추가 실패')
+      showToast(res.error ?? '그룹 추가 실패', 'error')
       return
     }
     await refreshShippingGroups()
@@ -1110,7 +1199,7 @@ export default function ListingNewClient() {
     })
     setShippingGroupActionBusy(false)
     if (!res.success) {
-      showToast(res.error ?? '저장 실패')
+      showToast(res.error ?? '저장 실패', 'error')
       return
     }
     setModalEditGroupId(null)
@@ -1130,7 +1219,7 @@ export default function ListingNewClient() {
     const res = await deleteShippingGroup(id)
     setShippingGroupActionBusy(false)
     if (!res.success) {
-      showToast(res.error ?? '삭제 실패')
+      showToast(res.error ?? '삭제 실패', 'error')
       return
     }
     if (shippingGroupId === id) setShippingGroupId('')
@@ -1158,13 +1247,16 @@ export default function ListingNewClient() {
             zIndex: 100,
             padding: '10px 18px',
             borderRadius: 8,
-            background: '#15803d',
+            background: toast.variant === 'success' ? '#15803d' : '#b91c1c',
             color: '#fff',
             fontSize: 13,
             fontWeight: 600,
+            maxWidth: 'min(92vw, 420px)',
+            textAlign: 'center',
+            lineHeight: 1.35,
           }}
         >
-          {toast}
+          {toast.text}
         </div>
       ) : null}
 
@@ -2247,14 +2339,30 @@ export default function ListingNewClient() {
 
         <div className={mod.ctaBar}>
           <div className={mod.ctaInner}>
-            <Link href="/admin/commerce/products" className={`${mod.btn} ${mod.btnCancel}`}>
+            <Link
+              href="/admin/commerce/products"
+              className={`${mod.btn} ${mod.btnCancel}`}
+              onClick={() => {
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('[CTA CANCEL STEP 1] click')
+                  console.log(
+                    '[CTA CANCEL STEP 2] navigation: Link href=/admin/commerce/products (no router.push in code)',
+                  )
+                }
+              }}
+            >
               취소
             </Link>
             <button
               type="button"
               className={`${mod.btn} ${mod.btnDraft}`}
               disabled={pending}
-              onClick={() => submitWithStatus('draft', false)}
+              onClick={() => {
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('[CTA DRAFT STEP 1] click', { pending })
+                }
+                submitWithStatus('draft', false)
+              }}
             >
               임시저장
             </button>
@@ -2262,7 +2370,12 @@ export default function ListingNewClient() {
               type="button"
               className={`${mod.btn} ${mod.btnNext}`}
               disabled={pending}
-              onClick={() => submitWithStatus('visible', true)}
+              onClick={() => {
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('[CTA NEXT STEP 1] click', { pending })
+                }
+                submitWithStatus('visible', true)
+              }}
             >
               저장 후 다음 상품
             </button>
@@ -2270,7 +2383,12 @@ export default function ListingNewClient() {
               type="button"
               className={`${mod.btn} ${mod.btnPrimary}`}
               disabled={pending}
-              onClick={() => submitWithStatus('visible', false)}
+              onClick={() => {
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('[CTA PUBLIC STEP 1] click', { pending })
+                }
+                submitWithStatus('visible', false)
+              }}
             >
               저장 후 공개
             </button>

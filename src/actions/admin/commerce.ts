@@ -38,6 +38,8 @@ async function insertAdminLog(
   supabase: any,
   input: {
     admin_id: string
+    /** 스키마 `admin_logs.admin_tenant_id` NOT NULL — 플랫폼 관리자는 보통 `PLATFORM_OWNER_TENANT`와 동일 sentinel */
+    admin_tenant_id?: string
     tenant_id?: string | null
     action_type: string
     reason?: string | null
@@ -47,7 +49,9 @@ async function insertAdminLog(
     new_value?: unknown
   },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  const admin_tenant_id = input.admin_tenant_id ?? PLATFORM_OWNER_TENANT
   const { error } = await supabase.from('admin_logs').insert({
+    admin_tenant_id,
     admin_id: input.admin_id,
     tenant_id: input.tenant_id ?? null,
     action_type: input.action_type,
@@ -1273,6 +1277,7 @@ export async function createListingFull(input: {
 
   const logRes = await insertAdminLog(supabase, {
     admin_id: auth.ctx.user_id,
+    admin_tenant_id: auth.ctx.tenant_id,
     tenant_id: PLATFORM_OWNER_TENANT,
     action_type: 'listing_created_full',
     target_table: 'commerce_product_listings',
@@ -1291,7 +1296,12 @@ export async function createListingFull(input: {
       shipping_group_id,
     },
   })
-  if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
+  if (!logRes.ok) {
+    console.error(
+      '[createListingFull] admin_logs insert failed — product and listing are already committed:',
+      logRes.error,
+    )
+  }
 
   revalidatePath('/admin/commerce/products')
   return { success: true, data: { listing_id, product_id } }

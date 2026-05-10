@@ -1169,6 +1169,8 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **작업 이력 (2026-05-09)**: `validateImageFile` 운영 현실화 — JPG/PNG/WebP/HEIC·HEIF·MIME 공백 시 확장자 허용·`application/octet-stream`+확장자·`VALIDATION FAIL` 콘솔·DEBUG `err`에 파일명/MIME/사유(최대 20건) — worklog: [`docs/worklogs/2026-05-09_fix_validate-image-file-realistic.md`](./worklogs/2026-05-09_fix_validate-image-file-realistic.md)
 - **작업 이력 (2026-05-09)**: 상세 이미지 피커 — `FileList`가 input과 라이브 연결되어 `value` 초기화 직후 `files.length`가 0으로 보이던 버그 수정(`Array.from` 스냅샷 후 `processIncomingDetailFiles`, 마지막에 clear) — worklog: [`docs/worklogs/2026-05-09_fix_detail-filelist-clear-timing.md`](./worklogs/2026-05-09_fix_detail-filelist-clear-timing.md)
 - **작업 이력 (2026-05-10)**: `commerce-images` Storage RLS 정책 마이그레이션 + 업로드 신뢰성 UX(상태·오류 매핑·규격 안내·공개 시 썸네일 경고) — worklog: [`docs/worklogs/2026-05-10_feat_commerce-storage-upload-trust.md`](./worklogs/2026-05-10_feat_commerce-storage-upload-trust.md)
+- **작업 이력 (2026-05-09)**: 상품 등록 `/new` 하단 CTA 포렌식 계측(dev `console.log` 단계별)·검증/저장 실패 시 토스트·`createListingFull` throw 시 `console.error` — worklog: [`docs/worklogs/2026-05-09_chore_listing-new-cta-forensic-instrumentation.md`](./worklogs/2026-05-09_chore_listing-new-cta-forensic-instrumentation.md)
+- **작업 이력 (2026-05-09)**: `admin_logs.admin_tenant_id` 누락으로 감사 로그 실패 시 상품 저장까지 실패로 보이던 문제 — 로그 INSERT 보강·`createListingFull`에서 로그 실패 비치명화·저장 토스트 구분·상품 목록 `/buy`형 미리보기 — worklog: [`docs/worklogs/2026-05-09_fix_commerce-listing-admin-logs-and-preview.md`](./worklogs/2026-05-09_fix_commerce-listing-admin-logs-and-preview.md)
 
 #### [COMMERCE-003] 관리자OS 주문 처리 화면
 - **우선순위**: HIGH
