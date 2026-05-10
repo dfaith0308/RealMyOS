@@ -28,6 +28,26 @@ const ACCEPT_IMAGE =
 const MAX_THUMB_BADGES = 2
 const THUMB_H = 160
 
+type DetailDebugFlowPanel = {
+  pairs: string
+  flushEntered: string
+  flushSuccess: string
+  appendCount: string
+  lastAppendId: string
+  lastValidate: string
+  lastUpload: string
+}
+
+const DETAIL_DEBUG_FLOW_INIT: DetailDebugFlowPanel = {
+  pairs: '-',
+  flushEntered: '-',
+  flushSuccess: '-',
+  appendCount: '-',
+  lastAppendId: '-',
+  lastValidate: '-',
+  lastUpload: '-',
+}
+
 function randomBlockId(): string {
   try {
     const c = globalThis.crypto
@@ -90,6 +110,39 @@ function validateImageFile(file: File): string | null {
   if (octetOk) return null
 
   return 'JPG/PNG/WebP/HEIC·HEIF만 가능합니다(허용 확장자 또는 image/jpeg·png·webp·heic·heif, octet-stream은 확장자 필요)'
+}
+
+/**
+ * dev 전용. `validateImageFile` 본문은 수정하지 않고, 동일 분기를 반영한 분해 로그용.
+ * (validateImageFile 시그니처/동작 변경 시 이 함수도 맞출 것)
+ */
+function auditValidateImageFileMeta(file: File) {
+  const mimeRaw = (file.type ?? '').trim()
+  const mime = mimeRaw.toLowerCase()
+  const extOk = /\.(jpe?g|png|webp|heic|heif)$/i.test(file.name)
+  const mimeOk =
+    mime === 'image/jpeg' ||
+    mime === 'image/jpg' ||
+    mime === 'image/pjpeg' ||
+    mime === 'image/png' ||
+    mime === 'image/webp' ||
+    mime === 'image/heic' ||
+    mime === 'image/heif' ||
+    /^image\/heic/i.test(mime) ||
+    /^image\/heif/i.test(mime)
+  const octetOk = mime === 'application/octet-stream' && extOk
+  const vf = validateImageFile(file)
+  const extLabel = file.name.match(/\.([^.]+)$/i)?.[1] ?? '(none)'
+  return {
+    name: file.name,
+    type: file.type || '(empty)',
+    size: file.size,
+    ext: extLabel,
+    allowedMime: mimeOk,
+    allowedExt: extOk,
+    octetOk,
+    finalResult: vf === null ? 'PASS' : vf,
+  }
 }
 
 function blocksToSavedUrls(blocks: DetailImageBlock[]): string[] {
@@ -272,10 +325,19 @@ export default function ListingNewClient() {
   const [detailDebugLastFiles, setDetailDebugLastFiles] = useState(0)
   const [detailDebugLastUrl, setDetailDebugLastUrl] = useState<string>('-')
   const [detailDebugLastError, setDetailDebugLastError] = useState<string | null>(null)
+  const [detailDebugFlow, setDetailDebugFlow] = useState<DetailDebugFlowPanel>(DETAIL_DEBUG_FLOW_INIT)
   const [listingDescription, setListingDescription] = useState(empty.listingDescription)
 
   useEffect(() => {
     detailBlocksRef.current = detailBlocks
+  }, [detailBlocks])
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'development') return
+    console.log('[DETAIL STEP 12] render detailBlocks', {
+      length: detailBlocks.length,
+      ids: detailBlocks.map((b) => b.id),
+    })
   }, [detailBlocks])
   const [adminMemo, setAdminMemo] = useState(empty.adminMemo)
   const [visibility, setVisibility] = useState<'draft' | 'visible'>(empty.visibility)
@@ -436,45 +498,118 @@ export default function ListingNewClient() {
   }
 
   async function uploadDetailBlockFile(blockId: string, file: File) {
-    const v = validateImageFile(file)
-    if (v) {
+    const isDev = process.env.NODE_ENV === 'development'
+    try {
+      if (isDev) {
+        console.log('[DETAIL STEP 10] uploadDetailBlockFile start', { blockId, name: file.name })
+        setDetailDebugFlow((p) => ({ ...p, lastUpload: `start:${file.name}` }))
+      }
+      const v = validateImageFile(file)
+      if (v) {
+        if (isDev) {
+          console.log('[DETAIL STEP 10] uploadDetailBlockFile validate fail before upload', v)
+          setDetailDebugFlow((p) => ({ ...p, lastUpload: `pre-upload-reject:${v}` }))
+        }
+        setDetailBlocks((prev) => {
+          const idx = prev.findIndex((x) => x.id === blockId)
+          if (idx === -1) return prev
+          return prev.map((b) =>
+            b.id === blockId ? { ...b, uploadStatus: 'error' as const, errorMessage: v } : b,
+          )
+        })
+        return
+      }
       setDetailBlocks((prev) => {
         const idx = prev.findIndex((x) => x.id === blockId)
-        if (idx === -1) return prev
+        if (idx === -1) {
+          if (prev.length >= MAX_DETAIL_IMAGES) return prev
+          return [
+            ...prev,
+            {
+              id: blockId,
+              url: '',
+              blockKind: 'file' as const,
+              uploadStatus: 'uploading' as const,
+              fileName: file.name,
+              errorMessage: undefined,
+            },
+          ]
+        }
         return prev.map((b) =>
-          b.id === blockId ? { ...b, uploadStatus: 'error' as const, errorMessage: v } : b,
+          b.id === blockId
+            ? { ...b, uploadStatus: 'uploading' as const, errorMessage: undefined }
+            : b,
         )
       })
-      return
-    }
-    setDetailBlocks((prev) => {
-      const idx = prev.findIndex((x) => x.id === blockId)
-      if (idx === -1) {
-        if (prev.length >= MAX_DETAIL_IMAGES) return prev
-        return [
-          ...prev,
-          {
-            id: blockId,
-            url: '',
-            blockKind: 'file' as const,
-            uploadStatus: 'uploading' as const,
-            fileName: file.name,
-            errorMessage: undefined,
-          },
-        ]
-      }
-      return prev.map((b) =>
-        b.id === blockId
-          ? { ...b, uploadStatus: 'uploading' as const, errorMessage: undefined }
-          : b,
-      )
-    })
-    const fd = new FormData()
-    fd.set('file', file)
-    try {
-      const res = await uploadListingImage(fd)
-      if (!res.success) {
-        const errMsg = res.error ?? '이미지 업로드에 실패했습니다.'
+      const fd = new FormData()
+      fd.set('file', file)
+      try {
+        const res = await uploadListingImage(fd)
+        if (!res.success) {
+          const errMsg = res.error ?? '이미지 업로드에 실패했습니다.'
+          if (isDev) {
+            console.error('[DETAIL STEP 11] uploadListingImage fail', errMsg)
+            setDetailDebugFlow((p) => ({ ...p, lastUpload: `fail:${errMsg}` }))
+            setDetailDebugLastError(`upload:${errMsg}`)
+          }
+          setDetailBlocks((prev) => {
+            const idx = prev.findIndex((x) => x.id === blockId)
+            if (idx === -1) {
+              queueMicrotask(() => showToast(errMsg))
+              return prev
+            }
+            return prev.map((b) =>
+              b.id === blockId
+                ? { ...b, uploadStatus: 'error' as const, errorMessage: errMsg }
+                : b,
+            )
+          })
+          return
+        }
+        const url = res.data?.url ?? ''
+        if (isDev) {
+          console.log('[DETAIL STEP 11] upload success', { publicUrl: url })
+          setDetailDebugLastUrl(url.trim() || '-')
+          setDetailDebugFlow((p) => ({ ...p, lastUpload: `ok:${url.slice(0, 48)}…` }))
+        }
+        setDetailBlocks((prev) => {
+          const idx = prev.findIndex((x) => x.id === blockId)
+          if (idx === -1) {
+            if (prev.length >= MAX_DETAIL_IMAGES) return prev
+            return [
+              ...prev,
+              {
+                id: blockId,
+                url,
+                blockKind: 'file' as const,
+                uploadStatus: 'done_upload' as const,
+                fileName: file.name,
+                errorMessage: undefined,
+              },
+            ]
+          }
+          return prev.map((b) =>
+            b.id === blockId
+              ? {
+                  ...b,
+                  url,
+                  uploadStatus: 'done_upload' as const,
+                  fileName: file.name,
+                  errorMessage: undefined,
+                }
+              : b,
+          )
+        })
+        if (url.trim()) {
+          showToast(file.name ? `업로드 완료 · ${file.name}` : '상세 이미지 업로드 완료')
+        }
+      } catch (netErr) {
+        const errMsg = '네트워크 오류로 업로드에 실패했습니다. 잠시 후 다시 시도해 주세요.'
+        console.error('[DETAIL STEP 11] uploadDetailBlockFile network', netErr)
+        if (isDev) {
+          setDetailDebugLastError(`network:${netErr instanceof Error ? netErr.message : String(netErr)}`)
+          setDetailDebugFlow((p) => ({ ...p, lastUpload: `network-error` }))
+        }
         setDetailBlocks((prev) => {
           const idx = prev.findIndex((x) => x.id === blockId)
           if (idx === -1) {
@@ -487,57 +622,13 @@ export default function ListingNewClient() {
               : b,
           )
         })
-        return
       }
-      const url = res.data?.url ?? ''
-      if (process.env.NODE_ENV === 'development') {
-        setDetailDebugLastUrl(url.trim() || '-')
+    } catch (fatal) {
+      console.error('[DETAIL STEP 10] uploadDetailBlockFile fatal', fatal)
+      if (isDev) {
+        setDetailDebugLastError(`uploadDetailBlockFile fatal:${fatal instanceof Error ? fatal.message : String(fatal)}`)
+        setDetailDebugFlow((p) => ({ ...p, lastUpload: 'fatal' }))
       }
-      setDetailBlocks((prev) => {
-        const idx = prev.findIndex((x) => x.id === blockId)
-        if (idx === -1) {
-          if (prev.length >= MAX_DETAIL_IMAGES) return prev
-          return [
-            ...prev,
-            {
-              id: blockId,
-              url,
-              blockKind: 'file' as const,
-              uploadStatus: 'done_upload' as const,
-              fileName: file.name,
-              errorMessage: undefined,
-            },
-          ]
-        }
-        return prev.map((b) =>
-          b.id === blockId
-            ? {
-                ...b,
-                url,
-                uploadStatus: 'done_upload' as const,
-                fileName: file.name,
-                errorMessage: undefined,
-              }
-            : b,
-        )
-      })
-      if (url.trim()) {
-        showToast(file.name ? `업로드 완료 · ${file.name}` : '상세 이미지 업로드 완료')
-      }
-    } catch {
-      const errMsg = '네트워크 오류로 업로드에 실패했습니다. 잠시 후 다시 시도해 주세요.'
-      setDetailBlocks((prev) => {
-        const idx = prev.findIndex((x) => x.id === blockId)
-        if (idx === -1) {
-          queueMicrotask(() => showToast(errMsg))
-          return prev
-        }
-        return prev.map((b) =>
-          b.id === blockId
-            ? { ...b, uploadStatus: 'error' as const, errorMessage: errMsg }
-            : b,
-        )
-      })
     }
   }
 
@@ -553,141 +644,216 @@ export default function ListingNewClient() {
    * crypto.randomUUID 실패·flushSync 예외 등은 디버그 state에 남긴다.
    */
   function processIncomingDetailFiles(fileArr: File[]) {
-    if (process.env.NODE_ENV === 'development') {
-      setDetailDebugLastFiles(fileArr.length)
-      setDetailDebugLastError(null)
-      console.log(
-        'FILES',
-        fileArr.length,
-        fileArr.map((f) => ({ name: f.name, type: f.type || '(empty)', size: f.size })),
-      )
-      console.log('BEFORE APPEND (ref)', detailBlocksRef.current.length)
-    }
-
-    const pairs: { file: File; block: DetailImageBlock }[] = []
-    const rejectSamples: string[] = []
-    for (const file of fileArr) {
-      const err = validateImageFile(file)
-      if (err) {
-        if (process.env.NODE_ENV === 'development') {
-          console.log('VALIDATION FAIL', {
-            name: file.name,
-            type: file.type,
-            size: file.size,
-            reason: err,
-          })
-        }
-        if (rejectSamples.length < MAX_DETAIL_IMAGES) {
-          rejectSamples.push(`${file.name} | MIME:${file.type || '(empty)'} | ${err}`)
-        }
-        continue
+    const isDev = process.env.NODE_ENV === 'development'
+    try {
+      if (isDev) {
+        setDetailDebugLastFiles(fileArr.length)
+        setDetailDebugLastError(null)
+        setDetailDebugFlow(DETAIL_DEBUG_FLOW_INIT)
+        console.log('[DETAIL STEP 4] processIncomingDetailFiles', { count: fileArr.length })
+        console.log(
+          '[DETAIL STEP 4] FILES meta',
+          fileArr.map((f) => ({ name: f.name, type: f.type || '(empty)', size: f.size })),
+        )
+        console.log('[DETAIL STEP 4] BEFORE APPEND ref.length', detailBlocksRef.current.length)
       }
-      try {
-        pairs.push({
-          file,
-          block: newBlock({
+
+      const pairs: { file: File; block: DetailImageBlock }[] = []
+      const rejectSamples: string[] = []
+      for (const file of fileArr) {
+        if (isDev) {
+          console.log('[DETAIL STEP 5] validate start', file.name)
+          const audit = auditValidateImageFileMeta(file)
+          console.log('[DETAIL STEP 5-6] validate audit', audit)
+          setDetailDebugFlow((p) => ({
+            ...p,
+            lastValidate: JSON.stringify(audit),
+          }))
+        }
+        const err = validateImageFile(file)
+        if (err) {
+          if (isDev) {
+            console.log('VALIDATION FAIL', {
+              name: file.name,
+              type: file.type,
+              size: file.size,
+              reason: err,
+            })
+          }
+          if (rejectSamples.length < MAX_DETAIL_IMAGES) {
+            rejectSamples.push(`${file.name} | MIME:${file.type || '(empty)'} | ${err}`)
+          }
+          continue
+        }
+        if (isDev) {
+          console.log('[DETAIL STEP 6] validate pass', file.name)
+        }
+        try {
+          const block = newBlock({
             url: '',
             blockKind: 'file',
             uploadStatus: 'uploading',
             fileName: file.name,
-          }),
-        })
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e)
-        if (process.env.NODE_ENV === 'development') {
-          setDetailDebugLastError(`newBlock: ${msg}`)
-          console.log('newBlock throw', msg)
+          })
+          pairs.push({ file, block })
+          if (isDev) {
+            console.log('[DETAIL STEP 7] pairs push', { id: block.id, name: file.name })
+          }
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e)
+          if (isDev) {
+            setDetailDebugLastError(`newBlock: ${msg}`)
+            console.error('[DETAIL STEP 7] newBlock throw', msg)
+          }
+          showToast('상세 이미지 블록을 만들 수 없습니다. 페이지를 새로고침 후 다시 시도해 주세요.')
+          return
         }
-        showToast('상세 이미지 블록을 만들 수 없습니다. 페이지를 새로고침 후 다시 시도해 주세요.')
+      }
+
+      if (isDev) {
+        setDetailDebugFlow((p) => ({ ...p, pairs: String(pairs.length) }))
+      }
+
+      if (pairs.length === 0) {
+        const summary =
+          rejectSamples.length > 0
+            ? `검증 탈락 ${fileArr.length}건(블록 미추가). 예: ${rejectSamples.join(' | ')}`
+            : `pairs=0 (파일 ${fileArr.length}개, 원인 불명)`
+        if (isDev) {
+          setDetailDebugLastError(summary)
+          console.log('[DETAIL STEP 7-8] pairs empty skip flushSync', rejectSamples)
+        }
+        showToast(
+          rejectSamples[0] ??
+            `선택한 ${fileArr.length}개를 상세 이미지로 추가할 수 없습니다(형식·용량 확인).`,
+        )
         return
       }
-    }
 
-    if (pairs.length === 0) {
-      const summary =
-        rejectSamples.length > 0
-          ? `검증 탈락 ${fileArr.length}건(블록 미추가). 예: ${rejectSamples.join(' | ')}`
-          : `pairs=0 (파일 ${fileArr.length}개, 원인 불명)`
-      if (process.env.NODE_ENV === 'development') {
-        setDetailDebugLastError(summary)
-        console.log('NEW BLOCKS', 0, 'pairs empty; samples:', rejectSamples)
+      if (isDev) {
+        console.log(
+          '[DETAIL STEP 7] pairs built',
+          pairs.length,
+          pairs.map((p) => ({ id: p.block.id, name: p.file.name })),
+        )
       }
-      showToast(
-        rejectSamples[0] ??
-          `선택한 ${fileArr.length}개를 상세 이미지로 추가할 수 없습니다(형식·용량 확인).`,
-      )
-      return
-    }
 
-    if (process.env.NODE_ENV === 'development') {
-      console.log(
-        'NEW BLOCKS',
-        pairs.length,
-        pairs.map((p) => ({ id: p.block.id, name: p.file.name })),
-      )
-    }
-
-    let uploadJobs: { file: File; id: string }[] = []
-    const appendReducer = (prev: DetailImageBlock[]) => {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('appendReducer IN prev.length', prev.length, 'pairs', pairs.length)
+      let uploadJobs: { file: File; id: string }[] = []
+      const appendReducer = (prev: DetailImageBlock[]) => {
+        try {
+          if (isDev) {
+            console.log('[DETAIL STEP 8] appendReducer in', { prevLen: prev.length, pairsLen: pairs.length })
+          }
+          const room = Math.max(0, MAX_DETAIL_IMAGES - prev.length)
+          const slice = pairs.slice(0, room)
+          uploadJobs = slice.map((p) => ({ file: p.file, id: p.block.id }))
+          const next =
+            slice.length === 0 ? prev : [...prev, ...slice.map((p) => p.block)]
+          if (isDev) {
+            console.log('[DETAIL STEP 8] appendReducer out', {
+              nextLen: next.length,
+              appendCount: slice.length,
+              lastId: slice[slice.length - 1]?.block.id,
+            })
+          }
+          return next
+        } catch (redErr) {
+          console.error('[DETAIL STEP 8] appendReducer error', redErr)
+          if (isDev) {
+            setDetailDebugLastError(
+              `appendReducer:${redErr instanceof Error ? redErr.message : String(redErr)}`,
+            )
+          }
+          throw redErr
+        }
       }
-      const room = Math.max(0, MAX_DETAIL_IMAGES - prev.length)
-      const slice = pairs.slice(0, room)
-      uploadJobs = slice.map((p) => ({ file: p.file, id: p.block.id }))
-      if (slice.length === 0) return prev
-      return [...prev, ...slice.map((p) => p.block)]
-    }
 
-    try {
-      flushSync(() => {
-        setDetailBlocks(appendReducer)
-      })
-      if (process.env.NODE_ENV === 'development') {
-        console.log('AFTER flushSync uploadJobs', uploadJobs.length)
-        queueMicrotask(() => {
-          console.log('STATE AFTER MICROTASK (ref.length)', detailBlocksRef.current.length)
+      if (isDev) {
+        console.log('[DETAIL STEP 8] before flushSync')
+        setDetailDebugFlow((p) => ({ ...p, flushEntered: 'yes' }))
+      }
+      try {
+        flushSync(() => {
+          setDetailBlocks(appendReducer)
         })
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      if (process.env.NODE_ENV === 'development') {
-        setDetailDebugLastError(`flushSync: ${msg}`)
-      }
-      setDetailBlocks(appendReducer)
-      requestAnimationFrame(() => {
-        for (const j of uploadJobs) {
-          void uploadDetailBlockFile(j.id, j.file).catch(() => {
-            /* uploadDetailBlockFile이 error state 처리 */
+        if (isDev) {
+          console.log('[DETAIL STEP 9] after flushSync', {
+            uploadJobs: uploadJobs.length,
+            refLen: detailBlocksRef.current.length,
+          })
+          setDetailDebugFlow((p) => ({
+            ...p,
+            flushSuccess: 'yes',
+            appendCount: String(uploadJobs.length),
+            lastAppendId: uploadJobs[uploadJobs.length - 1]?.id ?? '-',
+          }))
+          queueMicrotask(() => {
+            console.log('[DETAIL STEP 9] microtask ref.length', detailBlocksRef.current.length)
           })
         }
-      })
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        console.error('[DETAIL STEP 8-9] flushSync error', e)
+        if (isDev) {
+          setDetailDebugLastError(`flushSync: ${msg}`)
+          setDetailDebugFlow((p) => ({ ...p, flushSuccess: `no:${msg}` }))
+        }
+        setDetailBlocks(appendReducer)
+        requestAnimationFrame(() => {
+          for (const j of uploadJobs) {
+            void uploadDetailBlockFile(j.id, j.file).catch((upErr) => {
+              console.error('[DETAIL upload after flushSync catch]', upErr)
+            })
+          }
+        })
+        if (uploadJobs.length < pairs.length) {
+          showToast(`상세 이미지는 최대 ${MAX_DETAIL_IMAGES}장까지입니다`)
+        }
+        return
+      }
+
       if (uploadJobs.length < pairs.length) {
         showToast(`상세 이미지는 최대 ${MAX_DETAIL_IMAGES}장까지입니다`)
       }
-      return
-    }
 
-    if (uploadJobs.length < pairs.length) {
-      showToast(`상세 이미지는 최대 ${MAX_DETAIL_IMAGES}장까지입니다`)
-    }
-
-    for (const j of uploadJobs) {
-      void uploadDetailBlockFile(j.id, j.file).catch(() => {
-        /* 상태는 uploadDetailBlockFile 내부에서 갱신 */
-      })
+      for (const j of uploadJobs) {
+        void uploadDetailBlockFile(j.id, j.file).catch((upErr) => {
+          console.error('[DETAIL uploadDetailBlockFile promise]', upErr)
+          if (isDev) {
+            setDetailDebugLastError(`upload promise:${upErr instanceof Error ? upErr.message : String(upErr)}`)
+          }
+        })
+      }
+    } catch (outer) {
+      console.error('[DETAIL processIncomingDetailFiles outer]', outer)
+      if (isDev) {
+        setDetailDebugLastError(
+          `processIncomingDetailFiles:${outer instanceof Error ? outer.message : String(outer)}`,
+        )
+        setDetailDebugFlow((p) => ({ ...p, flushSuccess: 'outer-error' }))
+      }
+      showToast('상세 이미지 추가 중 오류가 발생했습니다. 콘솔을 확인해 주세요.')
     }
   }
 
   function addDetailFilesFromPicker(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = e.target.files
-    const n = files?.length ?? 0
-    if (process.env.NODE_ENV === 'development') {
+    const isDev = process.env.NODE_ENV === 'development'
+    if (isDev) {
+      console.log('[DETAIL STEP 2-3] addDetailFilesFromPicker onChange')
+    }
+    /** FileList는 input과 라이브 연결됨 — value 초기화 후에는 같은 참조가 비어 보임. 반드시 먼저 배열 스냅샷. */
+    const filesArr = Array.from(e.currentTarget.files ?? [])
+    const n = filesArr.length
+    if (isDev) {
+      console.log('[DETAIL STEP 3] FileList length', n)
       setDetailDebugLastFiles(n)
     }
-    e.target.value = ''
-    if (!files?.length) return
-    processIncomingDetailFiles(Array.from(files))
+    if (filesArr.length === 0) {
+      if (isDev) console.log('[DETAIL STEP 3] abort: no files selected')
+      return
+    }
+    processIncomingDetailFiles(filesArr)
+    e.currentTarget.value = ''
   }
 
   function onDetailListDrop(e: React.DragEvent) {
@@ -794,6 +960,7 @@ export default function ListingNewClient() {
       setDetailDebugLastFiles(0)
       setDetailDebugLastUrl('-')
       setDetailDebugLastError(null)
+      setDetailDebugFlow(DETAIL_DEBUG_FLOW_INIT)
     }
     setListingDescription(base.listingDescription)
     setAdminMemo(base.adminMemo)
@@ -1642,7 +1809,16 @@ export default function ListingNewClient() {
                   type="button"
                   className={mod.btnEmphasis}
                   disabled={pending || detailBlocks.length >= MAX_DETAIL_IMAGES}
-                  onClick={() => detailFilesRef.current?.click()}
+                  onClick={() => {
+                    if (process.env.NODE_ENV === 'development') {
+                      console.log('[DETAIL STEP 1] +이미지추가 click', {
+                        ref: Boolean(detailFilesRef.current),
+                        pending,
+                        atCap: detailBlocks.length >= MAX_DETAIL_IMAGES,
+                      })
+                    }
+                    detailFilesRef.current?.click()
+                  }}
                 >
                   + 이미지 추가
                 </button>
@@ -1798,6 +1974,15 @@ export default function ListingNewClient() {
                   <div>error: {detailDebugCounts.err}</div>
                   <div>lastFiles: {detailDebugLastFiles}</div>
                   <div>lastUrl: {detailDebugLastUrl}</div>
+                  <div>pairs: {detailDebugFlow.pairs}</div>
+                  <div>flushSync entered: {detailDebugFlow.flushEntered}</div>
+                  <div>flushSync success: {detailDebugFlow.flushSuccess}</div>
+                  <div>append count: {detailDebugFlow.appendCount}</div>
+                  <div>last append id: {detailDebugFlow.lastAppendId}</div>
+                  <div style={{ wordBreak: 'break-all' }}>
+                    last validate: {detailDebugFlow.lastValidate}
+                  </div>
+                  <div style={{ wordBreak: 'break-all' }}>last upload: {detailDebugFlow.lastUpload}</div>
                   {detailDebugLastError ? <div style={{ color: '#b91c1c' }}>err: {detailDebugLastError}</div> : null}
                   <div style={{ marginTop: 10 }}>
                     <button
