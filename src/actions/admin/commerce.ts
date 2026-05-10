@@ -76,6 +76,8 @@ export type CommerceListingRow = {
   thumbnail_url: string | null
   image_urls: string[] | null
   description: string | null
+  spec: string | null
+  admin_memo: string | null
   products: { name: string | null; category_id: string | null } | null
 }
 
@@ -178,6 +180,8 @@ export async function getListings(filters?: {
       thumbnail_url,
       image_urls,
       description,
+      spec,
+      admin_memo,
       products ( name, category_id )
     `,
     )
@@ -205,6 +209,8 @@ export async function getListings(filters?: {
     thumbnail_url: row.thumbnail_url ?? null,
     image_urls: row.image_urls ?? null,
     description: row.description ?? null,
+    spec: (row.spec as string | null) ?? null,
+    admin_memo: (row.admin_memo as string | null) ?? null,
     products: Array.isArray(row.products) ? row.products[0] ?? null : row.products ?? null,
   })) as CommerceListingRow[]
 
@@ -232,6 +238,41 @@ export async function getCategories(): Promise<ActionResult<{ categories: Platfo
       categories: (data ?? []) as PlatformCommerceCategory[],
     },
   }
+}
+
+export async function getSubCategories(
+  parentId: string,
+): Promise<ActionResult<{ categories: PlatformCommerceCategory[] }>> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const pid = String(parentId ?? '').trim()
+  if (!pid) return { success: false, error: '대분류를 선택해 주세요' }
+
+  const { data: parent, error: pErr } = await supabase
+    .from('product_categories')
+    .select('id')
+    .eq('id', pid)
+    .eq('tenant_id', PLATFORM_OWNER_TENANT)
+    .is('parent_id', null)
+    .eq('is_active', true)
+    .maybeSingle()
+
+  if (pErr) return { success: false, error: pErr.message }
+  if (!parent) return { success: false, error: '유효한 대분류가 아닙니다' }
+
+  const { data, error } = await supabase
+    .from('product_categories')
+    .select('id, name, parent_id')
+    .eq('tenant_id', PLATFORM_OWNER_TENANT)
+    .eq('parent_id', pid)
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+    .order('name', { ascending: true })
+
+  if (error) return { success: false, error: error.message }
+  return { success: true, data: { categories: (data ?? []) as PlatformCommerceCategory[] } }
 }
 
 /**
@@ -746,6 +787,251 @@ export async function createListing(input: {
 
   revalidatePath('/admin/commerce/products')
   return { success: true, data: { listing_id } }
+}
+
+/** createProduct()와 같이 product_costs 행이 필요해 최소값으로 둠(실제 판매가는 listing). */
+const PLATFORM_COMMERCE_PLACEHOLDER_COST = 1
+
+function buildPlatformProductDisplayName(
+  brand_name: string | null,
+  product_name: string,
+  spec: string | null,
+): string {
+  const parts: string[] = []
+  const b = brand_name?.trim()
+  const n = product_name.trim()
+  const sp = spec?.trim()
+  if (b) parts.push(b)
+  parts.push(n)
+  if (sp) parts.push(sp)
+  return parts.join(' ')
+}
+
+async function allocateProductCodeForPlatform(supabase: any): Promise<{ ok: true; code: string } | { ok: false; error: string }> {
+  try {
+    const { data: seqData } = await supabase.rpc('nextval_product_code')
+    if (seqData != null && Number.isFinite(Number(seqData))) {
+      return { ok: true, code: `P${String(Number(seqData)).padStart(4, '0')}` }
+    }
+  } catch {
+    // sequence 없으면 fallback
+  }
+  const { data: lastProduct, error } = await supabase
+    .from('products')
+    .select('product_code')
+    .like('product_code', 'P%')
+    .order('product_code', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) return { ok: false, error: error.message }
+  const n = lastProduct?.product_code
+    ? (parseInt(String(lastProduct.product_code).replace(/[^0-9]/g, ''), 10) || 0) + 1
+    : 1
+  return { ok: true, code: `P${String(n).padStart(4, '0')}` }
+}
+
+export async function uploadListingImage(formData: FormData): Promise<ActionResult<{ url: string }>> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const raw = formData.get('file')
+  if (!raw || !(raw instanceof File)) {
+    return { success: false, error: '파일이 없습니다' }
+  }
+  const file = raw
+  if (file.size === 0) return { success: false, error: '빈 파일입니다' }
+
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_') || 'image'
+  const path = `admin/${Date.now()}_${Math.random().toString(36).slice(2, 10)}_${safeName}`
+  const buf = Buffer.from(await file.arrayBuffer())
+
+  const { data, error } = await supabase.storage.from('commerce-images').upload(path, buf, {
+    contentType: file.type || 'application/octet-stream',
+    upsert: false,
+  })
+
+  if (error) {
+    const msg = error.message ?? String(error)
+    if (/bucket not found|Bucket not found|404|Not Found/i.test(msg)) {
+      return {
+        success: false,
+        error:
+          'commerce-images 저장소가 없습니다. Supabase Storage에서 commerce-images 버킷을 먼저 생성해주세요.',
+      }
+    }
+    return { success: false, error: msg || '업로드 실패' }
+  }
+
+  const { data: pub } = supabase.storage.from('commerce-images').getPublicUrl(data.path)
+  return { success: true, data: { url: pub.publicUrl } }
+}
+
+export async function createListingFull(input: {
+  brand_name: string | null
+  product_name: string
+  spec: string | null
+  thumbnail_url: string | null
+  category_id: string
+  commerce_price: number
+  original_price: number | null
+  shipping_type: ListingShippingType
+  admin_memo: string | null
+  status: 'draft' | 'visible'
+}): Promise<ActionResult<{ listing_id: string; product_id: string }>> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const product_name = String(input.product_name ?? '').trim()
+  if (!product_name) return { success: false, error: '상품명을 입력해 주세요' }
+
+  const category_id = String(input.category_id ?? '').trim()
+  if (!category_id) return { success: false, error: '카테고리를 선택해 주세요' }
+
+  const price = input.commerce_price
+  if (!Number.isFinite(price) || !Number.isInteger(price) || price <= 0) {
+    return { success: false, error: '식식이 판매가는 1원 이상의 정수여야 합니다' }
+  }
+
+  const { data: catRow, error: cErr } = await supabase
+    .from('product_categories')
+    .select('id')
+    .eq('id', category_id)
+    .eq('tenant_id', PLATFORM_OWNER_TENANT)
+    .eq('is_active', true)
+    .maybeSingle()
+
+  if (cErr) return { success: false, error: cErr.message }
+  if (!catRow) return { success: false, error: '유효한 카테고리가 아닙니다' }
+
+  const st = input.shipping_type
+  if (!(LISTING_SHIPPING_TYPES as readonly string[]).includes(st)) {
+    return { success: false, error: '유효하지 않은 배송 유형입니다' }
+  }
+
+  const statusIn = input.status
+  if (statusIn !== 'draft' && statusIn !== 'visible') {
+    return { success: false, error: '유효하지 않은 공개 설정입니다' }
+  }
+
+  const brand_name = String(input.brand_name ?? '').trim() || null
+  const spec = String(input.spec ?? '').trim() || null
+  const admin_memo = String(input.admin_memo ?? '').trim() || null
+  const thumbnail_url = String(input.thumbnail_url ?? '').trim() || null
+
+  let original_price: number | null = null
+  const opIn = input.original_price
+  if (opIn != null && Number.isFinite(opIn) && Number.isInteger(opIn) && opIn > 0) {
+    if (opIn > price) original_price = opIn
+  }
+
+  const dbProductName = buildPlatformProductDisplayName(brand_name, product_name, spec)
+
+  const codeRes = await allocateProductCodeForPlatform(supabase)
+  if (!codeRes.ok) return { success: false, error: codeRes.error }
+  const product_code = codeRes.code
+
+  const today = new Date().toISOString().slice(0, 10)
+
+  const { data: insertedProduct, error: pInsErr } = await supabase
+    .from('products')
+    .insert({
+      tenant_id: PLATFORM_OWNER_TENANT,
+      product_code,
+      name: dbProductName,
+      tax_type: 'taxable',
+      category_id,
+      supplier_id: null,
+      barcode: null,
+      ingredients: null,
+      item_report_number: null,
+      min_margin_rate: null,
+      procurement_type: 'consignment',
+    })
+    .select('id')
+    .single()
+
+  if (pInsErr || !insertedProduct) {
+    return { success: false, error: pInsErr?.message ?? '상품 저장 실패' }
+  }
+  const product_id = insertedProduct.id as string
+
+  const { error: costErr } = await supabase.from('product_costs').insert({
+    product_id,
+    cost_price: PLATFORM_COMMERCE_PLACEHOLDER_COST,
+    start_date: today,
+    end_date: null,
+  })
+
+  if (costErr) {
+    await supabase.from('products').update({ deleted_at: new Date().toISOString() }).eq('id', product_id)
+    return { success: false, error: `매입가 이력 저장 실패: ${costErr.message}` }
+  }
+
+  const { error: statsErr } = await supabase.from('product_stats').upsert(
+    { product_id, used_by_count: 0, avg_unit_price: price },
+    { onConflict: 'product_id' },
+  )
+  if (statsErr) {
+    await supabase.from('product_costs').delete().eq('product_id', product_id)
+    await supabase.from('products').update({ deleted_at: new Date().toISOString() }).eq('id', product_id)
+    return { success: false, error: `product_stats 저장 실패: ${statsErr.message}` }
+  }
+
+  const is_visible = statusIn === 'visible'
+  const listingStatus: ListingStatus = statusIn === 'visible' ? 'visible' : 'draft'
+
+  const { data: insertedListing, error: lErr } = await supabase
+    .from('commerce_product_listings')
+    .insert({
+      tenant_id: PLATFORM_OWNER_TENANT,
+      product_id,
+      owner_type: 'platform',
+      owner_tenant_id: PLATFORM_OWNER_TENANT,
+      commerce_price: price,
+      brand_name,
+      original_price,
+      shipping_type: st,
+      category_id,
+      status: listingStatus,
+      is_visible,
+      thumbnail_url,
+      description: null,
+      spec,
+      admin_memo,
+    })
+    .select('id')
+    .single()
+
+  if (lErr || !insertedListing) {
+    await supabase.from('product_costs').delete().eq('product_id', product_id)
+    await supabase.from('products').update({ deleted_at: new Date().toISOString() }).eq('id', product_id)
+    return { success: false, error: lErr?.message ?? 'Listing 저장 실패' }
+  }
+
+  const listing_id = insertedListing.id as string
+
+  const logRes = await insertAdminLog(supabase, {
+    admin_id: auth.ctx.user_id,
+    tenant_id: PLATFORM_OWNER_TENANT,
+    action_type: 'listing_created_full',
+    target_table: 'commerce_product_listings',
+    target_id: listing_id,
+    new_value: {
+      listing_id,
+      product_id,
+      product_name,
+      brand_name,
+      spec,
+      commerce_price: price,
+      status: statusIn,
+    },
+  })
+  if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
+
+  revalidatePath('/admin/commerce/products')
+  return { success: true, data: { listing_id, product_id } }
 }
 
 export async function getProducts(search?: string): Promise<ActionResult<{ products: ProductPickRow[] }>> {
