@@ -1171,6 +1171,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **작업 이력 (2026-05-10)**: `commerce-images` Storage RLS 정책 마이그레이션 + 업로드 신뢰성 UX(상태·오류 매핑·규격 안내·공개 시 썸네일 경고) — worklog: [`docs/worklogs/2026-05-10_feat_commerce-storage-upload-trust.md`](./worklogs/2026-05-10_feat_commerce-storage-upload-trust.md)
 - **작업 이력 (2026-05-09)**: 상품 등록 `/new` 하단 CTA 포렌식 계측(dev `console.log` 단계별)·검증/저장 실패 시 토스트·`createListingFull` throw 시 `console.error` — worklog: [`docs/worklogs/2026-05-09_chore_listing-new-cta-forensic-instrumentation.md`](./worklogs/2026-05-09_chore_listing-new-cta-forensic-instrumentation.md)
 - **작업 이력 (2026-05-09)**: `admin_logs.admin_tenant_id` 누락으로 감사 로그 실패 시 상품 저장까지 실패로 보이던 문제 — 로그 INSERT 보강·`createListingFull`에서 로그 실패 비치명화·저장 토스트 구분·상품 목록 `/buy`형 미리보기 — worklog: [`docs/worklogs/2026-05-09_fix_commerce-listing-admin-logs-and-preview.md`](./worklogs/2026-05-09_fix_commerce-listing-admin-logs-and-preview.md)
+- **작업 이력 (2026-05-09)**: 상품관리「스토어 미리보기」— 가짜 카드 제거·`NEXT_PUBLIC_STOREFRONT_ORIGIN` iframe으로 식당OS 실제 `/buy`·`/buy/products/[id]` 검수 — worklog: [`docs/worklogs/2026-05-09_feat_admin-storefront-iframe-preview.md`](./worklogs/2026-05-09_feat_admin-storefront-iframe-preview.md)
 
 #### [COMMERCE-003] 관리자OS 주문 처리 화면
 - **우선순위**: HIGH
