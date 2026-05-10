@@ -26,6 +26,18 @@ const ACCEPT_IMAGE = 'image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp'
 const MAX_THUMB_BADGES = 2
 const THUMB_H = 160
 
+function randomBlockId(): string {
+  try {
+    const c = globalThis.crypto
+    if (c && typeof c.randomUUID === 'function') {
+      return c.randomUUID()
+    }
+  } catch {
+    /* 일부 환경(비보안 컨텍스트 등)에서 randomUUID 사용 불가 */
+  }
+  return `blk_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`
+}
+
 export type DetailImageBlock = {
   id: string
   url: string
@@ -38,7 +50,7 @@ export type DetailImageBlock = {
 
 function newBlock(partial?: Partial<DetailImageBlock>): DetailImageBlock {
   return {
-    id: crypto.randomUUID(),
+    id: randomBlockId(),
     url: partial?.url ?? '',
     blockKind: partial?.blockKind ?? 'file',
     uploadStatus: partial?.uploadStatus ?? 'idle',
@@ -63,6 +75,16 @@ function blocksToSavedUrls(blocks: DetailImageBlock[]): string[] {
   return blocks
     .filter((b) => b.uploadStatus !== 'uploading' && b.uploadStatus !== 'error' && b.url.trim())
     .map((b) => b.url.trim())
+}
+
+function detailBlockStatusLabel(block: DetailImageBlock): string {
+  if (block.uploadStatus === 'uploading') return '상태: 업로드 중'
+  if (block.uploadStatus === 'error') return '상태: 업로드 실패'
+  if (block.uploadStatus === 'done_upload') return '상태: 업로드 완료'
+  if (block.uploadStatus === 'url_linked') return '상태: 외부 URL 연결'
+  if (block.blockKind === 'url' && !block.url.trim()) return '상태: URL 입력 대기'
+  if (block.url.trim()) return '상태: 미리보기'
+  return '상태: 대기'
 }
 
 /** 하드코딩 썸네일 뱃지 (향후 뱃지 관리 화면에서 확장) */
@@ -225,6 +247,10 @@ export default function ListingNewClient() {
   const [thumbSource, setThumbSource] = useState<'none' | 'upload' | 'url'>('none')
   const [thumbPublicWarning, setThumbPublicWarning] = useState(false)
   const [detailBlocks, setDetailBlocks] = useState<DetailImageBlock[]>(empty.detailBlocks)
+  /** 개발용: 상세 이미지 피커·업로드 추적 (배포 번들에서 NODE_ENV로 숨김) */
+  const [detailDebugLastFiles, setDetailDebugLastFiles] = useState(0)
+  const [detailDebugLastUrl, setDetailDebugLastUrl] = useState<string>('-')
+  const [detailDebugLastError, setDetailDebugLastError] = useState<string | null>(null)
   const [listingDescription, setListingDescription] = useState(empty.listingDescription)
   const [adminMemo, setAdminMemo] = useState(empty.adminMemo)
   const [visibility, setVisibility] = useState<'draft' | 'visible'>(empty.visibility)
@@ -438,6 +464,9 @@ export default function ListingNewClient() {
         return
       }
       const url = res.data?.url ?? ''
+      if (process.env.NODE_ENV === 'development') {
+        setDetailDebugLastUrl(url.trim() || '-')
+      }
       setDetailBlocks((prev) => {
         const idx = prev.findIndex((x) => x.id === blockId)
         if (idx === -1) {
@@ -493,45 +522,96 @@ export default function ListingNewClient() {
     })
   }
 
-  function addDetailFilesFromPicker(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = e.target.files
-    e.target.value = ''
-    if (!files?.length) return
-    void ingestDetailFiles(files)
-  }
-
   /**
-   * 블록 append 직후 microtask에서 uploadDetailBlockFile을 돌리면,
-   * React가 아직 state를 커밋하지 않아 prev에 blockId가 없고
-   * map 기반 setState가 전부 no-op → 업로드는 되어도 UI/저장 URL이 반영되지 않는다.
-   * macrotask(setTimeout 0)로 한 틀 뒤에 업로드를 시작한다.
+   * 파일 선택/드롭 직시 검증·블록 추가(업로드 중)·flushSync 커밋 후 서버 업로드.
+   * crypto.randomUUID 실패·flushSync 예외 등은 디버그 state에 남긴다.
    */
-  async function ingestDetailFiles(files: FileList) {
-    const arr = Array.from(files)
-    for (const file of arr) {
+  function processIncomingDetailFiles(fileArr: File[]) {
+    if (process.env.NODE_ENV === 'development') {
+      setDetailDebugLastFiles(fileArr.length)
+      setDetailDebugLastError(null)
+    }
+
+    const pairs: { file: File; block: DetailImageBlock }[] = []
+    for (const file of fileArr) {
       const err = validateImageFile(file)
       if (err) {
         showToast(err)
         continue
       }
-      const b = newBlock({ url: '', blockKind: 'file', uploadStatus: 'uploading' })
-      let skippedFull = false
-      flushSync(() => {
-        setDetailBlocks((prev) => {
-          if (prev.length >= MAX_DETAIL_IMAGES) {
-            skippedFull = true
-            return prev
-          }
-          skippedFull = false
-          return [...prev, b]
+      try {
+        pairs.push({
+          file,
+          block: newBlock({
+            url: '',
+            blockKind: 'file',
+            uploadStatus: 'uploading',
+            fileName: file.name,
+          }),
         })
-      })
-      if (skippedFull) {
-        showToast(`상세 이미지는 최대 ${MAX_DETAIL_IMAGES}장까지입니다`)
-        break
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        if (process.env.NODE_ENV === 'development') {
+          setDetailDebugLastError(`newBlock: ${msg}`)
+        }
+        showToast('상세 이미지 블록을 만들 수 없습니다. 페이지를 새로고침 후 다시 시도해 주세요.')
+        return
       }
-      await uploadDetailBlockFile(b.id, file)
     }
+    if (pairs.length === 0) return
+
+    let uploadJobs: { file: File; id: string }[] = []
+    const appendReducer = (prev: DetailImageBlock[]) => {
+      const room = Math.max(0, MAX_DETAIL_IMAGES - prev.length)
+      const slice = pairs.slice(0, room)
+      uploadJobs = slice.map((p) => ({ file: p.file, id: p.block.id }))
+      if (slice.length === 0) return prev
+      return [...prev, ...slice.map((p) => p.block)]
+    }
+
+    try {
+      flushSync(() => {
+        setDetailBlocks(appendReducer)
+      })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (process.env.NODE_ENV === 'development') {
+        setDetailDebugLastError(`flushSync: ${msg}`)
+      }
+      setDetailBlocks(appendReducer)
+      requestAnimationFrame(() => {
+        for (const j of uploadJobs) {
+          void uploadDetailBlockFile(j.id, j.file).catch(() => {
+            /* uploadDetailBlockFile이 error state 처리 */
+          })
+        }
+      })
+      if (uploadJobs.length < pairs.length) {
+        showToast(`상세 이미지는 최대 ${MAX_DETAIL_IMAGES}장까지입니다`)
+      }
+      return
+    }
+
+    if (uploadJobs.length < pairs.length) {
+      showToast(`상세 이미지는 최대 ${MAX_DETAIL_IMAGES}장까지입니다`)
+    }
+
+    for (const j of uploadJobs) {
+      void uploadDetailBlockFile(j.id, j.file).catch(() => {
+        /* 상태는 uploadDetailBlockFile 내부에서 갱신 */
+      })
+    }
+  }
+
+  function addDetailFilesFromPicker(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files
+    const n = files?.length ?? 0
+    if (process.env.NODE_ENV === 'development') {
+      setDetailDebugLastFiles(n)
+    }
+    e.target.value = ''
+    if (!files?.length) return
+    processIncomingDetailFiles(Array.from(files))
   }
 
   function onDetailListDrop(e: React.DragEvent) {
@@ -539,7 +619,7 @@ export default function ListingNewClient() {
     e.stopPropagation()
     if (pending) return
     const files = e.dataTransfer.files
-    if (files?.length) void ingestDetailFiles(files)
+    if (files?.length) processIncomingDetailFiles(Array.from(files))
   }
 
   function parseOriginal(): number | null {
@@ -634,6 +714,11 @@ export default function ListingNewClient() {
     setThumbSource('none')
     setThumbPublicWarning(false)
     setDetailBlocks(base.detailBlocks)
+    if (process.env.NODE_ENV === 'development') {
+      setDetailDebugLastFiles(0)
+      setDetailDebugLastUrl('-')
+      setDetailDebugLastError(null)
+    }
     setListingDescription(base.listingDescription)
     setAdminMemo(base.adminMemo)
     setVisibility(base.visibility)
@@ -718,6 +803,21 @@ export default function ListingNewClient() {
       }).length,
     [detailBlocks],
   )
+  const detailDebugCounts = useMemo(() => {
+    let uploading = 0
+    let success = 0
+    let err = 0
+    for (const b of detailBlocks) {
+      if (b.uploadStatus === 'uploading') uploading += 1
+      else if (b.uploadStatus === 'error') err += 1
+      else if (
+        (b.uploadStatus === 'done_upload' || b.uploadStatus === 'url_linked') &&
+        b.url.trim()
+      )
+        success += 1
+    }
+    return { uploading, success, err }
+  }, [detailBlocks])
   const marginModeDisabled = cost <= 0
 
   function renderImageOverlays() {
@@ -1423,6 +1523,9 @@ export default function ListingNewClient() {
               onDragOver={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
+                if (Array.from(e.dataTransfer.types).includes('Files')) {
+                  e.dataTransfer.dropEffect = 'copy'
+                }
               }}
               onDrop={onDetailListDrop}
             >
@@ -1487,7 +1590,7 @@ export default function ListingNewClient() {
               <div className={mod.detailBlockList}>
                 {detailBlocks.length === 0 ? (
                   <p className={mod.hint} style={{ margin: 0 }}>
-                    아직 상세 이미지가 없습니다. &quot;+ 이미지 추가&quot;로 올리면 이 영역에 카드·미리보기가 나타납니다.
+                    아직 상세 이미지가 없습니다. &quot;+ 이미지 추가&quot;를 누르면 이 영역에 카드가 나타납니다.
                   </p>
                 ) : null}
                 {detailBlocks.map((block, index) => (
@@ -1496,10 +1599,20 @@ export default function ListingNewClient() {
                     className={mod.detailBlock}
                     onDragOver={(e) => {
                       e.preventDefault()
-                      e.dataTransfer.dropEffect = 'move'
+                      e.stopPropagation()
+                      if (Array.from(e.dataTransfer.types).includes('Files')) {
+                        e.dataTransfer.dropEffect = 'copy'
+                      } else {
+                        e.dataTransfer.dropEffect = 'move'
+                      }
                     }}
                     onDrop={(e) => {
                       e.preventDefault()
+                      e.stopPropagation()
+                      if (e.dataTransfer.files?.length) {
+                        if (!pending) processIncomingDetailFiles(Array.from(e.dataTransfer.files))
+                        return
+                      }
                       const from = parseInt(e.dataTransfer.getData('text/plain'), 10)
                       if (Number.isNaN(from)) return
                       reorderDetailBlocks(from, index)
@@ -1508,7 +1621,9 @@ export default function ListingNewClient() {
                     <div className={mod.detailBlockHeader}>
                       <span
                         className={mod.dragHandle}
-                        draggable={block.uploadStatus !== 'uploading'}
+                        draggable={
+                          detailBlocks.length >= 2 && block.uploadStatus !== 'uploading'
+                        }
                         onDragStart={(e) => {
                           e.dataTransfer.setData('text/plain', String(index))
                           e.dataTransfer.effectAllowed = 'move'
@@ -1528,6 +1643,7 @@ export default function ListingNewClient() {
                       </button>
                     </div>
                     <div className={mod.detailBlockBody}>
+                      <p className={mod.detailBlockStatusTag}>{detailBlockStatusLabel(block)}</p>
                       {block.uploadStatus === 'uploading' ? (
                         <div className={mod.detailBlockStatus}>
                           <div className={mod.detailSkeleton} aria-hidden />
@@ -1596,6 +1712,19 @@ export default function ListingNewClient() {
                   </div>
                 ))}
               </div>
+
+              {process.env.NODE_ENV === 'development' ? (
+                <div className={mod.detailDebugPanel} data-testid="listing-detail-debug">
+                  <div className={mod.detailDebugTitle}>DEBUG</div>
+                  <div>blocks: {detailBlocks.length}</div>
+                  <div>uploading: {detailDebugCounts.uploading}</div>
+                  <div>success: {detailDebugCounts.success}</div>
+                  <div>error: {detailDebugCounts.err}</div>
+                  <div>lastFiles: {detailDebugLastFiles}</div>
+                  <div>lastUrl: {detailDebugLastUrl}</div>
+                  {detailDebugLastError ? <div style={{ color: '#b91c1c' }}>err: {detailDebugLastError}</div> : null}
+                </div>
+              ) : null}
 
               <div className={mod.descBlockCard}>
                 <div className={mod.label}>상세 설명 (하단 텍스트 블록)</div>
