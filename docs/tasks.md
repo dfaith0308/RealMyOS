@@ -28,6 +28,7 @@
 9. **`docs/TEST-RUN-001.md`** — 위 체크리스트를 **손 실행 순서**로 푼 운영자용 가이드(환경 확인 STEP 0 ~ 데이터 정리 STEP 8·비가역 검증·기록 템플릿). 코드 경로·테이블명은 저장소 현행 기준.
 10. **`docs/PAYMENT-FORENSIC-001.md`** — storefront **결제·주문** 실구현 범위(Toss·무통장·카카오·`commerce_orders`) 포렌식; `COMMERCE-FLOW.md` 대비 코드 갭 명시.
 11. **`docs/ORDER-FORENSIC-001.md`** — 공급자 **`orders`/`order_lines`** 주문등록·수금동시처리·`point_used`/할인·거래처 연결·`order_edit_lock_days` 수정제한 포렌식; `commerce_orders`와 구분.
+12. **`docs/ORDER-LOCK-FORENSIC-001.md`** — `order_edit_lock_days`가 **`settings` vs `admin_settings`** 중 어디를 읽는지·잠금 bypass 여부·운영 영향(CASE) 정리.
 
 ### [OPS — AI worklog] 절차 기록 (감사 ID와 별도)
 
@@ -73,6 +74,7 @@
 - **작업 이력 (2026-05-14)**: `docs/PAYMENT-FORENSIC-001.md` storefront 결제 구조 **포렌식**(무통장·카드·카카오·PG·주문-결제 관계) — worklog: [`docs/worklogs/2026-05-14_docs_payment-forensic-001-storefront-payment.md`](./worklogs/2026-05-14_docs_payment-forensic-001-storefront-payment.md)
 - **작업 이력 (2026-05-14)**: `ORDER-FORENSIC-001` 공급자 주문·수금·적립금 필드·수정잠금 포렌식 — worklog: [`docs/worklogs/2026-05-14_docs_order-forensic-001-supplier-orders.md`](./worklogs/2026-05-14_docs_order-forensic-001-supplier-orders.md)
 - **작업 이력 (2026-05-14)**: `BANK-TRANSFER-001` 무통장 계좌 `admin_settings` + 관리자 UI + 식당OS 체크아웃 표시 — worklog: [`docs/worklogs/2026-05-14_feat_bank-transfer-001-storefront-bank-settings.md`](./worklogs/2026-05-14_feat_bank-transfer-001-storefront-bank-settings.md)
+- **작업 이력 (2026-05-14)**: `ORDER-LOCK-FORENSIC-001` 주문 수정 잠금·`admin_settings` vs `settings` 연결 포렌식 — worklog: [`docs/worklogs/2026-05-14_docs_order-lock-forensic-001-settings-vs-admin.md`](./worklogs/2026-05-14_docs_order-lock-forensic-001-settings-vs-admin.md)
 
 ---
 
@@ -1323,6 +1325,15 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **산출물**: [`docs/ORDER-FORENSIC-001.md`](./ORDER-FORENSIC-001.md)
 - **migration 필요**: NO
 - **작업 이력 (2026-05-14)**: 포렌식 문서·문서 사용법·OPS 이력·본 블록 반영 — worklog: [`docs/worklogs/2026-05-14_docs_order-forensic-001-supplier-orders.md`](./worklogs/2026-05-14_docs_order-forensic-001-supplier-orders.md)
+
+#### [ORDER-LOCK-FORENSIC-001] `order_edit_lock_days` — `admin_settings` 연결 여부 (문서)
+- **우선순위**: HIGH (운영 설정 기대 vs 실코드 테이블 불일치)
+- **선행 조건**: 없음 (`src/` grep·파일 열람만)
+- **상태**: **완료 (2026-05-14)**
+- **설명**: `order_edit_lock_days` 문자열 사용처·`getLockDays`/`updateOrder`/편집 UI 경로를 확정하고, **`admin_settings`가 아닌 테넌트 `settings`** 가 SSOT임을 기록.
+- **산출물**: [`docs/ORDER-LOCK-FORENSIC-001.md`](./ORDER-LOCK-FORENSIC-001.md)
+- **migration 필요**: NO
+- **작업 이력 (2026-05-14)**: 문서·`tasks.md`(문서 사용법 12·OPS·본 블록)·worklog — worklog: [`docs/worklogs/2026-05-14_docs_order-lock-forensic-001-settings-vs-admin.md`](./worklogs/2026-05-14_docs_order-lock-forensic-001-settings-vs-admin.md)
 
 ---
 
