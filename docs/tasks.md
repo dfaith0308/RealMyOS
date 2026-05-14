@@ -30,6 +30,7 @@
 11. **`docs/ORDER-FORENSIC-001.md`** — 공급자 **`orders`/`order_lines`** 주문등록·수금동시처리·`point_used`/할인·거래처 연결·`order_edit_lock_days` 수정제한 포렌식; `commerce_orders`와 구분.
 12. **`docs/ORDER-LOCK-FORENSIC-001.md`** — `order_edit_lock_days`가 **`settings` vs `admin_settings`** 중 어디를 읽는지·잠금 bypass 여부·운영 영향(CASE) 정리.
 13. **`docs/POINT-FORENSIC-001.md`** — `orders.point_used`·적립금 UI가 **실제 잔고 시스템인지** vs **헤더 할인 숫자인지**; 테이블·원장·취소·중복 사용 포렌식.
+14. **`docs/DISCOUNT-FORENSIC-001.md`** — 기간할인·프로모션·`commerce_price`/`original_price`·storefront 계산·고객별 타깃·export 갭 포렌식.
 
 ### [OPS — AI worklog] 절차 기록 (감사 ID와 별도)
 
@@ -77,6 +78,7 @@
 - **작업 이력 (2026-05-14)**: `BANK-TRANSFER-001` 무통장 계좌 `admin_settings` + 관리자 UI + 식당OS 체크아웃 표시 — worklog: [`docs/worklogs/2026-05-14_feat_bank-transfer-001-storefront-bank-settings.md`](./worklogs/2026-05-14_feat_bank-transfer-001-storefront-bank-settings.md)
 - **작업 이력 (2026-05-14)**: `ORDER-LOCK-FORENSIC-001` 주문 수정 잠금·`admin_settings` vs `settings` 연결 포렌식 — worklog: [`docs/worklogs/2026-05-14_docs_order-lock-forensic-001-settings-vs-admin.md`](./worklogs/2026-05-14_docs_order-lock-forensic-001-settings-vs-admin.md)
 - **작업 이력 (2026-05-14)**: `POINT-FORENSIC-001` 적립금·`point_used` 잔고 vs 헤더 필드·원장 연결 포렌식 — worklog: [`docs/worklogs/2026-05-14_docs_point-forensic-001-balance.md`](./worklogs/2026-05-14_docs_point-forensic-001-balance.md)
+- **작업 이력 (2026-05-14)**: `DISCOUNT-FORENSIC-001` 기간할인·프로모션·storefront 가격 구조 포렌식 — worklog: [`docs/worklogs/2026-05-14_docs_discount-forensic-001-pricing.md`](./worklogs/2026-05-14_docs_discount-forensic-001-pricing.md)
 
 ---
 
@@ -1345,6 +1347,15 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **산출물**: [`docs/POINT-FORENSIC-001.md`](./POINT-FORENSIC-001.md)
 - **migration 필요**: NO
 - **작업 이력 (2026-05-14)**: 문서·문서 사용법 13·OPS·본 블록 — worklog: [`docs/worklogs/2026-05-14_docs_point-forensic-001-balance.md`](./worklogs/2026-05-14_docs_point-forensic-001-balance.md)
+
+#### [DISCOUNT-FORENSIC-001] 기간할인 / 프로모션 가격 구조 포렌식 (문서)
+- **우선순위**: HIGH (정무님 운영 정책 vs 실구현)
+- **선행 조건**: 없음 (코드·migration·CONTEXT 인벤토리)
+- **상태**: **완료 (2026-05-14)**
+- **설명**: `commerce_price`/`original_price`·listing 기간 필드 부재·storefront `createCommerceOrder` 재가격·공급자 `orders.discount_amount` 수동 헤더·export 갭·고객별 타깃 부재를 확정.
+- **산출물**: [`docs/DISCOUNT-FORENSIC-001.md`](./DISCOUNT-FORENSIC-001.md)
+- **migration 필요**: NO
+- **작업 이력 (2026-05-14)**: 문서·문서 사용법 14·OPS·본 블록 — worklog: [`docs/worklogs/2026-05-14_docs_discount-forensic-001-pricing.md`](./worklogs/2026-05-14_docs_discount-forensic-001-pricing.md)
 
 ---
 
