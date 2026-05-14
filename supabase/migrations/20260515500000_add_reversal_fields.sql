@@ -47,7 +47,3 @@ ALTER TABLE public.supplier_payables
 
 ALTER TABLE public.supplier_payables
   ADD COLUMN IF NOT EXISTS reversed_at timestamptz;
-
-CREATE INDEX IF NOT EXISTS supplier_payables_reversed_at_idx
-  ON public.supplier_payables (reversed_at)
-  WHERE reversed_at IS NOT NULL;
