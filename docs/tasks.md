@@ -62,7 +62,9 @@
 - **작업 이력 (2026-05-14)**: `PRODUCT.md` §13 「Storefront / 반복주문 시스템」추가 — 기존 자동발주 챕터는 §14로 번호 이동 — worklog: [`docs/worklogs/2026-05-14_docs_product-storefront-chapter.md`](./worklogs/2026-05-14_docs_product-storefront-chapter.md)
 - **작업 이력 (2026-05-14)**: `PRODUCT.md` §13 Storefront에「3-2. 학습 파이프라인」절 추가 — worklog: [`docs/worklogs/2026-05-14_docs_product-storefront-learning-pipeline.md`](./worklogs/2026-05-14_docs_product-storefront-learning-pipeline.md)
 - **작업 이력 (2026-05-14)**: `CONTEXT.md` storefront·commerce 테이블·ARCH-00·ARCH-09 경계 보완 — worklog: [`docs/worklogs/2026-05-14_docs_context-storefront-alignment.md`](./worklogs/2026-05-14_docs_context-storefront-alignment.md)
+- **작업 이력 (2026-05-14)**: `docs/TEST.md` 운영 검증 체크리스트 신규(STOREFRONT·ADMIN·RFQ·비가역·부하·regression·migration) — worklog: [`docs/worklogs/2026-05-14_docs_test-operational-checklist.md`](./worklogs/2026-05-14_docs_test-operational-checklist.md)
 - **작업 이력 (2026-05-14)**: COMMERCE-008 상품 운영 quick edit (`getListingForEdit`·`updateListingFull`·편집 라우트·`ListingEditClient`·목록 수정 진입) — worklog: [`docs/worklogs/2026-05-14_feat_commerce-008-listing-quick-edit.md`](./worklogs/2026-05-14_feat_commerce-008-listing-quick-edit.md)
+- **작업 이력 (2026-05-14)**: `tasks.md` COMMERCE-008·009·집계·OPS·`COMMERCE-007` 상태 정합 문서 반영 — worklog: [`docs/worklogs/2026-05-14_docs_tasks-commerce-ops-alignment.md`](./worklogs/2026-05-14_docs_tasks-commerce-ops-alignment.md)
 
 ---
 
@@ -1254,6 +1256,8 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **주의**: today 카드 3개 제한 유지 (RULE-29). `buy`가 today를 덮으면 안 됨.
 - **migration 필요**: NO
 - **완료 기준**: 카드 한 칸(또는 기존 카드 내 링크)으로 `/buy` 진입이 가능하고 RULE-29 위반 없음
+- **상태**: **완료 (2026-05-14)** — `resturant_os` `src/app/(app)/today/page.tsx`: 하단 `구매하기` → `/buy` 링크 존재, 본문 카드 조합 최대 3개 주석·로직 유지
+- **작업 이력 (2026-05-14)**: `resturant_os` `today/page.tsx` 기준 완료 기준 충족 확인 — worklog: [`docs/worklogs/2026-05-14_docs_tasks-commerce-ops-alignment.md`](./worklogs/2026-05-14_docs_tasks-commerce-ops-alignment.md)
 
 #### [COMMERCE-008] 상품 운영 quick edit (편집 화면)
 - **우선순위**: MEDIUM
@@ -1264,11 +1268,29 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
   - `/admin/commerce/products/[id]/edit` + `ListingEditClient.tsx`
   - 목록 `ListingsClient`에서 편집 진입
   - `admin_logs` `listing_updated` (before / after / changed_fields)
-- **비범위**: 이미지 업로드·삭제·순서, `ListingNewClient`·`createListingFull` 변경, migration
+  - 편집 UI에서 썸네일·상세 이미지 **URL 표시만**(업로드·삭제·순서 변경·URL 직접 편집 없음)
+- **비범위**: 이미지 업로드·삭제·순서 변경·썸네일 URL 직접 수정, `ListingNewClient`·`createListingFull` 변경, migration
 - **migration 필요**: NO
 - **완료 기준**: 수정 가능 필드만 DB 반영, 스토어 노출은 `visible`+`is_visible` 및 `updateListingStatus` 전이와 정합, 실패 시 안내
 - **상태**: **완료 (2026-05-14)**
 - **작업 이력 (2026-05-14)**: quick edit 서버 액션·편집 UI·목록 수정 링크·`listing_updated` 로그 — worklog: [`docs/worklogs/2026-05-14_feat_commerce-008-listing-quick-edit.md`](./worklogs/2026-05-14_feat_commerce-008-listing-quick-edit.md)
+- **작업 이력 (2026-05-14)**: 본문 범위 문구 정합(썸네일·상세 이미지 URL 표시만·비범위 명시) — worklog: [`docs/worklogs/2026-05-14_docs_tasks-commerce-ops-alignment.md`](./worklogs/2026-05-14_docs_tasks-commerce-ops-alignment.md)
+
+#### [COMMERCE-009] 운영 전환 / forensic cleanup
+- **우선순위**: MEDIUM
+- **선행 조건**: 없음 (점진 정리; 편집 플로우는 `COMMERCE-008` 참고)
+- **상태**: **미착수**
+- **설명**: 커머스·관리자 UI를 운영 기준으로 정리하고, 개발용 잔여물을 제거한다. **아래 항목은 미구현이며 본 ID에서 완료 처리하지 않는다.**
+- **범위 (예정)**:
+  - DEBUG TEST BLOCK 제거
+  - forensic/debug state 제거
+  - DETAIL STEP logs 제거
+  - 운영 불필요 `console.log` 제거
+  - `ListingsClient` `window.prompt` 제거
+  - 상품 수정 플로우를 edit 페이지 기준으로 정리
+  - `docs/TEST.md`와 실제 운영·코드 상태 정합 반영(문서·체크리스트 갱신)
+- **migration 필요**: NO (코드 정리·문서; DDL 별도 시 별 ID)
+- **작업 이력 (2026-05-14)**: 항목 신규 등록·범위·미착수 고정 — worklog: [`docs/worklogs/2026-05-14_docs_tasks-commerce-ops-alignment.md`](./worklogs/2026-05-14_docs_tasks-commerce-ops-alignment.md)
 
 ---
 
@@ -1560,10 +1582,10 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 | RES- | 19 |
 | *(소계 `DB`/`SUP`/`ADM`/`RES`)* | **65** |
 | FORENSIC- | **9** |
-| COMMERCE- | **9** |
-| **본문 ID 합계** | **83** |
+| COMMERCE- | **10** |
+| **본문 ID 합계** | **84** |
 
-> **`COMMERCE-*` 9건**은 `## [커머스]` 블록의 `#### [COMMERCE-000]`~`008`에 대응한다.
+> **`COMMERCE-*` 10건**은 `## [커머스]` 블록의 `#### [COMMERCE-000]`~`009`에 대응한다.
 
 ### 교차 검증 (운영 DB forensic 반영 후, 본문 `#### [접두사-…]` 개수)
 
@@ -1574,10 +1596,10 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 | ADM- | 2 | ✅ |
 | RES- | 19 | ✅ |
 | FORENSIC- | 9 | ✅ |
-| COMMERCE- | 9 | ✅ |
-| **합계** | **83** | ✅ |
+| COMMERCE- | 10 | ✅ |
+| **합계** | **84** | ✅ |
 
-유형 합(`DB`/`SUP`/`ADM`/`RES` 표만): 구조위험 14 + 가짜 4 + 부분 15 + 미구현 7 + 확인 14 + 완료 11 = **65** ✅ — **`FORENSIC-*` 9건·`COMMERCE-*` 9건은 별도 축** (`## [FORENSIC]`, `## [커머스]`).
+유형 합(`DB`/`SUP`/`ADM`/`RES` 표만): 구조위험 14 + 가짜 4 + 부분 15 + 미구현 7 + 확인 14 + 완료 11 = **65** ✅ — **`FORENSIC-*` 9건·`COMMERCE-*` 10건은 별도 축** (`## [FORENSIC]`, `## [커머스]`).
 
 ---
 
@@ -1641,8 +1663,9 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 **비-DB 운영 확인** (`## 비-DB 운영 확인` 참조)  
 - **`SUP-CHECK-002`** — 언제든 병렬 가능 (Phase 0~6과 독립, 단 **운영/환경 접근** 필요)
 
-**Phase 8 — 커머스 (`COMMERCE-*`, `## [커머스]`)** — **미착수**  
+**Phase 8 — 커머스 (`COMMERCE-*`, `## [커머스]`)** — **진행 중** (일부 ID 완료·`COMMERCE-009` 미착수)  
 - **순서**: **`COMMERCE-000`** (상태 플로우 문서 SSOT) → **`COMMERCE-001`** (DDL·RLS) → **`COMMERCE-002`**·**`003`** (관리자OS Listing·주문) → **`COMMERCE-004`** (사이드바) → **`COMMERCE-005`** (식당OS `/buy/*`) → **`COMMERCE-006`** (결제 연동) → **`COMMERCE-007`** (`/today` 진입, RULE-29 유지).  
+- **후속 정리**: **`COMMERCE-008`** (listing quick edit, 완료) · **`COMMERCE-009`** (운영 전환 / forensic cleanup, 미착수) — 로드맵 순서와 병행해 추적.
 - **원칙**: 관리자OS·DB·운영 플로우 우선, 식당OS 쇼핑 UX·결제·today 연결은 후속.
 
 ---
