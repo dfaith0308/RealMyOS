@@ -26,6 +26,9 @@ export default async function AdminCommerceAllocationsPage(props: { searchParams
           </p>
         </div>
         <div className={s.actionsRow}>
+          <Link href="/admin/commerce/payables" className={s.ghostBtn}>
+            지급 예정 원장
+          </Link>
           <Link href="/admin/commerce/orders" className={s.ghostBtn}>
             주문 처리
           </Link>

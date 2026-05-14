@@ -116,6 +116,9 @@ export default async function AdminCommerceOrdersPage(props: {
           <Link href="/admin/commerce/allocations" className={s.ghostBtn}>
             지급 예정(allocation)
           </Link>
+          <Link href="/admin/commerce/payables" className={s.ghostBtn}>
+            지급 예정 원장
+          </Link>
           <Link href="/admin/dashboard" className={s.ghostBtn}>
             대시보드
           </Link>

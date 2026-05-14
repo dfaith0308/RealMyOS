@@ -36,6 +36,7 @@
 17. **`docs/PLATFORM-ERP-DESIGN-001.md`** — PLATFORM-ERP-DESIGN-001: `commerce_orders` 최소 ERP 연결(`payments` SSOT·receivable owner·동기화 시점·migration 설계 목록만).
 18. **`supabase/migrations/20260515100000_add_commerce_order_id_to_payments.sql`** + **`updateCommerceOrderStatus`** — PLATFORM-ERP-P0-001: `paid` 확정 시 `payments` inbound + `commerce_order_id` (운영 DB 적용은 별도 승인).
 19. **`docs/TEST-RUN-001.md` STEP 8** + **`docs/TEST.md`** — TEST-RUN-002: storefront→`payments` ERP bridge **실전 검증 시나리오**(실행 아님, 문서만).
+20. **`supabase/migrations/20260515220000_create_supplier_payables.sql`** — PLATFORM-ERP-P2-003: 확정 allocation → `supplier_payables` 지급 예정 원장(파일 추가; 운영 DB 적용은 별도 승인).
 
 ### [OPS — AI worklog] 절차 기록 (감사 ID와 별도)
 
@@ -91,6 +92,7 @@
 - **작업 이력 (2026-05-14)**: PLATFORM-ERP-P1-001 — 관리자OS storefront 매출·미수·최근 입금 KPI (`getStorefrontRevenueKPI`, `/admin/commerce/orders`) — worklog: [`docs/worklogs/2026-05-14_feat_platform-erp-p1-001-storefront-kpi.md`](./worklogs/2026-05-14_feat_platform-erp-p1-001-storefront-kpi.md)
 - **작업 이력 (2026-05-14)**: PLATFORM-ERP-P2-001 — 품목별 allocation·공급자 payable 추적·paid 연동 — worklog: [`docs/worklogs/2026-05-14_feat_platform-erp-p2-001-commerce-allocations.md`](./worklogs/2026-05-14_feat_platform-erp-p2-001-commerce-allocations.md)
 - **작업 이력 (2026-05-14)**: PLATFORM-ERP-P2 allocation 취소 audit(`cancelled_at`/`cancelled_by`)·주문 cancelled 시 pending allocation 자동 취소 — worklog: [`docs/worklogs/2026-05-14_feat_platform-erp-p2-allocation-cancel-audit.md`](./worklogs/2026-05-14_feat_platform-erp-p2-allocation-cancel-audit.md)
+- **작업 이력 (2026-05-14)**: **PLATFORM-ERP-P2-003** 확정 allocation → `supplier_payables` 원장·RLS·관리자 조회·`/admin/commerce/payables`·allocation 화면 연동 — worklog: [`docs/worklogs/2026-05-14_feat_platform-erp-p2-003-supplier-payables.md`](./worklogs/2026-05-14_feat_platform-erp-p2-003-supplier-payables.md)
 - **작업 이력 (2026-05-14)**: TEST-RUN-002 — `TEST-RUN-001` STEP 8(ERP bridge)·`TEST.md` 체크리스트·migration 목록 문서 반영 — worklog: [`docs/worklogs/2026-05-14_docs_test-run-002-storefront-payments-bridge.md`](./worklogs/2026-05-14_docs_test-run-002-storefront-payments-bridge.md)
 - **작업 이력 (2026-05-14)**: **BUILD-FIX-001** storefront-bank `admin-shared.module.css` import 경로 수정 + `realmyos`/`resturant_os` `tsc --noEmit` 전수 — worklog: [`docs/worklogs/2026-05-14_chore_build-fix-001-tsc-and-css-path.md`](./worklogs/2026-05-14_chore_build-fix-001-tsc-and-css-path.md)
 
@@ -1078,6 +1080,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **작업 이력 (2026-05-14)**: **PLATFORM-ERP-P1-001** 관리자OS storefront 매출·미수·최근 입금 KPI (`getStorefrontRevenueKPI`, `/admin/commerce/orders`) — worklog: [`docs/worklogs/2026-05-14_feat_platform-erp-p1-001-storefront-kpi.md`](./worklogs/2026-05-14_feat_platform-erp-p1-001-storefront-kpi.md)
 - **작업 이력 (2026-05-14)**: **PLATFORM-ERP-P2-001** 품목별 `commerce_order_allocations`·공급자 식별·paid 시 생성·지급 예정 수동 확정·`/admin/commerce/allocations` — worklog: [`docs/worklogs/2026-05-14_feat_platform-erp-p2-001-commerce-allocations.md`](./worklogs/2026-05-14_feat_platform-erp-p2-001-commerce-allocations.md)
 - **작업 이력 (2026-05-14)**: **PLATFORM-ERP-P2-001 후속** `cancelled_at`/`cancelled_by` audit + 주문 취소 시 pending allocation 자동 cancelled — worklog: [`docs/worklogs/2026-05-14_feat_platform-erp-p2-allocation-cancel-audit.md`](./worklogs/2026-05-14_feat_platform-erp-p2-allocation-cancel-audit.md)
+- **작업 이력 (2026-05-14)**: **PLATFORM-ERP-P2-003** `supplier_payables`·확정 시 INSERT·관리자/공급자 RLS·`/admin/commerce/payables` — worklog: [`docs/worklogs/2026-05-14_feat_platform-erp-p2-003-supplier-payables.md`](./worklogs/2026-05-14_feat_platform-erp-p2-003-supplier-payables.md)
 - **작업 이력 (2026-05-14)**: **TEST-RUN-002** ERP bridge 검증 시나리오(`TEST-RUN-001` STEP 8·`TEST.md`) — worklog: [`docs/worklogs/2026-05-14_docs_test-run-002-storefront-payments-bridge.md`](./worklogs/2026-05-14_docs_test-run-002-storefront-payments-bridge.md)
 
 ### 🔍 확인 필요

@@ -138,6 +138,9 @@ export type CommerceAllocationListRow = {
   cancelled_by: string | null
   /** `users` 조회 성공 시 표시용(실패 시 null — UUID는 cancelled_by 에 유지) */
   cancelled_by_display: string | null
+  /** `supplier_payables` (PLATFORM-ERP-P2-003), 없으면 null */
+  supplier_payable_id: string | null
+  supplier_payable_status: string | null
 }
 
 export type SupplierPayableSummaryRow = {
@@ -377,7 +380,109 @@ export async function createCommerceOrderAllocations(commerce_order_id: string):
   return { success: true, data: { created: planned.length, skipped } }
 }
 
-export async function confirmCommerceAllocation(allocation_id: string): Promise<ActionResult<void>> {
+export type ConfirmAllocationPayableData = {
+  payable_linked: boolean
+  supplier_payable_id: string | null
+  /** allocation 확정은 되었으나 원장 INSERT 실패 등 */
+  payable_error?: string
+}
+
+export async function createSupplierPayableFromAllocation(allocation_id: string): Promise<
+  ActionResult<{ payable_id: string | null; created: boolean }>
+> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const aid = String(allocation_id ?? '').trim()
+  if (!aid) return { success: false, error: 'allocation ID가 필요합니다' }
+
+  const { data: dup, error: dErr } = await supabase
+    .from('supplier_payables')
+    .select('id')
+    .eq('commerce_order_allocation_id', aid)
+    .maybeSingle()
+
+  if (dErr) return { success: false, error: dErr.message }
+  if (dup?.id) {
+    return { success: true, data: { payable_id: dup.id as string, created: false } }
+  }
+
+  const { data: a, error: aErr } = await supabase
+    .from('commerce_order_allocations')
+    .select(
+      'id, commerce_order_id, commerce_order_item_id, supplier_tenant_id, item_amount, platform_fee_amount, supplier_payable_amount, status',
+    )
+    .eq('id', aid)
+    .maybeSingle()
+
+  if (aErr) return { success: false, error: aErr.message }
+  if (!a) return { success: false, error: 'allocation을 찾을 수 없습니다' }
+  if ((a as { status?: string }).status !== 'confirmed') {
+    return { success: false, error: 'confirmed allocation만 supplier_payables 원장을 만들 수 있습니다' }
+  }
+
+  const now = new Date().toISOString()
+  const note = `storefront allocation payable ${aid}`
+  const row = a as {
+    commerce_order_id: string
+    commerce_order_item_id: string
+    supplier_tenant_id: string
+    item_amount: number
+    platform_fee_amount: number
+    supplier_payable_amount: number
+  }
+
+  const payload = {
+    commerce_order_allocation_id: aid,
+    commerce_order_id: row.commerce_order_id,
+    commerce_order_item_id: row.commerce_order_item_id,
+    supplier_tenant_id: row.supplier_tenant_id,
+    payer_tenant_id: PLATFORM_OWNER_TENANT,
+    payee_tenant_id: row.supplier_tenant_id,
+    item_amount: row.item_amount,
+    platform_fee_amount: row.platform_fee_amount,
+    payable_amount: row.supplier_payable_amount,
+    status: 'unpaid' as const,
+    confirmed_at: now,
+    confirmed_by: auth.ctx.user_id,
+    note,
+  }
+
+  const { data: ins, error: insErr } = await supabase.from('supplier_payables').insert(payload).select('id').maybeSingle()
+
+  if (insErr) {
+    const code = (insErr as { code?: string }).code
+    if (code === '23505') {
+      const { data: again } = await supabase.from('supplier_payables').select('id').eq('commerce_order_allocation_id', aid).maybeSingle()
+      if (again?.id) return { success: true, data: { payable_id: again.id as string, created: false } }
+    }
+    return { success: false, error: insErr.message }
+  }
+
+  const payableId = (ins as { id?: string } | null)?.id ?? null
+
+  const logPay = await insertAdminLog(supabase, {
+    admin_id: auth.ctx.user_id,
+    tenant_id: row.supplier_tenant_id,
+    action_type: 'supplier_payable_created',
+    target_table: 'supplier_payables',
+    target_id: payableId,
+    new_value: {
+      commerce_order_allocation_id: aid,
+      commerce_order_id: row.commerce_order_id,
+      payable_amount: row.supplier_payable_amount,
+    },
+  })
+  if (!logPay.ok) {
+    // 감사 로그만 실패한 경우 — supplier_payables 행은 이미 커밋됨.
+  }
+
+  revalidatePath('/admin/commerce/payables')
+  return { success: true, data: { payable_id: payableId, created: true } }
+}
+
+export async function confirmCommerceAllocation(allocation_id: string): Promise<ActionResult<ConfirmAllocationPayableData>> {
   const supabase = await createSupabaseServer()
   const auth = await requireAdmin(supabase)
   if (!auth.ok) return { success: false, error: auth.error }
@@ -426,9 +531,28 @@ export async function confirmCommerceAllocation(allocation_id: string): Promise<
   })
   if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
 
+  const payRes = await createSupplierPayableFromAllocation(aid)
+  const payload: ConfirmAllocationPayableData = {
+    payable_linked: Boolean(payRes.success && payRes.data?.payable_id),
+    supplier_payable_id: payRes.success ? (payRes.data?.payable_id ?? null) : null,
+  }
+
+  if (!payRes.success) {
+    payload.payable_error = payRes.error ?? 'supplier_payables 생성 실패'
+    await insertAdminLog(supabase, {
+      admin_id: auth.ctx.user_id,
+      tenant_id: tenantId,
+      action_type: 'supplier_payable_create_failed',
+      target_table: 'commerce_order_allocations',
+      target_id: aid,
+      new_value: { error: payload.payable_error },
+    })
+  }
+
   revalidatePath('/admin/commerce/allocations')
   revalidatePath('/admin/commerce/orders')
-  return { success: true }
+  revalidatePath('/admin/commerce/payables')
+  return { success: true, data: payload }
 }
 
 export type CommerceAllocationsAdminPayload = {
@@ -515,9 +639,23 @@ export async function getCommerceAllocationsAdminData(status: 'all' | 'pending' 
     }
   }
 
+  const allocIds = raw.map((r) => r.id)
+  const payableByAlloc = new Map<string, { id: string; status: string }>()
+  if (allocIds.length) {
+    const { data: spRows, error: spErr } = await supabase
+      .from('supplier_payables')
+      .select('id, commerce_order_allocation_id, status')
+      .in('commerce_order_allocation_id', allocIds)
+    if (spErr) return { success: false, error: spErr.message }
+    for (const p of (spRows ?? []) as { id: string; commerce_order_allocation_id: string; status: string }[]) {
+      payableByAlloc.set(p.commerce_order_allocation_id, { id: p.id, status: p.status })
+    }
+  }
+
   const rows: CommerceAllocationListRow[] = raw.map((r) => {
     const on = r.commerce_orders
     const order_number = Array.isArray(on) ? on[0]?.order_number ?? null : on?.order_number ?? null
+    const sp = payableByAlloc.get(r.id)
     return {
       id: r.id,
       commerce_order_id: r.commerce_order_id,
@@ -534,6 +672,8 @@ export async function getCommerceAllocationsAdminData(status: 'all' | 'pending' 
       cancelled_at: r.cancelled_at ?? null,
       cancelled_by: r.cancelled_by ?? null,
       cancelled_by_display: r.cancelled_by ? userDisplayMap.get(r.cancelled_by) ?? null : null,
+      supplier_payable_id: sp?.id ?? null,
+      supplier_payable_status: sp?.status ?? null,
     }
   })
 
