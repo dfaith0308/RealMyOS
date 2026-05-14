@@ -6,6 +6,7 @@ import type { ActionResult } from '@/types/order'
 import { getOverdueReceivable } from '@/lib/ledger-calc'
 import type { ContactResult, NextActionType } from '@/actions/contact'
 import { getAdminSettingNumber } from '@/actions/admin/policy-console'
+import { fetchInboundSupersededOriginalPaymentIds } from '@/lib/inbound-payment-superseded'
 
 // ============================================================
 // 타입
@@ -123,6 +124,20 @@ export async function getSalesTargets(): Promise<ActionResult<SalesTarget[]>> {
   const today    = new Date(todayStr + 'T00:00:00Z')
   const d90ago   = new Date(today.getTime() - 90 * 86400000).toISOString().slice(0, 10)
 
+  const payeeScope = `payee_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`
+  const supersededInbound = await fetchInboundSupersededOriginalPaymentIds(supabase, payeeScope)
+
+  let paymentsQuery = supabase
+    .from('payments')
+    .select('customer_id, amount')
+    .or(payeeScope)
+    .eq('direction', 'inbound')
+    .eq('status', 'confirmed')
+    .is('reversal_of_id', null)
+  if (supersededInbound.length) {
+    paymentsQuery = paymentsQuery.not('id', 'in', `(${supersededInbound.join(',')})`)
+  }
+
   const [
     { data: customers },
     { data: orders },
@@ -141,12 +156,7 @@ export async function getSalesTargets(): Promise<ActionResult<SalesTarget[]>> {
       .eq('status', 'confirmed').is('deleted_at', null)
       .order('order_date', { ascending: false }),
 
-    supabase.from('payments')
-      .select('customer_id, amount')
-      // 전환: payee_tenant_id 우선 (legacy tenant_id 병행)
-      .or(`payee_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
-      .eq('direction', 'inbound')
-      .eq('status', 'confirmed'),
+    paymentsQuery,
 
     supabase.from('contact_logs')
       .select('customer_id, contacted_at, result, next_action_date, next_action_type')

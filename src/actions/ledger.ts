@@ -15,6 +15,7 @@ import {
   getOverdueReceivable,
   getCustomerDeposit,
 } from '@/lib/ledger-calc'
+import { fetchInboundSupersededOriginalPaymentIds } from '@/lib/inbound-payment-superseded'
 
 // ============================================================
 // 원장 허브용 셀렉트 데이터 (RULE-01)
@@ -140,16 +141,24 @@ export async function getCustomerLedger(
   if (options?.from) ordersQuery = ordersQuery.gte('order_date', options.from)
   if (options?.to)   ordersQuery = ordersQuery.lte('order_date', options.to)
 
+  const payeeScope = `payee_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`
+  const supersededInbound = await fetchInboundSupersededOriginalPaymentIds(supabase, payeeScope)
+
   let paymentsQuery = supabase
     .from('payments')
     .select('id, payment_date, created_at, amount, payment_method, memo')
     .eq('customer_id', customer_id)
     // 전환: payee_tenant_id 우선 (legacy tenant_id 병행)
-    .or(`payee_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
+    .or(payeeScope)
     .eq('direction', 'inbound')
     .eq('status', 'confirmed')
+    .is('reversal_of_id', null)
     .order('payment_date', { ascending: true })
     .order('created_at', { ascending: true })
+
+  if (supersededInbound.length) {
+    paymentsQuery = paymentsQuery.not('id', 'in', `(${supersededInbound.join(',')})`)
+  }
 
   if (options?.from)           paymentsQuery = paymentsQuery.gte('payment_date', options.from)
   if (options?.to)             paymentsQuery = paymentsQuery.lte('payment_date', options.to)
@@ -295,6 +304,21 @@ export async function getDailyCashflow(): Promise<ActionResult<DailyCashflow[]>>
 
   const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
+  const payeeScope = `payee_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`
+  const supersededInbound = await fetchInboundSupersededOriginalPaymentIds(supabase, payeeScope)
+
+  let paymentsQuery = supabase
+    .from('payments')
+    .select('payment_date, amount')
+    .or(payeeScope)
+    .eq('direction', 'inbound')
+    .eq('status', 'confirmed')
+    .is('reversal_of_id', null)
+    .gte('payment_date', since7d)
+  if (supersededInbound.length) {
+    paymentsQuery = paymentsQuery.not('id', 'in', `(${supersededInbound.join(',')})`)
+  }
+
   const [{ data: orders }, { data: payments }] = await Promise.all([
     supabase.from('orders')
       .select('order_date, total_amount, final_amount')
@@ -303,13 +327,7 @@ export async function getDailyCashflow(): Promise<ActionResult<DailyCashflow[]>>
       .eq('status', 'confirmed')
       .is('deleted_at', null)
       .gte('order_date', since7d),
-    supabase.from('payments')
-      .select('payment_date, amount')
-      // 전환: payee_tenant_id 우선 (legacy tenant_id 병행)
-      .or(`payee_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
-      .eq('direction', 'inbound')
-      .eq('status', 'confirmed')
-      .gte('payment_date', since7d),
+    paymentsQuery,
   ])
 
   const revenueByDate  = new Map<string, number>()
@@ -356,6 +374,21 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
   if (!customers?.length) return { success: true, data: [] }
   const ids = customers.map((c) => c.id)
 
+  const payeeScope = `payee_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`
+  const supersededInbound = await fetchInboundSupersededOriginalPaymentIds(supabase, payeeScope)
+
+  let paymentRowsQuery = supabase
+    .from('payments')
+    .select('customer_id, amount, payment_date')
+    .in('customer_id', ids)
+    .or(payeeScope)
+    .eq('direction', 'inbound')
+    .eq('status', 'confirmed')
+    .is('reversal_of_id', null)
+  if (supersededInbound.length) {
+    paymentRowsQuery = paymentRowsQuery.not('id', 'in', `(${supersededInbound.join(',')})`)
+  }
+
   const collectionResult = await getPendingCollectionMap(ctx.tenant_id, supabase).catch(e => {
     const msg = e instanceof Error ? e.message : 'unknown error'
     return { enabled: false, data: {} as Record<string, import('@/actions/collection').CollectionSchedule | null>, error: msg }
@@ -373,13 +406,7 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
         .is('deleted_at', null)
         .order('order_date', { ascending: false }),
 
-      supabase.from('payments')
-        .select('customer_id, amount, payment_date')
-        .in('customer_id', ids)
-        // 전환: payee_tenant_id 우선 (legacy tenant_id 병행)
-        .or(`payee_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
-        .eq('direction', 'inbound')
-        .eq('status', 'confirmed'),
+      paymentRowsQuery,
 
       supabase.from('contact_logs')
         .select('customer_id, contacted_at, contact_method, outcome')
@@ -642,6 +669,20 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
   const nowKST   = new Date(Date.now() + 9 * 3600000)
   const todayStr = nowKST.toISOString().slice(0, 10)
 
+  const payeeScope = `payee_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`
+  const supersededInbound = await fetchInboundSupersededOriginalPaymentIds(supabase, payeeScope)
+
+  let paymentRowsQuery = supabase
+    .from('payments')
+    .select('customer_id, amount')
+    .or(payeeScope)
+    .eq('direction', 'inbound')
+    .eq('status', 'confirmed')
+    .is('reversal_of_id', null)
+  if (supersededInbound.length) {
+    paymentRowsQuery = paymentRowsQuery.not('id', 'in', `(${supersededInbound.join(',')})`)
+  }
+
   // 4쿼리 병렬 — receivable 정확성을 위해 orders + payments 직접 조회
   const _q0 = Date.now()
   const [{ data: rows, error }, { data: statsRows }, { data: orderRows }, { data: paymentRows }, { data: depositRows }] = await Promise.all([
@@ -657,12 +698,7 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
       // 전환: seller_tenant_id 우선 (legacy tenant_id 병행)
       .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
       .eq('status', 'confirmed').is('deleted_at', null),
-    supabase.from('payments')
-      .select('customer_id, amount')
-      // 전환: payee_tenant_id 우선 (legacy tenant_id 병행)
-      .or(`payee_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
-      .eq('direction', 'inbound')
-      .eq('status', 'confirmed'),
+    paymentRowsQuery,
     supabase.from('customer_deposits')
       .select('customer_id, balance')
       .eq('tenant_id', ctx.tenant_id),

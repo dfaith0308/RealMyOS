@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import type { ActionResult } from '@/types/order'
+import { PAYMENTS_TYPE_PAYOUT_REVERSAL } from '@/lib/inbound-payment-superseded'
 
 const PLATFORM_OWNER_TENANT = '00000000-0000-0000-0000-000000000000'
 
@@ -208,6 +209,9 @@ async function createPaymentReversalRowInternal(
 
   const o = orig as Record<string, unknown>
   const now = new Date().toISOString()
+  const origType = o.type
+  const typeMissing = origType == null || String(origType).trim() === ''
+
   const payload: Record<string, unknown> = {
     tenant_id: o.tenant_id ?? PLATFORM_OWNER_TENANT,
     payer_tenant_id: o.payer_tenant_id ?? null,
@@ -229,8 +233,22 @@ async function createPaymentReversalRowInternal(
     reversal_reason: rid || 'commerce_order_cancelled',
     reversed_by: aid,
     reversed_at: now,
+    type: typeMissing ? PAYMENTS_TYPE_PAYOUT_REVERSAL : origType,
   }
-  if (o.type != null) payload.type = o.type
+  if (typeMissing) {
+    await insertAdminLog(supabase, {
+      admin_id: aid,
+      tenant_id: tenantId,
+      action_type: 'payment_type_missing_warned',
+      target_table: 'payments',
+      target_id: origId,
+      new_value: {
+        commerce_order_id: oid,
+        defaulted_type: PAYMENTS_TYPE_PAYOUT_REVERSAL,
+        admin_user_id: aid,
+      },
+    }).catch(() => {})
+  }
   if (o.settlement_memo != null) payload.settlement_memo = o.settlement_memo
 
   const { data: ins, error: insErr } = await supabase.from('payments').insert(payload).select('id').maybeSingle()

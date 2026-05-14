@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { ensurePolicyDefaults } from '@/actions/admin/policy-console'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
+import { fetchInboundSupersededSubset } from '@/lib/inbound-payment-superseded'
 
 type ActionResult<T = void> = { success: boolean; data?: T; error?: string }
 
@@ -424,7 +425,7 @@ export async function getUnifiedSettlementView(): Promise<ActionResult<{ rows: U
   const [{ data: pays, error: pErr }, { data: settles, error: sErr }] = await Promise.all([
     supabase
       .from('payments')
-      .select('order_id, amount, status, direction, type')
+      .select('id, order_id, amount, status, direction, type')
       .in('order_id', orderIds)
       .eq('status', 'confirmed')
       .neq('type', 'settlement')
@@ -441,8 +442,16 @@ export async function getUnifiedSettlementView(): Promise<ActionResult<{ rows: U
   if (pErr) return { success: false, error: pErr.message }
   if (sErr) return { success: false, error: sErr.message }
 
+  const payList = (pays ?? []) as Array<{ id?: string; order_id?: string; amount?: number }>
+  const supersededInbound = await fetchInboundSupersededSubset(
+    supabase,
+    payList.map((p) => String(p.id ?? '')).filter(Boolean),
+  )
+  const supersedeSet = new Set(supersededInbound)
+
   const paidByOrder = new Map<string, number>()
-  for (const p of (pays ?? []) as any[]) {
+  for (const p of payList) {
+    if (supersedeSet.has(String(p.id ?? ''))) continue
     const oid = String(p.order_id ?? '')
     if (!oid) continue
     const amt = typeof p.amount === 'number' ? p.amount : 0

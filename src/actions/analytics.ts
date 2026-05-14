@@ -17,6 +17,7 @@ import {
   type CustomerRow,
   type OverviewSummary,
 } from '@/lib/analytics-calc'
+import { fetchInboundSupersededOriginalPaymentIds } from '@/lib/inbound-payment-superseded'
 
 // ============================================================
 // 공통 — confirmed orders + order_lines 스냅샷 fetch (RULE-01, RULE-03)
@@ -148,17 +149,26 @@ export async function getMarginByCustomer(
     const top3Revenue  = rows.slice(0, 3).reduce((s, r) => s + r.revenue, 0)
     const top3_share   = totalRevenue !== 0 ? (top3Revenue / totalRevenue) * 100 : 0
 
+    const payeeScope = `payee_tenant_id.eq.${tid},tenant_id.eq.${tid}`
+    const supersededInbound = await fetchInboundSupersededOriginalPaymentIds(supabase, payeeScope)
+
+    let paymentsQuery = supabase
+      .from('payments')
+      .select('customer_id, payment_date, amount')
+      .or(payeeScope)
+      .eq('direction', 'inbound')
+      .eq('status', 'confirmed')
+      .is('reversal_of_id', null)
+      .gte('payment_date', from)
+      .lte('payment_date', to)
+    if (supersededInbound.length) {
+      paymentsQuery = paymentsQuery.not('id', 'in', `(${supersededInbound.join(',')})`)
+    }
+
     // KPI: 평균결제기간(근사) / 미수금 비율 / 반복구매율
     // RULE-02: DB 캐시 없이 메모리 계산
     const [{ data: payments }, { data: customers }] = await Promise.all([
-      supabase
-        .from('payments')
-        .select('customer_id, payment_date, amount')
-        .or(`payee_tenant_id.eq.${tid},tenant_id.eq.${tid}`)
-        .eq('direction', 'inbound')
-        .eq('status', 'confirmed')
-        .gte('payment_date', from)
-        .lte('payment_date', to),
+      paymentsQuery,
       supabase
         .from('customers')
         .select('id')

@@ -1185,10 +1185,11 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 
 #### [APPEND-ONLY-CONVERGENCE-P1-001] P1 append-only 수렴 구현 (범위 확정 / 구현 대기)
 - **우선순위**: HIGH
-- **상태**: **구현 범위 확정 (2026-05-14)** — 별도 구현 지시·승인 migration 전까지 **코드 변경 없음**
+- **상태**: **P1 코드 1차 반영 (2026-05-14)** — `insertOutboundReversal`·`insertInboundPaymentReversal`·`cancelPayment`/`cancelDisbursement` append-only 우선 + legacy RPC/UPDATE fallback 유지; `log_payment_reversal_audit` migration은 **파일 추가(미적용 가정)** 별도 승인
 - **산출물**: [`docs/APPEND-ONLY-CONVERGENCE-P1-SPEC-001.md`](./APPEND-ONLY-CONVERGENCE-P1-SPEC-001.md) — `insert_outbound_reversal`(가칭)·inbound 상쇅·`reverse_disbursement`/`cancelPayment` **deprecated 경로**·`type` 가드 1차·KPI·`admin_logs`·제외 범위·완료 기준
 - **연계**: **[APPEND-ONLY-CONVERGENCE-POLICY-001]** · **[APPEND-ONLY-CONVERGENCE-DESIGN-001]** · **`DECISIONS.md` [D-021]~[D-024]** · **[ACCOUNTING-REVERSAL-P0-001]** · **[KPI-REVERSAL-P0-001]** · **[PAYMENTS-TAXONOMY-POLICY-001]** · **[ERP-ROADMAP-001](./ERP-ROADMAP-001.md)**
 - **작업 이력 (2026-05-14)**: P1 범위 명세 문서·`tasks.md` Epic — worklog: [`docs/worklogs/2026-05-14_docs_append-only-convergence-policy-001.md`](./worklogs/2026-05-14_docs_append-only-convergence-policy-001.md)
+- **작업 이력 (2026-05-14)**: **P1 구현** append-only reversal·superseded 원장/KPI 필터·`commerce-reversal` type soft guard — worklog: [`docs/worklogs/2026-05-14_feat_append-only-convergence-p1-001.md`](./worklogs/2026-05-14_feat_append-only-convergence-p1-001.md)
 
 #### [ERP-ROADMAP-001] 관리자OS ERP 실구현 로드맵 (문서)
 - **우선순위**: HIGH (`[PLATFORM-ERP-001]` 실행 순서·위험 통제)

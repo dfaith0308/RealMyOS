@@ -12,6 +12,7 @@ import {
 } from '@/lib/ledger-calc'
 import type { ActionResult } from '@/types/order'
 import { fallbackMessage } from '@/lib/dashboard-utils'
+import { fetchInboundSupersededOriginalPaymentIds } from '@/lib/inbound-payment-superseded'
 
 function todayKST(): string {
   return new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10)
@@ -276,6 +277,20 @@ export async function getTodayCollections(): Promise<ActionResult<CollectionTarg
   const todayStr = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10)
   const tid      = ctx.tenant_id
 
+  const payeeScope = `payee_tenant_id.eq.${tid},tenant_id.eq.${tid}`
+  const supersededInbound = await fetchInboundSupersededOriginalPaymentIds(supabase, payeeScope)
+
+  let paymentsQuery = supabase
+    .from('payments')
+    .select('customer_id, amount, payment_date')
+    .or(payeeScope)
+    .eq('direction', 'inbound')
+    .eq('status', 'confirmed')
+    .is('reversal_of_id', null)
+  if (supersededInbound.length) {
+    paymentsQuery = paymentsQuery.not('id', 'in', `(${supersededInbound.join(',')})`)
+  }
+
   const [{ data: customers }, { data: orders }, { data: payments }] = await Promise.all([
     supabase.from('customers').select('id, name, opening_balance')
       .eq('tenant_id', tid).is('deleted_at', null),
@@ -284,9 +299,7 @@ export async function getTodayCollections(): Promise<ActionResult<CollectionTarg
       .or(`seller_tenant_id.eq.${tid},tenant_id.eq.${tid}`)
       .eq('status', 'confirmed')
       .is('deleted_at', null),
-    supabase.from('payments').select('customer_id, amount, payment_date')
-      .or(`payee_tenant_id.eq.${tid},tenant_id.eq.${tid}`)
-      .eq('direction', 'inbound').eq('status', 'confirmed'),
+    paymentsQuery,
   ])
 
   // customer_name → id 역매핑 (동명이인 제외)

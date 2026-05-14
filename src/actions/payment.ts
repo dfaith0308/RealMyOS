@@ -2,7 +2,8 @@
 
 import { revalidatePath } from 'next/cache'
 import { linkActionResult } from '@/actions/action-log'
-import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
+import { createSupabaseServer, getAuthCtx, type AuthCtx } from '@/lib/supabase-server'
+import { fetchInboundSupersededOriginalPaymentIds, PAYMENTS_TYPE_PAYOUT_REVERSAL } from '@/lib/inbound-payment-superseded'
 import type { ActionResult } from '@/types/order'
 import { effectiveOrderAmount, getAccountsReceivable, getCustomerDeposit } from '@/lib/ledger-calc'
 
@@ -188,36 +189,423 @@ export async function createPayment(
 }
 
 // ============================================================
-// 수금 취소 — status='cancelled'만 변경 (delete 금지)
-// ledger가 confirmed만 집계하므로 취소 시 자동으로 잔액 원복
+// Append-only reversal (RFQ outbound / inbound) — [D-021]~[D-024] P1
 // ============================================================
 
-export async function cancelPayment(payment_id: string): Promise<ActionResult> {
+async function logPaymentReversalAudit(
+  supabase: Awaited<ReturnType<typeof createSupabaseServer>>,
+  ctx: AuthCtx,
+  actionType: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  const { error } = await supabase.rpc('log_payment_reversal_audit', {
+    p_action_type: actionType,
+    p_tenant_id:   ctx.tenant_id,
+    p_new_value:   payload,
+  })
+  if (error && process.env.NODE_ENV === 'development') {
+    console.warn('[log_payment_reversal_audit]', error.message)
+  }
+}
+
+function tenantInboundPayeeScope(tenantId: string): string {
+  return `payee_tenant_id.eq.${tenantId},tenant_id.eq.${tenantId}`
+}
+
+function tenantOutboundPayerScope(tenantId: string): string {
+  return `payer_tenant_id.eq.${tenantId},tenant_id.eq.${tenantId}`
+}
+
+/** RFQ outbound allocation이 “유효”한지(레거시 reversed + append-only 상쇅 row). */
+async function computeOutboundEffectivePaidForPurchase(
+  supabase: Awaited<ReturnType<typeof createSupabaseServer>>,
+  ctx: AuthCtx,
+  purchaseId: string,
+): Promise<number> {
+  const { data: rows, error } = await supabase
+    .from('payment_allocations')
+    .select(`
+      allocated_amount,
+      payment_id,
+      payments!inner(id, status, direction)
+    `)
+    .eq('purchase_id', purchaseId)
+    .eq('tenant_id', ctx.tenant_id)
+
+  if (error || !rows?.length) return 0
+
+  type Pay = { id: string; status: string; direction: string }
+  const paymentIds = [
+    ...new Set(
+      (rows as { payment_id: string; payments: Pay | Pay[] }[]).map((r) => {
+        const p = Array.isArray(r.payments) ? r.payments[0] : r.payments
+        return String(p?.id ?? '')
+      }).filter(Boolean),
+    ),
+  ]
+  if (!paymentIds.length) return 0
+
+  const { data: revRows } = await supabase
+    .from('payments')
+    .select('reversal_of_id')
+    .in('reversal_of_id', paymentIds)
+    .eq('direction', 'outbound')
+    .eq('status', 'reversed')
+
+  const superseded = new Set(
+    (revRows ?? []).map((x: { reversal_of_id: string }) => String(x.reversal_of_id)),
+  )
+
+  let sum = 0
+  for (const row of rows as { allocated_amount: number; payments: Pay | Pay[] }[]) {
+    const p = Array.isArray(row.payments) ? row.payments[0] : row.payments
+    if (!p || p.direction !== 'outbound') continue
+    if (!(p.status === 'pending' || p.status === 'confirmed')) continue
+    if (superseded.has(p.id)) continue
+    sum += Number(row.allocated_amount ?? 0)
+  }
+  return sum
+}
+
+async function recalculatePurchasesAfterOutboundAppendOnly(
+  supabase: Awaited<ReturnType<typeof createSupabaseServer>>,
+  ctx: AuthCtx,
+  originalPaymentId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { data: allocRows, error: aErr } = await supabase
+    .from('payment_allocations')
+    .select('purchase_id')
+    .eq('payment_id', originalPaymentId)
+    .eq('tenant_id', ctx.tenant_id)
+    .not('purchase_id', 'is', null)
+
+  if (aErr) return { ok: false, error: aErr.message }
+
+  const purchaseIds = [
+    ...new Set(
+      (allocRows ?? []).map((r: { purchase_id: string }) => String(r.purchase_id)).filter(Boolean),
+    ),
+  ]
+
+  for (const v_pid of purchaseIds) {
+    const v_effective_paid = await computeOutboundEffectivePaidForPurchase(supabase, ctx, v_pid)
+
+    const { data: pur, error: pErr } = await supabase
+      .from('purchases')
+      .select('total_amount')
+      .eq('id', v_pid)
+      .eq('tenant_id', ctx.tenant_id)
+      .maybeSingle()
+
+    if (pErr || !pur) return { ok: false, error: pErr?.message ?? 'purchase not found' }
+
+    const v_total_amount = Number((pur as { total_amount: number }).total_amount ?? 0)
+    const v_new_status =
+      v_effective_paid >= v_total_amount ? 'paid'
+        : v_effective_paid > 0 ? 'partial'
+          : 'unpaid'
+
+    const { error: uErr } = await supabase
+      .from('purchases')
+      .update({ status: v_new_status, updated_at: new Date().toISOString() })
+      .eq('id', v_pid)
+      .eq('tenant_id', ctx.tenant_id)
+
+    if (uErr) return { ok: false, error: uErr.message }
+  }
+
+  return { ok: true }
+}
+
+function pickReversalPaymentType(origType: unknown): { type: string; warned: boolean } {
+  if (origType != null && String(origType).trim() !== '') {
+    return { type: String(origType), warned: false }
+  }
+  return { type: PAYMENTS_TYPE_PAYOUT_REVERSAL, warned: true }
+}
+
+/**
+ * RFQ outbound 지급 append-only 상쇅 row ([D-024]). 원본 `payments` UPDATE 금지.
+ */
+export async function insertOutboundReversal(
+  payment_id: string,
+  reason: string,
+): Promise<ActionResult<{ reversal_payment_id: string | null; skipped?: boolean }>> {
   const supabase = await createSupabaseServer()
   const ctx      = await getAuthCtx(supabase)
   if (!ctx) return { success: false, error: '로그인 필요' }
 
-  // 1. payment 조회 + tenant 보호
+  const rsn = String(reason ?? '').trim().slice(0, 500) || 'disbursement_cancelled'
+
+  const { data: orig, error: oErr } = await supabase
+    .from('payments')
+    .select('*')
+    .eq('id', payment_id)
+    .eq('direction', 'outbound')
+    .or(tenantOutboundPayerScope(ctx.tenant_id))
+    .in('status', ['pending', 'confirmed'])
+    .is('reversal_of_id', null)
+    .maybeSingle()
+
+  if (oErr) return { success: false, error: oErr.message }
+  if (!orig) return { success: false, error: '지급 내역을 찾을 수 없거나 취소할 수 없습니다.' }
+
+  const origId = String((orig as { id: string }).id)
+
+  const { data: dup } = await supabase
+    .from('payments')
+    .select('id')
+    .eq('reversal_of_id', origId)
+    .maybeSingle()
+
+  if (dup?.id) {
+    await logPaymentReversalAudit(supabase, ctx, 'outbound_payment_reversal_created', {
+      payment_id: origId,
+      reversal_payment_id: String((dup as { id: string }).id),
+      skipped:    true,
+      reason:     rsn,
+      admin_user_id: ctx.user_id,
+    })
+    return { success: true, data: { reversal_payment_id: String((dup as { id: string }).id), skipped: true } }
+  }
+
+  const o   = orig as Record<string, unknown>
+  const tIn = pickReversalPaymentType(o.type)
+  if (tIn.warned) {
+    await logPaymentReversalAudit(supabase, ctx, 'payment_type_missing_warned', {
+      payment_id: origId,
+      direction:  'outbound',
+      defaulted_type: PAYMENTS_TYPE_PAYOUT_REVERSAL,
+      admin_user_id: ctx.user_id,
+    })
+  }
+
+  const now = new Date().toISOString()
+  const payload: Record<string, unknown> = {
+    tenant_id:          o.tenant_id ?? ctx.tenant_id,
+    payer_tenant_id:    o.payer_tenant_id ?? ctx.tenant_id,
+    payee_tenant_id:    o.payee_tenant_id ?? null,
+    counterparty_name:  o.counterparty_name ?? null,
+    amount:             o.amount,
+    payment_date:       o.payment_date ?? new Date().toISOString().slice(0, 10),
+    due_date:           o.due_date ?? null,
+    payment_method:     o.payment_method,
+    memo:               typeof o.memo === 'string' ? `${o.memo} [reversal]` : '[reversal]',
+    status:             'reversed',
+    direction:          'outbound',
+    deposit_amount:     o.deposit_amount ?? 0,
+    order_id:           o.order_id ?? null,
+    commerce_order_id:  o.commerce_order_id ?? null,
+    created_by:         ctx.user_id,
+    reversal_of_id:     origId,
+    reversal_reason:    rsn,
+    reversed_by:        ctx.user_id,
+    reversed_at:        now,
+    type:               tIn.type,
+  }
+
+  const { data: ins, error: insErr } = await supabase.from('payments').insert(payload).select('id').maybeSingle()
+
+  if (insErr) {
+    const code = (insErr as { code?: string }).code
+    await logPaymentReversalAudit(supabase, ctx, 'outbound_payment_reversal_failed', {
+      payment_id: origId,
+      error:      insErr.message,
+      code:       code ?? null,
+      admin_user_id: ctx.user_id,
+    })
+    if (code === '23505') {
+      return { success: true, data: { reversal_payment_id: null, skipped: true } }
+    }
+    return { success: false, error: insErr.message }
+  }
+
+  const newId = (ins as { id?: string } | null)?.id ?? null
+  const rec = await recalculatePurchasesAfterOutboundAppendOnly(supabase, ctx, origId)
+  if (!rec.ok) {
+    await logPaymentReversalAudit(supabase, ctx, 'outbound_payment_reversal_failed', {
+      payment_id: origId,
+      reversal_payment_id: newId,
+      error:      `purchase_recalc_failed: ${rec.error}`,
+      admin_user_id: ctx.user_id,
+    })
+    return { success: false, error: `지급 취소 처리 중 매입 상태 갱신 실패: ${rec.error}` }
+  }
+
+  await logPaymentReversalAudit(supabase, ctx, 'outbound_payment_reversal_created', {
+    payment_id: origId,
+    reversal_payment_id: newId,
+    amount:     o.amount,
+    order_id:   o.order_id ?? null,
+    reason:     rsn,
+    admin_user_id: ctx.user_id,
+  })
+
+  revalidatePath('/disbursements')
+  revalidatePath('/purchases')
+  return { success: true, data: { reversal_payment_id: newId } }
+}
+
+/**
+ * RFQ inbound 수금 append-only 상쇅 row ([D-024]). 원본 `payments` UPDATE 금지.
+ */
+export async function insertInboundPaymentReversal(
+  payment_id: string,
+  reason: string,
+): Promise<ActionResult<{ reversal_payment_id: string | null; skipped?: boolean }>> {
+  const supabase = await createSupabaseServer()
+  const ctx      = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const rsn = String(reason ?? '').trim().slice(0, 500) || 'payment_cancelled'
+
+  const { data: orig, error: oErr } = await supabase
+    .from('payments')
+    .select('*')
+    .eq('id', payment_id)
+    .eq('direction', 'inbound')
+    .or(tenantInboundPayeeScope(ctx.tenant_id))
+    .eq('status', 'confirmed')
+    .is('reversal_of_id', null)
+    .maybeSingle()
+
+  if (oErr) return { success: false, error: oErr.message }
+  if (!orig) return { success: false, error: '수금 내역을 찾을 수 없거나 취소할 수 없습니다.' }
+
+  const origId = String((orig as { id: string }).id)
+
+  const { data: dup } = await supabase
+    .from('payments')
+    .select('id')
+    .eq('reversal_of_id', origId)
+    .maybeSingle()
+
+  if (dup?.id) {
+    await logPaymentReversalAudit(supabase, ctx, 'inbound_payment_reversal_created', {
+      payment_id: origId,
+      reversal_payment_id: String((dup as { id: string }).id),
+      skipped:    true,
+      reason:     rsn,
+      admin_user_id: ctx.user_id,
+    })
+    return { success: true, data: { reversal_payment_id: String((dup as { id: string }).id), skipped: true } }
+  }
+
+  const o   = orig as Record<string, unknown>
+  const tIn = pickReversalPaymentType(o.type)
+  if (tIn.warned) {
+    await logPaymentReversalAudit(supabase, ctx, 'payment_type_missing_warned', {
+      payment_id: origId,
+      direction:  'inbound',
+      defaulted_type: PAYMENTS_TYPE_PAYOUT_REVERSAL,
+      admin_user_id: ctx.user_id,
+    })
+  }
+
+  const now = new Date().toISOString()
+  const payload: Record<string, unknown> = {
+    tenant_id:         o.tenant_id ?? ctx.tenant_id,
+    payer_tenant_id:   o.payer_tenant_id ?? null,
+    payee_tenant_id:   o.payee_tenant_id ?? ctx.tenant_id,
+    customer_id:       o.customer_id ?? null,
+    amount:            o.amount,
+    payment_date:      o.payment_date ?? new Date().toISOString().slice(0, 10),
+    due_date:          o.due_date ?? null,
+    payment_method:    o.payment_method,
+    memo:              typeof o.memo === 'string' ? `${o.memo} [reversal]` : '[reversal]',
+    status:            'reversed',
+    direction:         'inbound',
+    deposit_amount:    o.deposit_amount ?? 0,
+    order_id:          o.order_id ?? null,
+    commerce_order_id: o.commerce_order_id ?? null,
+    counterparty_name: o.counterparty_name ?? null,
+    created_by:        ctx.user_id,
+    reversal_of_id:    origId,
+    reversal_reason:   rsn,
+    reversed_by:       ctx.user_id,
+    reversed_at:       now,
+    type:              tIn.type,
+  }
+
+  const { data: ins, error: insErr } = await supabase.from('payments').insert(payload).select('id').maybeSingle()
+
+  if (insErr) {
+    const code = (insErr as { code?: string }).code
+    await logPaymentReversalAudit(supabase, ctx, 'inbound_payment_reversal_failed', {
+      payment_id: origId,
+      error:      insErr.message,
+      code:       code ?? null,
+      admin_user_id: ctx.user_id,
+    })
+    if (code === '23505') {
+      return { success: true, data: { reversal_payment_id: null, skipped: true } }
+    }
+    return { success: false, error: insErr.message }
+  }
+
+  const newId = (ins as { id?: string } | null)?.id ?? null
+  await logPaymentReversalAudit(supabase, ctx, 'inbound_payment_reversal_created', {
+    payment_id: origId,
+    reversal_payment_id: newId,
+    amount:     o.amount,
+    order_id:   o.order_id ?? null,
+    customer_id: o.customer_id ?? null,
+    reason:     rsn,
+    admin_user_id: ctx.user_id,
+  })
+
+  revalidatePath('/customers')
+  revalidatePath('/payments/new')
+  return { success: true, data: { reversal_payment_id: newId } }
+}
+
+// ============================================================
+// 수금 취소 — append-only 상쇅 row 우선 ([D-024])
+// D-024 transition debt fallback; remove after P1 verification — 레거시 UPDATE `reversed`
+// ledger가 confirmed만 집계하므로 취소 시 자동으로 잔액 원복
+// ============================================================
+
+export async function cancelPayment(payment_id: string, reason?: string): Promise<ActionResult> {
+  const supabase = await createSupabaseServer()
+  const ctx      = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
   const { data: payment } = await supabase
     .from('payments')
-    .select('id, status, tenant_id, customer_id, amount')
+    .select('id, status')
     .eq('id', payment_id)
-    // 전환: payee_tenant_id 우선 (legacy tenant_id 병행)
-    .or(`payee_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
-    .single()
+    .eq('direction', 'inbound')
+    .or(tenantInboundPayeeScope(ctx.tenant_id))
+    .maybeSingle()
 
-  if (!payment)                       return { success: false, error: '수금 내역을 찾을 수 없습니다.' }
+  if (!payment) return { success: false, error: '수금 내역을 찾을 수 없습니다.' }
   if (payment.status === 'reversed') return { success: false, error: '이미 취소된 수금입니다.' }
 
-  // 2. status → reversed (ledger 집계에서 자동 제외됨)
+  const { data: child } = await supabase
+    .from('payments')
+    .select('id')
+    .eq('reversal_of_id', payment_id)
+    .maybeSingle()
+  if (child?.id) return { success: false, error: '이미 취소된 수금입니다.' }
+
+  const append = await insertInboundPaymentReversal(payment_id, reason ?? 'payment_cancelled')
+  if (append.success) return { success: true }
+
+  // D-024 transition debt fallback; remove after P1 verification — append-only INSERT 실패 시에만 레거시 UPDATE
   const { error } = await supabase
     .from('payments')
     .update({ status: 'reversed' })
     .eq('id', payment_id)
-    // 전환: payee_tenant_id 우선 (legacy tenant_id 병행)
-    .or(`payee_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
+    .or(tenantInboundPayeeScope(ctx.tenant_id))
 
   if (error) return { success: false, error: error.message }
+
+  await logPaymentReversalAudit(supabase, ctx, 'inbound_payment_reversal_legacy_fallback_used', {
+    payment_id,
+    legacy_update_used: true,
+    append_error: append.error ?? null,
+    admin_user_id: ctx.user_id,
+  })
 
   revalidatePath('/customers')
   revalidatePath('/payments/new')
@@ -245,6 +633,20 @@ export async function getCustomerBalance(
     .single()
   if (!customer) return { success: false, error: '거래처 없음' }
 
+  const scope = tenantInboundPayeeScope(ctx.tenant_id)
+  const superseded = await fetchInboundSupersededOriginalPaymentIds(supabase, scope)
+
+  let payQ = supabase.from('payments')
+    .select('amount')
+    .eq('customer_id', customer_id)
+    // 전환: payee_tenant_id 우선 (legacy tenant_id 병행)
+    .or(scope)
+    .eq('direction', 'inbound')
+    .eq('status', 'confirmed')
+    .is('reversal_of_id', null)
+
+  if (superseded.length) payQ = payQ.not('id', 'in', `(${superseded.join(',')})`)
+
   const [{ data: orderRows }, { data: paymentRows }, { data: depRow }] = await Promise.all([
     supabase.from('orders')
       .select('final_amount, total_amount')
@@ -252,13 +654,7 @@ export async function getCustomerBalance(
       // 전환: seller_tenant_id 우선 (legacy tenant_id 병행)
       .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
       .eq('status', 'confirmed').is('deleted_at', null),
-    supabase.from('payments')
-      .select('amount')
-      .eq('customer_id', customer_id)
-      // 전환: payee_tenant_id 우선 (legacy tenant_id 병행)
-      .or(`payee_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
-      .eq('direction', 'inbound')
-      .eq('status', 'confirmed'),
+    payQ,
     supabase.from('customer_deposits')
       .select('balance')
       .eq('tenant_id', ctx.tenant_id)
@@ -628,15 +1024,21 @@ export async function getPaymentList(filters?: {
   const ctx      = await getAuthCtx(supabase)
   if (!ctx) return { success: false, error: '로그인 필요' }
 
+  const scope = tenantInboundPayeeScope(ctx.tenant_id)
+  const superseded = await fetchInboundSupersededOriginalPaymentIds(supabase, scope)
+
   let query = supabase
     .from('payments')
     .select('id, payment_date, customer_id, amount, deposit_amount, payment_method, memo, status, created_at, customers(id, name)')
     // 전환: payee_tenant_id 우선 (legacy tenant_id 병행)
-    .or(`payee_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
+    .or(scope)
     .eq('direction', 'inbound')
+    .is('reversal_of_id', null)
     .order('payment_date', { ascending: false })
     .order('created_at',   { ascending: false })
     .limit(500)
+
+  if (superseded.length) query = query.not('id', 'in', `(${superseded.join(',')})`)
 
   if (filters?.from)        query = query.gte('payment_date', filters.from)
   if (filters?.to)          query = query.lte('payment_date', filters.to)
@@ -692,6 +1094,7 @@ export async function getDisbursementList(filters?: {
     .select('id, counterparty_name, amount, due_date, status, payment_method, order_id, memo, created_at')
     .eq('direction', 'outbound')
     .or(`payer_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
+    .is('reversal_of_id', null)
     .order('due_date', { ascending: true, nullsFirst: false })
     .order('created_at', { ascending: true })
     .limit(50)
@@ -782,7 +1185,7 @@ export async function createDisbursement(
 }
 
 // ============================================================
-// 지급 취소 — reverse_disbursement RPC (RULE-10/11/19/20)
+// 지급 취소 — append-only INSERT 우선 ([D-024]); `reverse_disbursement` RPC는 transition debt fallback
 // ============================================================
 
 export async function cancelDisbursement(payment_id: string): Promise<ActionResult> {
@@ -790,12 +1193,22 @@ export async function cancelDisbursement(payment_id: string): Promise<ActionResu
   const ctx      = await getAuthCtx(supabase)
   if (!ctx) return { success: false, error: '로그인 필요' }
 
+  const append = await insertOutboundReversal(payment_id, 'disbursement_cancelled')
+  if (append.success) return { success: true }
+
+  // D-024 transition debt fallback; remove after P1 verification
   const { error } = await supabase.rpc('reverse_disbursement', {
     p_tenant_id:  ctx.tenant_id,
     p_payment_id: payment_id,
   })
 
   if (error) return { success: false, error: error.message }
+
+  await logPaymentReversalAudit(supabase, ctx, 'outbound_payment_reversal_legacy_fallback_used', {
+    payment_id,
+    append_error: append.error ?? null,
+    admin_user_id: ctx.user_id,
+  })
 
   revalidatePath('/disbursements')
   revalidatePath('/purchases')
