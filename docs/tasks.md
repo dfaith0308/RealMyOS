@@ -92,6 +92,7 @@
 - **작업 이력 (2026-05-14)**: PLATFORM-ERP-P2-001 — 품목별 allocation·공급자 payable 추적·paid 연동 — worklog: [`docs/worklogs/2026-05-14_feat_platform-erp-p2-001-commerce-allocations.md`](./worklogs/2026-05-14_feat_platform-erp-p2-001-commerce-allocations.md)
 - **작업 이력 (2026-05-14)**: PLATFORM-ERP-P2 allocation 취소 audit(`cancelled_at`/`cancelled_by`)·주문 cancelled 시 pending allocation 자동 취소 — worklog: [`docs/worklogs/2026-05-14_feat_platform-erp-p2-allocation-cancel-audit.md`](./worklogs/2026-05-14_feat_platform-erp-p2-allocation-cancel-audit.md)
 - **작업 이력 (2026-05-14)**: TEST-RUN-002 — `TEST-RUN-001` STEP 8(ERP bridge)·`TEST.md` 체크리스트·migration 목록 문서 반영 — worklog: [`docs/worklogs/2026-05-14_docs_test-run-002-storefront-payments-bridge.md`](./worklogs/2026-05-14_docs_test-run-002-storefront-payments-bridge.md)
+- **작업 이력 (2026-05-14)**: **BUILD-FIX-001** storefront-bank `admin-shared.module.css` import 경로 수정 + `realmyos`/`resturant_os` `tsc --noEmit` 전수 — worklog: [`docs/worklogs/2026-05-14_chore_build-fix-001-tsc-and-css-path.md`](./worklogs/2026-05-14_chore_build-fix-001-tsc-and-css-path.md)
 
 ---
 
@@ -975,6 +976,11 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 ---
 
 ## [관리자OS] realmyos/src/app/(admin)/
+
+#### [BUILD-FIX-001] 빌드·타입체크 오류 수정 (admin CSS import 등)
+- **범위**: `next build` / `tsc --noEmit` 에서 드러나는 **모듈 경로·타입 오류** 최소 수정 (기능 로직 변경 없음).
+- **migration 필요**: NO
+- **작업 이력 (2026-05-14)**: `storefront-bank/page.tsx` — `admin-shared.module.css` 상대 경로 정정(`../../../`) + `realmyos`·`resturant_os` 전체 `tsc --noEmit` 확인 — worklog: [`docs/worklogs/2026-05-14_chore_build-fix-001-tsc-and-css-path.md`](./worklogs/2026-05-14_chore_build-fix-001-tsc-and-css-path.md)
 
 ### ❌ 미구현
 

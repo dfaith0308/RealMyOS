@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { getStorefrontBankTransferSettingsAdmin } from '@/actions/admin/storefront-bank-transfer'
 import StorefrontBankTransferClient from '@/components/commerce/StorefrontBankTransferClient'
-import s from '../../admin-shared.module.css'
+import s from '../../../admin-shared.module.css'
 
 export default async function AdminStorefrontBankPage() {
   const res = await getStorefrontBankTransferSettingsAdmin()
