@@ -32,7 +32,7 @@
 13. **`docs/ORDER-LOCK-FORENSIC-001.md`** — `order_edit_lock_days`가 **`settings` vs `admin_settings`** 중 어디를 읽는지·잠금 bypass 여부·운영 영향(CASE) 정리.
 14. **`docs/POINT-FORENSIC-001.md`** — `orders.point_used`·적립금 UI가 **실제 잔고 시스템인지** vs **헤더 할인 숫자인지**; 테이블·원장·취소·중복 사용 포렌식.
 15. **`docs/DISCOUNT-FORENSIC-001.md`** — 기간할인·프로모션·`commerce_price`/`original_price`·storefront 계산·고객별 타깃·export 갭 포렌식.
-16. **`docs/DISCOUNT-ENGINE-DESIGN-001.md`** — DISCOUNT-ENGINE-DESIGN-001: B2B 가격정책 엔진 설계(고객 청구·공급자 기준·부담 주체별 할인·스냅샷·ERP 연동; 구현·migration 아님).
+16. **`docs/DISCOUNT-ENGINE-DESIGN-001.md`** — DISCOUNT-ENGINE-DESIGN-001: B2B 가격정책 엔진 설계(고객 청구·공급자 기준·부담 주체별 할인·스냅샷·ERP 연동; 구현·migration 아님). 수수료 기준 **안 A/B** 등 탐색안은 있으며, **정책 확정은 `DECISIONS.md` [D-020]** 가 우선한다.
 17. **`docs/PRODUCT.md` §5·§10·§12·§13 + `docs/CONTEXT.md` [ARCH-08A]·[ARCH-09]** — STOREFRONT-ARCH-001: 디닷페이스 플랫폼 주문·ERP·fulfillment(해내음)·정산 축 문서 정렬.
 18. **`docs/PLATFORM-ERP-ARCH-001.md`** — PLATFORM-ERP-ARCH-001: 관리자OS ERP capability·`commerce_orders` vs `orders`/`payments`·정산 KPI·원장 분리 **코드 기준 포렌식**.
 19. **`docs/PLATFORM-ERP-DESIGN-001.md`** — PLATFORM-ERP-DESIGN-001: `commerce_orders` 최소 ERP 연결(`payments` SSOT·receivable owner·동기화 시점·migration 설계 목록만).
@@ -1072,9 +1072,10 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
   - storefront **플랫폼 주문**(`commerce_orders` 등)과 **디닷페이스 ERP(관리자OS)** 의 **자동 연동**(수동 이중 입력 제거 방향)
   - **공급 allocation** → **Supplier Fulfillment**(예: 해내음코리아) → **Supplier Settlement**(공급자↔디닷페이스)
   - **플랫폼 receivable·매출·수수료·PG/결제** 운영 축과의 SSOT
+  - **B2B 가격·마진·공급자 기준가** 축: **`DECISIONS.md` [D-020]** · **`[DISCOUNT-ENGINE-001]`** (구현 시 allocation·스냅샷·`pricing_policies`와 연동)
 - **비범위(본 Epic 문서만)**: ERP 전 구현·`payments` 스키마 변경·allocation RPC 일괄 추가 — 별 지시 전까지 **설계·단계 과제 분해만**
 - **migration 필요**: 별도 결정(본 문서 턴에서는 **파일 추가 없음**)
-- **연계**: `COMMERCE-*`, `ADM-MISSING-006`, `POINT-FORENSIC-001`, `DISCOUNT-FORENSIC-001`, **`DISCOUNT-ENGINE-DESIGN-001`**, **`PLATFORM-ERP-ARCH-001`** (`docs/PLATFORM-ERP-ARCH-001.md`), **`PLATFORM-ERP-DESIGN-001`** (`docs/PLATFORM-ERP-DESIGN-001.md`)
+- **연계**: `COMMERCE-*`, `ADM-MISSING-006`, `POINT-FORENSIC-001`, `DISCOUNT-FORENSIC-001`, **`DISCOUNT-ENGINE-DESIGN-001`**, **`[DISCOUNT-ENGINE-001]`** (가격 엔진 구현 Epic), **`DECISIONS.md` [D-020]**, **`PLATFORM-ERP-ARCH-001`** (`docs/PLATFORM-ERP-ARCH-001.md`), **`PLATFORM-ERP-DESIGN-001`** (`docs/PLATFORM-ERP-DESIGN-001.md`)
 - **작업 이력 (2026-05-14)**: Epic 신규 등록·PRODUCT/CONTEXT 정렬·본 블록 — worklog: [`docs/worklogs/2026-05-14_docs_storefront-arch-001-platform-erp.md`](./worklogs/2026-05-14_docs_storefront-arch-001-platform-erp.md)
 - **작업 이력 (2026-05-14)**: `origin/dev` 병합으로 생긴 **`[PLATFORM-ERP-001]` 중복 블록 제거** — worklog: 동일
 - **작업 이력 (2026-05-14)**: **PLATFORM-ERP-ARCH-001** 현행 갭 포렌식 문서 — worklog: [`docs/worklogs/2026-05-14_docs_platform-erp-arch-001-forensic.md`](./worklogs/2026-05-14_docs_platform-erp-arch-001-forensic.md)
@@ -1087,6 +1088,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **작업 이력 (2026-05-14)**: **TEST-RUN-002** ERP bridge 검증 시나리오(`TEST-RUN-001` STEP 8·`TEST.md`) — worklog: [`docs/worklogs/2026-05-14_docs_test-run-002-storefront-payments-bridge.md`](./worklogs/2026-05-14_docs_test-run-002-storefront-payments-bridge.md)
 - **작업 이력 (2026-05-14)**: **TEST-RUN-ERP-001** ERP 회계 숫자 정합성 손 검증 가이드(`docs/TEST-RUN-ERP-001.md`) — worklog: [`docs/worklogs/2026-05-14_docs_test-run-erp-001-accounting-guide.md`](./worklogs/2026-05-14_docs_test-run-erp-001-accounting-guide.md)
 - **작업 이력 (2026-05-14)**: **DISCOUNT-ENGINE-DESIGN-001** B2B 가격정책 엔진 설계(`docs/DISCOUNT-ENGINE-DESIGN-001.md`) — worklog: [`docs/worklogs/2026-05-14_docs_discount-engine-design-001-b2b-pricing.md`](./worklogs/2026-05-14_docs_discount-engine-design-001-b2b-pricing.md)
+- **작업 이력 (2026-05-14)**: **DISCOUNT-ENGINE-POLICY-001** B2B 가격정책 핵심 원칙 — `DECISIONS.md` [D-020]·`PRODUCT.md`·`CONTEXT.md`·`[DISCOUNT-ENGINE-001]` Epic — worklog: [`docs/worklogs/2026-05-14_docs_discount-engine-policy-001-core-principles.md`](./worklogs/2026-05-14_docs_discount-engine-policy-001-core-principles.md)
 
 ### 🔍 확인 필요
 
@@ -1414,6 +1416,28 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **산출물**: [`docs/DISCOUNT-ENGINE-DESIGN-001.md`](./DISCOUNT-ENGINE-DESIGN-001.md)
 - **migration 필요**: 설계안 기준 **후속 별도 승인** (본 문서는 파일 목록만)
 - **작업 이력 (2026-05-14)**: 본 블록·문서 사용법 16·OPS — worklog: [`docs/worklogs/2026-05-14_docs_discount-engine-design-001-b2b-pricing.md`](./worklogs/2026-05-14_docs_discount-engine-design-001-b2b-pricing.md)
+
+#### [DISCOUNT-ENGINE-POLICY-001] B2B 가격정책 핵심 원칙 문서화 (정책 확정)
+- **우선순위**: HIGH
+- **선행 조건**: `DISCOUNT-ENGINE-DESIGN-001`·`DISCOUNT-FORENSIC-001`
+- **상태**: **정책 문서 반영 완료 (2026-05-14)** — 구현 아님
+- **설명**: 정무님 확정 원칙을 `DECISIONS.md` **[D-020]** · `PRODUCT.md` §13-1-2 · `CONTEXT.md` [ARCH-09] ERP 가격 축 · 본 Epic에 반영.
+- **산출물**: `DECISIONS.md` [D-020], `PRODUCT.md`, `CONTEXT.md`, `tasks.md` 본 블록
+- **migration 필요**: NO (정책만)
+- **작업 이력 (2026-05-14)**: 본 블록·OPS — worklog: [`docs/worklogs/2026-05-14_docs_discount-engine-policy-001-core-principles.md`](./worklogs/2026-05-14_docs_discount-engine-policy-001-core-principles.md)
+
+#### [DISCOUNT-ENGINE-001] B2B 가격정책 엔진 (구현 Epic)
+- **우선순위**: HIGH
+- **상태**: **설계·정책 완료 / 구현 미착수**
+- **범위 (구현 시)**:
+  - `pricing_policies` / `pricing_policy_targets` 테이블 및 RLS
+  - 가격 우선순위 엔진
+  - 주문 생성 시 가격정책 적용·**금액 스냅샷** 저장 (`customer_charge`, `supplier_basis`, `platform_discount`, `supplier_discount` 등)
+  - `commerce_order_allocations`에 **supplier_basis** 등 ERP 금액 모델 연결 (**[D-020]** · `DISCOUNT-ENGINE-DESIGN-001` 정합)
+  - `supplier_payables`·`payments`와의 대사·불변 스냅샷 유지 (`PLATFORM-ERP-P0-001`·`P2-003` 축)
+- **연계**: **`DECISIONS.md` [D-020]**, [`docs/DISCOUNT-ENGINE-DESIGN-001.md`](./DISCOUNT-ENGINE-DESIGN-001.md), **`[PLATFORM-ERP-001]`**, `COMMERCE-*`
+- **migration 필요**: Epic 착수 시 별도 설계·승인
+- **작업 이력**: 정책 반영은 **DISCOUNT-ENGINE-POLICY-001** worklog 참조
 
 ---
 

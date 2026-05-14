@@ -228,6 +228,24 @@
         섞으면 잔액 계산 오류 발생
 - 금지: 두 상태 혼용 / 하나로 합치는 것
 
+---
+
+## [D-020] B2B 가격정책 엔진 핵심 원칙
+- 결정일: 2026-05-14
+- 결정자: 정무님
+- 결정 (요약):
+  - **supplier_basis (옵션 B)**: 공급자에게 인정하는 **납품 기준가**. **`commerce_product_listings.commerce_price`는 supplier_basis로 사용하지 않는다.** 판매가(**customer_charge**, 식당 실결제)와 납품가(**supplier_basis**)는 **반드시 분리**한다.
+  - **customer_charge**: 식당이 실제 결제하는 금액. **platform_margin = customer_charge − supplier_payable** 로 플랫폼 마진 구조를 드러낸다.
+  - **supplier_payable**: `supplier_basis`에서 공급자 부담 할인·수수료 반영 후 지급 예정액(정책 식: `supplier_payable = supplier_basis − supplier_discount − platform_fee`; 세부는 PRODUCT.md·구현 시 스냅샷에 고정).
+  - **platform_fee (초기 정책, 안 B)**: `platform_fee = customer_charge × fee_rate` (`fee_rate`는 `admin_settings.platform_fee_rate` 등 기존 **[D-017]** 축 유지). **fee(원장·ERP bookkeeping)** 와 **margin(플랫폼 economics)** 는 개념적으로 분리해 추적한다.
+  - **customer_product_prices ↔ storefront**: **직접 연결하지 않는다.** `customer_product_prices`는 참고·제안 근거(공급자 CRM 캐시)이며, **storefront 적용 가격의 SSOT는 향후 `pricing_policies`**(미구현)로 둔다.
+  - **immutable ERP snapshot**: 가격은 **주문 생성 시점**에 스냅샷으로 확정하고, **allocation / supplier_payables / payments 대사**는 해당 스냅샷을 따른다. 이후 listing·정책 변경이 **기존 주문 금액을 바꾸지 않는다** (**[D-003]** 과 정합).
+- 이유: 할인 엔진이 단순 UI가 아니라 **플랫폼 마진**과 **공급자 payable**을 동시에 정하므로, 한 축(`commerce_price`만)으로 receivable·allocation·정산을 섞으면 회계·감사가 붕괴된다.
+- 구현: 본 결정은 **정책 확정** 단계. 스키마·코드 반영은 별도 Epic·migration 승인 후 진행 (`tasks.md` **`[DISCOUNT-ENGINE-001]`**).
+- 금지: `commerce_price`를 supplier_basis로 취급하기 · `customer_product_prices`를 storefront 가격 결정에 직접 연결하기 · 확정 스냅샷 없이 할인만으로 allocation/payable 역산하기 · 본 결정과 모순되는 임의 컬럼 추가(승인 전).
+
+---
+
 ## 추가 원칙
 새로운 결정이 생기면 아래 형식으로 추가:
 

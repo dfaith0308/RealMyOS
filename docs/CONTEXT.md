@@ -2170,6 +2170,23 @@ Supplier Settlement    (공급자 ↔ 디닷페이스)
 - **식당 ↔ 디닷페이스**: Storefront 결제·주문·환불·클레임·플랫폼 미수.
 - **공급자 ↔ 디닷페이스**: fulfillment 대가·수수료·정산(식당↔공급자 직접 결제 없음 — PRODUCT 직거래 금지와 동일).
 
+### ERP 가격 금액 축 (DISCOUNT-ENGINE-POLICY-001, 정책 확정 / 구현 전)
+
+아래는 **정무님 확정 원칙(2026-05-14)** 에 따른 **금액 축 정의**이다. **`DECISIONS.md` [D-020]** 과 `PRODUCT.md` §13-1-2를 SSOT로 한다.
+
+| 축 (개념명) | 저장소·코드에서의 기준 (현재 / 향후) |
+|-------------|----------------------------------------|
+| **customer_charge** | 식당 실결제 금액. **현행** storefront bridge에서 `payments.amount`는 `commerce_orders.total_amount`(주문 합계)와 대사 (`PLATFORM-ERP-P0-001`). **향후** 품목 스냅샷의 `customer_charge`와 1:1 대사하도록 정렬 예정. |
+| **supplier_basis** | 공급자 납품 기준가. **`commerce_order_allocations` 등에 `supplier_basis` 컬럼은 현재 없음** (grep·migration 기준). 향후 스냅샷 컬럼으로 추가 예정 — **구현 전 임의 컬럼 추가 금지** (migration 별도 승인). |
+| **platform_fee** | **정책(초기)**: `customer_charge × fee_rate`. **현행** `commerce_order_allocations.platform_fee_amount`는 `item_amount`(주문 라인 `total_price` 기반) × fee% 로 계산됨 (`commerce-allocation.ts`) — 단일 축 모델. **[D-020]** 적용 후에는 `customer_charge` 스냅샷 기준으로 맞출 **구현 과제**가 남음. |
+| **supplier_payable** | **현행** `supplier_payables.payable_amount` = allocation의 `supplier_payable_amount`. **향후** [D-020]·PRODUCT §13-1-2 식과 스냅샷 정합. |
+| **platform_margin** | `customer_charge − supplier_payable` (리포트·economics). **테이블 컬럼으로 저장할지**는 구현 단계에서 결정; 현재는 **계산값**으로 취급 가능. |
+
+**명시 (미구현)**:
+
+- **`pricing_policies` / `pricing_policy_targets` 테이블**: 저장소 incremental에 **아직 없음** (`DISCOUNT-ENGINE-DESIGN-001` 설계안만 존재).
+- **정책 단계**: 본 절은 **정책 확정 문서화**이며, 코드·DB 변경은 **`[DISCOUNT-ENGINE-001]`** Epic 승인 후 진행.
+
 ---
 
 ### commerce_orders 구조

@@ -7881,6 +7881,26 @@ Supplier Settlement       (공급자 ↔ 디닷페이스 정산)
 - **식당 ↔ 디닷페이스**: Storefront 결제·환불·클레임·플랫폼 미수 등.
 - **공급자 ↔ 디닷페이스**: fulfillment 대가·수수료·정산 주기 등(공급자↔식당 직접 결제는 PRODUCT 기존 원칙과 동일하게 **금지**).
 
+### 1-2. B2B 가격정책 엔진 — 금액 모델 (정책 확정, DISCOUNT-ENGINE-POLICY-001)
+
+가격정책 엔진은 단순 할인 UI가 아니라 **플랫폼 마진**과 **공급자 payable**을 동시에 정하는 **ERP 가격 엔진**이다. 아래 금액·원칙은 **정무님 확정(2026-05-14)** 이며, 상세 결정 문구는 **`DECISIONS.md` [D-020]** 과 **`docs/DISCOUNT-ENGINE-DESIGN-001.md`** 를 참조한다.
+
+#### [가격 금액 모델] (품목·주문 스냅샷 단위)
+
+- **customer_charge**: 식당 **실결제** 금액(청구·`payments` 대사 축).
+- **supplier_basis**: 공급자에게 인정하는 **납품 기준가**. **`commerce_price`와 동일시하지 않는다** (판매가 ≠ 납품가).
+- **platform_fee**: **초기 정책** `platform_fee = customer_charge × fee_rate` (fee_rate는 관리자 설정 축; 코드 하드코딩 금지 원칙은 기존과 동일).
+- **supplier_payable**: `supplier_basis − supplier_discount − platform_fee` (공급자 부담 할인·수수료 반영 후 지급 예정액).
+- **platform_margin**: `customer_charge − supplier_payable` (economics·리포트 축; **fee**와 개념 분리 유지).
+
+#### [원칙]
+
+- **판매가 ≠ 납품가** — 단일 “할인 후 결제금액”만으로 allocation·fee·payable·receivable을 **동시에** 정하지 않는다.
+- **storefront 가격 결정**은 향후 **`pricing_policies`** 가 SSOT(현재 테이블·엔진 **미구현**).
+- **`customer_product_prices`** 는 **참고 데이터**(공급자 CRM 마지막 거래가 등)일 뿐, **storefront 가격정책에 직접 연결하지 않는다.**
+- **fee**와 **margin** 은 설계·운영에서 분리해 추적한다.
+- **주문 생성 시** 가격·금액 **스냅샷 확정**; **allocation·supplier_payables** 는 해당 스냅샷 기반 **불변(immutable ERP snapshot)**. 이후 가격·정책 변경이 기존 주문에 영향을 주지 않는다.
+
 ### 2. RFQ와 역할 분리
 
 RFQ와 Storefront는 경쟁 관계가 아니다.
