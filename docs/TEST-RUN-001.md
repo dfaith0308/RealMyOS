@@ -3,7 +3,7 @@
 > **성격**: QA 자동화·단위 테스트 문서가 **아님**. 정무님이 **실제 브라우저에서** 식당OS(`resturant_os`)와 관리자OS(`realmyos`)를 순서대로 눌러보며 이상을 발견·기록하기 위한 **실행 순서 가이드**다.  
 > **전제**: 아래 경로·파일명·테이블명은 저장소 **현재 코드** 기준이다. 구현되지 않은 기능(예: 체크아웃의 **카드 결제** — UI에서 “준비 중”으로 막힘)은 **실행 대상에서 제외**한다.
 
-**상위 체크리스트**: 항목 정의·감사 관점은 [`docs/TEST.md`](./TEST.md)를 본다. 본 문서는 그 항목을 **손으로 재현하는 순서**로만 풀었다.
+**상위 체크리스트**: 항목 정의·감사 관점은 [`docs/TEST.md`](./TEST.md)를 본다. 본 문서는 그 항목을 **손으로 재현하는 순서**로만 풀었다. **STEP 8** = storefront→`payments` **ERP bridge** 검증, **STEP 9** = 테스트 데이터 정리.
 
 ---
 
@@ -302,7 +302,123 @@
 
 ---
 
-## STEP 8 — 테스트 데이터 정리
+## STEP 8 — storefront → ERP payments bridge 검증
+
+> **목적**: storefront 주문(`commerce_orders`)이 관리자 **입금 확인(paid)** 이후 **`payments` 원장**에 자동 기록되는지 검증한다.  
+> **성격**: 단순 주문 UI 테스트가 아니라 **ERP 연결(P0)** 검증이다.  
+> **코드 기준**: `realmyos/src/actions/admin/commerce.ts` — `updateCommerceOrderStatus` → `tryRecordPlatformReceivablePayment`; migration `realmyos/supabase/migrations/20260515100000_add_commerce_order_id_to_payments.sql`.
+
+### 사전 조건
+
+다음이 **모두** 갖춰졌는지 확인한다.
+
+1. **운영(또는 스테이징) DB**에 migration **`20260515100000_add_commerce_order_id_to_payments.sql`** 적용 완료 — `payments.commerce_order_id` 컬럼·부분 UNIQUE·`chk_order_id_exclusive`·`payments_payment_method_check` 확장 포함 (Table Editor / `information_schema` / 아래 SELECT로 확인).
+2. 관리자 **`/admin/commerce/storefront-bank`** 에 **무통장 계좌** 입력·저장 완료 (`getStorefrontBankTransferSettingsAdmin` / `updateStorefrontBankTransferSettings`, `storefront-bank-transfer.ts`).
+3. 테스트용 상품이 **`visible`** 이고 스토어 노출 조건을 만족하는지 확인한다(STEP 1·STEP 6과 동일 정책).
+4. **식당 테넌트 계정**으로 `resturant_os` 로그인 가능(STEP 0).
+
+### 실행 순서
+
+#### 1. 관리자OS 무통장 계좌 설정
+
+1. 관리자OS에서 **`/admin/commerce/storefront-bank`** 로 이동한다 (`realmyos/src/app/(admin)/admin/commerce/storefront-bank/page.tsx`).
+2. **은행명·계좌번호·예금주·안내 문구**를 입력하고 저장한다.
+3. 저장 성공(오류 없음)·재방문 시 값이 유지되는지 확인한다.
+
+#### 2. 식당 계정 storefront 주문
+
+1. 식당 계정으로 **`/buy`** → 상품 선택 → **`/buy/cart`** → **`/buy/checkout`** (`resturant_os`).
+2. 결제 수단은 **`무통장(bank_transfer)`** 을 선택한다(본 STEP의 PASS 조건이 `bank_transfer` 기준 — **카카오 주문전달**만 쓴 경우 PASS의 `payment_method` 기대값을 **`kakao_manual`** 로 바꿔 기록한다).
+3. 주문 제출 후 **주문번호 표시·무통장 계좌 안내 노출**을 확인한다.
+4. (선택) Supabase에서 해당 `commerce_orders` 행: **`payment_status = unpaid`**, **`status = pending_payment`** 인지 확인한다.
+
+#### 3. 관리자OS 주문 paid 처리
+
+1. 관리자 **`/admin/commerce/orders`** 로 이동한다 (`OrdersClient`).
+2. 위에서 만든 주문에 대해 **「입금 확인 완료」**(또는 동일 의미의 `pending_payment` → **`paid`** 전이 버튼)를 실행한다 — 서버 액션 `updateCommerceOrderStatus` (`commerce.ts`).
+3. 목록·상세에서 **`status`·`payment_status`(paid)** 반영을 확인한다.
+
+#### 4. `payments` 테이블 검증
+
+Supabase **SQL Editor**에서 아래를 실행한다.
+
+```sql
+SELECT
+  id,
+  commerce_order_id,
+  amount,
+  direction,
+  status,
+  payment_method,
+  payment_date,
+  payer_tenant_id,
+  payee_tenant_id,
+  tenant_id,
+  created_at
+FROM payments
+WHERE commerce_order_id IS NOT NULL
+ORDER BY created_at DESC
+LIMIT 5;
+```
+
+### PASS 조건
+
+아래를 **모두** 만족하면 PASS(무통장 시나리오 기준).
+
+- **`payments` 행이 1건 이상** 생겼고, **`commerce_order_id`** 가 해당 `commerce_orders.id` 와 일치한다.
+- **`amount`** = 해당 주문의 **`commerce_orders.total_amount`** 와 같다.
+- **`direction`** = `inbound`.
+- **`status`** = `confirmed`.
+- **`payer_tenant_id`** = 해당 주문의 **`commerce_orders.tenant_id`**(식당 테넌트).
+- **`payee_tenant_id`** = **`00000000-0000-0000-0000-000000000000`** (`PLATFORM_OWNER_TENANT`, `commerce.ts` 상수와 동일).
+- **`tenant_id`** = **`00000000-0000-0000-0000-000000000000`**(코드상 플랫폼 소유 행과 동일).
+- **`payment_method`** = `bank_transfer`(카카오 전용 테스트 시 `kakao_manual`).
+- **`payment_date`** 가 NULL이 아니다(날짜 컬럼).
+
+### FAIL 증상 및 확인 위치
+
+**CASE 1 — `payments` 행이 없음**
+
+- 확인: `realmyos/src/actions/admin/commerce.ts` — `updateCommerceOrderStatus`, `tryRecordPlatformReceivablePayment`(조건·에러 로그).
+- 확인: migration 미적용·RLS로 insert 거절 여부.
+
+**CASE 2 — `payment_method` CHECK 위반 등 스키마 오류**
+
+- 확인: DB 제약 **`payments_payment_method_check`** 및 migration **`20260515100000_add_commerce_order_id_to_payments.sql`** 적용 여부.
+
+**CASE 3 — 동일 주문에 `payments`가 2건 이상**
+
+- 확인: 인덱스 **`payments_commerce_order_id_unique`** 존재 여부.
+- 확인: 동일 **`commerce_order_id`** 중복 row.
+
+**CASE 4 — 주문은 `paid` 인데 `payments` 없음(부분 성공)**
+
+- 확인: **`admin_logs`** 에 **`action_type = platform_payment_insert_failed`** 가 있는지(`commerce.ts`).
+- 확인: 서버/브라우저 **`console.error('[platform storefront payment]' …)`** 출력.
+
+### 기록 템플릿
+
+```text
+STEP 8 — storefront → ERP bridge 검증
+
+실행일:
+실행자:
+
+주문번호:
+
+결과:
+PASS / FAIL / PARTIAL
+
+payments row 생성 여부:
+
+발견 문제:
+
+비고:
+```
+
+---
+
+## STEP 9 — 테스트 데이터 정리
 
 실제 DB를 쓰므로 **끝낼 때 반드시** 정리한다.
 
@@ -319,7 +435,7 @@
 - 운영 데이터와 **테스트 데이터를 식별**할 수 있다(메모·이름 규칙).
 - `hidden` 등 **의도치 않은 비노출 상품을 방치**하지 않았다.
 
-### STEP 8 실패 시
+### STEP 9 실패 시
 
 **증상**: 어떤 상품이 테스트인지 모름, 주문만 쌓임.
 
@@ -397,4 +513,7 @@ STEP N — [제목]
 | 식당 체크아웃·주문 완료 UI | `resturant_os/src/components/buy/BuyCheckoutClient.tsx` |
 | 주문 생성·멱등·장바구니 | `resturant_os/src/actions/buy.ts` — `createCommerceOrder` |
 | 멱등 migration | `realmyos/supabase/migrations/20260514200000_commerce_orders_idempotency.sql` |
+| storefront → `payments` P0 bridge | `realmyos/supabase/migrations/20260515100000_add_commerce_order_id_to_payments.sql` |
+| 주문 `paid` 시 플랫폼 수금 row | `realmyos/src/actions/admin/commerce.ts` — `updateCommerceOrderStatus`, `tryRecordPlatformReceivablePayment` |
+| 무통장 계좌 설정(관리자) | `realmyos/src/app/(admin)/admin/commerce/storefront-bank/page.tsx`, `realmyos/src/actions/admin/storefront-bank-transfer.ts` |
 | 체크리스트 원문 | `docs/TEST.md` |

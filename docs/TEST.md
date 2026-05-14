@@ -74,6 +74,7 @@
 - [ ] **XLSX export**가 실제 xlsx로 열리는가 (확장자만 바꾼 파일이 아닌지).
 - [ ] export 파일 **한글**이 Excel·메모장에서 깨지지 않는가 (공급자 대외 품질).
 - [ ] export가 **한 줄 = 한 상품(라인)** 인지, 주문 1건 다품목이 **여러 행**으로 나오는지 (발주 실수·수량 누락 리스크).
+- [ ] storefront 주문을 **입금 확인 완료(`paid`)** 처리했을 때 **`payments`** 원장에 **`commerce_order_id`** 로 inbound `confirmed` 행이 자동 생성되는가 (`PLATFORM-ERP-P0-001`, 손 실행 순서는 **`docs/TEST-RUN-001.md` STEP 8**).
 
 ### 상품 운영 UX
 
@@ -157,6 +158,7 @@
 ### 주문 멱등성
 
 - [ ] `20260514200000_commerce_orders_idempotency.sql` — `checkout_submission_id`·`idempotency_key` 및 부분 유니크 인덱스 (**식당OS 주문 멱등과 연동**)
+- [ ] `20260515100000_add_commerce_order_id_to_payments.sql` — storefront `paid` → `payments` 연결(`commerce_order_id`·`order_id` 배타 CHECK·`payment_method` CHECK 확장)
 
 ### 적용 후 스모크
 
