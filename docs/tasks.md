@@ -33,6 +33,7 @@
 14. **`docs/DISCOUNT-FORENSIC-001.md`** — 기간할인·프로모션·`commerce_price`/`original_price`·storefront 계산·고객별 타깃·export 갭 포렌식.
 15. **`docs/PRODUCT.md` §5·§10·§12·§13 + `docs/CONTEXT.md` [ARCH-08A]·[ARCH-09]** — STOREFRONT-ARCH-001: 디닷페이스 플랫폼 주문·ERP·fulfillment(해내음)·정산 축 문서 정렬.
 16. **`docs/PLATFORM-ERP-ARCH-001.md`** — PLATFORM-ERP-ARCH-001: 관리자OS ERP capability·`commerce_orders` vs `orders`/`payments`·정산 KPI·원장 분리 **코드 기준 포렌식**.
+17. **`docs/PLATFORM-ERP-DESIGN-001.md`** — PLATFORM-ERP-DESIGN-001: `commerce_orders` 최소 ERP 연결(`payments` SSOT·receivable owner·동기화 시점·migration 설계 목록만).
 
 ### [OPS — AI worklog] 절차 기록 (감사 ID와 별도)
 
@@ -83,6 +84,7 @@
 - **작업 이력 (2026-05-14)**: `DISCOUNT-FORENSIC-001` 기간할인·프로모션·storefront 가격 구조 포렌식 — worklog: [`docs/worklogs/2026-05-14_docs_discount-forensic-001-pricing.md`](./worklogs/2026-05-14_docs_discount-forensic-001-pricing.md)
 - **작업 이력 (2026-05-14)**: STOREFRONT-ARCH-001 — 디닷페이스 플랫폼 주문·ERP·fulfillment 문서 정렬(`PRODUCT`·`CONTEXT`·`[PLATFORM-ERP-001]`); **`origin/dev` 병합 후 `tasks.md` `[PLATFORM-ERP-001]` 중복 제거** — worklog: [`docs/worklogs/2026-05-14_docs_storefront-arch-001-platform-erp.md`](./worklogs/2026-05-14_docs_storefront-arch-001-platform-erp.md)
 - **작업 이력 (2026-05-14)**: PLATFORM-ERP-ARCH-001 — 관리자OS ERP capability·storefront→ERP 연결 **코드 포렌식**(`docs/PLATFORM-ERP-ARCH-001.md`) — worklog: [`docs/worklogs/2026-05-14_docs_platform-erp-arch-001-forensic.md`](./worklogs/2026-05-14_docs_platform-erp-arch-001-forensic.md)
+- **작업 이력 (2026-05-14)**: PLATFORM-ERP-DESIGN-001 — `commerce_orders` 최소 ERP 연결 **설계 문서**(`docs/PLATFORM-ERP-DESIGN-001.md`) — worklog: [`docs/worklogs/2026-05-14_docs_platform-erp-design-001-minimal-erp-link.md`](./worklogs/2026-05-14_docs_platform-erp-design-001-minimal-erp-link.md)
 
 ---
 
@@ -1054,10 +1056,11 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
   - **플랫폼 receivable·매출·수수료·PG/결제** 운영 축과의 SSOT
 - **비범위(본 Epic 문서만)**: ERP 전 구현·`payments` 스키마 변경·allocation RPC 일괄 추가 — 별 지시 전까지 **설계·단계 과제 분해만**
 - **migration 필요**: 별도 결정(본 문서 턴에서는 **파일 추가 없음**)
-- **연계**: `COMMERCE-*`, `ADM-MISSING-006`, `POINT-FORENSIC-001`, `DISCOUNT-FORENSIC-001`, **`PLATFORM-ERP-ARCH-001`** (`docs/PLATFORM-ERP-ARCH-001.md`)
+- **연계**: `COMMERCE-*`, `ADM-MISSING-006`, `POINT-FORENSIC-001`, `DISCOUNT-FORENSIC-001`, **`PLATFORM-ERP-ARCH-001`** (`docs/PLATFORM-ERP-ARCH-001.md`), **`PLATFORM-ERP-DESIGN-001`** (`docs/PLATFORM-ERP-DESIGN-001.md`)
 - **작업 이력 (2026-05-14)**: Epic 신규 등록·PRODUCT/CONTEXT 정렬·본 블록 — worklog: [`docs/worklogs/2026-05-14_docs_storefront-arch-001-platform-erp.md`](./worklogs/2026-05-14_docs_storefront-arch-001-platform-erp.md)
 - **작업 이력 (2026-05-14)**: `origin/dev` 병합으로 생긴 **`[PLATFORM-ERP-001]` 중복 블록 제거** — worklog: 동일
 - **작업 이력 (2026-05-14)**: **PLATFORM-ERP-ARCH-001** 현행 갭 포렌식 문서 — worklog: [`docs/worklogs/2026-05-14_docs_platform-erp-arch-001-forensic.md`](./worklogs/2026-05-14_docs_platform-erp-arch-001-forensic.md)
+- **작업 이력 (2026-05-14)**: **PLATFORM-ERP-DESIGN-001** 최소 ERP 연결 설계 — worklog: [`docs/worklogs/2026-05-14_docs_platform-erp-design-001-minimal-erp-link.md`](./worklogs/2026-05-14_docs_platform-erp-design-001-minimal-erp-link.md)
 
 ### 🔍 확인 필요
 
@@ -1070,7 +1073,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 
 ## [커머스] 플랫폼 Listing·주문·식당OS `/buy` (COMMERCE-*)
 
-> **SSOT 연계**: `docs/PRODUCT.md` §5·§10·§12·§13(Storefront)·§14(자동발주), `docs/CONTEXT.md` [ARCH-08A]·[ARCH-09]·STOREFRONT-ARCH-001, `docs/rules.md` RULE-27~30·RULE-01·RULE-03·RULE-17 등. 플랫폼 주문·ERP 정렬 Epic: **`[PLATFORM-ERP-001]`** · 현행 갭 포렌식: **`docs/PLATFORM-ERP-ARCH-001.md`**.  
+> **SSOT 연계**: `docs/PRODUCT.md` §5·§10·§12·§13(Storefront)·§14(자동발주), `docs/CONTEXT.md` [ARCH-08A]·[ARCH-09]·STOREFRONT-ARCH-001, `docs/rules.md` RULE-27~30·RULE-01·RULE-03·RULE-17 등. 플랫폼 주문·ERP 정렬 Epic: **`[PLATFORM-ERP-001]`** · 현행 갭 포렌식: **`docs/PLATFORM-ERP-ARCH-001.md`** · 최소 연결 설계: **`docs/PLATFORM-ERP-DESIGN-001.md`**.  
 > **집계**: `COMMERCE-*`는 `DB-*`/`SUP-*`/`ADM-*`/`RES-*` 유형별 표와 **별도 축** — 아래 **`#### [COMMERCE-…]`** 개수만 접두사별 합산에 포함.
 
 ### 📋 실행 과제 (미착수)
