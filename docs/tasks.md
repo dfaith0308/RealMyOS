@@ -65,6 +65,7 @@
 - **작업 이력 (2026-05-14)**: `docs/TEST.md` 운영 검증 체크리스트 신규(STOREFRONT·ADMIN·RFQ·비가역·부하·regression·migration) — worklog: [`docs/worklogs/2026-05-14_docs_test-operational-checklist.md`](./worklogs/2026-05-14_docs_test-operational-checklist.md)
 - **작업 이력 (2026-05-14)**: COMMERCE-008 상품 운영 quick edit (`getListingForEdit`·`updateListingFull`·편집 라우트·`ListingEditClient`·목록 수정 진입) — worklog: [`docs/worklogs/2026-05-14_feat_commerce-008-listing-quick-edit.md`](./worklogs/2026-05-14_feat_commerce-008-listing-quick-edit.md)
 - **작업 이력 (2026-05-14)**: `tasks.md` COMMERCE-008·009·집계·OPS·`COMMERCE-007` 상태 정합 문서 반영 — worklog: [`docs/worklogs/2026-05-14_docs_tasks-commerce-ops-alignment.md`](./worklogs/2026-05-14_docs_tasks-commerce-ops-alignment.md)
+- **작업 이력 (2026-05-14)**: COMMERCE-009 운영 전환 정리(forensic·prompt·`TEST.md`) — worklog: [`docs/worklogs/2026-05-14_feat_commerce-009-ops-forensic-cleanup.md`](./worklogs/2026-05-14_feat_commerce-009-ops-forensic-cleanup.md)
 
 ---
 
@@ -1279,18 +1280,15 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 #### [COMMERCE-009] 운영 전환 / forensic cleanup
 - **우선순위**: MEDIUM
 - **선행 조건**: 없음 (점진 정리; 편집 플로우는 `COMMERCE-008` 참고)
-- **상태**: **미착수**
-- **설명**: 커머스·관리자 UI를 운영 기준으로 정리하고, 개발용 잔여물을 제거한다. **아래 항목은 미구현이며 본 ID에서 완료 처리하지 않는다.**
-- **범위 (예정)**:
-  - DEBUG TEST BLOCK 제거
-  - forensic/debug state 제거
-  - DETAIL STEP logs 제거
-  - 운영 불필요 `console.log` 제거
-  - `ListingsClient` `window.prompt` 제거
-  - 상품 수정 플로우를 edit 페이지 기준으로 정리
-  - `docs/TEST.md`와 실제 운영·코드 상태 정합 반영(문서·체크리스트 갱신)
+- **상태**: **완료 (2026-05-14)** — 본 턴 범위: `ListingNewClient`·`ListingsClient`·`docs/TEST.md`·문서 이력
+- **설명**: 커머스·관리자 UI를 운영 기준으로 정리하고, 개발용 잔여물을 제거한다.
+- **범위 (본 턴에서 수행)**:
+  - `ListingNewClient`: DEBUG 패널·DEBUG TEST BLOCK·forensic/debug `console.log`·`detailDebug*` 등 개발 전용 상태·`auditValidateImageFileMeta` 제거; 업로드·검증·저장 실패는 `console.error` 유지
+  - `ListingsClient`: `window.prompt` 가격 수정·`updateListingPrice` 호출 제거 (서버 액션 `updateListingPrice` 유지)
+  - `docs/TEST.md`: COMMERCE-008·009 점검 항목 반영
 - **migration 필요**: NO (코드 정리·문서; DDL 별도 시 별 ID)
 - **작업 이력 (2026-05-14)**: 항목 신규 등록·범위·미착수 고정 — worklog: [`docs/worklogs/2026-05-14_docs_tasks-commerce-ops-alignment.md`](./worklogs/2026-05-14_docs_tasks-commerce-ops-alignment.md)
+- **작업 이력 (2026-05-14)**: forensic/debug 정리·prompt 제거·`TEST.md` 체크리스트 갱신 — worklog: [`docs/worklogs/2026-05-14_feat_commerce-009-ops-forensic-cleanup.md`](./worklogs/2026-05-14_feat_commerce-009-ops-forensic-cleanup.md)
 
 ---
 
@@ -1663,9 +1661,9 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 **비-DB 운영 확인** (`## 비-DB 운영 확인` 참조)  
 - **`SUP-CHECK-002`** — 언제든 병렬 가능 (Phase 0~6과 독립, 단 **운영/환경 접근** 필요)
 
-**Phase 8 — 커머스 (`COMMERCE-*`, `## [커머스]`)** — **진행 중** (일부 ID 완료·`COMMERCE-009` 미착수)  
+**Phase 8 — 커머스 (`COMMERCE-*`, `## [커머스]`)** — **진행 중** (일부 ID 완료·`COMMERCE-009` 본 턴 범위 완료)  
 - **순서**: **`COMMERCE-000`** (상태 플로우 문서 SSOT) → **`COMMERCE-001`** (DDL·RLS) → **`COMMERCE-002`**·**`003`** (관리자OS Listing·주문) → **`COMMERCE-004`** (사이드바) → **`COMMERCE-005`** (식당OS `/buy/*`) → **`COMMERCE-006`** (결제 연동) → **`COMMERCE-007`** (`/today` 진입, RULE-29 유지).  
-- **후속 정리**: **`COMMERCE-008`** (listing quick edit, 완료) · **`COMMERCE-009`** (운영 전환 / forensic cleanup, 미착수) — 로드맵 순서와 병행해 추적.
+- **후속 정리**: **`COMMERCE-008`** (listing quick edit, 완료) · **`COMMERCE-009`** (운영 전환 / forensic cleanup, 본 턴 허용 범위 완료) — 로드맵 순서와 병행해 추적.
 - **원칙**: 관리자OS·DB·운영 플로우 우선, 식당OS 쇼핑 UX·결제·today 연결은 후속.
 
 ---

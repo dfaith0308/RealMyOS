@@ -28,26 +28,6 @@ const ACCEPT_IMAGE =
 const MAX_THUMB_BADGES = 2
 const THUMB_H = 160
 
-type DetailDebugFlowPanel = {
-  pairs: string
-  flushEntered: string
-  flushSuccess: string
-  appendCount: string
-  lastAppendId: string
-  lastValidate: string
-  lastUpload: string
-}
-
-const DETAIL_DEBUG_FLOW_INIT: DetailDebugFlowPanel = {
-  pairs: '-',
-  flushEntered: '-',
-  flushSuccess: '-',
-  appendCount: '-',
-  lastAppendId: '-',
-  lastValidate: '-',
-  lastUpload: '-',
-}
-
 function randomBlockId(): string {
   try {
     const c = globalThis.crypto
@@ -112,50 +92,10 @@ function validateImageFile(file: File): string | null {
   return 'JPG/PNG/WebP/HEIC·HEIF만 가능합니다(허용 확장자 또는 image/jpeg·png·webp·heic·heif, octet-stream은 확장자 필요)'
 }
 
-/**
- * dev 전용. `validateImageFile` 본문은 수정하지 않고, 동일 분기를 반영한 분해 로그용.
- * (validateImageFile 시그니처/동작 변경 시 이 함수도 맞출 것)
- */
-function auditValidateImageFileMeta(file: File) {
-  const mimeRaw = (file.type ?? '').trim()
-  const mime = mimeRaw.toLowerCase()
-  const extOk = /\.(jpe?g|png|webp|heic|heif)$/i.test(file.name)
-  const mimeOk =
-    mime === 'image/jpeg' ||
-    mime === 'image/jpg' ||
-    mime === 'image/pjpeg' ||
-    mime === 'image/png' ||
-    mime === 'image/webp' ||
-    mime === 'image/heic' ||
-    mime === 'image/heif' ||
-    /^image\/heic/i.test(mime) ||
-    /^image\/heif/i.test(mime)
-  const octetOk = mime === 'application/octet-stream' && extOk
-  const vf = validateImageFile(file)
-  const extLabel = file.name.match(/\.([^.]+)$/i)?.[1] ?? '(none)'
-  return {
-    name: file.name,
-    type: file.type || '(empty)',
-    size: file.size,
-    ext: extLabel,
-    allowedMime: mimeOk,
-    allowedExt: extOk,
-    octetOk,
-    finalResult: vf === null ? 'PASS' : vf,
-  }
-}
-
 function blocksToSavedUrls(blocks: DetailImageBlock[]): string[] {
   return blocks
     .filter((b) => b.uploadStatus !== 'uploading' && b.uploadStatus !== 'error' && b.url.trim())
     .map((b) => b.url.trim())
-}
-
-/** CTA 콘솔 계측용 prefix (submitWithStatus 인자로부터) */
-function ctaDebugLabel(status: 'draft' | 'visible', andReset: boolean): 'DRAFT' | 'NEXT' | 'PUBLIC' {
-  if (status === 'draft') return 'DRAFT'
-  if (andReset) return 'NEXT'
-  return 'PUBLIC'
 }
 
 function detailBlockStatusLabel(block: DetailImageBlock): string {
@@ -328,24 +268,12 @@ export default function ListingNewClient() {
   const [thumbSource, setThumbSource] = useState<'none' | 'upload' | 'url'>('none')
   const [thumbPublicWarning, setThumbPublicWarning] = useState(false)
   const [detailBlocks, setDetailBlocks] = useState<DetailImageBlock[]>(empty.detailBlocks)
-  /** 개발용: 상세 이미지 피커·업로드 추적 (배포 번들에서 NODE_ENV로 숨김) */
-  const [detailDebugLastFiles, setDetailDebugLastFiles] = useState(0)
-  const [detailDebugLastUrl, setDetailDebugLastUrl] = useState<string>('-')
-  const [detailDebugLastError, setDetailDebugLastError] = useState<string | null>(null)
-  const [detailDebugFlow, setDetailDebugFlow] = useState<DetailDebugFlowPanel>(DETAIL_DEBUG_FLOW_INIT)
   const [listingDescription, setListingDescription] = useState(empty.listingDescription)
 
   useEffect(() => {
     detailBlocksRef.current = detailBlocks
   }, [detailBlocks])
 
-  useEffect(() => {
-    if (process.env.NODE_ENV !== 'development') return
-    console.log('[DETAIL STEP 12] render detailBlocks', {
-      length: detailBlocks.length,
-      ids: detailBlocks.map((b) => b.id),
-    })
-  }, [detailBlocks])
   const [adminMemo, setAdminMemo] = useState(empty.adminMemo)
   const [visibility, setVisibility] = useState<'draft' | 'visible'>(empty.visibility)
 
@@ -505,18 +433,9 @@ export default function ListingNewClient() {
   }
 
   async function uploadDetailBlockFile(blockId: string, file: File) {
-    const isDev = process.env.NODE_ENV === 'development'
     try {
-      if (isDev) {
-        console.log('[DETAIL STEP 10] uploadDetailBlockFile start', { blockId, name: file.name })
-        setDetailDebugFlow((p) => ({ ...p, lastUpload: `start:${file.name}` }))
-      }
       const v = validateImageFile(file)
       if (v) {
-        if (isDev) {
-          console.log('[DETAIL STEP 10] uploadDetailBlockFile validate fail before upload', v)
-          setDetailDebugFlow((p) => ({ ...p, lastUpload: `pre-upload-reject:${v}` }))
-        }
         setDetailBlocks((prev) => {
           const idx = prev.findIndex((x) => x.id === blockId)
           if (idx === -1) return prev
@@ -554,11 +473,7 @@ export default function ListingNewClient() {
         const res = await uploadListingImage(fd)
         if (!res.success) {
           const errMsg = res.error ?? '이미지 업로드에 실패했습니다.'
-          if (isDev) {
-            console.error('[DETAIL STEP 11] uploadListingImage fail', errMsg)
-            setDetailDebugFlow((p) => ({ ...p, lastUpload: `fail:${errMsg}` }))
-            setDetailDebugLastError(`upload:${errMsg}`)
-          }
+          console.error('[ListingNew] uploadListingImage failed', errMsg)
           setDetailBlocks((prev) => {
             const idx = prev.findIndex((x) => x.id === blockId)
             if (idx === -1) {
@@ -574,11 +489,6 @@ export default function ListingNewClient() {
           return
         }
         const url = res.data?.url ?? ''
-        if (isDev) {
-          console.log('[DETAIL STEP 11] upload success', { publicUrl: url })
-          setDetailDebugLastUrl(url.trim() || '-')
-          setDetailDebugFlow((p) => ({ ...p, lastUpload: `ok:${url.slice(0, 48)}…` }))
-        }
         setDetailBlocks((prev) => {
           const idx = prev.findIndex((x) => x.id === blockId)
           if (idx === -1) {
@@ -612,11 +522,7 @@ export default function ListingNewClient() {
         }
       } catch (netErr) {
         const errMsg = '네트워크 오류로 업로드에 실패했습니다. 잠시 후 다시 시도해 주세요.'
-        console.error('[DETAIL STEP 11] uploadDetailBlockFile network', netErr)
-        if (isDev) {
-          setDetailDebugLastError(`network:${netErr instanceof Error ? netErr.message : String(netErr)}`)
-          setDetailDebugFlow((p) => ({ ...p, lastUpload: `network-error` }))
-        }
+        console.error('[ListingNew] uploadDetailBlockFile network error', netErr)
         setDetailBlocks((prev) => {
           const idx = prev.findIndex((x) => x.id === blockId)
           if (idx === -1) {
@@ -631,11 +537,7 @@ export default function ListingNewClient() {
         })
       }
     } catch (fatal) {
-      console.error('[DETAIL STEP 10] uploadDetailBlockFile fatal', fatal)
-      if (isDev) {
-        setDetailDebugLastError(`uploadDetailBlockFile fatal:${fatal instanceof Error ? fatal.message : String(fatal)}`)
-        setDetailDebugFlow((p) => ({ ...p, lastUpload: 'fatal' }))
-      }
+      console.error('[ListingNew] uploadDetailBlockFile fatal', fatal)
     }
   }
 
@@ -648,52 +550,18 @@ export default function ListingNewClient() {
 
   /**
    * 파일 선택/드롭 직시 검증·블록 추가(업로드 중)·flushSync 커밋 후 서버 업로드.
-   * crypto.randomUUID 실패·flushSync 예외 등은 디버그 state에 남긴다.
    */
   function processIncomingDetailFiles(fileArr: File[]) {
-    const isDev = process.env.NODE_ENV === 'development'
     try {
-      if (isDev) {
-        setDetailDebugLastFiles(fileArr.length)
-        setDetailDebugLastError(null)
-        setDetailDebugFlow(DETAIL_DEBUG_FLOW_INIT)
-        console.log('[DETAIL STEP 4] processIncomingDetailFiles', { count: fileArr.length })
-        console.log(
-          '[DETAIL STEP 4] FILES meta',
-          fileArr.map((f) => ({ name: f.name, type: f.type || '(empty)', size: f.size })),
-        )
-        console.log('[DETAIL STEP 4] BEFORE APPEND ref.length', detailBlocksRef.current.length)
-      }
-
       const pairs: { file: File; block: DetailImageBlock }[] = []
       const rejectSamples: string[] = []
       for (const file of fileArr) {
-        if (isDev) {
-          console.log('[DETAIL STEP 5] validate start', file.name)
-          const audit = auditValidateImageFileMeta(file)
-          console.log('[DETAIL STEP 5-6] validate audit', audit)
-          setDetailDebugFlow((p) => ({
-            ...p,
-            lastValidate: JSON.stringify(audit),
-          }))
-        }
         const err = validateImageFile(file)
         if (err) {
-          if (isDev) {
-            console.log('VALIDATION FAIL', {
-              name: file.name,
-              type: file.type,
-              size: file.size,
-              reason: err,
-            })
-          }
           if (rejectSamples.length < MAX_DETAIL_IMAGES) {
             rejectSamples.push(`${file.name} | MIME:${file.type || '(empty)'} | ${err}`)
           }
           continue
-        }
-        if (isDev) {
-          console.log('[DETAIL STEP 6] validate pass', file.name)
         }
         try {
           const block = newBlock({
@@ -703,33 +571,15 @@ export default function ListingNewClient() {
             fileName: file.name,
           })
           pairs.push({ file, block })
-          if (isDev) {
-            console.log('[DETAIL STEP 7] pairs push', { id: block.id, name: file.name })
-          }
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e)
-          if (isDev) {
-            setDetailDebugLastError(`newBlock: ${msg}`)
-            console.error('[DETAIL STEP 7] newBlock throw', msg)
-          }
+          console.error('[ListingNew] newBlock failed', msg)
           showToast('상세 이미지 블록을 만들 수 없습니다. 페이지를 새로고침 후 다시 시도해 주세요.', 'error')
           return
         }
       }
 
-      if (isDev) {
-        setDetailDebugFlow((p) => ({ ...p, pairs: String(pairs.length) }))
-      }
-
       if (pairs.length === 0) {
-        const summary =
-          rejectSamples.length > 0
-            ? `검증 탈락 ${fileArr.length}건(블록 미추가). 예: ${rejectSamples.join(' | ')}`
-            : `pairs=0 (파일 ${fileArr.length}개, 원인 불명)`
-        if (isDev) {
-          setDetailDebugLastError(summary)
-          console.log('[DETAIL STEP 7-8] pairs empty skip flushSync', rejectSamples)
-        }
         showToast(
           rejectSamples[0] ??
             `선택한 ${fileArr.length}개를 상세 이미지로 추가할 수 없습니다(형식·용량 확인).`,
@@ -738,79 +588,32 @@ export default function ListingNewClient() {
         return
       }
 
-      if (isDev) {
-        console.log(
-          '[DETAIL STEP 7] pairs built',
-          pairs.length,
-          pairs.map((p) => ({ id: p.block.id, name: p.file.name })),
-        )
-      }
-
       let uploadJobs: { file: File; id: string }[] = []
       const appendReducer = (prev: DetailImageBlock[]) => {
         try {
-          if (isDev) {
-            console.log('[DETAIL STEP 8] appendReducer in', { prevLen: prev.length, pairsLen: pairs.length })
-          }
           const room = Math.max(0, MAX_DETAIL_IMAGES - prev.length)
           const slice = pairs.slice(0, room)
           uploadJobs = slice.map((p) => ({ file: p.file, id: p.block.id }))
           const next =
             slice.length === 0 ? prev : [...prev, ...slice.map((p) => p.block)]
-          if (isDev) {
-            console.log('[DETAIL STEP 8] appendReducer out', {
-              nextLen: next.length,
-              appendCount: slice.length,
-              lastId: slice[slice.length - 1]?.block.id,
-            })
-          }
           return next
         } catch (redErr) {
-          console.error('[DETAIL STEP 8] appendReducer error', redErr)
-          if (isDev) {
-            setDetailDebugLastError(
-              `appendReducer:${redErr instanceof Error ? redErr.message : String(redErr)}`,
-            )
-          }
+          console.error('[ListingNew] appendReducer error', redErr)
           throw redErr
         }
       }
 
-      if (isDev) {
-        console.log('[DETAIL STEP 8] before flushSync')
-        setDetailDebugFlow((p) => ({ ...p, flushEntered: 'yes' }))
-      }
       try {
         flushSync(() => {
           setDetailBlocks(appendReducer)
         })
-        if (isDev) {
-          console.log('[DETAIL STEP 9] after flushSync', {
-            uploadJobs: uploadJobs.length,
-            refLen: detailBlocksRef.current.length,
-          })
-          setDetailDebugFlow((p) => ({
-            ...p,
-            flushSuccess: 'yes',
-            appendCount: String(uploadJobs.length),
-            lastAppendId: uploadJobs[uploadJobs.length - 1]?.id ?? '-',
-          }))
-          queueMicrotask(() => {
-            console.log('[DETAIL STEP 9] microtask ref.length', detailBlocksRef.current.length)
-          })
-        }
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e)
-        console.error('[DETAIL STEP 8-9] flushSync error', e)
-        if (isDev) {
-          setDetailDebugLastError(`flushSync: ${msg}`)
-          setDetailDebugFlow((p) => ({ ...p, flushSuccess: `no:${msg}` }))
-        }
+        console.error('[ListingNew] flushSync error', e)
         setDetailBlocks(appendReducer)
         requestAnimationFrame(() => {
           for (const j of uploadJobs) {
             void uploadDetailBlockFile(j.id, j.file).catch((upErr) => {
-              console.error('[DETAIL upload after flushSync catch]', upErr)
+              console.error('[ListingNew] upload after flushSync catch', upErr)
             })
           }
         })
@@ -826,38 +629,19 @@ export default function ListingNewClient() {
 
       for (const j of uploadJobs) {
         void uploadDetailBlockFile(j.id, j.file).catch((upErr) => {
-          console.error('[DETAIL uploadDetailBlockFile promise]', upErr)
-          if (isDev) {
-            setDetailDebugLastError(`upload promise:${upErr instanceof Error ? upErr.message : String(upErr)}`)
-          }
+          console.error('[ListingNew] uploadDetailBlockFile promise rejection', upErr)
         })
       }
     } catch (outer) {
-      console.error('[DETAIL processIncomingDetailFiles outer]', outer)
-      if (isDev) {
-        setDetailDebugLastError(
-          `processIncomingDetailFiles:${outer instanceof Error ? outer.message : String(outer)}`,
-        )
-        setDetailDebugFlow((p) => ({ ...p, flushSuccess: 'outer-error' }))
-      }
+      console.error('[ListingNew] processIncomingDetailFiles outer error', outer)
       showToast('상세 이미지 추가 중 오류가 발생했습니다. 콘솔을 확인해 주세요.', 'error')
     }
   }
 
   function addDetailFilesFromPicker(e: React.ChangeEvent<HTMLInputElement>) {
-    const isDev = process.env.NODE_ENV === 'development'
-    if (isDev) {
-      console.log('[DETAIL STEP 2-3] addDetailFilesFromPicker onChange')
-    }
     /** FileList는 input과 라이브 연결됨 — value 초기화 후에는 같은 참조가 비어 보임. 반드시 먼저 배열 스냅샷. */
     const filesArr = Array.from(e.currentTarget.files ?? [])
-    const n = filesArr.length
-    if (isDev) {
-      console.log('[DETAIL STEP 3] FileList length', n)
-      setDetailDebugLastFiles(n)
-    }
     if (filesArr.length === 0) {
-      if (isDev) console.log('[DETAIL STEP 3] abort: no files selected')
       return
     }
     processIncomingDetailFiles(filesArr)
@@ -964,12 +748,6 @@ export default function ListingNewClient() {
     setThumbSource('none')
     setThumbPublicWarning(false)
     setDetailBlocks(base.detailBlocks)
-    if (process.env.NODE_ENV === 'development') {
-      setDetailDebugLastFiles(0)
-      setDetailDebugLastUrl('-')
-      setDetailDebugLastError(null)
-      setDetailDebugFlow(DETAIL_DEBUG_FLOW_INIT)
-    }
     setListingDescription(base.listingDescription)
     setAdminMemo(base.adminMemo)
     setVisibility(base.visibility)
@@ -978,12 +756,6 @@ export default function ListingNewClient() {
   }
 
   function submitWithStatus(status: 'draft' | 'visible', andReset: boolean) {
-    const isDev = process.env.NODE_ENV === 'development'
-    const cta = ctaDebugLabel(status, andReset)
-    if (isDev) {
-      console.log(`[CTA ${cta} STEP 2] submit start`, { status, andReset, pending })
-    }
-
     setError(null)
     if (status === 'draft') {
       setThumbPublicWarning(false)
@@ -994,55 +766,32 @@ export default function ListingNewClient() {
     }
     const pn = productName.trim()
     if (!pn) {
-      if (isDev) console.log(`[CTA ${cta} STEP 4] validation FAIL: 상품명`)
       setError('상품명을 입력해 주세요')
       showToast('상품명을 입력해 주세요', 'error')
       return
     }
     if (!rootCategoryId) {
-      if (isDev) console.log(`[CTA ${cta} STEP 4] validation FAIL: 대분류`)
       setError('대분류 카테고리를 선택해 주세요')
       showToast('대분류 카테고리를 선택해 주세요', 'error')
       return
     }
     if (!effectiveCategoryId) {
-      if (isDev) console.log(`[CTA ${cta} STEP 4] validation FAIL: 카테고리`)
       setError('카테고리를 선택해 주세요')
       showToast('카테고리를 선택해 주세요', 'error')
       return
     }
     const price = parseInt(commercePrice.replace(/\D/g, ''), 10)
     if (!Number.isFinite(price) || price <= 0) {
-      if (isDev) console.log(`[CTA ${cta} STEP 4] validation FAIL: 판매가`)
       setError('식식이 판매가는 1원 이상 정수로 입력해 주세요')
       showToast('식식이 판매가는 1원 이상 정수로 입력해 주세요', 'error')
       return
-    }
-
-    if (isDev) {
-      console.log(`[CTA ${cta} STEP 4] validation pass`)
     }
 
     const op = parseOriginal()
     const image_urls = blocksToSavedUrls(detailBlocks)
     const badge_labels = thumbnailBadges.length > 0 ? thumbnailBadges : null
 
-    if (isDev) {
-      console.log(`[CTA ${cta} STEP 3] payload build`, {
-        product_name: pn,
-        category_id: effectiveCategoryId,
-        commerce_price: price,
-        status,
-        andReset,
-        image_urls_count: image_urls.length,
-        shipping_group_id: shippingGroupId.trim() || null,
-      })
-    }
-
     startTransition(async () => {
-      if (isDev) {
-        console.log(`[CTA ${cta} STEP 5] createListingFull call (server action)`)
-      }
       try {
         const r = await createListingFull({
           brand_name: brandName.trim() || null,
@@ -1060,22 +809,11 @@ export default function ListingNewClient() {
           description: listingDescription.trim() || null,
           status,
         })
-        if (isDev) {
-          console.log(`[CTA ${cta} STEP 6] createListingFull returned`, {
-            success: r.success,
-            error: r.success ? undefined : r.error,
-            listing_id: r.success ? r.data?.listing_id : undefined,
-            product_id: r.success ? r.data?.product_id : undefined,
-          })
-        }
         if (!r.success) {
           const msg = r.error ?? '저장 실패'
-          console.error(`[CTA ${cta} STEP 6] createListingFull success:false`, msg)
+          console.error('[ListingNew] createListingFull failed', msg)
           setError(msg)
           showToast(msg, 'error')
-          if (isDev) {
-            console.log(`[CTA ${cta} STEP 9] callback end (failed, pending clears)`)
-          }
           return
         }
         const successToast =
@@ -1083,41 +821,18 @@ export default function ListingNewClient() {
             ? '임시저장이 완료되었습니다'
             : '상품이 저장되었습니다 · 스토어에 공개되었습니다'
         if (andReset) {
-          if (isDev) {
-            console.log(
-              `[CTA ${cta} STEP 7] toast + applyResetForm (저장 후 다음 상품: 동일 페이지, 폼 초기화)`,
-            )
-          }
           showToast(successToast)
           applyResetForm()
-          if (isDev) {
-            console.log(`[CTA ${cta} STEP 8] router.refresh (no router.push — 목록 미이동)`)
-          }
           router.refresh()
-          if (isDev) {
-            console.log(`[CTA ${cta} STEP 9] callback end (success+reset)`)
-          }
           return
         }
-        if (isDev) {
-          console.log(`[CTA ${cta} STEP 7] toast (저장 후 공개: 폼 유지)`)
-        }
         showToast(successToast)
-        if (isDev) {
-          console.log(`[CTA ${cta} STEP 8] router.refresh (no router.push — 목록 미이동)`)
-        }
         router.refresh()
-        if (isDev) {
-          console.log(`[CTA ${cta} STEP 9] callback end (success)`)
-        }
       } catch (e) {
-        console.error(`[CTA ${cta} STEP 5-6] createListingFull threw`, e)
+        console.error('[ListingNew] createListingFull threw', e)
         const msg = e instanceof Error ? e.message : String(e)
         setError(msg)
         showToast('저장 중 오류가 발생했습니다. 콘솔을 확인해 주세요.', 'error')
-        if (isDev) {
-          console.log(`[CTA ${cta} STEP 9] callback end (throw)`)
-        }
       }
     })
   }
@@ -1135,21 +850,6 @@ export default function ListingNewClient() {
       }).length,
     [detailBlocks],
   )
-  const detailDebugCounts = useMemo(() => {
-    let uploading = 0
-    let success = 0
-    let err = 0
-    for (const b of detailBlocks) {
-      if (b.uploadStatus === 'uploading') uploading += 1
-      else if (b.uploadStatus === 'error') err += 1
-      else if (
-        (b.uploadStatus === 'done_upload' || b.uploadStatus === 'url_linked') &&
-        b.url.trim()
-      )
-        success += 1
-    }
-    return { uploading, success, err }
-  }, [detailBlocks])
   const marginModeDisabled = cost <= 0
 
   function renderImageOverlays() {
@@ -1902,13 +1602,6 @@ export default function ListingNewClient() {
                   className={mod.btnEmphasis}
                   disabled={pending || detailBlocks.length >= MAX_DETAIL_IMAGES}
                   onClick={() => {
-                    if (process.env.NODE_ENV === 'development') {
-                      console.log('[DETAIL STEP 1] +이미지추가 click', {
-                        ref: Boolean(detailFilesRef.current),
-                        pending,
-                        atCap: detailBlocks.length >= MAX_DETAIL_IMAGES,
-                      })
-                    }
                     detailFilesRef.current?.click()
                   }}
                 >
@@ -2056,51 +1749,6 @@ export default function ListingNewClient() {
                   </div>
                 ))}
               </div>
-
-              {process.env.NODE_ENV === 'development' ? (
-                <div className={mod.detailDebugPanel} data-testid="listing-detail-debug">
-                  <div className={mod.detailDebugTitle}>DEBUG</div>
-                  <div>blocks: {detailBlocks.length}</div>
-                  <div>uploading: {detailDebugCounts.uploading}</div>
-                  <div>success: {detailDebugCounts.success}</div>
-                  <div>error: {detailDebugCounts.err}</div>
-                  <div>lastFiles: {detailDebugLastFiles}</div>
-                  <div>lastUrl: {detailDebugLastUrl}</div>
-                  <div>pairs: {detailDebugFlow.pairs}</div>
-                  <div>flushSync entered: {detailDebugFlow.flushEntered}</div>
-                  <div>flushSync success: {detailDebugFlow.flushSuccess}</div>
-                  <div>append count: {detailDebugFlow.appendCount}</div>
-                  <div>last append id: {detailDebugFlow.lastAppendId}</div>
-                  <div style={{ wordBreak: 'break-all' }}>
-                    last validate: {detailDebugFlow.lastValidate}
-                  </div>
-                  <div style={{ wordBreak: 'break-all' }}>last upload: {detailDebugFlow.lastUpload}</div>
-                  {detailDebugLastError ? <div style={{ color: '#b91c1c' }}>err: {detailDebugLastError}</div> : null}
-                  <div style={{ marginTop: 10 }}>
-                    <button
-                      type="button"
-                      className={mod.btnMuted}
-                      onClick={() => {
-                        setDetailDebugLastError(null)
-                        setDetailBlocks([
-                          {
-                            id: 'debug-test-block',
-                            url: 'https://picsum.photos/200',
-                            blockKind: 'file',
-                            uploadStatus: 'done_upload',
-                            fileName: 'debug-test.jpg',
-                            errorMessage: undefined,
-                          },
-                        ])
-                        showToast('DEBUG TEST BLOCK: 블록 1개 주입')
-                        console.log('DEBUG TEST BLOCK clicked → setDetailBlocks 1')
-                      }}
-                    >
-                      DEBUG TEST BLOCK
-                    </button>
-                  </div>
-                </div>
-              ) : null}
 
               <div className={mod.descBlockCard}>
                 <div className={mod.label}>상세 설명 (하단 텍스트 블록)</div>
@@ -2339,18 +1987,7 @@ export default function ListingNewClient() {
 
         <div className={mod.ctaBar}>
           <div className={mod.ctaInner}>
-            <Link
-              href="/admin/commerce/products"
-              className={`${mod.btn} ${mod.btnCancel}`}
-              onClick={() => {
-                if (process.env.NODE_ENV === 'development') {
-                  console.log('[CTA CANCEL STEP 1] click')
-                  console.log(
-                    '[CTA CANCEL STEP 2] navigation: Link href=/admin/commerce/products (no router.push in code)',
-                  )
-                }
-              }}
-            >
+            <Link href="/admin/commerce/products" className={`${mod.btn} ${mod.btnCancel}`}>
               취소
             </Link>
             <button
@@ -2358,9 +1995,6 @@ export default function ListingNewClient() {
               className={`${mod.btn} ${mod.btnDraft}`}
               disabled={pending}
               onClick={() => {
-                if (process.env.NODE_ENV === 'development') {
-                  console.log('[CTA DRAFT STEP 1] click', { pending })
-                }
                 submitWithStatus('draft', false)
               }}
             >
@@ -2371,9 +2005,6 @@ export default function ListingNewClient() {
               className={`${mod.btn} ${mod.btnNext}`}
               disabled={pending}
               onClick={() => {
-                if (process.env.NODE_ENV === 'development') {
-                  console.log('[CTA NEXT STEP 1] click', { pending })
-                }
                 submitWithStatus('visible', true)
               }}
             >
@@ -2384,9 +2015,6 @@ export default function ListingNewClient() {
               className={`${mod.btn} ${mod.btnPrimary}`}
               disabled={pending}
               onClick={() => {
-                if (process.env.NODE_ENV === 'development') {
-                  console.log('[CTA PUBLIC STEP 1] click', { pending })
-                }
                 submitWithStatus('visible', false)
               }}
             >

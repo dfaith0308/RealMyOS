@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState, useTransition } from 'react'
-import { updateListingPrice, updateListingStatus, type CommerceListingRow } from '@/actions/admin/commerce'
+import { updateListingStatus, type CommerceListingRow } from '@/actions/admin/commerce'
 import { formatKRW } from '@/lib/calc'
 import s from '@/app/(admin)/admin-shared.module.css'
 
@@ -75,20 +75,6 @@ export default function ListingsClient({
     },
     [refresh],
   )
-
-  function onChangePrice(listing: CommerceListingRow) {
-    const raw = window.prompt(
-      '새 판매가(원, 정수)',
-      String(listing.commerce_price),
-    )
-    if (raw === null) return
-    const price = parseInt(String(raw).replace(/[^\d]/g, ''), 10)
-    if (!Number.isFinite(price) || price <= 0) {
-      setError('가격은 1원 이상의 정수여야 합니다')
-      return
-    }
-    run(() => updateListingPrice(listing.id, price))
-  }
 
   return (
     <>
@@ -333,16 +319,6 @@ export default function ListingsClient({
                       >
                         수정
                       </Link>
-                      {row.status !== 'discontinued' ? (
-                        <button
-                          type="button"
-                          className={s.ghostBtn}
-                          disabled={pending}
-                          onClick={() => onChangePrice(row)}
-                        >
-                          가격
-                        </button>
-                      ) : null}
                       {row.status === 'draft' ? (
                         <button
                           type="button"

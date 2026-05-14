@@ -80,7 +80,23 @@
 - [ ] 등록된 상품의 **명·스펙·이미지 일괄 수정**이 코드 없이 가능한가 (불가면 “50개 SKU 유지보수” 현실성 평가).
 - [ ] 상품 **삭제(또는 완전 비노출)** 요구가 있을 때 정책·UI가 일치하는가 (discontinued만 가능 등).
 - [ ] 상품 **50개 이상**을 하루 관리할 때 **스크롤·검색·필터**로 버틸 수 있는가.
-- [ ] 가격 변경 등에 **`window.prompt`** 같은 입력이 있다면, **오타·취소·감사 추적 없음**으로 인한 운영 사고 가능성을 [!]로 명시했는가.
+- [x] 상품 목록에서 **`window.prompt` 기반 가격 수정이 제거**되었고, 가격·핵심 메타는 **`/admin/commerce/products/[id]/edit`** 에서 다루는가 (`COMMERCE-009` 코드 반영).
+
+### COMMERCE-008 구현 검증 (코드·스펙 기준, 수동 재확인 권장)
+
+- [x] 상품 **quick edit** 구현 (`getListingForEdit` / `updateListingFull`, 편집 라우트·`ListingEditClient`)
+- [x] **dirty check** 구현 (저장하지 않은 변경 시 이탈 확인)
+- [x] **`admin_logs`** 저장 시 **`listing_updated`** (before / after / changed_fields) 기록
+- [x] 상품 목록 **수정** 버튼 → **edit 페이지** 이동
+
+### COMMERCE-009 / 운영 UI·문서 정합 (수동 검증)
+
+- [ ] 상품 수정 후 **storefront**에 가격·이미지·노출이 기대대로 반영되는가
+- [ ] **dirty** 상태에서 브라우저 **뒤로가기** 시 confirm이 표시되는가
+- [ ] 저장 후 **`admin_logs`** 에 기대 필드로 기록되는가
+- [ ] 상품 목록에 **`window.prompt` 가격 수정**이 남아 있지 않은가
+- [ ] 상품 **신규 등록** 화면에 **DEBUG TEST BLOCK** 이 없는가
+- [ ] **운영 빌드**(`NODE_ENV=production`)에서 forensic·DEBUG 패널이 **노출되지 않는**가
 
 ---
 
