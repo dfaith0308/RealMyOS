@@ -113,6 +113,9 @@ export default async function AdminCommerceOrdersPage(props: {
           <Link href="/admin/commerce/storefront-bank" className={s.ghostBtn}>
             스토어 무통장
           </Link>
+          <Link href="/admin/commerce/allocations" className={s.ghostBtn}>
+            지급 예정(allocation)
+          </Link>
           <Link href="/admin/dashboard" className={s.ghostBtn}>
             대시보드
           </Link>

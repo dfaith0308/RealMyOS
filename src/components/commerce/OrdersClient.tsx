@@ -490,8 +490,8 @@ export default function OrdersClient({
                       </tr>
                     </thead>
                     <tbody>
-                      {detail.items.map((it, idx) => (
-                        <tr key={`${it.listing_title}-${idx}`}>
+                      {detail.items.map((it) => (
+                        <tr key={it.id || it.listing_title}>
                           <td className={s.td}>{it.listing_title}</td>
                           <td className={s.td}>{it.quantity}</td>
                           <td className={s.td}>{formatKRW(it.unit_price)}</td>
@@ -501,6 +501,44 @@ export default function OrdersClient({
                     </tbody>
                   </table>
                 </div>
+                {detail.allocations && detail.allocations.length > 0 ? (
+                  <div style={{ marginTop: 16 }}>
+                    <h4 className={s.kpiTitle} style={{ fontSize: 13, marginBottom: 8 }}>
+                      품목별 지급 예정 (allocation)
+                    </h4>
+                    <div className={s.tableWrap}>
+                      <table className={s.table}>
+                        <thead>
+                          <tr className={s.theadRow}>
+                            <th className={s.th}>공급자</th>
+                            <th className={s.th}>품목액</th>
+                            <th className={s.th}>수수료</th>
+                            <th className={s.th}>지급예정</th>
+                            <th className={s.th}>상태</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {detail.allocations.map((a) => (
+                            <tr key={a.id}>
+                              <td className={s.td}>
+                                <div className={s.cellStrong}>{a.supplier_name ?? '—'}</div>
+                                <div className={s.cellMutedSm}>{a.supplier_tenant_id}</div>
+                              </td>
+                              <td className={s.td}>{formatKRW(a.item_amount)}</td>
+                              <td className={s.td}>{formatKRW(a.platform_fee_amount)}</td>
+                              <td className={s.td}>{formatKRW(a.supplier_payable_amount)}</td>
+                              <td className={s.td}>{a.status}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : detail.payment_status === 'paid' ? (
+                  <p className={s.subtitle} style={{ marginTop: 12, fontSize: 12 }}>
+                    allocation 미생성 — listing 공급자 식별 실패 시 자동 생성이 생략됩니다. `commerce_product_listings.supplier_tenant_id` 등을 확인하세요.
+                  </p>
+                ) : null}
               </>
             ) : (
               <p className={s.subtitle}>표시할 데이터가 없습니다</p>

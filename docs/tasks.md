@@ -89,6 +89,7 @@
 - **작업 이력 (2026-05-14)**: PLATFORM-ERP-DESIGN-001 — `commerce_orders` 최소 ERP 연결 **설계 문서**(`docs/PLATFORM-ERP-DESIGN-001.md`) — worklog: [`docs/worklogs/2026-05-14_docs_platform-erp-design-001-minimal-erp-link.md`](./worklogs/2026-05-14_docs_platform-erp-design-001-minimal-erp-link.md)
 - **작업 이력 (2026-05-14)**: PLATFORM-ERP-P0-001 — `commerce_orders` `paid` 시 `payments` inbound·`commerce_order_id`·`payment_method` CHECK 확장 migration + `tryRecordPlatformReceivablePayment` — worklog: [`docs/worklogs/2026-05-14_feat_platform-erp-p0-001-commerce-payments.md`](./worklogs/2026-05-14_feat_platform-erp-p0-001-commerce-payments.md)
 - **작업 이력 (2026-05-14)**: PLATFORM-ERP-P1-001 — 관리자OS storefront 매출·미수·최근 입금 KPI (`getStorefrontRevenueKPI`, `/admin/commerce/orders`) — worklog: [`docs/worklogs/2026-05-14_feat_platform-erp-p1-001-storefront-kpi.md`](./worklogs/2026-05-14_feat_platform-erp-p1-001-storefront-kpi.md)
+- **작업 이력 (2026-05-14)**: PLATFORM-ERP-P2-001 — 품목별 allocation·공급자 payable 추적·paid 연동 — worklog: [`docs/worklogs/2026-05-14_feat_platform-erp-p2-001-commerce-allocations.md`](./worklogs/2026-05-14_feat_platform-erp-p2-001-commerce-allocations.md)
 - **작업 이력 (2026-05-14)**: TEST-RUN-002 — `TEST-RUN-001` STEP 8(ERP bridge)·`TEST.md` 체크리스트·migration 목록 문서 반영 — worklog: [`docs/worklogs/2026-05-14_docs_test-run-002-storefront-payments-bridge.md`](./worklogs/2026-05-14_docs_test-run-002-storefront-payments-bridge.md)
 
 ---
@@ -1068,6 +1069,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **작업 이력 (2026-05-14)**: **PLATFORM-ERP-DESIGN-001** 최소 ERP 연결 설계 — worklog: [`docs/worklogs/2026-05-14_docs_platform-erp-design-001-minimal-erp-link.md`](./worklogs/2026-05-14_docs_platform-erp-design-001-minimal-erp-link.md)
 - **작업 이력 (2026-05-14)**: **PLATFORM-ERP-P0-001** `paid`→`payments` 최소 연결 구현 — worklog: [`docs/worklogs/2026-05-14_feat_platform-erp-p0-001-commerce-payments.md`](./worklogs/2026-05-14_feat_platform-erp-p0-001-commerce-payments.md)
 - **작업 이력 (2026-05-14)**: **PLATFORM-ERP-P1-001** 관리자OS storefront 매출·미수·최근 입금 KPI (`getStorefrontRevenueKPI`, `/admin/commerce/orders`) — worklog: [`docs/worklogs/2026-05-14_feat_platform-erp-p1-001-storefront-kpi.md`](./worklogs/2026-05-14_feat_platform-erp-p1-001-storefront-kpi.md)
+- **작업 이력 (2026-05-14)**: **PLATFORM-ERP-P2-001** 품목별 `commerce_order_allocations`·공급자 식별·paid 시 생성·지급 예정 수동 확정·`/admin/commerce/allocations` — worklog: [`docs/worklogs/2026-05-14_feat_platform-erp-p2-001-commerce-allocations.md`](./worklogs/2026-05-14_feat_platform-erp-p2-001-commerce-allocations.md)
 - **작업 이력 (2026-05-14)**: **TEST-RUN-002** ERP bridge 검증 시나리오(`TEST-RUN-001` STEP 8·`TEST.md`) — worklog: [`docs/worklogs/2026-05-14_docs_test-run-002-storefront-payments-bridge.md`](./worklogs/2026-05-14_docs_test-run-002-storefront-payments-bridge.md)
 
 ### 🔍 확인 필요

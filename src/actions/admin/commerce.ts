@@ -12,6 +12,7 @@ import {
 } from '@/lib/commerce-constants'
 import type { ActionResult } from '@/types/order'
 import type { SupplierExportRow } from '@/lib/commerce-order-supplier-export'
+import { createCommerceOrderAllocations } from '@/actions/admin/commerce-allocation'
 
 export type { ListingShippingType } from '@/lib/commerce-constants'
 
@@ -1781,16 +1782,30 @@ export type CommerceOrderSummaryRow = {
 }
 
 export type CommerceOrderItemRow = {
+  id: string
   listing_title: string
   quantity: number
   unit_price: number
   total_price: number
 }
 
+export type CommerceAllocationDetailRow = {
+  id: string
+  commerce_order_item_id: string
+  supplier_tenant_id: string
+  supplier_name: string | null
+  item_amount: number
+  platform_fee_rate: number
+  platform_fee_amount: number
+  supplier_payable_amount: number
+  status: string
+}
+
 export type CommerceOrderDetail = Omit<CommerceOrderSummaryRow, 'items_count'> & {
   source: string
   rfq_request_id: string | null
   items: CommerceOrderItemRow[]
+  allocations: CommerceAllocationDetailRow[]
 }
 
 const ORDER_LIST_SELECT = `
@@ -2097,7 +2112,7 @@ export async function getCommerceOrderDetail(id: string): Promise<ActionResult<{
       refund_pending_at,
       created_at,
       updated_at,
-      commerce_order_items ( listing_title, quantity, unit_price, total_price )
+      commerce_order_items ( id, listing_title, quantity, unit_price, total_price )
     `,
     )
     .eq('id', oid)
@@ -2106,8 +2121,9 @@ export async function getCommerceOrderDetail(id: string): Promise<ActionResult<{
   if (error) return { success: false, error: error.message }
   if (!row) return { success: false, error: '주문을 찾을 수 없습니다' }
 
-  const rawItems = (row as any).commerce_order_items as CommerceOrderItemRow[] | undefined
+  const rawItems = (row as any).commerce_order_items as (CommerceOrderItemRow & { id?: string })[] | undefined
   const items = (Array.isArray(rawItems) ? rawItems : []).map((it) => ({
+    id: String(it.id ?? ''),
     listing_title: it.listing_title,
     quantity: it.quantity,
     unit_price: it.unit_price,
@@ -2160,6 +2176,36 @@ export async function getCommerceOrderDetail(id: string): Promise<ActionResult<{
     source: String(orderRest.source ?? 'direct'),
     rfq_request_id: (orderRest.rfq_request_id as string | null) ?? null,
     items,
+    allocations: [],
+  }
+
+  const { data: allocData, error: allocErr } = await supabase
+    .from('commerce_order_allocations')
+    .select(
+      'id, commerce_order_item_id, supplier_tenant_id, item_amount, platform_fee_rate, platform_fee_amount, supplier_payable_amount, status',
+    )
+    .eq('commerce_order_id', oid)
+
+  if (!allocErr && allocData && allocData.length > 0) {
+    const supIds = [...new Set((allocData as { supplier_tenant_id: string }[]).map((a) => a.supplier_tenant_id))]
+    const allocNameMap = new Map<string, string | null>()
+    if (supIds.length) {
+      const { data: tn } = await supabase.from('tenants').select('id, name').in('id', supIds)
+      for (const t of (tn ?? []) as { id: string; name: string | null }[]) {
+        allocNameMap.set(t.id, t.name ?? null)
+      }
+    }
+    order.allocations = (allocData as CommerceAllocationDetailRow[]).map((a) => ({
+      id: a.id,
+      commerce_order_item_id: a.commerce_order_item_id,
+      supplier_tenant_id: a.supplier_tenant_id,
+      supplier_name: allocNameMap.get(a.supplier_tenant_id) ?? null,
+      item_amount: a.item_amount,
+      platform_fee_rate: Number(a.platform_fee_rate),
+      platform_fee_amount: a.platform_fee_amount,
+      supplier_payable_amount: a.supplier_payable_amount,
+      status: a.status,
+    }))
   }
 
   return { success: true, data: { order } }
@@ -2418,6 +2464,7 @@ export async function updateCommerceOrderStatus(
       total_amount: Number((row as { total_amount?: number }).total_amount ?? 0),
       payment_method: String(row.payment_method ?? ''),
     })
+    await createCommerceOrderAllocations(oid)
   }
 
   revalidatePath('/admin/commerce/orders')
