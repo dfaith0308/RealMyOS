@@ -1511,6 +1511,43 @@ deposit_logs          → 예치금 변동 이력 (append-only)
 
 ---
 
+## lifecycle finality 정의 ([D-023] · ACCOUNTING-LIFECYCLE-POLICY-001)
+
+> **현행**: 저장소는 **transition state** — §아래 “**현행 구조 한계**” 참조. **목표·정책**: **`DECISIONS.md` [D-023]** 및 `docs/ACCOUNTING-LIFECYCLE-DESIGN-001.md`.
+
+### [finality 단계 정의] (정책 목표 기준)
+
+| 단계 | finality (목표) | rollback / 역처리 (목표 방향) | 방식 (목표) |
+|------|-------------------|-------------------------------|-------------|
+| allocation `pending` | 낮음 | 자동 `cancelled` 허용(현행과 정합) | 운영·append-only cancel 이벤트 |
+| allocation `confirmed` | 중간 | **수동만**([D-021]) | 수동 reversal / 조정 절차 |
+| payable `unpaid` | 중간 | 취소 가능(현행: status update → `cancelled`) | 금액 불변·감사 메타 |
+| payable `paid` | **높음** | **금지 방향** | **adjustment only** ([D-023] Q1) |
+| settlement `payments` row (`type=settlement`) | **매우 높음** | **금지** | **새 이벤트로 상쇄** (adjustment / reversal event) |
+| **payout 완료** (자금 사실) | **최고** | **금지** | **external reconciliation** |
+
+### [UPDATE `reversed` transition debt]
+
+- **`reverse_disbursement`**: `payments` **`UPDATE` → `status = 'reversed'`** (`supabase/migrations/20260507060000_create_reverse_disbursement.sql`).
+- **storefront inbound reversal**: **`payments` INSERT** + `reversal_of_id` (**append-only**).
+- **두 패턴 공존** = **transition debt** — outbound accounting semantics **미정렬**.
+- **즉시 제거 대상이 아님** — **[D-023]** 전환 순서에 따라 **정책 확정 후 P1에서 점진 이행** · **append-only outbound 통합 예정**.
+
+### [settlement ≠ paid 원칙]
+
+- **settlement** = **회계 인식 이벤트** (RFQ 수수료 `payments` row; **[D-022]** 에서 명칭 유지).
+- **`paid`** = **실제 지급 finality** (`supplier_payables.paid` — **[D-023]** Q1 옵션 B).
+- **settlement 완료 ≠ payable `paid`** — 혼동 금지.
+- **payable `paid`** 는 **external reconciliation** 성격.
+
+### [settlement / payout 현재 구조 한계] (현행 사실)
+
+- storefront **`supplier_payables` → `paid` 전이**: 애플리케이션 경로 **미구현**(저장소 기준, `ACCOUNTING-LIFECYCLE-DESIGN-001` 교차).
+- **settlement ↔ payable**: 코드상 **직접 연결 없음**(RFQ settlement vs storefront payable **별개 흐름**).
+- **append-only outbound accounting**: **미완성** — `UPDATE reversed` 축 잔존.
+
+---
+
 ## [ECL] Execution Control Layer — 실행 통제 레이어
 
 > 이 레이어는 기존 구조를 수정하지 않는다.

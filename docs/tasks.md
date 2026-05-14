@@ -49,6 +49,7 @@
 30. **`docs/PAYMENTS-TAXONOMY-DESIGN-001.md`** — **PAYMENTS-TAXONOMY-DESIGN-001**: `payments` 회계 이벤트 `type` taxonomy·lifecycle·KPI·append-only 평가 **설계 전용**(구현·migration 실행 없음).
 31. **`docs/DECISIONS.md` [D-022]** · **`docs/PRODUCT.md`**(10-9) · **`docs/CONTEXT.md`** — **PAYMENTS-TAXONOMY-POLICY-001**: `payments.type` taxonomy **정책 확정**(legacy NULL·신규 type 필수 방향·`settlement` 유지·P1 enforcement 순서·**[SCHEMA-DRIFT-001]** 기록; 구현·migration·DB 변경 없음).
 32. **`docs/ACCOUNTING-LIFECYCLE-DESIGN-001.md`** — **ACCOUNTING-LIFECYCLE-DESIGN-001**: settlement / payout / payable / reversal chain **lifecycle 설계**(코드 기준 사실 + 권장 semantics; 구현·migration 실행 없음).
+33. **`docs/DECISIONS.md` [D-023]** · **`docs/PRODUCT.md`**(10-9) · **`docs/CONTEXT.md`** — **ACCOUNTING-LIFECYCLE-POLICY-001**: settlement/payout/finality·**`paid` 정의**·UPDATE reversed transition debt·outbound append-only 수렴 **정책 확정**(구현·migration 없음).
 
 ### [OPS — AI worklog] 절차 기록 (감사 ID와 별도)
 
@@ -118,6 +119,7 @@
 - **작업 이력 (2026-05-14)**: **PAYMENTS-TAXONOMY-DESIGN-001** `payments` type taxonomy 설계 문서(`docs/PAYMENTS-TAXONOMY-DESIGN-001.md`)·`tasks.md` — worklog: [`docs/worklogs/2026-05-14_docs_payments-taxonomy-design-001.md`](./worklogs/2026-05-14_docs_payments-taxonomy-design-001.md)
 - **작업 이력 (2026-05-14)**: **PAYMENTS-TAXONOMY-POLICY-001** `payments.type` 정책 확정 → `DECISIONS.md` **[D-022]** · `PRODUCT.md`(10-9) · `CONTEXT.md`(drift·enforcement 상태) · 본 Epic — worklog: [`docs/worklogs/2026-05-14_docs_payments-taxonomy-policy-001.md`](./worklogs/2026-05-14_docs_payments-taxonomy-policy-001.md)
 - **작업 이력 (2026-05-14)**: **ACCOUNTING-LIFECYCLE-DESIGN-001** settlement/payout/payable/reversal lifecycle 설계 문서(`docs/ACCOUNTING-LIFECYCLE-DESIGN-001.md`)·`tasks.md` — worklog: [`docs/worklogs/2026-05-14_docs_accounting-lifecycle-design-001.md`](./worklogs/2026-05-14_docs_accounting-lifecycle-design-001.md)
+- **작업 이력 (2026-05-14)**: **ACCOUNTING-LIFECYCLE-POLICY-001** lifecycle 정책 확정 → `DECISIONS.md` **[D-023]** · `PRODUCT.md`(10-9) · `CONTEXT.md` — worklog: [`docs/worklogs/2026-05-14_docs_accounting-lifecycle-policy-001.md`](./worklogs/2026-05-14_docs_accounting-lifecycle-policy-001.md)
 
 ---
 
@@ -1107,6 +1109,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **작업 이력 (2026-05-14)**: **PLATFORM-ERP-P2-001 후속** `cancelled_at`/`cancelled_by` audit + 주문 취소 시 pending allocation 자동 cancelled — worklog: [`docs/worklogs/2026-05-14_feat_platform-erp-p2-allocation-cancel-audit.md`](./worklogs/2026-05-14_feat_platform-erp-p2-allocation-cancel-audit.md)
 - **작업 이력 (2026-05-14)**: **PLATFORM-ERP-P2-003** `supplier_payables`·확정 시 INSERT·관리자/공급자 RLS·`/admin/commerce/payables` — worklog: [`docs/worklogs/2026-05-14_feat_platform-erp-p2-003-supplier-payables.md`](./worklogs/2026-05-14_feat_platform-erp-p2-003-supplier-payables.md)
 - **작업 이력 (2026-05-14)**: **ACCOUNTING-LIFECYCLE-DESIGN-001** settlement/payout/reversal lifecycle 설계(`docs/ACCOUNTING-LIFECYCLE-DESIGN-001.md`) — worklog: [`docs/worklogs/2026-05-14_docs_accounting-lifecycle-design-001.md`](./worklogs/2026-05-14_docs_accounting-lifecycle-design-001.md)
+- **작업 이력 (2026-05-14)**: **ACCOUNTING-LIFECYCLE-POLICY-001** → `DECISIONS.md` **[D-023]** · `PRODUCT.md` · `CONTEXT.md` — worklog: [`docs/worklogs/2026-05-14_docs_accounting-lifecycle-policy-001.md`](./worklogs/2026-05-14_docs_accounting-lifecycle-policy-001.md)
 - **작업 이력 (2026-05-14)**: **TEST-RUN-002** ERP bridge 검증 시나리오(`TEST-RUN-001` STEP 8·`TEST.md`) — worklog: [`docs/worklogs/2026-05-14_docs_test-run-002-storefront-payments-bridge.md`](./worklogs/2026-05-14_docs_test-run-002-storefront-payments-bridge.md)
 - **작업 이력 (2026-05-14)**: **TEST-RUN-ERP-001** ERP 회계 숫자 정합성 손 검증 가이드(`docs/TEST-DEV/TEST-RUN-ERP-001.md`) — worklog: [`docs/worklogs/2026-05-14_docs_test-run-erp-001-accounting-guide.md`](./worklogs/2026-05-14_docs_test-run-erp-001-accounting-guide.md)
 - **작업 이력 (2026-05-14)**: **DISCOUNT-ENGINE-DESIGN-001** B2B 가격정책 엔진 설계(`docs/DISCOUNT-ENGINE-DESIGN-001.md`) — worklog: [`docs/worklogs/2026-05-14_docs_discount-engine-design-001-b2b-pricing.md`](./worklogs/2026-05-14_docs_discount-engine-design-001-b2b-pricing.md)
@@ -1120,7 +1123,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **상태**: **정책 확정 완료 (2026-05-14)** — 구현·migration·DB 변경 없음
 - **산출물**: `docs/DECISIONS.md` **[D-021]** · `docs/PRODUCT.md`(10-9 보강) · `docs/CONTEXT.md`(`[ARCH-17A]`) · 본 `tasks.md` Epic
 - **범위 (향후 구현 과제로만 기술)**: reversal lifecycle · refund flow · KPI reversal 반영 · append-only reversal row · partial refund(장기) — 실행은 별도 승인
-- **연계**: [`docs/ACCOUNTING-EVENT-MODEL-001.md`](./ACCOUNTING-EVENT-MODEL-001.md), [`docs/ACCOUNTING-REVERSAL-DESIGN-001.md`](./ACCOUNTING-REVERSAL-DESIGN-001.md), **`[PLATFORM-ERP-001]`**, **[D-017]**, **[D-020]**, [`docs/ACCOUNTING-LIFECYCLE-DESIGN-001.md`](./ACCOUNTING-LIFECYCLE-DESIGN-001.md) (**[ACCOUNTING-LIFECYCLE-DESIGN-001]**)
+- **연계**: [`docs/ACCOUNTING-EVENT-MODEL-001.md`](./ACCOUNTING-EVENT-MODEL-001.md), [`docs/ACCOUNTING-REVERSAL-DESIGN-001.md`](./ACCOUNTING-REVERSAL-DESIGN-001.md), **`[PLATFORM-ERP-001]`**, **[D-017]**, **[D-020]**, [`docs/ACCOUNTING-LIFECYCLE-DESIGN-001.md`](./ACCOUNTING-LIFECYCLE-DESIGN-001.md) (**[ACCOUNTING-LIFECYCLE-DESIGN-001]**), **`DECISIONS.md` [D-023]** (**[ACCOUNTING-LIFECYCLE-POLICY-001]**)
 
 #### [PAYMENTS-TAXONOMY-DESIGN-001] `payments` 회계 이벤트 taxonomy (설계 전용)
 - **우선순위**: HIGH (SSOT·KPI·reversal·settlement 정렬의 선행)
@@ -1142,14 +1145,22 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **상태**: **설계 문서만 (2026-05-14)** — 구현·migration 실행·DB 변경 없음
 - **산출물**: [`docs/ACCOUNTING-LIFECYCLE-DESIGN-001.md`](./ACCOUNTING-LIFECYCLE-DESIGN-001.md)
 - **범위**: 코드 기준 사전 확인 · settlement/payout/payable 의미 권장안 · reversal depth · cutoff · append-only 호환성 · KPI 시점 · migration 필요 목록(실행 없음) · 인간 정책 결정 목록
-- **연계**: **`DECISIONS.md` [D-021]**, **`DECISIONS.md` [D-022]**, **[PAYMENTS-TAXONOMY-DESIGN-001](./PAYMENTS-TAXONOMY-DESIGN-001.md)**, **[PAYMENTS-TAXONOMY-POLICY-001]** (Epic), **[ACCOUNTING-EVENT-MODEL-001](./ACCOUNTING-EVENT-MODEL-001.md)**, **[ACCOUNTING-REVERSAL-DESIGN-001](./ACCOUNTING-REVERSAL-DESIGN-001.md)**, **`[PLATFORM-ERP-001]`**, **[ACCOUNTING-REVERSAL-P0-001]**, **[KPI-REVERSAL-P0-001]**
+- **연계**: **`DECISIONS.md` [D-021]**, **`DECISIONS.md` [D-022]**, **`DECISIONS.md` [D-023]**, **[PAYMENTS-TAXONOMY-DESIGN-001](./PAYMENTS-TAXONOMY-DESIGN-001.md)**, **[PAYMENTS-TAXONOMY-POLICY-001]** (Epic), **[ACCOUNTING-LIFECYCLE-POLICY-001]** (Epic), **[ACCOUNTING-EVENT-MODEL-001](./ACCOUNTING-EVENT-MODEL-001.md)**, **[ACCOUNTING-REVERSAL-DESIGN-001](./ACCOUNTING-REVERSAL-DESIGN-001.md)**, **`[PLATFORM-ERP-001]`**, **[ACCOUNTING-REVERSAL-P0-001]**, **[KPI-REVERSAL-P0-001]**
 - **작업 이력 (2026-05-14)**: 설계 문서·`tasks.md`·worklog — worklog: [`docs/worklogs/2026-05-14_docs_accounting-lifecycle-design-001.md`](./worklogs/2026-05-14_docs_accounting-lifecycle-design-001.md)
+
+#### [ACCOUNTING-LIFECYCLE-POLICY-001] settlement / payout / reversal chain 정책 확정 ([D-023])
+- **우선순위**: HIGH (finality·`paid`·outbound 수렴의 운영 기준)
+- **상태**: **정책 확정 완료 (2026-05-14)** — 구현·migration 실행·DB 변경 없음
+- **산출물**: `docs/DECISIONS.md` **[D-023]** · `docs/PRODUCT.md`(§10-9 settlement/payout lifecycle 절) · `docs/CONTEXT.md`(lifecycle finality · UPDATE reversed transition debt · 한계 명시) · 본 블록
+- **범위**: settlement finality · payout/`paid` 정의 · reversal depth 방향 · **UPDATE `reversed` transition debt** 기록 · outbound append-only 수렴 · P1 전환 준비(실행 없음)
+- **연계**: [`docs/ACCOUNTING-LIFECYCLE-DESIGN-001.md`](./ACCOUNTING-LIFECYCLE-DESIGN-001.md), **[ACCOUNTING-EVENT-MODEL-001](./ACCOUNTING-EVENT-MODEL-001.md)**, **[PAYMENTS-TAXONOMY-DESIGN-001](./PAYMENTS-TAXONOMY-DESIGN-001.md)**, **`DECISIONS.md` [D-021]**, **`DECISIONS.md` [D-022]**, **`DECISIONS.md` [D-023]**, **`[PLATFORM-ERP-001]`**
+- **작업 이력 (2026-05-14)**: 정책 문서 반영 — worklog: [`docs/worklogs/2026-05-14_docs_accounting-lifecycle-policy-001.md`](./worklogs/2026-05-14_docs_accounting-lifecycle-policy-001.md)
 
 #### [ACCOUNTING-EVENT-MODEL-001] 회계 이벤트 모델·immutable ledger 원칙 (최상위)
 - **우선순위**: HIGH (역환불·정산·KPI·SSOT의 기준 문서)
 - **상태**: **설계 문서만 (2026-05-14)** — 구현·migration 실행·DB 변경 없음
 - **산출물**: [`docs/ACCOUNTING-EVENT-MODEL-001.md`](./ACCOUNTING-EVENT-MODEL-001.md)
-- **연계**: **[ACCOUNTING-REVERSAL-DESIGN-001](./ACCOUNTING-REVERSAL-DESIGN-001.md)**, **`[PLATFORM-ERP-001]`**, `settlement-control.ts`, `payments` SSOT, `DISCOUNT-ENGINE-001` (가격 스냅샷 축), **`DECISIONS.md` [D-021]** (정책 확정 · ACCOUNTING-EVENT-POLICY-001), **`DECISIONS.md` [D-022]** (**[PAYMENTS-TAXONOMY-POLICY-001]** · type enforcement 순서)
+- **연계**: **[ACCOUNTING-REVERSAL-DESIGN-001](./ACCOUNTING-REVERSAL-DESIGN-001.md)**, **`[PLATFORM-ERP-001]`**, `settlement-control.ts`, `payments` SSOT, `DISCOUNT-ENGINE-001` (가격 스냅샷 축), **`DECISIONS.md` [D-021]** (정책 확정 · ACCOUNTING-EVENT-POLICY-001), **`DECISIONS.md` [D-022]** (**[PAYMENTS-TAXONOMY-POLICY-001]** · type enforcement 순서), **`DECISIONS.md` [D-023]** (**[ACCOUNTING-LIFECYCLE-POLICY-001]** · finality·paid·outbound 수렴)
 - **migration 필요**: 본 ID 문서 **SECTION 10** 검토 목록만(실행 없음)
 - **작업 이력 (2026-05-14)**: 원칙 문서·`tasks.md`·worklog — worklog: [`docs/worklogs/2026-05-14_docs_accounting-event-model-001.md`](./worklogs/2026-05-14_docs_accounting-event-model-001.md)
 

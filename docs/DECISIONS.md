@@ -335,6 +335,64 @@
 
 ---
 
+## [D-023] settlement / payout / reversal chain lifecycle 정책 (finality · paid 정의 · outbound 수렴)
+
+- **결정일**: 2026-05-14
+- **결정자**: 정무님
+- **근거 문서**: [`docs/ACCOUNTING-LIFECYCLE-DESIGN-001.md`](./ACCOUNTING-LIFECYCLE-DESIGN-001.md) (**ACCOUNTING-LIFECYCLE-DESIGN-001**), [`docs/ACCOUNTING-EVENT-MODEL-001.md`](./ACCOUNTING-EVENT-MODEL-001.md), [`docs/PAYMENTS-TAXONOMY-DESIGN-001.md`](./PAYMENTS-TAXONOMY-DESIGN-001.md)
+- **연계 결정**:
+  - **[D-021]** — **append-only accounting** 원칙(overwrite 금지·reversal row 방향·운영/회계 분리).
+  - **[D-022]** — **`payments.type` taxonomy enforcement sequencing**(정책 → lifecycle → enforcement; P1 이후 DB 강제).
+  - **[D-023]** — **lifecycle finality** 정의: **settlement ≠ paid**, **payout = 자금 사실 finality**, **settlement row 불변**, **outbound append-only 수렴** 방향.
+  - **세 결정은 함께 동작**한다: [D-021]이 원장 행위 원칙, [D-022]가 분류·강제 순서, [D-023]가 **정산·지급·역처리의 의미와 종료 시점**을 고정한다.
+- **현재 구조 고지**: 저장소는 **transition state**다 — storefront **append-only reversal row**, RFQ outbound **`reverse_disbursement`의 UPDATE `reversed`**, RFQ **`processSettlement` 즉시 `confirmed`**, storefront **`supplier_payables.paid` 전이 미구현** 등이 **공존**한다. **[D-023]** 는 이 상태를 **완성형으로 가정하지 않고**, **최종 방향·정책 닫기(policy closure)** 만 확정한다. **RFQ outbound UPDATE 패턴**은 본 결정상 **transition debt**이며, **즉시 제거 대상이 아니라** 정책·lifecycle·taxonomy 정렬 후 **P1에서 append-only로 점진 이행**한다.
+
+### Q1. `supplier_payables` **`paid`** 의미
+
+- **확정: 옵션 B**
+- **원칙**:
+  - **`paid` = 실제 자금 이동(또는 동등한 최종 지급 사실) 확인 이후**만 허용하는 **accounting finality** 축.
+  - **`settlement` 완료만으로 `paid` 전환 금지** — settlement는 **회계 인식 이벤트**이지 공급자 지급 완료가 아니다.
+  - **`settlement ≠ paid`** — **false finality**(미지급인데 paid)가 **KPI margin 왜곡**보다 위험하다는 판단으로 분리를 고정한다.
+  - **`supplier_payables.paid`** 는 **외부 대사(reconciliation)** 성격을 띤다.
+
+### Q2. settlement 역처리 범위
+
+- **확정: 옵션 A**
+- **원칙**:
+  - **settlement `payments` row 자체는 append-only 불변** — **DELETE·금액 overwrite·UPDATE rollback 금지**.
+  - **역효과**는 **adjustment** 또는 **reversal 계열 회계 이벤트(새 row)** 로만 처리한다.
+  - settlement는 **상태 토글**이 아니라 **이미 발생한 회계 이벤트**로 취급한다.
+  - “잘못된 settlement 삭제 후 재작성” **금지** — **[D-021]**·**[D-003]** 정합.
+
+### Q3. `reverse_disbursement` (UPDATE `reversed`) 이행 시점
+
+- **확정: 옵션 A — P1에서 append-only 방향으로 전환 검토**
+- **원칙**:
+  - **현행 UPDATE `reversed` = transition debt** — storefront inbound reversal(**INSERT append-only**)과 **semantics 불일치**.
+  - **INSERT reversal vs UPDATE `reversed` 장기 공존 금지** — 수렴 목표는 **outbound accounting도 append-only**.
+  - **즉시 강제 전환 금지** — 아래 순서 고정.
+- **전환 순서(고정)**:
+  1. **lifecycle semantics 확정**(본 **[D-023]** · `ACCOUNTING-LIFECYCLE-POLICY-001`)
+  2. **taxonomy stabilization**(**[D-022]** 궤적)
+  3. **settlement / payout 구조 확정**(구현 설계·승인)
+  4. **P1 outbound append-only 전환**(migration·RPC 별도 승인)
+
+### 최종 원칙 (6개, 고정)
+
+1. **`settlement ≠ paid`**
+2. **`paid` = 실제 지급 finality**(Q1)
+3. **settlement rollback 금지**(Q2)
+4. **correction = adjustment / reversal event**(새 회계 이벤트)
+5. **outbound accounting도 append-only로 수렴**하는 것을 목표로 한다
+6. **UPDATE `reversed`는 transition debt**로 관리하며 P1에서 수렴 이행한다(Q3)
+
+### 금지
+
+- settlement row **삭제·덮어쓰기**로 “정산 취소”하기 · **`settlement` 만으로 `supplier_payables` 를 `paid` 로 올리기** · lifecycle·taxonomy 확정 전 **`reverse_disbursement` 임의 개편**으로 운영 리스크 키우기.
+
+---
+
 ## 추가 원칙
 새로운 결정이 생기면 아래 형식으로 추가:
 

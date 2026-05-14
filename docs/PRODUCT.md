@@ -7133,6 +7133,34 @@ Low Risk 대상
 - **semantics alignment 이전** migration·CHECK·NOT NULL **선행 enforcement**.
 - **drift 발견 후 근거 없는 임의 수정** — 기록·재검증 절차는 `CONTEXT.md` **[SCHEMA-DRIFT-001]** · semantics drift 원칙 따름.
 
+#### settlement / payout lifecycle 정책 (**ACCOUNTING-LIFECYCLE-POLICY-001** · `DECISIONS.md` **[D-023]**)
+
+> **현행 vs 목표**: 아래 **정책 문장**은 **목표·의미 고정**이다. 저장소는 **transition state**(storefront append-only reversal · RFQ `UPDATE reversed` · settlement 즉시 `confirmed` · payable `paid` 경로 미완 등)이므로 **완성 구현을 전제로 서술하지 않는다**. 상세 설계·코드 사실은 **`docs/ACCOUNTING-LIFECYCLE-DESIGN-001.md`**.
+
+**[settlement 원칙]**
+
+- **settlement** = RFQ 주문 단위 **플랫폼 수수료 인식(회계 recognition)** 이벤트(`type='settlement'` 축, **[D-022]** transition taxonomy 유지).
+- **settlement ≠ 실제 지급 완료** · **settlement ≠ `supplier_payables.paid`**.
+- **settlement row = immutable(append-only)** — **overwrite / DELETE / UPDATE rollback 금지**; 오류 정정은 **adjustment 또는 reversal 계열의 별도 회계 이벤트**만([D-021]·[D-023]).
+
+**[payout 원칙]**
+
+- **payout** = **실제 자금 이동** 또는 **동등한 최종 지급 사실**이 확인된 것을 전제로 한 이벤트(구체 SSOT는 구현 과제).
+- **`supplier_payables.paid`** 는 **위 payout 완료 이후**에만 허용하는 **accounting finality** — **settlement 완료만으로 `paid` 전환 금지**([D-023] Q1).
+- **payout finality 이후 rollback 금지 방향** — 조정은 **adjustment only** 방향([D-021] 정합).
+
+**[reversal chain 원칙]**
+
+- **reversal depth = 1 고정 방향** — **reverse-of-reversal 금지 방향**(예외는 정책·감사 절차 하 **adjustment**).
+- **payout 이후 reversal** = **adjustment only** 방향.
+- **settlement 이후 “취소”** = **새 이벤트로 상쇄** — **overwrite rollback 금지**.
+
+**[transition debt]**
+
+- **`reverse_disbursement`** = **`payments` UPDATE `reversed`** — **transition debt**([D-023] Q3).
+- **storefront inbound reversal** = **INSERT append-only** — **참조 패턴**(P0).
+- **P1**에서 **outbound append-only** 로 수렴 예정 — **장기 두 패턴 공존 금지** 방향.
+
 ---
 
 ### 10-10. 정책/실험 콘솔
