@@ -43,6 +43,7 @@
 24. **`supabase/migrations/20260515220000_create_supplier_payables.sql`** — PLATFORM-ERP-P2-003: 확정 allocation → `supplier_payables` 지급 예정 원장(파일 추가; 운영 DB 적용은 별도 승인).
 25. **`docs/ACCOUNTING-REVERSAL-DESIGN-001.md`** — ACCOUNTING-REVERSAL-DESIGN-001: 주문 취소·환불 시 `payments`·allocation·`supplier_payables`·스냅샷 역흐름 **코드·migration 기준 포렌식 + 설계**(구현·migration 실행 아님).
 26. **`docs/ACCOUNTING-EVENT-MODEL-001.md`** — ACCOUNTING-EVENT-MODEL-001: 회계 이벤트 taxonomy·immutable ledger·`payments` SSOT 역할·KPI·forensic **최상위 원칙 문서**(구현·migration 실행 아님).
+27. **`docs/DECISIONS.md` [D-021]** — ACCOUNTING-EVENT-POLICY-001: 정무님 확정 **회계 이벤트 정책**(append-only·운영/회계 분리·KPI 시점·부분 환불 금지·confirmed 수동 reversal).
 
 ### [OPS — AI worklog] 절차 기록 (감사 ID와 별도)
 
@@ -106,6 +107,7 @@
 - **작업 이력 (2026-05-14)**: **BUILD-FIX-001** storefront-bank `admin-shared.module.css` import 경로 수정 + `realmyos`/`resturant_os` `tsc --noEmit` 전수 — worklog: [`docs/worklogs/2026-05-14_chore_build-fix-001-tsc-and-css-path.md`](./worklogs/2026-05-14_chore_build-fix-001-tsc-and-css-path.md)
 - **작업 이력 (2026-05-14)**: **ACCOUNTING-REVERSAL-DESIGN-001** 취소·환불 역흐름 설계 문서(`docs/ACCOUNTING-REVERSAL-DESIGN-001.md`)·`tasks.md`·worklog — worklog: [`docs/worklogs/2026-05-14_docs_accounting-reversal-design-001.md`](./worklogs/2026-05-14_docs_accounting-reversal-design-001.md)
 - **작업 이력 (2026-05-14)**: **ACCOUNTING-EVENT-MODEL-001** 회계 이벤트 모델·원칙 문서(`docs/ACCOUNTING-EVENT-MODEL-001.md`)·`tasks.md`·worklog — worklog: [`docs/worklogs/2026-05-14_docs_accounting-event-model-001.md`](./worklogs/2026-05-14_docs_accounting-event-model-001.md)
+- **작업 이력 (2026-05-14)**: **ACCOUNTING-EVENT-POLICY-001** 정무님 확정 정책 → `DECISIONS.md` **[D-021]** · `PRODUCT.md` · `CONTEXT.md` · `tasks.md` — worklog: [`docs/worklogs/2026-05-14_docs_accounting-event-policy-001.md`](./worklogs/2026-05-14_docs_accounting-event-policy-001.md)
 
 ---
 
@@ -1083,7 +1085,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
   - **B2B 가격·마진·공급자 기준가** 축: **`DECISIONS.md` [D-020]** · **`[DISCOUNT-ENGINE-001]`** (구현 시 allocation·스냅샷·`pricing_policies`와 연동)
 - **비범위(본 Epic 문서만)**: ERP 전 구현·`payments` 스키마 변경·allocation RPC 일괄 추가 — 별 지시 전까지 **설계·단계 과제 분해만**
 - **migration 필요**: 별도 결정(본 문서 턴에서는 **파일 추가 없음**)
-- **연계**: `COMMERCE-*`, `ADM-MISSING-006`, `POINT-FORENSIC-001`, `DISCOUNT-FORENSIC-001`, **`DISCOUNT-ENGINE-DESIGN-001`**, **`[DISCOUNT-ENGINE-001]`** (가격 엔진 구현 Epic), **`DECISIONS.md` [D-020]**, **`PLATFORM-ERP-ARCH-001`** (`docs/PLATFORM-ERP-ARCH-001.md`), **`PLATFORM-ERP-DESIGN-001`** (`docs/PLATFORM-ERP-DESIGN-001.md`)
+- **연계**: `COMMERCE-*`, `ADM-MISSING-006`, `POINT-FORENSIC-001`, `DISCOUNT-FORENSIC-001`, **`DISCOUNT-ENGINE-DESIGN-001`**, **`[DISCOUNT-ENGINE-001]`** (가격 엔진 구현 Epic), **`DECISIONS.md` [D-020]**, **`DECISIONS.md` [D-021]** (회계 이벤트 정책 · ACCOUNTING-EVENT-POLICY-001), **`PLATFORM-ERP-ARCH-001`** (`docs/PLATFORM-ERP-ARCH-001.md`), **`PLATFORM-ERP-DESIGN-001`** (`docs/PLATFORM-ERP-DESIGN-001.md`)
 - **작업 이력 (2026-05-14)**: Epic 신규 등록·PRODUCT/CONTEXT 정렬·본 블록 — worklog: [`docs/worklogs/2026-05-14_docs_storefront-arch-001-platform-erp.md`](./worklogs/2026-05-14_docs_storefront-arch-001-platform-erp.md)
 - **작업 이력 (2026-05-14)**: `origin/dev` 병합으로 생긴 **`[PLATFORM-ERP-001]` 중복 블록 제거** — worklog: 동일
 - **작업 이력 (2026-05-14)**: **PLATFORM-ERP-ARCH-001** 현행 갭 포렌식 문서 — worklog: [`docs/worklogs/2026-05-14_docs_platform-erp-arch-001-forensic.md`](./worklogs/2026-05-14_docs_platform-erp-arch-001-forensic.md)
@@ -1099,12 +1101,20 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **작업 이력 (2026-05-14)**: **DISCOUNT-ENGINE-POLICY-001** B2B 가격정책 핵심 원칙 — `DECISIONS.md` [D-020]·`PRODUCT.md`·`CONTEXT.md`·`[DISCOUNT-ENGINE-001]` Epic — worklog: [`docs/worklogs/2026-05-14_docs_discount-engine-policy-001-core-principles.md`](./worklogs/2026-05-14_docs_discount-engine-policy-001-core-principles.md)
 - **작업 이력 (2026-05-14)**: **ACCOUNTING-REVERSAL-DESIGN-001** 역흐름 포렌식·설계 문서 — worklog: [`docs/worklogs/2026-05-14_docs_accounting-reversal-design-001.md`](./worklogs/2026-05-14_docs_accounting-reversal-design-001.md) · 감사 ID: **[ACCOUNTING-REVERSAL-DESIGN-001]** (아래 전용 블록)
 - **작업 이력 (2026-05-14)**: **ACCOUNTING-EVENT-MODEL-001** 회계 이벤트 taxonomy·원칙 문서 — worklog: [`docs/worklogs/2026-05-14_docs_accounting-event-model-001.md`](./worklogs/2026-05-14_docs_accounting-event-model-001.md) · 감사 ID: **[ACCOUNTING-EVENT-MODEL-001]** (아래 전용 블록)
+- **작업 이력 (2026-05-14)**: **ACCOUNTING-EVENT-POLICY-001** 정책 확정 → `DECISIONS.md` **[D-021]** · `PRODUCT.md` · `CONTEXT.md` — worklog: [`docs/worklogs/2026-05-14_docs_accounting-event-policy-001.md`](./worklogs/2026-05-14_docs_accounting-event-policy-001.md) · 감사 ID: **[ACCOUNTING-EVENT-POLICY-001]**
+
+#### [ACCOUNTING-EVENT-POLICY-001] 회계 이벤트 정책 확정 ([D-021])
+- **우선순위**: HIGH (reversal·refund·KPI·settlement·payable 구현의 **기준 정책**)
+- **상태**: **정책 확정 완료 (2026-05-14)** — 구현·migration·DB 변경 없음
+- **산출물**: `docs/DECISIONS.md` **[D-021]** · `docs/PRODUCT.md`(10-9 보강) · `docs/CONTEXT.md`(`[ARCH-17A]`) · 본 `tasks.md` Epic
+- **범위 (향후 구현 과제로만 기술)**: reversal lifecycle · refund flow · KPI reversal 반영 · append-only reversal row · partial refund(장기) — 실행은 별도 승인
+- **연계**: [`docs/ACCOUNTING-EVENT-MODEL-001.md`](./ACCOUNTING-EVENT-MODEL-001.md), [`docs/ACCOUNTING-REVERSAL-DESIGN-001.md`](./ACCOUNTING-REVERSAL-DESIGN-001.md), **`[PLATFORM-ERP-001]`**, **[D-017]**, **[D-020]**
 
 #### [ACCOUNTING-EVENT-MODEL-001] 회계 이벤트 모델·immutable ledger 원칙 (최상위)
 - **우선순위**: HIGH (역환불·정산·KPI·SSOT의 기준 문서)
 - **상태**: **설계 문서만 (2026-05-14)** — 구현·migration 실행·DB 변경 없음
 - **산출물**: [`docs/ACCOUNTING-EVENT-MODEL-001.md`](./ACCOUNTING-EVENT-MODEL-001.md)
-- **연계**: **[ACCOUNTING-REVERSAL-DESIGN-001](./ACCOUNTING-REVERSAL-DESIGN-001.md)**, **`[PLATFORM-ERP-001]`**, `settlement-control.ts`, `payments` SSOT, `DISCOUNT-ENGINE-001` (가격 스냅샷 축)
+- **연계**: **[ACCOUNTING-REVERSAL-DESIGN-001](./ACCOUNTING-REVERSAL-DESIGN-001.md)**, **`[PLATFORM-ERP-001]`**, `settlement-control.ts`, `payments` SSOT, `DISCOUNT-ENGINE-001` (가격 스냅샷 축), **`DECISIONS.md` [D-021]** (정책 확정 · ACCOUNTING-EVENT-POLICY-001)
 - **migration 필요**: 본 ID 문서 **SECTION 10** 검토 목록만(실행 없음)
 - **작업 이력 (2026-05-14)**: 원칙 문서·`tasks.md`·worklog — worklog: [`docs/worklogs/2026-05-14_docs_accounting-event-model-001.md`](./worklogs/2026-05-14_docs_accounting-event-model-001.md)
 
@@ -1112,7 +1122,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **우선순위**: HIGH (ERP 정합·감사추적)
 - **상태**: **설계 문서만 (2026-05-14)** — 구현·migration 실행·DB 변경 없음
 - **산출물**: [`docs/ACCOUNTING-REVERSAL-DESIGN-001.md`](./ACCOUNTING-REVERSAL-DESIGN-001.md)
-- **연계**: **`[PLATFORM-ERP-001]`**, `PLATFORM-ERP-P0-001`·`P2-003`, `docs/TEST-DEV/TEST-RUN-ERP-001.md`, `docs/PLATFORM-ERP-DESIGN-001.md`
+- **연계**: **`[PLATFORM-ERP-001]`**, `PLATFORM-ERP-P0-001`·`P2-003`, `docs/TEST-DEV/TEST-RUN-ERP-001.md`, `docs/PLATFORM-ERP-DESIGN-001.md`, **`DECISIONS.md` [D-021]**
 - **migration 필요**: 본 ID 문서 **SECTION 10** 검토 목록만(실행 없음)
 - **작업 이력 (2026-05-14)**: 설계 문서·`tasks.md`·worklog — worklog: [`docs/worklogs/2026-05-14_docs_accounting-reversal-design-001.md`](./worklogs/2026-05-14_docs_accounting-reversal-design-001.md)
 

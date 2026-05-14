@@ -7070,6 +7070,35 @@ Low Risk 대상
 
 ---
 
+#### 회계 이벤트 정책 (ACCOUNTING-EVENT-POLICY-001 · DECISIONS **[D-021]**)
+
+> **플랫폼 storefront·allocation·`supplier_payables`·`payments` 축**에 적용. 본 절(10-9)의 일반 서술(예: 조건 기반 자동 정산)과 충돌할 경우 **storefront 회계 이벤트는 [D-021] 및 아래 원칙이 우선**한다.
+
+**[회계 이벤트 원칙]**
+
+- **cancelled** = 운영(또는 품질) 상태로서의 종료 표시. **단독으로 회계 확정·KPI 역전을 의미하지 않는다.**
+- **reversal** = 회계 이벤트 — **append-only 방향**(상쇄·추가 기록 우선, 확정 금액 overwrite 금지).
+- **refund** = 실제 돈 반환 이벤트 — **cancellation 과 동일시하지 않는다.**
+- **KPI** = **reversal/refund 완료**를 반영하는 것을 목표로 한다(구현은 `tasks.md` **`[ACCOUNTING-EVENT-POLICY-001]`**·`[PLATFORM-ERP-001]` 범위).
+- **`commerce_order_allocations` `confirmed` 이후** 자동 rollback·자동 reversal **금지** — **관리자 수동 검토** 필수.
+
+**[취소·환불 원칙]**
+
+- **pending allocation**: 자동 `cancelled` 허용(현행).
+- **confirmed allocation 이후**: 관리자 수동 처리 필수.
+- **현재 지원 단위**: **주문 전체** 취소·환불·reversal 만(부분 환불·품목 단위 취소는 장기 과제, **P0/P1 부분 환불 로직 금지**).
+
+**[immutable 원칙]**
+
+- 주문 시점 **스냅샷 삭제 금지** · **확정 금액 필드 overwrite 금지**.
+- reversal 은 **새 회계 이벤트**로 남기고, **audit trail(`admin_logs`) 유지**를 전제로 한다.
+
+**[append-only 방향]**
+
+- 기존 이벤트 **삭제보다 reversal 이벤트 추가**를 우선하여, ERP·**forensic 재현**이 가능하도록 한다.
+
+---
+
 ### 10-10. 정책/실험 콘솔
 
 **흐름 위치**: 이 메뉴는 판단/분석 엔진의 트리거를 입력받아 정책을 자동 제안하고 관리자 승인 후 적용하며 거래 흐름 관제 / 참여자 네트워크 / 수익 통제로 전달하고 결과를 데이터 학습 센터로 재유입시킨다.

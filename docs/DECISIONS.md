@@ -246,6 +246,44 @@
 
 ---
 
+## [D-021] 회계 이벤트 정책 핵심 원칙 (append-only · 운영/회계 분리)
+- 결정일: 2026-05-14
+- 결정자: 정무님
+- 근거 문서: [`docs/ACCOUNTING-EVENT-MODEL-001.md`](./ACCOUNTING-EVENT-MODEL-001.md), [`docs/ACCOUNTING-REVERSAL-DESIGN-001.md`](./ACCOUNTING-REVERSAL-DESIGN-001.md)
+- 연계 결정: **[D-017]**(수수료율·마진 계산 축), **[D-020]**(가격·스냅샷·allocation·payable 대사), **`[PLATFORM-ERP-001]`**(`tasks.md` — 플랫폼 주문·ERP·정산 구현 Epic)
+
+### Q1. `commerce_order_allocations` **confirmed** 이후 주문 취소
+- **확정: 옵션 A — 항상 수동 처리**
+- **원칙**:
+  - `pending` allocation 까지는 **자동 `cancelled` 허용**(현행 코드와 정합).
+  - **`confirmed` allocation 이후** 취소·역처리는 **반드시 관리자 수동 검토** — 자동 rollback 금지.
+  - confirmed 이후는 “운영 취소”가 아니라 **회계 이벤트 reversal** 영역으로 본다.
+  - **`supplier_payables` 자동 rollback 금지**, **settlement 자동 rollback 금지**, **KPI 자동 역전 금지**.
+  - **원본 row 금액 overwrite 금지** — 상쇄는 **새 회계 이벤트(append-only 방향)** 로만 한다.
+
+### Q2. KPI 취소·환불 반영 시점
+- **확정: 옵션 B — 환불 완료(reversal/refund 이벤트 완료) 시점 기준**
+- **원칙**:
+  - **운영 상태(`cancelled` 등) ≠ 회계 상태(`refunded` / `reversed` 등)** — 분리 유지.
+  - **platform revenue · receivable · platform margin · settlement balance** 는 **실제 reversal·refund 완료**를 반영한 뒤에만 변경한다는 것을 목표 원칙으로 둔다.
+  - **`cancelled` 만으로 KPI·매출 숫자를 바꾸지 않는다**(현행 구현과의 차이는 구현 과제로 남김).
+
+### Q3. 부분 환불
+- **확정: 옵션 A — 현재 주문 단위만**
+- **원칙**:
+  - **P0/P1** 단계에서 **부분 환불·수량 단위 partial refund 로직 금지**.
+  - 품목(line) 단위 취소·수량 split 은 **장기 과제**(현행 스키마: 품목당 allocation 1건 등 — `ACCOUNTING-REVERSAL-DESIGN-001` 정합).
+
+### 최종 원칙 (요약)
+1. confirmed 이후 **자동 rollback 최소화**(수동 reversal 중심).
+2. **refund ≠ cancellation**(취소만으로 회계 확정을 바꾸지 않음).
+3. **KPI는 reversal/refund 완료 기준**(목표; 구현은 별도).
+4. **immutable snapshot 유지**(**[D-020]**·**[D-003]** 과 정합).
+5. 기존 ledger row **overwrite 금지** — reversal·조정은 **추가 이벤트** 우선.
+6. 회계 이벤트는 **append-only 방향**을 원칙으로 한다.
+
+---
+
 ## 추가 원칙
 새로운 결정이 생기면 아래 형식으로 추가:
 

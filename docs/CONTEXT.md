@@ -1436,6 +1436,47 @@ deposit_logs          → 예치금 변동 이력 (append-only)
 
 ---
 
+## [ARCH-17A] 플랫폼 회계 이벤트 정책 (ACCOUNTING-EVENT-POLICY-001 / [D-021])
+
+> **상태**: 정책 확정(2026-05-14, 정무님). 구현·migration 아님.  
+> **근거**: `docs/DECISIONS.md` **[D-021]** · `docs/ACCOUNTING-EVENT-MODEL-001.md` · `docs/ACCOUNTING-REVERSAL-DESIGN-001.md` · `tasks.md` **`[PLATFORM-ERP-001]`**
+
+### [reversal 원칙]
+
+- **`pending` allocation** → 주문 취소 시 **자동 `cancelled` 허용**(현행 `realmyos` 코드).
+- **`confirmed` allocation 이후** → **관리자 수동 reversal** 원칙(**자동 rollback 금지**).
+- **refund** → 실제 돈 반환 이벤트; **cancellation(운영 취소)** 과 혼동 금지.
+- **KPI** → **reversal/refund 완료**를 기준으로 반영하는 것을 목표로 한다(현행 코드는 일부 `confirmed` 입금 기준 집계 — **목표와의 차이는 구현으로 해소**).
+- **append-only ledger 방향** — 상쇄·역분개는 **새 이벤트 row 추가**를 우선하고, **확정 금액 필드 overwrite 금지**.
+
+### [immutable snapshot]
+
+- **`commerce_order_items`** 주문 시점 스냅샷·**`applied_policy_snapshot`** — **삭제·덮어쓰기 금지**([D-020]·pricing migration COMMENT 정합).
+- **allocation·`supplier_payables` 확정 금액** — overwrite 금지; 취소·조정은 **상태·별도 이벤트**로 표현.
+
+### [현재 미구현] (코드 기준, 열거만)
+
+- storefront **refund 자동화**와 **`payments` inbound 자동 reversal**
+- **KPI에 reversal/refund 완료 반영**
+- **전용 reversal row**(상쇄 INSERT) 파이프라인
+- **partial refund** · **settlement rollback 자동화**
+
+### [구현 전 금지]
+
+- 임의 **rollback** 코드·**confirmed allocation 자동 취소**
+- **overwrite** 방식의 회계 금액 수정
+- **KPI 직접 차감**만으로 취소 반영하는 방식
+
+### [현재 구조 vs 목표 구조]
+
+| 구분 | 현재(저장소 기준 요지) | 목표([D-021]) |
+|------|------------------------|----------------|
+| 취소·무효 | `status`·`voided`·`reversed` 등 **상태 마킹**이 일부 존재 | **append-only 회계 이벤트** + 운영 상태 분리 강화 |
+| KPI | 일부 **`confirmed` 입금** 기준 집계 | **reversal/refund 완료** 기준 |
+| confirmed 이후 | 자동 역전 **없음**(사실) | **수동 reversal** 원칙 유지·UI·원장 보강 |
+
+---
+
 ## [ECL] Execution Control Layer — 실행 통제 레이어
 
 > 이 레이어는 기존 구조를 수정하지 않는다.
