@@ -24,7 +24,8 @@
 5. **레거시** — [`tasks-legacy.md`](./tasks-legacy.md) (TASK-nn, 2026-04-27). **`tasks.md`와 혼합 금지.**
 6. **AI·코드 작업 종료 시** — 관련 감사 ID 블록에 **작업 이력**(날짜·요약·`docs/worklogs/YYYY-MM-DD_phase-topic.md` 링크)을 남기고, worklog에 목적·ID·파일·변경 요약·migration·테스트·위험·다음 권장 작업을 기록한다. **작업 완료 = 변경 + tasks 반영 + worklog** (`.cursor/rules/worklog-completion.mdc`).
 7. **`## [FORENSIC]`** — `docs/FORENSIC.md` 연계 **레이어 감사 후속** (`FORENSIC-*`). 표준 `DB-*`/`SUP-*`/`ADM-*`/`RES-*` **유형별 표와 별도 축** — 집계는 **`감사 요약`** 참조.
-8. **`docs/TEST.md`** — 운영 배포 전 **실운영 가능성** 체크리스트(STOREFRONT·ADMIN·RFQ·비가역 원칙·운영 부하·regression·migration). QA 시나리오가 아니라 **정무님·식당·공급자가 하루를 버티는지** 검증용.
+8. **`docs/TEST.md`** — 운영 배포 전 **실운영 가능성** 체크리스트(STOREFRONT·ADMIN·RFQ·비가역 원칙·운영 부하·regression·migration). QA 시나리오가 아니라 **정무님·식당·공급자가 하루를 버티는지** 검증용.  
+9. **`docs/TEST-RUN-001.md`** — 위 체크리스트를 **손 실행 순서**로 푼 운영자용 가이드(환경 확인 STEP 0 ~ 데이터 정리 STEP 8·비가역 검증·기록 템플릿). 코드 경로·테이블명은 저장소 현행 기준.
 
 ### [OPS — AI worklog] 절차 기록 (감사 ID와 별도)
 
@@ -66,6 +67,7 @@
 - **작업 이력 (2026-05-14)**: COMMERCE-008 상품 운영 quick edit (`getListingForEdit`·`updateListingFull`·편집 라우트·`ListingEditClient`·목록 수정 진입) — worklog: [`docs/worklogs/2026-05-14_feat_commerce-008-listing-quick-edit.md`](./worklogs/2026-05-14_feat_commerce-008-listing-quick-edit.md)
 - **작업 이력 (2026-05-14)**: `tasks.md` COMMERCE-008·009·집계·OPS·`COMMERCE-007` 상태 정합 문서 반영 — worklog: [`docs/worklogs/2026-05-14_docs_tasks-commerce-ops-alignment.md`](./worklogs/2026-05-14_docs_tasks-commerce-ops-alignment.md)
 - **작업 이력 (2026-05-14)**: COMMERCE-009 운영 전환 정리(forensic·prompt·`TEST.md`) — worklog: [`docs/worklogs/2026-05-14_feat_commerce-009-ops-forensic-cleanup.md`](./worklogs/2026-05-14_feat_commerce-009-ops-forensic-cleanup.md)
+- **작업 이력 (2026-05-14)**: `docs/TEST-RUN-001.md` 운영 테스트 **실행 가이드**(STEP 0~8·비가역·기록 템플릿; 코드 기준 경로만) — worklog: [`docs/worklogs/2026-05-14_docs_test-run-001-operational-guide.md`](./worklogs/2026-05-14_docs_test-run-001-operational-guide.md)
 
 ---
 
