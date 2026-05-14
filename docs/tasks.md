@@ -62,7 +62,7 @@
 - **작업 이력 (2026-05-14)**: `PRODUCT.md` §13 「Storefront / 반복주문 시스템」추가 — 기존 자동발주 챕터는 §14로 번호 이동 — worklog: [`docs/worklogs/2026-05-14_docs_product-storefront-chapter.md`](./worklogs/2026-05-14_docs_product-storefront-chapter.md)
 - **작업 이력 (2026-05-14)**: `PRODUCT.md` §13 Storefront에「3-2. 학습 파이프라인」절 추가 — worklog: [`docs/worklogs/2026-05-14_docs_product-storefront-learning-pipeline.md`](./worklogs/2026-05-14_docs_product-storefront-learning-pipeline.md)
 - **작업 이력 (2026-05-14)**: `CONTEXT.md` storefront·commerce 테이블·ARCH-00·ARCH-09 경계 보완 — worklog: [`docs/worklogs/2026-05-14_docs_context-storefront-alignment.md`](./worklogs/2026-05-14_docs_context-storefront-alignment.md)
-- **작업 이력 (2026-05-14)**: 운영 검증 체크리스트 `docs/TEST.md` 추가(배포 전 실운영 가능성·비가역·regression·migration 점검) — worklog: [`docs/worklogs/2026-05-14_docs_test-operational-checklist.md`](./worklogs/2026-05-14_docs_test-operational-checklist.md)
+- **작업 이력 (2026-05-14)**: COMMERCE-008 상품 운영 quick edit (`getListingForEdit`·`updateListingFull`·편집 라우트·`ListingEditClient`·목록 수정 진입) — worklog: [`docs/worklogs/2026-05-14_feat_commerce-008-listing-quick-edit.md`](./worklogs/2026-05-14_feat_commerce-008-listing-quick-edit.md)
 
 ---
 
@@ -1255,6 +1255,21 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **migration 필요**: NO
 - **완료 기준**: 카드 한 칸(또는 기존 카드 내 링크)으로 `/buy` 진입이 가능하고 RULE-29 위반 없음
 
+#### [COMMERCE-008] 상품 운영 quick edit (편집 화면)
+- **우선순위**: MEDIUM
+- **선행 조건**: `COMMERCE-002` 완료
+- **설명**: 신규 등록(`ListingNewClient`·`createListingFull`)과 분리된 Listing 편집 — 핵심 메타데이터만 안전하게 수정.
+- **범위**:
+  - `getListingForEdit` / `updateListingFull` (`src/actions/admin/commerce.ts`)
+  - `/admin/commerce/products/[id]/edit` + `ListingEditClient.tsx`
+  - 목록 `ListingsClient`에서 편집 진입
+  - `admin_logs` `listing_updated` (before / after / changed_fields)
+- **비범위**: 이미지 업로드·삭제·순서, `ListingNewClient`·`createListingFull` 변경, migration
+- **migration 필요**: NO
+- **완료 기준**: 수정 가능 필드만 DB 반영, 스토어 노출은 `visible`+`is_visible` 및 `updateListingStatus` 전이와 정합, 실패 시 안내
+- **상태**: **완료 (2026-05-14)**
+- **작업 이력 (2026-05-14)**: quick edit 서버 액션·편집 UI·목록 수정 링크·`listing_updated` 로그 — worklog: [`docs/worklogs/2026-05-14_feat_commerce-008-listing-quick-edit.md`](./worklogs/2026-05-14_feat_commerce-008-listing-quick-edit.md)
+
 ---
 
 ## [식당OS] resturant_os/src/app/(app)/
@@ -1545,10 +1560,10 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 | RES- | 19 |
 | *(소계 `DB`/`SUP`/`ADM`/`RES`)* | **65** |
 | FORENSIC- | **9** |
-| COMMERCE- | **8** |
-| **본문 ID 합계** | **82** |
+| COMMERCE- | **9** |
+| **본문 ID 합계** | **83** |
 
-> **`COMMERCE-*` 8건**은 `## [커머스]` 블록의 `#### [COMMERCE-000]`~`007`에 대응한다.
+> **`COMMERCE-*` 9건**은 `## [커머스]` 블록의 `#### [COMMERCE-000]`~`008`에 대응한다.
 
 ### 교차 검증 (운영 DB forensic 반영 후, 본문 `#### [접두사-…]` 개수)
 
@@ -1559,10 +1574,10 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 | ADM- | 2 | ✅ |
 | RES- | 19 | ✅ |
 | FORENSIC- | 9 | ✅ |
-| COMMERCE- | 8 | ✅ |
-| **합계** | **82** | ✅ |
+| COMMERCE- | 9 | ✅ |
+| **합계** | **83** | ✅ |
 
-유형 합(`DB`/`SUP`/`ADM`/`RES` 표만): 구조위험 14 + 가짜 4 + 부분 15 + 미구현 7 + 확인 14 + 완료 11 = **65** ✅ — **`FORENSIC-*` 9건·`COMMERCE-*` 8건은 별도 축** (`## [FORENSIC]`, `## [커머스]`).
+유형 합(`DB`/`SUP`/`ADM`/`RES` 표만): 구조위험 14 + 가짜 4 + 부분 15 + 미구현 7 + 확인 14 + 완료 11 = **65** ✅ — **`FORENSIC-*` 9건·`COMMERCE-*` 9건은 별도 축** (`## [FORENSIC]`, `## [커머스]`).
 
 ---
 

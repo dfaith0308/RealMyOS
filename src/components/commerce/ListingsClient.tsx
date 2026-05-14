@@ -326,6 +326,13 @@ export default function ListingsClient({
                   </td>
                   <td className={s.tdNowrap}>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      <Link
+                        href={`/admin/commerce/products/${row.id}/edit`}
+                        className={s.ghostBtn}
+                        style={{ fontSize: 12, padding: '4px 10px', textDecoration: 'none' }}
+                      >
+                        수정
+                      </Link>
                       {row.status !== 'discontinued' ? (
                         <button
                           type="button"

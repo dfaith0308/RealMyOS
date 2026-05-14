@@ -1,0 +1,62 @@
+import Link from 'next/link'
+import { notFound } from 'next/navigation'
+import { getCategories, getListingForEdit, getShippingGroups } from '@/actions/admin/commerce'
+import ListingEditClient from '@/components/commerce/ListingEditClient'
+import s from '../../../../../admin-shared.module.css'
+
+export default async function AdminCommerceProductEditPage(props: { params: Promise<{ id: string }> }) {
+  const { id } = await props.params
+  const [lr, cr, sr] = await Promise.all([getListingForEdit(id), getCategories(), getShippingGroups()])
+
+  if (!lr.success || !lr.data) {
+    const msg = lr.error ?? ''
+    if (msg.includes('Listing 을 찾을 수 없습니다') || msg.includes('연결된 상품이 없습니다')) {
+      notFound()
+    }
+    return (
+      <main className={s.mainSimple}>
+        <h1 className={s.title}>상품 수정</h1>
+        <p className={s.subtitle} style={{ color: 'var(--ds-text-danger, #b91c1c)' }}>
+          {msg || '조회에 실패했습니다'}
+        </p>
+        <Link href="/admin/commerce/products" className={s.ghostBtn}>
+          목록으로
+        </Link>
+      </main>
+    )
+  }
+
+  if (!cr.success || !cr.data) {
+    return (
+      <main className={s.mainSimple}>
+        <h1 className={s.title}>상품 수정</h1>
+        <p className={s.subtitle} style={{ color: 'var(--ds-text-danger, #b91c1c)' }}>{cr.error}</p>
+        <Link href="/admin/commerce/products" className={s.ghostBtn}>
+          목록으로
+        </Link>
+      </main>
+    )
+  }
+
+  if (!sr.success || !sr.data) {
+    return (
+      <main className={s.mainSimple}>
+        <h1 className={s.title}>상품 수정</h1>
+        <p className={s.subtitle} style={{ color: 'var(--ds-text-danger, #b91c1c)' }}>{sr.error}</p>
+        <Link href="/admin/commerce/products" className={s.ghostBtn}>
+          목록으로
+        </Link>
+      </main>
+    )
+  }
+
+  return (
+    <main className={s.main} style={{ maxWidth: 900, margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
+      <ListingEditClient
+        initial={lr.data}
+        categories={cr.data.categories}
+        shippingGroups={sr.data.groups}
+      />
+    </main>
+  )
+}

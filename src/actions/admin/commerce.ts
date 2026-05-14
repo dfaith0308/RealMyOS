@@ -719,6 +719,393 @@ export async function updateListingPrice(id: string, price: number): Promise<Act
   return { success: true }
 }
 
+/** 편집 화면 초기값 — 상품명은 `products.name` (목록·스토어와 동일 소스) */
+export type ListingForEditData = {
+  id: string
+  product_id: string
+  product_name: string
+  category_id: string | null
+  commerce_price: number
+  original_price: number | null
+  status: ListingStatus
+  is_visible: boolean
+  shipping_group_id: string | null
+  shipping_type: string
+  badge_labels: string[] | null
+  admin_memo: string | null
+  thumbnail_url: string | null
+  image_urls: string[] | null
+}
+
+export type UpdateListingFullInput = {
+  listing_id: string
+  product_name: string
+  category_id: string
+  commerce_price: number
+  original_price: number | null
+  /** 스토어 노출 = `status === 'visible'` & `is_visible` (getListings / COMMERCE-FLOW 정합) */
+  storefront_published: boolean
+  shipping_type: ListingShippingType
+  shipping_group_id: string | null
+  badge_labels: string[] | null
+  admin_memo: string | null
+}
+
+function listingStorefrontPublished(status: ListingStatus, is_visible: boolean): boolean {
+  return status === 'visible' && is_visible
+}
+
+/**
+ * 스토어 공개 토글을 `updateListingStatus`와 동일한 전이 규칙으로 `status`/`is_visible`에 반영한다.
+ * `visible`이지만 `is_visible`만 false인 비정상 행은 공개로 두면 `is_visible`만 true로 보정한다.
+ */
+function resolveStorefrontVisibility(
+  currentStatus: ListingStatus,
+  currentIsVisible: boolean,
+  desiredPublished: boolean,
+): { ok: false; error: string } | { ok: true; nextStatus: ListingStatus; nextIsVisible: boolean } {
+  if (currentStatus === 'discontinued') {
+    if (desiredPublished) {
+      return { ok: false, error: '판매중단 상품은 스토어에 공개할 수 없습니다' }
+    }
+    return { ok: true, nextStatus: 'discontinued', nextIsVisible: false }
+  }
+
+  const currentlyPublished = listingStorefrontPublished(currentStatus, currentIsVisible)
+
+  if (desiredPublished === currentlyPublished) {
+    return { ok: true, nextStatus: currentStatus, nextIsVisible: currentIsVisible }
+  }
+
+  if (desiredPublished) {
+    if (currentStatus === 'visible' && !currentIsVisible) {
+      return { ok: true, nextStatus: 'visible', nextIsVisible: true }
+    }
+    const allowed = ALLOWED_STATUS_TRANSITIONS[currentStatus] ?? []
+    if (!allowed.includes('visible')) {
+      return { ok: false, error: '현재 상태에서는 스토어 공개로 전환할 수 없습니다' }
+    }
+    return { ok: true, nextStatus: 'visible', nextIsVisible: true }
+  }
+
+  if (currentStatus === 'visible' && currentIsVisible) {
+    const allowed = ALLOWED_STATUS_TRANSITIONS.visible ?? []
+    if (!allowed.includes('hidden')) {
+      return { ok: false, error: '현재 상태에서는 스토어 비공개(숨김)로 전환할 수 없습니다' }
+    }
+    return { ok: true, nextStatus: 'hidden', nextIsVisible: false }
+  }
+
+  return { ok: true, nextStatus: currentStatus, nextIsVisible: currentIsVisible }
+}
+
+export async function getListingForEdit(listingId: string): Promise<ActionResult<ListingForEditData>> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const lid = String(listingId ?? '').trim()
+  if (!lid) return { success: false, error: 'Listing ID가 필요합니다' }
+
+  const { data, error } = await supabase
+    .from('commerce_product_listings')
+    .select(
+      `
+      id,
+      tenant_id,
+      product_id,
+      commerce_price,
+      original_price,
+      shipping_type,
+      category_id,
+      status,
+      is_visible,
+      shipping_group_id,
+      badge_labels,
+      admin_memo,
+      thumbnail_url,
+      image_urls,
+      products ( id, name )
+    `,
+    )
+    .eq('id', lid)
+    .is('deleted_at', null)
+    .maybeSingle()
+
+  if (error) return { success: false, error: error.message }
+  if (!data) return { success: false, error: 'Listing 을 찾을 수 없습니다' }
+
+  const row = data as Record<string, unknown>
+  if ((row.tenant_id as string) !== PLATFORM_OWNER_TENANT) {
+    return { success: false, error: 'Listing 을 찾을 수 없습니다' }
+  }
+
+  const product_id = row.product_id as string | null
+  if (!product_id) return { success: false, error: '연결된 상품이 없습니다' }
+
+  const prod = Array.isArray(row.products) ? row.products[0] : row.products
+  const p = (prod ?? null) as { id?: string; name?: string | null } | null
+
+  const status = row.status as ListingStatus
+  if (!(LISTING_STATUSES as readonly string[]).includes(status)) {
+    return { success: false, error: 'Listing 상태값이 올바르지 않습니다' }
+  }
+
+  return {
+    success: true,
+    data: {
+      id: row.id as string,
+      product_id,
+      product_name: String(p?.name ?? '').trim(),
+      category_id: (row.category_id as string | null) ?? null,
+      commerce_price:
+        typeof row.commerce_price === 'number' && Number.isFinite(row.commerce_price)
+          ? Math.round(row.commerce_price)
+          : 0,
+      original_price:
+        typeof row.original_price === 'number' && Number.isFinite(row.original_price)
+          ? Math.round(row.original_price)
+          : null,
+      status,
+      is_visible: row.is_visible === true,
+      shipping_group_id: (row.shipping_group_id as string | null) ?? null,
+      shipping_type: (row.shipping_type as string) || 'free',
+      badge_labels: (row.badge_labels as string[] | null) ?? null,
+      admin_memo: (row.admin_memo as string | null) ?? null,
+      thumbnail_url: (row.thumbnail_url as string | null) ?? null,
+      image_urls: (row.image_urls as string[] | null) ?? null,
+    },
+  }
+}
+
+export async function updateListingFull(
+  input: UpdateListingFullInput,
+): Promise<ActionResult<{ id: string }>> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const listing_id = String(input.listing_id ?? '').trim()
+  if (!listing_id) return { success: false, error: 'Listing ID가 필요합니다' }
+
+  const product_name = String(input.product_name ?? '').trim()
+  if (!product_name) return { success: false, error: '상품명을 입력해 주세요' }
+
+  const category_id = String(input.category_id ?? '').trim()
+  if (!category_id) return { success: false, error: '카테고리를 선택해 주세요' }
+
+  const price = input.commerce_price
+  if (!Number.isFinite(price) || !Number.isInteger(price) || price <= 0) {
+    return { success: false, error: '식식이 판매가는 1원 이상의 정수여야 합니다' }
+  }
+
+  const { data: catRow, error: cErr } = await supabase
+    .from('product_categories')
+    .select('id')
+    .eq('id', category_id)
+    .eq('tenant_id', PLATFORM_OWNER_TENANT)
+    .eq('is_active', true)
+    .maybeSingle()
+
+  if (cErr) return { success: false, error: cErr.message }
+  if (!catRow) return { success: false, error: '유효한 카테고리가 아닙니다' }
+
+  const st = input.shipping_type
+  if (!(LISTING_SHIPPING_TYPES as readonly string[]).includes(st)) {
+    return { success: false, error: '유효하지 않은 배송 유형입니다' }
+  }
+
+  let shipping_group_id: string | null = null
+  const sgRaw = input.shipping_group_id
+  if (sgRaw != null && String(sgRaw).trim()) {
+    const sgId = String(sgRaw).trim()
+    const { data: sgRow, error: sgErr } = await supabase
+      .from('shipping_groups')
+      .select('id')
+      .eq('id', sgId)
+      .eq('tenant_id', PLATFORM_OWNER_TENANT)
+      .eq('is_active', true)
+      .maybeSingle()
+    if (sgErr) return { success: false, error: sgErr.message }
+    if (!sgRow) return { success: false, error: '유효한 묶음배송 그룹이 아닙니다' }
+    shipping_group_id = sgId
+  }
+
+  const admin_memo = String(input.admin_memo ?? '').trim() || null
+
+  const rawBadges = input.badge_labels
+  const badge_labels =
+    Array.isArray(rawBadges) && rawBadges.length > 0
+      ? rawBadges.map((b) => String(b ?? '').trim()).filter(Boolean).slice(0, 2)
+      : []
+  const badge_labels_db = badge_labels.length > 0 ? badge_labels : null
+
+  let original_price: number | null = null
+  const opIn = input.original_price
+  if (opIn != null && Number.isFinite(opIn) && Number.isInteger(opIn) && opIn > 0) {
+    if (opIn > price) original_price = opIn
+  }
+
+  const { data: listingRow, error: lFetchErr } = await supabase
+    .from('commerce_product_listings')
+    .select(
+      `
+      id,
+      tenant_id,
+      product_id,
+      commerce_price,
+      original_price,
+      shipping_type,
+      category_id,
+      status,
+      is_visible,
+      shipping_group_id,
+      badge_labels,
+      admin_memo,
+      products ( id, name )
+    `,
+    )
+    .eq('id', listing_id)
+    .is('deleted_at', null)
+    .maybeSingle()
+
+  if (lFetchErr) return { success: false, error: lFetchErr.message }
+  if (!listingRow) return { success: false, error: 'Listing 을 찾을 수 없습니다' }
+
+  const L = listingRow as Record<string, unknown>
+  if ((L.tenant_id as string) !== PLATFORM_OWNER_TENANT) {
+    return { success: false, error: 'Listing 을 찾을 수 없습니다' }
+  }
+
+  const product_id = L.product_id as string | null
+  if (!product_id) return { success: false, error: '연결된 상품이 없습니다' }
+
+  const currentStatus = L.status as ListingStatus
+  if (!(LISTING_STATUSES as readonly string[]).includes(currentStatus)) {
+    return { success: false, error: 'Listing 상태값이 올바르지 않습니다' }
+  }
+  const currentIsVisible = L.is_visible === true
+
+  const vis = resolveStorefrontVisibility(currentStatus, currentIsVisible, input.storefront_published)
+  if (!vis.ok) return { success: false, error: vis.error }
+
+  const { data: productGuard, error: pgErr } = await supabase
+    .from('products')
+    .select('id, tenant_id')
+    .eq('id', product_id)
+    .is('deleted_at', null)
+    .maybeSingle()
+
+  if (pgErr) return { success: false, error: pgErr.message }
+  if (!productGuard || (productGuard as { tenant_id: string }).tenant_id !== PLATFORM_OWNER_TENANT) {
+    return { success: false, error: '상품을 찾을 수 없거나 수정할 수 없습니다' }
+  }
+
+  const prodJoin = Array.isArray(L.products) ? L.products[0] : L.products
+  const p0 = (prodJoin ?? null) as { name?: string | null } | null
+  const before_product_name = String(p0?.name ?? '').trim()
+
+  const beforeSnapshot = {
+    product_name: before_product_name,
+    category_id: (L.category_id as string | null) ?? null,
+    commerce_price:
+      typeof L.commerce_price === 'number' && Number.isFinite(L.commerce_price)
+        ? Math.round(L.commerce_price)
+        : 0,
+    original_price:
+      typeof L.original_price === 'number' && Number.isFinite(L.original_price)
+        ? Math.round(L.original_price)
+        : null,
+    status: currentStatus,
+    is_visible: currentIsVisible,
+    shipping_group_id: (L.shipping_group_id as string | null) ?? null,
+    shipping_type: (L.shipping_type as string) || 'free',
+    badge_labels: (L.badge_labels as string[] | null) ?? null,
+    admin_memo: (L.admin_memo as string | null) ?? null,
+  }
+
+  const afterSnapshot = {
+    product_name,
+    category_id,
+    commerce_price: price,
+    original_price,
+    status: vis.nextStatus,
+    is_visible: vis.nextIsVisible,
+    shipping_group_id,
+    shipping_type: st,
+    badge_labels: badge_labels_db,
+    admin_memo,
+  }
+
+  const normBadges = (v: string[] | null | undefined) => {
+    if (!v || !Array.isArray(v) || v.length === 0) return ''
+    return [...v].map(String).sort().join('\u0001')
+  }
+
+  const changed_fields: string[] = []
+  const keys = Object.keys(afterSnapshot) as (keyof typeof afterSnapshot)[]
+  for (const k of keys) {
+    const a = beforeSnapshot[k]
+    const b = afterSnapshot[k]
+    const same =
+      k === 'badge_labels'
+        ? normBadges(a as string[] | null) === normBadges(b as string[] | null)
+        : a === b
+    if (!same) changed_fields.push(k)
+  }
+
+  if (changed_fields.length === 0) {
+    return { success: true, data: { id: listing_id } }
+  }
+
+  const { error: pUpErr } = await supabase
+    .from('products')
+    .update({ name: product_name })
+    .eq('id', product_id)
+    .eq('tenant_id', PLATFORM_OWNER_TENANT)
+    .is('deleted_at', null)
+
+  if (pUpErr) return { success: false, error: pUpErr.message }
+
+  const { error: lUpErr } = await supabase
+    .from('commerce_product_listings')
+    .update({
+      commerce_price: price,
+      original_price,
+      category_id,
+      shipping_type: st,
+      shipping_group_id,
+      badge_labels: badge_labels_db,
+      admin_memo,
+      status: vis.nextStatus,
+      is_visible: vis.nextIsVisible,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', listing_id)
+    .is('deleted_at', null)
+
+  if (lUpErr) return { success: false, error: lUpErr.message }
+
+  const logRes = await insertAdminLog(supabase, {
+    admin_id: auth.ctx.user_id,
+    admin_tenant_id: auth.ctx.tenant_id,
+    tenant_id: PLATFORM_OWNER_TENANT,
+    action_type: 'listing_updated',
+    target_table: 'commerce_product_listings',
+    target_id: listing_id,
+    new_value: {
+      before: beforeSnapshot,
+      after: afterSnapshot,
+      changed_fields,
+    },
+  })
+  if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
+
+  revalidatePath('/admin/commerce/products')
+  revalidatePath(`/admin/commerce/products/${listing_id}/edit`)
+  return { success: true, data: { id: listing_id } }
+}
+
 export async function createListing(input: {
   product_id: string
   commerce_price: number
