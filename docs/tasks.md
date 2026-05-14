@@ -31,6 +31,7 @@
 12. **`docs/ORDER-LOCK-FORENSIC-001.md`** — `order_edit_lock_days`가 **`settings` vs `admin_settings`** 중 어디를 읽는지·잠금 bypass 여부·운영 영향(CASE) 정리.
 13. **`docs/POINT-FORENSIC-001.md`** — `orders.point_used`·적립금 UI가 **실제 잔고 시스템인지** vs **헤더 할인 숫자인지**; 테이블·원장·취소·중복 사용 포렌식.
 14. **`docs/DISCOUNT-FORENSIC-001.md`** — 기간할인·프로모션·`commerce_price`/`original_price`·storefront 계산·고객별 타깃·export 갭 포렌식.
+15. **`docs/PRODUCT.md` §5·§10·§12·§13 + `docs/CONTEXT.md` [ARCH-08A]·[ARCH-09]** — STOREFRONT-ARCH-001: 디닷페이스 플랫폼 주문·ERP·fulfillment(해내음)·정산 축 문서 정렬.
 
 ### [OPS — AI worklog] 절차 기록 (감사 ID와 별도)
 
@@ -79,6 +80,7 @@
 - **작업 이력 (2026-05-14)**: `ORDER-LOCK-FORENSIC-001` 주문 수정 잠금·`admin_settings` vs `settings` 연결 포렌식 — worklog: [`docs/worklogs/2026-05-14_docs_order-lock-forensic-001-settings-vs-admin.md`](./worklogs/2026-05-14_docs_order-lock-forensic-001-settings-vs-admin.md)
 - **작업 이력 (2026-05-14)**: `POINT-FORENSIC-001` 적립금·`point_used` 잔고 vs 헤더 필드·원장 연결 포렌식 — worklog: [`docs/worklogs/2026-05-14_docs_point-forensic-001-balance.md`](./worklogs/2026-05-14_docs_point-forensic-001-balance.md)
 - **작업 이력 (2026-05-14)**: `DISCOUNT-FORENSIC-001` 기간할인·프로모션·storefront 가격 구조 포렌식 — worklog: [`docs/worklogs/2026-05-14_docs_discount-forensic-001-pricing.md`](./worklogs/2026-05-14_docs_discount-forensic-001-pricing.md)
+- **작업 이력 (2026-05-14)**: STOREFRONT-ARCH-001 — 디닷페이스 플랫폼 주문·ERP·fulfillment 문서 정렬(`PRODUCT`·`CONTEXT`·`[PLATFORM-ERP-001]`) — worklog: [`docs/worklogs/2026-05-14_docs_storefront-arch-001-platform-erp.md`](./worklogs/2026-05-14_docs_storefront-arch-001-platform-erp.md)
 
 ---
 
@@ -966,6 +968,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 ### ❌ 미구현
 
 #### [ADM-TODO-001] 관리자OS route group 자체가 없음
+- **문서 갱신 (2026-05-14)**: 초기 과제 등록 시 “`(admin)` 없음” 서술이 있었으나, **`ADM-CHECK-001` 종결**로 **`realmyos/src/app/(admin)/` 존재·미들웨어 보호**가 확정됨. 본 ID는 **역사적 제목 유지**; 현행 구현은 **`ADM-CHECK-001`** 및 관리자 라우트 트리를 본다.
 - **PRODUCT 정의 위치**: PRODUCT.md §10 관리자OS 기능 상세, CONTEXT.md [ARCH-02] / [ARCH-08G] `realmyos/src/app/(admin)/`
 - **완료 기준**: `realmyos/src/app/(admin)/` 경로가 생성되고, `users.role='admin'` 전용 접근 제어(미들웨어/레이아웃)와 기본 페이지가 존재
 - **선행 조건**: 없음 (코드 레벨에서 `/admin/*` 보호 + `getAuthCtx.role` 확장으로 달성)
@@ -1046,11 +1049,24 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **확인 방법**: 저장소 직접 열람·라우트 트리·미들웨어 정적 검증 완료. **과거 서술** 「`(admin)` 폴더 없음」→ **철회**.
 - **잔여**: 모든 관리자 행위의 `admin_logs` 강제 등은 **`ADM-*` · PRODUCT §10** 별도 감사.
 
+#### [PLATFORM-ERP-001] 플랫폼 주문·ERP 자동 동기화·공급 allocation·정산 (설계 Epic)
+- **우선순위**: HIGH
+- **상태**: **설계·문서 정렬 진행 중 (2026-05-14)** — 구현 완료로 쓰지 않음
+- **선행 조건**: `PRODUCT.md` §13·§12, `CONTEXT.md` [ARCH-08A]·[ARCH-09] STOREFRONT-ARCH-001 반영
+- **범위 (목표)**:
+  - storefront **플랫폼 주문**(`commerce_orders` 등)과 **디닷페이스 ERP(관리자OS)** 의 **자동 연동**(수동 이중 입력 제거 방향)
+  - **공급 allocation** → **Supplier Fulfillment**(예: 해내음코리아) → **Supplier Settlement**(공급자↔디닷페이스)
+  - **플랫폼 receivable·매출·수수료·PG/결제** 운영 축과의 SSOT
+- **비범위(본 Epic 문서만)**: ERP 전 구현·`payments` 스키마 변경·allocation RPC 일괄 추가 — 별 지시(`DISCOUNT-FIX-001` 등) 전까지 **설계·단계 과제 분해만**
+- **migration 필요**: 별도 결정(본 문서 턴에서는 **파일 추가 없음**)
+- **연계**: `COMMERCE-*`, `ADM-MISSING-006`, `POINT-FORENSIC-001`, `DISCOUNT-FORENSIC-001`
+- **작업 이력 (2026-05-14)**: Epic 신규 등록·PRODUCT/CONTEXT 정렬·본 블록 — worklog: [`docs/worklogs/2026-05-14_docs_storefront-arch-001-platform-erp.md`](./worklogs/2026-05-14_docs_storefront-arch-001-platform-erp.md)
+
 ---
 
 ## [커머스] 플랫폼 Listing·주문·식당OS `/buy` (COMMERCE-*)
 
-> **SSOT 연계**: `docs/PRODUCT.md` §12·§13(Storefront)·§14(자동발주), `docs/CONTEXT.md` ARCH-09, `docs/rules.md` RULE-27~30·RULE-01·RULE-03·RULE-17 등.  
+> **SSOT 연계**: `docs/PRODUCT.md` §5·§10·§12·§13(Storefront)·§14(자동발주), `docs/CONTEXT.md` [ARCH-08A]·[ARCH-09]·STOREFRONT-ARCH-001, `docs/rules.md` RULE-27~30·RULE-01·RULE-03·RULE-17 등. 플랫폼 주문·ERP 정렬 Epic: **`[PLATFORM-ERP-001]`**.  
 > **집계**: `COMMERCE-*`는 `DB-*`/`SUP-*`/`ADM-*`/`RES-*` 유형별 표와 **별도 축** — 아래 **`#### [COMMERCE-…]`** 개수만 접두사별 합산에 포함.
 
 ### 📋 실행 과제 (미착수)
