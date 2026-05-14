@@ -26,6 +26,7 @@
 7. **`## [FORENSIC]`** — `docs/FORENSIC.md` 연계 **레이어 감사 후속** (`FORENSIC-*`). 표준 `DB-*`/`SUP-*`/`ADM-*`/`RES-*` **유형별 표와 별도 축** — 집계는 **`감사 요약`** 참조.
 8. **`docs/TEST.md`** — 운영 배포 전 **실운영 가능성** 체크리스트(STOREFRONT·ADMIN·RFQ·비가역 원칙·운영 부하·regression·migration). QA 시나리오가 아니라 **정무님·식당·공급자가 하루를 버티는지** 검증용.  
 9. **`docs/TEST-RUN-001.md`** — 위 체크리스트를 **손 실행 순서**로 푼 운영자용 가이드(환경 확인 STEP 0 ~ 데이터 정리 STEP 8·비가역 검증·기록 템플릿). 코드 경로·테이블명은 저장소 현행 기준.
+10. **`docs/PAYMENT-FORENSIC-001.md`** — storefront **결제·주문** 실구현 범위(Toss·무통장·카카오·`commerce_orders`) 포렌식; `COMMERCE-FLOW.md` 대비 코드 갭 명시.
 
 ### [OPS — AI worklog] 절차 기록 (감사 ID와 별도)
 
@@ -68,6 +69,7 @@
 - **작업 이력 (2026-05-14)**: `tasks.md` COMMERCE-008·009·집계·OPS·`COMMERCE-007` 상태 정합 문서 반영 — worklog: [`docs/worklogs/2026-05-14_docs_tasks-commerce-ops-alignment.md`](./worklogs/2026-05-14_docs_tasks-commerce-ops-alignment.md)
 - **작업 이력 (2026-05-14)**: COMMERCE-009 운영 전환 정리(forensic·prompt·`TEST.md`) — worklog: [`docs/worklogs/2026-05-14_feat_commerce-009-ops-forensic-cleanup.md`](./worklogs/2026-05-14_feat_commerce-009-ops-forensic-cleanup.md)
 - **작업 이력 (2026-05-14)**: `docs/TEST-RUN-001.md` 운영 테스트 **실행 가이드**(STEP 0~8·비가역·기록 템플릿; 코드 기준 경로만) — worklog: [`docs/worklogs/2026-05-14_docs_test-run-001-operational-guide.md`](./worklogs/2026-05-14_docs_test-run-001-operational-guide.md)
+- **작업 이력 (2026-05-14)**: `docs/PAYMENT-FORENSIC-001.md` storefront 결제 구조 **포렌식**(무통장·카드·카카오·PG·주문-결제 관계) — worklog: [`docs/worklogs/2026-05-14_docs_payment-forensic-001-storefront-payment.md`](./worklogs/2026-05-14_docs_payment-forensic-001-storefront-payment.md)
 
 ---
 
@@ -1291,6 +1293,15 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **migration 필요**: NO (코드 정리·문서; DDL 별도 시 별 ID)
 - **작업 이력 (2026-05-14)**: 항목 신규 등록·범위·미착수 고정 — worklog: [`docs/worklogs/2026-05-14_docs_tasks-commerce-ops-alignment.md`](./worklogs/2026-05-14_docs_tasks-commerce-ops-alignment.md)
 - **작업 이력 (2026-05-14)**: forensic/debug 정리·prompt 제거·`TEST.md` 체크리스트 갱신 — worklog: [`docs/worklogs/2026-05-14_feat_commerce-009-ops-forensic-cleanup.md`](./worklogs/2026-05-14_feat_commerce-009-ops-forensic-cleanup.md)
+
+#### [PAYMENT-FORENSIC-001] storefront 결제 구조 포렌식 (문서)
+- **우선순위**: HIGH (운영 기대치·실구현 정합)
+- **선행 조건**: 없음 (읽기 전용 조사)
+- **상태**: **완료 (2026-05-14)** — 코드·의존성·예시 env 기준만 기록
+- **설명**: 식당OS `/buy` 체크아웃·`createCommerceOrder`·관리자 주문 UI를 통해 **실제 결제(PG·입금·카카오 API) 구현 범위**를 확정한다.
+- **산출물**: [`docs/PAYMENT-FORENSIC-001.md`](./PAYMENT-FORENSIC-001.md)
+- **migration 필요**: NO
+- **작업 이력 (2026-05-14)**: 포렌식 문서 작성·`tasks.md` 반영 — worklog: [`docs/worklogs/2026-05-14_docs_payment-forensic-001-storefront-payment.md`](./worklogs/2026-05-14_docs_payment-forensic-001-storefront-payment.md)
 
 ---
 
