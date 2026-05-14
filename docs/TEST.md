@@ -74,7 +74,7 @@
 - [ ] **XLSX export**가 실제 xlsx로 열리는가 (확장자만 바꾼 파일이 아닌지).
 - [ ] export 파일 **한글**이 Excel·메모장에서 깨지지 않는가 (공급자 대외 품질).
 - [ ] export가 **한 줄 = 한 상품(라인)** 인지, 주문 1건 다품목이 **여러 행**으로 나오는지 (발주 실수·수량 누락 리스크).
-- [ ] storefront 주문을 **입금 확인 완료(`paid`)** 처리했을 때 **`payments`** 원장에 **`commerce_order_id`** 로 inbound `confirmed` 행이 자동 생성되는가 (`PLATFORM-ERP-P0-001`, 손 실행 순서는 **`docs/TEST-RUN-001.md` STEP 8**).
+- [ ] storefront 주문을 **입금 확인 완료(`paid`)** 처리했을 때 **`payments`** 원장에 **`commerce_order_id`** 로 inbound `confirmed` 행이 자동 생성되는가 (`PLATFORM-ERP-P0-001`, 손 실행 순서는 **`docs/TEST-RUN-001.md` STEP 8**). 이후 **숫자·중복·취소·RLS**는 **`docs/TEST-RUN-ERP-001.md`** 로 검증한다.
 
 ### 상품 운영 UX
 
@@ -163,6 +163,21 @@
 ### 적용 후 스모크
 
 - [ ] migration 적용 직후 **주문 1건 생성**·**목록·export**·**기존 주문 조회**를 연속 수행했는가.
+
+---
+
+## 8. [ERP — 회계 숫자 정합성]
+
+> 손 실행 순서·SQL·PASS 정의: **`docs/TEST-RUN-ERP-001.md`**. UI가 아니라 **숫자·중복·취소·RLS**를 검증한다.
+
+- [ ] ERP 회계 정합성 검증 (**TEST-RUN-ERP-001** 참조)
+- [ ] allocation 중복 방지 확인
+- [ ] cancel 역방향 동기화 확인 (pending vs **confirmed 유지** — 현행 코드 기준)
+- [ ] `supplier_payables` 생성·1:1·금액 CHECK 확인
+- [ ] fee 계산 검증 (`platform_fee_rate` 스냅샷 vs `admin_settings`)
+- [ ] 멀티 공급자 allocation·payable 분리 확인
+- [ ] ERP audit trail (`admin_logs`) 확인
+- [ ] RLS 보안 확인 (`supplier_payables`·`commerce_order_allocations`)
 
 ---
 

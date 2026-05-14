@@ -26,17 +26,18 @@
 7. **`## [FORENSIC]`** — `docs/FORENSIC.md` 연계 **레이어 감사 후속** (`FORENSIC-*`). 표준 `DB-*`/`SUP-*`/`ADM-*`/`RES-*` **유형별 표와 별도 축** — 집계는 **`감사 요약`** 참조.
 8. **`docs/TEST.md`** — 운영 배포 전 **실운영 가능성** 체크리스트(STOREFRONT·ADMIN·RFQ·비가역 원칙·운영 부하·regression·migration). QA 시나리오가 아니라 **정무님·식당·공급자가 하루를 버티는지** 검증용.  
 9. **`docs/TEST-RUN-001.md`** — 위 체크리스트를 **손 실행 순서**로 푼 운영자용 가이드(환경 확인 STEP 0 ~ 데이터 정리 STEP 8·비가역 검증·기록 템플릿). 코드 경로·테이블명은 저장소 현행 기준.
-10. **`docs/PAYMENT-FORENSIC-001.md`** — storefront **결제·주문** 실구현 범위(Toss·무통장·카카오·`commerce_orders`) 포렌식; `COMMERCE-FLOW.md` 대비 코드 갭 명시.
-11. **`docs/ORDER-FORENSIC-001.md`** — 공급자 **`orders`/`order_lines`** 주문등록·수금동시처리·`point_used`/할인·거래처 연결·`order_edit_lock_days` 수정제한 포렌식; `commerce_orders`와 구분.
-12. **`docs/ORDER-LOCK-FORENSIC-001.md`** — `order_edit_lock_days`가 **`settings` vs `admin_settings`** 중 어디를 읽는지·잠금 bypass 여부·운영 영향(CASE) 정리.
-13. **`docs/POINT-FORENSIC-001.md`** — `orders.point_used`·적립금 UI가 **실제 잔고 시스템인지** vs **헤더 할인 숫자인지**; 테이블·원장·취소·중복 사용 포렌식.
-14. **`docs/DISCOUNT-FORENSIC-001.md`** — 기간할인·프로모션·`commerce_price`/`original_price`·storefront 계산·고객별 타깃·export 갭 포렌식.
-15. **`docs/PRODUCT.md` §5·§10·§12·§13 + `docs/CONTEXT.md` [ARCH-08A]·[ARCH-09]** — STOREFRONT-ARCH-001: 디닷페이스 플랫폼 주문·ERP·fulfillment(해내음)·정산 축 문서 정렬.
-16. **`docs/PLATFORM-ERP-ARCH-001.md`** — PLATFORM-ERP-ARCH-001: 관리자OS ERP capability·`commerce_orders` vs `orders`/`payments`·정산 KPI·원장 분리 **코드 기준 포렌식**.
-17. **`docs/PLATFORM-ERP-DESIGN-001.md`** — PLATFORM-ERP-DESIGN-001: `commerce_orders` 최소 ERP 연결(`payments` SSOT·receivable owner·동기화 시점·migration 설계 목록만).
-18. **`supabase/migrations/20260515100000_add_commerce_order_id_to_payments.sql`** + **`updateCommerceOrderStatus`** — PLATFORM-ERP-P0-001: `paid` 확정 시 `payments` inbound + `commerce_order_id` (운영 DB 적용은 별도 승인).
-19. **`docs/TEST-RUN-001.md` STEP 8** + **`docs/TEST.md`** — TEST-RUN-002: storefront→`payments` ERP bridge **실전 검증 시나리오**(실행 아님, 문서만).
-20. **`supabase/migrations/20260515220000_create_supplier_payables.sql`** — PLATFORM-ERP-P2-003: 확정 allocation → `supplier_payables` 지급 예정 원장(파일 추가; 운영 DB 적용은 별도 승인).
+10. **`docs/TEST-RUN-ERP-001.md`** — storefront→ERP **회계 숫자 정합성** 손 검증(수금·allocation·`supplier_payables`·중복·취소·fee·RLS·`admin_logs`). TEST-RUN-001 완료 후 권장.
+11. **`docs/PAYMENT-FORENSIC-001.md`** — storefront **결제·주문** 실구현 범위(Toss·무통장·카카오·`commerce_orders`) 포렌식; `COMMERCE-FLOW.md` 대비 코드 갭 명시.
+12. **`docs/ORDER-FORENSIC-001.md`** — 공급자 **`orders`/`order_lines`** 주문등록·수금동시처리·`point_used`/할인·거래처 연결·`order_edit_lock_days` 수정제한 포렌식; `commerce_orders`와 구분.
+13. **`docs/ORDER-LOCK-FORENSIC-001.md`** — `order_edit_lock_days`가 **`settings` vs `admin_settings`** 중 어디를 읽는지·잠금 bypass 여부·운영 영향(CASE) 정리.
+14. **`docs/POINT-FORENSIC-001.md`** — `orders.point_used`·적립금 UI가 **실제 잔고 시스템인지** vs **헤더 할인 숫자인지**; 테이블·원장·취소·중복 사용 포렌식.
+15. **`docs/DISCOUNT-FORENSIC-001.md`** — 기간할인·프로모션·`commerce_price`/`original_price`·storefront 계산·고객별 타깃·export 갭 포렌식.
+16. **`docs/PRODUCT.md` §5·§10·§12·§13 + `docs/CONTEXT.md` [ARCH-08A]·[ARCH-09]** — STOREFRONT-ARCH-001: 디닷페이스 플랫폼 주문·ERP·fulfillment(해내음)·정산 축 문서 정렬.
+17. **`docs/PLATFORM-ERP-ARCH-001.md`** — PLATFORM-ERP-ARCH-001: 관리자OS ERP capability·`commerce_orders` vs `orders`/`payments`·정산 KPI·원장 분리 **코드 기준 포렌식**.
+18. **`docs/PLATFORM-ERP-DESIGN-001.md`** — PLATFORM-ERP-DESIGN-001: `commerce_orders` 최소 ERP 연결(`payments` SSOT·receivable owner·동기화 시점·migration 설계 목록만).
+19. **`supabase/migrations/20260515100000_add_commerce_order_id_to_payments.sql`** + **`updateCommerceOrderStatus`** — PLATFORM-ERP-P0-001: `paid` 확정 시 `payments` inbound + `commerce_order_id` (운영 DB 적용은 별도 승인).
+20. **`docs/TEST-RUN-001.md` STEP 8** + **`docs/TEST.md`** — TEST-RUN-002: storefront→`payments` ERP bridge **실전 검증 시나리오**(실행 아님, 문서만).
+21. **`supabase/migrations/20260515220000_create_supplier_payables.sql`** — PLATFORM-ERP-P2-003: 확정 allocation → `supplier_payables` 지급 예정 원장(파일 추가; 운영 DB 적용은 별도 승인).
 
 ### [OPS — AI worklog] 절차 기록 (감사 ID와 별도)
 
@@ -94,6 +95,7 @@
 - **작업 이력 (2026-05-14)**: PLATFORM-ERP-P2 allocation 취소 audit(`cancelled_at`/`cancelled_by`)·주문 cancelled 시 pending allocation 자동 취소 — worklog: [`docs/worklogs/2026-05-14_feat_platform-erp-p2-allocation-cancel-audit.md`](./worklogs/2026-05-14_feat_platform-erp-p2-allocation-cancel-audit.md)
 - **작업 이력 (2026-05-14)**: **PLATFORM-ERP-P2-003** 확정 allocation → `supplier_payables` 원장·RLS·관리자 조회·`/admin/commerce/payables`·allocation 화면 연동 — worklog: [`docs/worklogs/2026-05-14_feat_platform-erp-p2-003-supplier-payables.md`](./worklogs/2026-05-14_feat_platform-erp-p2-003-supplier-payables.md)
 - **작업 이력 (2026-05-14)**: TEST-RUN-002 — `TEST-RUN-001` STEP 8(ERP bridge)·`TEST.md` 체크리스트·migration 목록 문서 반영 — worklog: [`docs/worklogs/2026-05-14_docs_test-run-002-storefront-payments-bridge.md`](./worklogs/2026-05-14_docs_test-run-002-storefront-payments-bridge.md)
+- **작업 이력 (2026-05-14)**: **TEST-RUN-ERP-001** — storefront→ERP **회계 숫자 정합성** 손 검증 가이드(`docs/TEST-RUN-ERP-001.md`) + `TEST.md`·`TEST-RUN-001.md`·`tasks.md` 연동 — worklog: [`docs/worklogs/2026-05-14_docs_test-run-erp-001-accounting-guide.md`](./worklogs/2026-05-14_docs_test-run-erp-001-accounting-guide.md)
 - **작업 이력 (2026-05-14)**: **BUILD-FIX-001** storefront-bank `admin-shared.module.css` import 경로 수정 + `realmyos`/`resturant_os` `tsc --noEmit` 전수 — worklog: [`docs/worklogs/2026-05-14_chore_build-fix-001-tsc-and-css-path.md`](./worklogs/2026-05-14_chore_build-fix-001-tsc-and-css-path.md)
 
 ---
@@ -1082,6 +1084,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **작업 이력 (2026-05-14)**: **PLATFORM-ERP-P2-001 후속** `cancelled_at`/`cancelled_by` audit + 주문 취소 시 pending allocation 자동 cancelled — worklog: [`docs/worklogs/2026-05-14_feat_platform-erp-p2-allocation-cancel-audit.md`](./worklogs/2026-05-14_feat_platform-erp-p2-allocation-cancel-audit.md)
 - **작업 이력 (2026-05-14)**: **PLATFORM-ERP-P2-003** `supplier_payables`·확정 시 INSERT·관리자/공급자 RLS·`/admin/commerce/payables` — worklog: [`docs/worklogs/2026-05-14_feat_platform-erp-p2-003-supplier-payables.md`](./worklogs/2026-05-14_feat_platform-erp-p2-003-supplier-payables.md)
 - **작업 이력 (2026-05-14)**: **TEST-RUN-002** ERP bridge 검증 시나리오(`TEST-RUN-001` STEP 8·`TEST.md`) — worklog: [`docs/worklogs/2026-05-14_docs_test-run-002-storefront-payments-bridge.md`](./worklogs/2026-05-14_docs_test-run-002-storefront-payments-bridge.md)
+- **작업 이력 (2026-05-14)**: **TEST-RUN-ERP-001** ERP 회계 숫자 정합성 손 검증 가이드(`docs/TEST-RUN-ERP-001.md`) — worklog: [`docs/worklogs/2026-05-14_docs_test-run-erp-001-accounting-guide.md`](./worklogs/2026-05-14_docs_test-run-erp-001-accounting-guide.md)
 
 ### 🔍 확인 필요
 
