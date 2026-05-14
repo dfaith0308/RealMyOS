@@ -7161,6 +7161,15 @@ Low Risk 대상
 - **storefront inbound reversal** = **INSERT append-only** — **참조 패턴**(P0).
 - **P1**에서 **outbound append-only** 로 수렴 예정 — **장기 두 패턴 공존 금지** 방향.
 
+**[append-only convergence 정책]** ([D-024] · [`APPEND-ONLY-CONVERGENCE-P1-SPEC-001.md`](./APPEND-ONLY-CONVERGENCE-P1-SPEC-001.md))
+
+- **수렴 목표(패턴 3개)**: **A** storefront inbound = INSERT append-only(완료) · **B** RFQ outbound `reverse_disbursement` = P1에서 INSERT 수렴 · **α** `cancelPayment` inbound = **P1에서 B와 동시** INSERT 수렴.
+- **`amount` 양수 원칙**([D-024] Q1): reversal 의미는 **`reversal_of_id` · `type` · lifecycle** — **음수 금액 혼합 금지**; KPI = **gross − reversal aggregation**.
+- **P1 전환 대상**: `insert_outbound_reversal`(가칭) 경로 · inbound 상쇅 신규 경로 · **`type` 가드 1차**(신규 INSERT만; [D-022] sequencing).
+- **transition debt**: `UPDATE reversed`(`reverse_disbursement`, `cancelPayment`)는 **deprecated**·**즉시 제거 금지** — 운영 semantics·`purchases.status` 보존 우선.
+- **overwrite 금지** 재강조([D-021]): correction = **새 이벤트**만.
+- **현재는 transition state** — 완전한 outbound append-only accounting **미완성**; P1은 **명세 범위 내 점진 이행**만.
+
 ---
 
 ### 10-10. 정책/실험 콘솔

@@ -1546,6 +1546,25 @@ deposit_logs          → 예치금 변동 이력 (append-only)
 - **settlement ↔ payable**: 코드상 **직접 연결 없음**(RFQ settlement vs storefront payable **별개 흐름**).
 - **append-only outbound accounting**: **미완성** — `UPDATE reversed` 축 잔존.
 
+### [P1 convergence 범위] ([D-024] · `APPEND-ONLY-CONVERGENCE-P1-SPEC-001`)
+
+- **`reverse_disbursement`** → **INSERT 상쇅** 전환 예정(기존 RPC는 **transition debt**, 즉시 제거 아님).
+- **`cancelPayment`(패턴 α)** → **INSERT 상쇅** 전환 예정 — **outbound P1과 동시 수렴**.
+- **`type` 가드 1차** — 신규 accounting INSERT에 `type` 필수; **NOT NULL enforcement·backfill 아님**([D-022]).
+- **transition debt 점진 해소 순서**: outbound INSERT 경로 검증 → inbound 수렴 → type 가드 → KPI·`admin_logs` 검증(명세 §순서).
+
+### [수렴 완료 목표 구조]
+
+- 모든 reversal = **INSERT append-only**
+- 모든 correction = **새 이벤트**
+- **overwrite 없음**([D-021])
+
+### [transition debt] (공존·위험)
+
+- **패턴 A/B/α 공존** — storefront INSERT vs outbound·inbound `UPDATE reversed`.
+- **semantics drift** 위험 — 집계·KPI·`purchases.status` 회귀 필수.
+- **단계적 convergence 진행 중** — 현재 구조를 완성형으로 가정하지 않음.
+
 ---
 
 ## [ECL] Execution Control Layer — 실행 통제 레이어

@@ -51,6 +51,8 @@
 32. **`docs/ACCOUNTING-LIFECYCLE-DESIGN-001.md`** — **ACCOUNTING-LIFECYCLE-DESIGN-001**: settlement / payout / payable / reversal chain **lifecycle 설계**(코드 기준 사실 + 권장 semantics; 구현·migration 실행 없음).
 33. **`docs/DECISIONS.md` [D-023]** · **`docs/PRODUCT.md`**(10-9) · **`docs/CONTEXT.md`** — **ACCOUNTING-LIFECYCLE-POLICY-001**: settlement/payout/finality·**`paid` 정의**·UPDATE reversed transition debt·outbound append-only 수렴 **정책 확정**(구현·migration 없음).
 34. **`docs/APPEND-ONLY-CONVERGENCE-DESIGN-001.md`** — **APPEND-ONLY-CONVERGENCE-DESIGN-001**: outbound/storefront reversal 패턴 수렴·`reverse_disbursement` 이행 순서·taxonomy 준비 **설계 전용**(구현·migration 실행 없음).
+35. **`docs/DECISIONS.md` [D-024]** · **`docs/PRODUCT.md`**(10-9) · **`docs/CONTEXT.md`** — **APPEND-ONLY-CONVERGENCE-POLICY-001**: append-only 수렴 **실행 정책** 확정(reversal `amount` 양수·`cancelPayment` P1 동시 수렴·transition state 명시); **구현·migration 없음**.
+36. **`docs/APPEND-ONLY-CONVERGENCE-P1-SPEC-001.md`** — **APPEND-ONLY-CONVERGENCE-P1-001**: P1 **구현 범위 명세**만(`insert_outbound_reversal`·inbound 상쇅·`cancelPayment` deprecate·`type` 가드 1차·KPI·`admin_logs`·제외 범위); **코드·migration 실행 아님**.
 
 ### [OPS — AI worklog] 절차 기록 (감사 ID와 별도)
 
@@ -122,6 +124,7 @@
 - **작업 이력 (2026-05-14)**: **ACCOUNTING-LIFECYCLE-DESIGN-001** settlement/payout/payable/reversal lifecycle 설계 문서(`docs/ACCOUNTING-LIFECYCLE-DESIGN-001.md`)·`tasks.md` — worklog: [`docs/worklogs/2026-05-14_docs_accounting-lifecycle-design-001.md`](./worklogs/2026-05-14_docs_accounting-lifecycle-design-001.md)
 - **작업 이력 (2026-05-14)**: **ACCOUNTING-LIFECYCLE-POLICY-001** lifecycle 정책 확정 → `DECISIONS.md` **[D-023]** · `PRODUCT.md`(10-9) · `CONTEXT.md` — worklog: [`docs/worklogs/2026-05-14_docs_accounting-lifecycle-policy-001.md`](./worklogs/2026-05-14_docs_accounting-lifecycle-policy-001.md)
 - **작업 이력 (2026-05-14)**: **APPEND-ONLY-CONVERGENCE-DESIGN-001** append-only 수렴 설계(`docs/APPEND-ONLY-CONVERGENCE-DESIGN-001.md`)·`tasks.md` — worklog: [`docs/worklogs/2026-05-14_docs_append-only-convergence-design-001.md`](./worklogs/2026-05-14_docs_append-only-convergence-design-001.md)
+- **작업 이력 (2026-05-14)**: **APPEND-ONLY-CONVERGENCE-POLICY-001** + **APPEND-ONLY-CONVERGENCE-P1-001** — `DECISIONS.md` **[D-024]** · P1 범위 명세(`docs/APPEND-ONLY-CONVERGENCE-P1-SPEC-001.md`) · `PRODUCT.md` · `CONTEXT.md` · 본 Epic — worklog: [`docs/worklogs/2026-05-14_docs_append-only-convergence-policy-001.md`](./worklogs/2026-05-14_docs_append-only-convergence-policy-001.md)
 
 ---
 
@@ -1099,7 +1102,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
   - **B2B 가격·마진·공급자 기준가** 축: **`DECISIONS.md` [D-020]** · **`[DISCOUNT-ENGINE-001]`** (구현 시 allocation·스냅샷·`pricing_policies`와 연동)
 - **비범위(본 Epic 문서만)**: ERP 전 구현·`payments` 스키마 변경·allocation RPC 일괄 추가 — 별 지시 전까지 **설계·단계 과제 분해만**
 - **migration 필요**: 별도 결정(본 문서 턴에서는 **파일 추가 없음**)
-- **연계**: `COMMERCE-*`, `ADM-MISSING-006`, `POINT-FORENSIC-001`, `DISCOUNT-FORENSIC-001`, **`DISCOUNT-ENGINE-DESIGN-001`**, **`[DISCOUNT-ENGINE-001]`** (가격 엔진 구현 Epic), **`DECISIONS.md` [D-020]**, **`DECISIONS.md` [D-021]** (회계 이벤트 정책 · ACCOUNTING-EVENT-POLICY-001), **`PLATFORM-ERP-ARCH-001`** (`docs/PLATFORM-ERP-ARCH-001.md`), **`PLATFORM-ERP-DESIGN-001`** (`docs/PLATFORM-ERP-DESIGN-001.md`)
+- **연계**: `COMMERCE-*`, `ADM-MISSING-006`, `POINT-FORENSIC-001`, `DISCOUNT-FORENSIC-001`, **`DISCOUNT-ENGINE-DESIGN-001`**, **`[DISCOUNT-ENGINE-001]`** (가격 엔진 구현 Epic), **`DECISIONS.md` [D-020]**, **`DECISIONS.md` [D-021]** (회계 이벤트 정책 · ACCOUNTING-EVENT-POLICY-001), **`DECISIONS.md` [D-024]** (**[APPEND-ONLY-CONVERGENCE-POLICY-001]**), **`PLATFORM-ERP-ARCH-001`** (`docs/PLATFORM-ERP-ARCH-001.md`), **`PLATFORM-ERP-DESIGN-001`** (`docs/PLATFORM-ERP-DESIGN-001.md`)
 - **작업 이력 (2026-05-14)**: Epic 신규 등록·PRODUCT/CONTEXT 정렬·본 블록 — worklog: [`docs/worklogs/2026-05-14_docs_storefront-arch-001-platform-erp.md`](./worklogs/2026-05-14_docs_storefront-arch-001-platform-erp.md)
 - **작업 이력 (2026-05-14)**: `origin/dev` 병합으로 생긴 **`[PLATFORM-ERP-001]` 중복 블록 제거** — worklog: 동일
 - **작업 이력 (2026-05-14)**: **PLATFORM-ERP-ARCH-001** 현행 갭 포렌식 문서 — worklog: [`docs/worklogs/2026-05-14_docs_platform-erp-arch-001-forensic.md`](./worklogs/2026-05-14_docs_platform-erp-arch-001-forensic.md)
@@ -1117,6 +1120,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **작업 이력 (2026-05-14)**: **TEST-RUN-ERP-001** ERP 회계 숫자 정합성 손 검증 가이드(`docs/TEST-DEV/TEST-RUN-ERP-001.md`) — worklog: [`docs/worklogs/2026-05-14_docs_test-run-erp-001-accounting-guide.md`](./worklogs/2026-05-14_docs_test-run-erp-001-accounting-guide.md)
 - **작업 이력 (2026-05-14)**: **DISCOUNT-ENGINE-DESIGN-001** B2B 가격정책 엔진 설계(`docs/DISCOUNT-ENGINE-DESIGN-001.md`) — worklog: [`docs/worklogs/2026-05-14_docs_discount-engine-design-001-b2b-pricing.md`](./worklogs/2026-05-14_docs_discount-engine-design-001-b2b-pricing.md)
 - **작업 이력 (2026-05-14)**: **DISCOUNT-ENGINE-POLICY-001** B2B 가격정책 핵심 원칙 — `DECISIONS.md` [D-020]·`PRODUCT.md`·`CONTEXT.md`·`[DISCOUNT-ENGINE-001]` Epic — worklog: [`docs/worklogs/2026-05-14_docs_discount-engine-policy-001-core-principles.md`](./worklogs/2026-05-14_docs_discount-engine-policy-001-core-principles.md)
+- **작업 이력 (2026-05-14)**: **APPEND-ONLY-CONVERGENCE-POLICY-001** + **P1-001** 범위 명세·`DECISIONS.md` **[D-024]** — worklog: [`docs/worklogs/2026-05-14_docs_append-only-convergence-policy-001.md`](./worklogs/2026-05-14_docs_append-only-convergence-policy-001.md)
 - **작업 이력 (2026-05-14)**: **ACCOUNTING-REVERSAL-DESIGN-001** 역흐름 포렌식·설계 문서 — worklog: [`docs/worklogs/2026-05-14_docs_accounting-reversal-design-001.md`](./worklogs/2026-05-14_docs_accounting-reversal-design-001.md) · 감사 ID: **[ACCOUNTING-REVERSAL-DESIGN-001]** (아래 전용 블록)
 - **작업 이력 (2026-05-14)**: **ACCOUNTING-EVENT-MODEL-001** 회계 이벤트 taxonomy·원칙 문서 — worklog: [`docs/worklogs/2026-05-14_docs_accounting-event-model-001.md`](./worklogs/2026-05-14_docs_accounting-event-model-001.md) · 감사 ID: **[ACCOUNTING-EVENT-MODEL-001]** (아래 전용 블록)
 - **작업 이력 (2026-05-14)**: **ACCOUNTING-EVENT-POLICY-001** 정책 확정 → `DECISIONS.md` **[D-021]** · `PRODUCT.md` · `CONTEXT.md` — worklog: [`docs/worklogs/2026-05-14_docs_accounting-event-policy-001.md`](./worklogs/2026-05-14_docs_accounting-event-policy-001.md) · 감사 ID: **[ACCOUNTING-EVENT-POLICY-001]**
@@ -1156,7 +1160,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **상태**: **정책 확정 완료 (2026-05-14)** — 구현·migration 실행·DB 변경 없음
 - **산출물**: `docs/DECISIONS.md` **[D-023]** · `docs/PRODUCT.md`(§10-9 settlement/payout lifecycle 절) · `docs/CONTEXT.md`(lifecycle finality · UPDATE reversed transition debt · 한계 명시) · 본 블록
 - **범위**: settlement finality · payout/`paid` 정의 · reversal depth 방향 · **UPDATE `reversed` transition debt** 기록 · outbound append-only 수렴 · P1 전환 준비(실행 없음)
-- **연계**: [`docs/ACCOUNTING-LIFECYCLE-DESIGN-001.md`](./ACCOUNTING-LIFECYCLE-DESIGN-001.md), **[ACCOUNTING-EVENT-MODEL-001](./ACCOUNTING-EVENT-MODEL-001.md)**, **[PAYMENTS-TAXONOMY-DESIGN-001](./PAYMENTS-TAXONOMY-DESIGN-001.md)**, **`DECISIONS.md` [D-021]**, **`DECISIONS.md` [D-022]**, **`DECISIONS.md` [D-023]**, **`[PLATFORM-ERP-001]`**, [`docs/APPEND-ONLY-CONVERGENCE-DESIGN-001.md`](./APPEND-ONLY-CONVERGENCE-DESIGN-001.md) (**[APPEND-ONLY-CONVERGENCE-DESIGN-001]**)
+- **연계**: [`docs/ACCOUNTING-LIFECYCLE-DESIGN-001.md`](./ACCOUNTING-LIFECYCLE-DESIGN-001.md), **[ACCOUNTING-EVENT-MODEL-001](./ACCOUNTING-EVENT-MODEL-001.md)**, **[PAYMENTS-TAXONOMY-DESIGN-001](./PAYMENTS-TAXONOMY-DESIGN-001.md)**, **`DECISIONS.md` [D-021]**, **`DECISIONS.md` [D-022]**, **`DECISIONS.md` [D-023]**, **`DECISIONS.md` [D-024]** (**[APPEND-ONLY-CONVERGENCE-POLICY-001]**), **`[PLATFORM-ERP-001]`**, [`docs/APPEND-ONLY-CONVERGENCE-DESIGN-001.md`](./APPEND-ONLY-CONVERGENCE-DESIGN-001.md) (**[APPEND-ONLY-CONVERGENCE-DESIGN-001]**), [`docs/APPEND-ONLY-CONVERGENCE-P1-SPEC-001.md`](./APPEND-ONLY-CONVERGENCE-P1-SPEC-001.md) (**[APPEND-ONLY-CONVERGENCE-P1-001]**)
 - **작업 이력 (2026-05-14)**: 정책 문서 반영 — worklog: [`docs/worklogs/2026-05-14_docs_accounting-lifecycle-policy-001.md`](./worklogs/2026-05-14_docs_accounting-lifecycle-policy-001.md)
 
 #### [APPEND-ONLY-CONVERGENCE-DESIGN-001] append-only accounting 수렴 (설계 전용)
@@ -1164,14 +1168,30 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **상태**: **설계 문서만 (2026-05-14)** — 구현·migration 실행·DB 변경 없음
 - **산출물**: [`docs/APPEND-ONLY-CONVERGENCE-DESIGN-001.md`](./APPEND-ONLY-CONVERGENCE-DESIGN-001.md)
 - **범위**: outbound append-only 전환 방식·`reverse_disbursement` 제거 순서·reversal chain·taxonomy 준비·semantics alignment·transition debt 목록·migration 목록(실행 없음)
-- **연계**: **`DECISIONS.md` [D-021]**, **`DECISIONS.md` [D-022]**, **`DECISIONS.md` [D-023]**, [`docs/ACCOUNTING-LIFECYCLE-DESIGN-001.md`](./ACCOUNTING-LIFECYCLE-DESIGN-001.md), **[ACCOUNTING-LIFECYCLE-POLICY-001]** (Epic), **[PAYMENTS-TAXONOMY-DESIGN-001](./PAYMENTS-TAXONOMY-DESIGN-001.md)**, **[PAYMENTS-TAXONOMY-POLICY-001]** (Epic), **[ACCOUNTING-EVENT-MODEL-001](./ACCOUNTING-EVENT-MODEL-001.md)**, **`[PLATFORM-ERP-001]`**, **[ACCOUNTING-REVERSAL-P0-001]**, **[KPI-REVERSAL-P0-001]**
+- **연계**: **`DECISIONS.md` [D-021]**, **`DECISIONS.md` [D-022]**, **`DECISIONS.md` [D-023]**, **`DECISIONS.md` [D-024]** (**[APPEND-ONLY-CONVERGENCE-POLICY-001]**), [`docs/APPEND-ONLY-CONVERGENCE-P1-SPEC-001.md`](./APPEND-ONLY-CONVERGENCE-P1-SPEC-001.md) (**[APPEND-ONLY-CONVERGENCE-P1-001]** 범위 명세), [`docs/ACCOUNTING-LIFECYCLE-DESIGN-001.md`](./ACCOUNTING-LIFECYCLE-DESIGN-001.md), **[ACCOUNTING-LIFECYCLE-POLICY-001]** (Epic), **[PAYMENTS-TAXONOMY-DESIGN-001](./PAYMENTS-TAXONOMY-DESIGN-001.md)**, **[PAYMENTS-TAXONOMY-POLICY-001]** (Epic), **[ACCOUNTING-EVENT-MODEL-001](./ACCOUNTING-EVENT-MODEL-001.md)**, **`[PLATFORM-ERP-001]`**, **[ACCOUNTING-REVERSAL-P0-001]**, **[KPI-REVERSAL-P0-001]**
 - **작업 이력 (2026-05-14)**: 설계 문서·`tasks.md`·worklog — worklog: [`docs/worklogs/2026-05-14_docs_append-only-convergence-design-001.md`](./worklogs/2026-05-14_docs_append-only-convergence-design-001.md)
+- **작업 이력 (2026-05-14)**: **[D-024]**·P1 범위 명세 연계 반영 — worklog: [`docs/worklogs/2026-05-14_docs_append-only-convergence-policy-001.md`](./worklogs/2026-05-14_docs_append-only-convergence-policy-001.md)
+
+#### [APPEND-ONLY-CONVERGENCE-POLICY-001] append-only convergence 실행 정책 확정 ([D-024])
+- **우선순위**: HIGH (P1 구현·KPI·운영 semantics의 **실행 기준**)
+- **상태**: **정책 확정 완료 (2026-05-14)** — 코드·migration·DB 변경 없음
+- **산출물**: `docs/DECISIONS.md` **[D-024]** · `docs/PRODUCT.md`(§10-9 append-only convergence) · `docs/CONTEXT.md`(P1 범위·수렴 목표·transition debt) · 본 블록
+- **범위 (고정)**: Q1 reversal `amount` **양수 유지** · Q2 **`cancelPayment`(α)** = **P1에서 outbound와 동시** INSERT 수렴 · 패턴 A/B/α 최종 목표 · transition debt(즉시 제거 금지) · **[D-021]~[D-024] 동시 적용**
+- **연계**: [`docs/APPEND-ONLY-CONVERGENCE-DESIGN-001.md`](./APPEND-ONLY-CONVERGENCE-DESIGN-001.md) (**[APPEND-ONLY-CONVERGENCE-DESIGN-001]**), [`docs/APPEND-ONLY-CONVERGENCE-P1-SPEC-001.md`](./APPEND-ONLY-CONVERGENCE-P1-SPEC-001.md) (**[APPEND-ONLY-CONVERGENCE-P1-001]**), **`DECISIONS.md` [D-021]** · **[D-022]** · **[D-023]**, **[ACCOUNTING-REVERSAL-P0-001]**, **[KPI-REVERSAL-P0-001]**, **[ACCOUNTING-LIFECYCLE-POLICY-001]**, **[PAYMENTS-TAXONOMY-POLICY-001]**
+- **작업 이력 (2026-05-14)**: 정책 문서 반영 — worklog: [`docs/worklogs/2026-05-14_docs_append-only-convergence-policy-001.md`](./worklogs/2026-05-14_docs_append-only-convergence-policy-001.md)
+
+#### [APPEND-ONLY-CONVERGENCE-P1-001] P1 append-only 수렴 구현 (범위 확정 / 구현 대기)
+- **우선순위**: HIGH
+- **상태**: **구현 범위 확정 (2026-05-14)** — 별도 구현 지시·승인 migration 전까지 **코드 변경 없음**
+- **산출물**: [`docs/APPEND-ONLY-CONVERGENCE-P1-SPEC-001.md`](./APPEND-ONLY-CONVERGENCE-P1-SPEC-001.md) — `insert_outbound_reversal`(가칭)·inbound 상쇅·`reverse_disbursement`/`cancelPayment` **deprecated 경로**·`type` 가드 1차·KPI·`admin_logs`·제외 범위·완료 기준
+- **연계**: **[APPEND-ONLY-CONVERGENCE-POLICY-001]** · **[APPEND-ONLY-CONVERGENCE-DESIGN-001]** · **`DECISIONS.md` [D-021]~[D-024]** · **[ACCOUNTING-REVERSAL-P0-001]** · **[KPI-REVERSAL-P0-001]** · **[PAYMENTS-TAXONOMY-POLICY-001]**
+- **작업 이력 (2026-05-14)**: P1 범위 명세 문서·`tasks.md` Epic — worklog: [`docs/worklogs/2026-05-14_docs_append-only-convergence-policy-001.md`](./worklogs/2026-05-14_docs_append-only-convergence-policy-001.md)
 
 #### [ACCOUNTING-EVENT-MODEL-001] 회계 이벤트 모델·immutable ledger 원칙 (최상위)
 - **우선순위**: HIGH (역환불·정산·KPI·SSOT의 기준 문서)
 - **상태**: **설계 문서만 (2026-05-14)** — 구현·migration 실행·DB 변경 없음
 - **산출물**: [`docs/ACCOUNTING-EVENT-MODEL-001.md`](./ACCOUNTING-EVENT-MODEL-001.md)
-- **연계**: **[ACCOUNTING-REVERSAL-DESIGN-001](./ACCOUNTING-REVERSAL-DESIGN-001.md)**, **`[PLATFORM-ERP-001]`**, `settlement-control.ts`, `payments` SSOT, `DISCOUNT-ENGINE-001` (가격 스냅샷 축), **`DECISIONS.md` [D-021]** (정책 확정 · ACCOUNTING-EVENT-POLICY-001), **`DECISIONS.md` [D-022]** (**[PAYMENTS-TAXONOMY-POLICY-001]** · type enforcement 순서), **`DECISIONS.md` [D-023]** (**[ACCOUNTING-LIFECYCLE-POLICY-001]** · finality·paid·outbound 수렴), [`docs/APPEND-ONLY-CONVERGENCE-DESIGN-001.md`](./APPEND-ONLY-CONVERGENCE-DESIGN-001.md) (**[APPEND-ONLY-CONVERGENCE-DESIGN-001]**)
+- **연계**: **[ACCOUNTING-REVERSAL-DESIGN-001](./ACCOUNTING-REVERSAL-DESIGN-001.md)**, **`[PLATFORM-ERP-001]`**, `settlement-control.ts`, `payments` SSOT, `DISCOUNT-ENGINE-001` (가격 스냅샷 축), **`DECISIONS.md` [D-021]** (정책 확정 · ACCOUNTING-EVENT-POLICY-001), **`DECISIONS.md` [D-022]** (**[PAYMENTS-TAXONOMY-POLICY-001]** · type enforcement 순서), **`DECISIONS.md` [D-023]** (**[ACCOUNTING-LIFECYCLE-POLICY-001]** · finality·paid·outbound 수렴), **`DECISIONS.md` [D-024]** (**[APPEND-ONLY-CONVERGENCE-POLICY-001]**), [`docs/APPEND-ONLY-CONVERGENCE-DESIGN-001.md`](./APPEND-ONLY-CONVERGENCE-DESIGN-001.md) (**[APPEND-ONLY-CONVERGENCE-DESIGN-001]**), [`docs/APPEND-ONLY-CONVERGENCE-P1-SPEC-001.md`](./APPEND-ONLY-CONVERGENCE-P1-SPEC-001.md) (**[APPEND-ONLY-CONVERGENCE-P1-001]**)
 - **migration 필요**: 본 ID 문서 **SECTION 10** 검토 목록만(실행 없음)
 - **작업 이력 (2026-05-14)**: 원칙 문서·`tasks.md`·worklog — worklog: [`docs/worklogs/2026-05-14_docs_accounting-event-model-001.md`](./worklogs/2026-05-14_docs_accounting-event-model-001.md)
 

@@ -393,6 +393,62 @@
 
 ---
 
+## [D-024] append-only convergence 실행 정책 (reversal 금액 부호 · P1 수렴 범위)
+
+- **결정일**: 2026-05-14
+- **결정자**: 정무님
+- **근거 문서**: [`docs/APPEND-ONLY-CONVERGENCE-DESIGN-001.md`](./APPEND-ONLY-CONVERGENCE-DESIGN-001.md) (**APPEND-ONLY-CONVERGENCE-DESIGN-001**), 구현 범위 명세 [`docs/APPEND-ONLY-CONVERGENCE-P1-SPEC-001.md`](./APPEND-ONLY-CONVERGENCE-P1-SPEC-001.md) (**APPEND-ONLY-CONVERGENCE-P1-SPEC-001**)
+- **연계 결정**:
+  - **[D-021]** — append-only accounting **원칙**(overwrite 금지·reversal row 방향).
+  - **[D-022]** — **`payments.type` taxonomy enforcement sequencing** — P1에서는 **NOT NULL·CHECK가 아닌** 가드 1차만.
+  - **[D-023]** — lifecycle **finality**(`paid`·settlement 불변·`UPDATE reversed` = transition debt).
+  - **[D-024]** — 위를 **`payments` reversal·취소 경로 실행** 및 **P1 구현 범위**로 고정.
+  - **네 결정은 함께 동작**한다: 원칙([D-021])·분류 순서([D-022])·지급·정산 의미([D-023])·**수렴 실행·P1 범위([D-024])**를 한 세트로 적용한다.
+- **현재 구조 고지**: 저장소는 **transition state**이며, **즉시 완전 append-only 전환을 가정하지 않는다**. P1은 **`APPEND-ONLY-CONVERGENCE-P1-SPEC-001`** 범위 내 **점진 이행**만 한다.
+
+### Q1. 상쇅(reversal) row의 **`amount` 부호**
+
+- **확정: 옵션 A — reversal row도 `amount`는 양수 유지**
+- **원칙**:
+  - reversal 의미는 **`reversal_of_id` · `type` · lifecycle** 으로 표현 — **음수 금액 혼합 금지**.
+  - **KPI** = **gross − reversal aggregation** 유지(storefront P0·[KPI-REVERSAL-P0-001]와 충돌 없음).
+  - **inbound / outbound 동일 철학** — settlement·payout lifecycle 해석 충돌 방지.
+  - 기존 **storefront append-only reversal semantics 유지**.
+
+### Q2. **`cancelPayment`(패턴 α)** 통합 시점
+
+- **확정: 옵션 A — P1 outbound append-only 전환과 동시에 수렴**
+- **원칙**:
+  - **`cancelPayment`의 `UPDATE reversed`** = **transition debt** — **[D-023]**·`APPEND-ONLY-CONVERGENCE-DESIGN-001` 과 정합.
+  - P1에서 **`reverse_disbursement` 수렴과 함께** **INSERT append-only semantics** 로 통일.
+  - **`UPDATE reversed` 패턴은 장기 제거**([D-021] 목표).
+
+### 최종 수렴 목표 (패턴 3개)
+
+| 패턴 | 현재 | 목표 |
+|------|------|------|
+| **A** storefront inbound 상쇅 | INSERT append-only **(완료)** | 유지 |
+| **B** RFQ outbound `reverse_disbursement` | UPDATE `reversed` | **P1 → INSERT append-only** |
+| **α** `cancelPayment` inbound | UPDATE `reversed` | **P1 → INSERT append-only** |
+
+- **최종 상태(목표)**: 모든 reversal = **INSERT append-only** · 모든 correction = **새 이벤트** · **overwrite 없음**.
+
+### P1에서 다루는 범위(고정)
+
+- **포함**: 패턴 B·α의 **INSERT 상쇅 전환**(명세: **`APPEND-ONLY-CONVERGENCE-P1-SPEC-001`**), **신규 accounting row `type` 가드 1차**(Server Action·주요 RPC, [D-022] 유지).
+- **제외**: legacy NULL **backfill** · DB **NOT NULL/CHECK** enforcement · settlement correction · payout/`paid` lifecycle · partial cancellation · 외부 대사·복식부기·reverse-of-reversal·adjustment taxonomy 확정 등 — **별 Epic·승인**.
+
+### transition debt 관리 원칙
+
+- **`reverse_disbursement` 즉시 DROP/제거 금지** — **deprecated** 후 **이중 경로 검증**·제거([D-023]·DESIGN-001).
+- **`purchases.status` 오염 방지**·**운영 semantics 보존**이 속도보다 우선.
+
+### 금지
+
+- **음수 `amount` 혼합** · P1 밖 **settlement/payout 착수** · **[D-022]** 위반 **즉시 DB enforcement** · 명세 없이 **RPC 단독 변경**.
+
+---
+
 ## 추가 원칙
 새로운 결정이 생기면 아래 형식으로 추가:
 
