@@ -24,6 +24,7 @@
 5. **레거시** — [`tasks-legacy.md`](./tasks-legacy.md) (TASK-nn, 2026-04-27). **`tasks.md`와 혼합 금지.**
 6. **AI·코드 작업 종료 시** — 관련 감사 ID 블록에 **작업 이력**(날짜·요약·`docs/worklogs/YYYY-MM-DD_phase-topic.md` 링크)을 남기고, worklog에 목적·ID·파일·변경 요약·migration·테스트·위험·다음 권장 작업을 기록한다. **작업 완료 = 변경 + tasks 반영 + worklog** (`.cursor/rules/worklog-completion.mdc`).
 7. **`## [FORENSIC]`** — `docs/FORENSIC.md` 연계 **레이어 감사 후속** (`FORENSIC-*`). 표준 `DB-*`/`SUP-*`/`ADM-*`/`RES-*` **유형별 표와 별도 축** — 집계는 **`감사 요약`** 참조.
+8. **`docs/TEST.md`** — 운영 배포 전 **실운영 가능성** 체크리스트(STOREFRONT·ADMIN·RFQ·비가역 원칙·운영 부하·regression·migration). QA 시나리오가 아니라 **정무님·식당·공급자가 하루를 버티는지** 검증용.
 
 ### [OPS — AI worklog] 절차 기록 (감사 ID와 별도)
 
@@ -61,6 +62,7 @@
 - **작업 이력 (2026-05-14)**: `PRODUCT.md` §13 「Storefront / 반복주문 시스템」추가 — 기존 자동발주 챕터는 §14로 번호 이동 — worklog: [`docs/worklogs/2026-05-14_docs_product-storefront-chapter.md`](./worklogs/2026-05-14_docs_product-storefront-chapter.md)
 - **작업 이력 (2026-05-14)**: `PRODUCT.md` §13 Storefront에「3-2. 학습 파이프라인」절 추가 — worklog: [`docs/worklogs/2026-05-14_docs_product-storefront-learning-pipeline.md`](./worklogs/2026-05-14_docs_product-storefront-learning-pipeline.md)
 - **작업 이력 (2026-05-14)**: `CONTEXT.md` storefront·commerce 테이블·ARCH-00·ARCH-09 경계 보완 — worklog: [`docs/worklogs/2026-05-14_docs_context-storefront-alignment.md`](./worklogs/2026-05-14_docs_context-storefront-alignment.md)
+- **작업 이력 (2026-05-14)**: 운영 검증 체크리스트 `docs/TEST.md` 추가(배포 전 실운영 가능성·비가역·regression·migration 점검) — worklog: [`docs/worklogs/2026-05-14_docs_test-operational-checklist.md`](./worklogs/2026-05-14_docs_test-operational-checklist.md)
 
 ---
 
