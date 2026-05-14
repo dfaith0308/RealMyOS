@@ -133,7 +133,7 @@ OS 간 직접 API 호출 금지. 상태 변경 기반 이벤트로만 연결.
 | `today_events` | 행동 유도 측정 | ✅ 사용 중 |
 | `ai_decision_logs` | AI 판단 학습 | ✅ 사용 중 |
 | `savings_stats` | 월별 절약 통계 | ✅ 사용 중 |
-| `commerce_orders` | storefront Direct Order 주문 테이블. `commerce_orders.tenant_id` = 구매자(식당) tenant로 사용됨(`resturant_os/src/actions/buy.ts` insert). 현재 RFQ `orders` / ledger / `payments` 학습 파이프라인과 **코드상 미연결**(PRODUCT.md §13 「3-2. 학습 파이프라인」명시). 구조 확정 전 임의 통합 금지. | ⚠️ 분리 유지 |
+| `commerce_orders` | storefront Direct Order 주문 테이블. `commerce_orders.tenant_id` = **구매자(식당) tenant** (`resturant_os/src/actions/buy.ts` insert). **주문·고객·결제의 1차 owner는 플랫폼(디닷페이스)** 로 정렬한다; 공급자는 **fulfillment allocation** 축에서만 연결된다. RFQ `orders` / 공급자 원장 / `payments` 학습 파이프라인과는 **코드상 아직 단일 원장으로 통합되지 않음**(PRODUCT.md §13·`[PLATFORM-ERP-001]`). 구조 확정 전 임의 통합 금지. | ⚠️ 분리 유지 |
 | `commerce_order_items` | `commerce_orders` 라인 스냅샷. `listing_id` → `commerce_product_listings` 참조(migration `20260509010000_create_commerce_tables.sql`). | ✅ 사용 중 |
 | `commerce_product_listings` | 플랫폼 큐레이션 storefront 상품. `owner_type` CHECK에 `platform`·`approved_supplier` 존재; 관리자 생성 경로에서 `owner_type='platform'` insert(`realmyos/src/actions/admin/commerce.ts`). **공급자 직접 등록 구조 아님.** | ✅ 사용 중 |
 | `cart_items` | 장바구니. `tenant_id` + `listing_id`(migration 동일 파일). `resturant_os/src/actions/buy.ts`에서 사용. | ✅ 사용 중 |
@@ -536,6 +536,8 @@ CREATE POLICY "auth_all" ON relationships
 **한 줄 정의**: 관리자OS는 플랫폼이 스스로 판단하고 진화하게 만드는 중앙 제어 시스템이다.
 
 관리자OS는 "보는 곳"이 아니다. 데이터 → 판단 → 정책 → 자동화로 이어지는 구조를 만드는 시스템이다.
+
+**역할 확장 (STOREFRONT-ARCH-001)**: 관리자OS는 **디닷페이스(식식이OS 플랫폼 운영사)** 의 **플랫폼 운영센터 + ERP** 축이다. Storefront(`commerce_orders` 등)에서 발생하는 **플랫폼 주문·매출·미수·정산·수수료·PG/결제 운영**과, **공급 allocation → 공급자 정산**을 같은 허브에서 다루는 방향으로 문서를 정렬한다(구현 상태는 `tasks.md` **`[PLATFORM-ERP-001]`**).
 
 ```
 관리자OS 핵심 원칙:
@@ -2155,6 +2157,19 @@ Storefront는 RFQ를 대체하지 않는다.
 두 시스템은 역할이 다르며,
 식당 lifecycle 안에서 함께 동작한다.
 
+### 플랫폼 주문·allocation·정산 (STOREFRONT-ARCH-001)
+
+```
+Platform Order   (commerce_orders — owner: 디닷페이스 / 플랫폼)
+       ↓
+Supplier Fulfillment   (allocation된 공급자 — 예: 해내음코리아)
+       ↓
+Supplier Settlement    (공급자 ↔ 디닷페이스)
+```
+
+- **식당 ↔ 디닷페이스**: Storefront 결제·주문·환불·클레임·플랫폼 미수.
+- **공급자 ↔ 디닷페이스**: fulfillment 대가·수수료·정산(식당↔공급자 직접 결제 없음 — PRODUCT 직거래 금지와 동일).
+
 ---
 
 ### commerce_orders 구조
@@ -2164,6 +2179,8 @@ RFQ orders와 분리된 별도 테이블.
 이유:
 RFQ: 견적/입찰/협상/공급 탐색 포함
 Commerce: 즉시 구매/장바구니/결제/재주문
+
+**플랫폼 주문 (Platform Order)**: 본 테이블의 주문은 **공급자OS에 수동으로 재키잉하는 ERP 입력 대상이 아니다.** 발생 이벤트는 **디닷페이스 ERP(관리자OS)** 로 **자동 동기화**되는 것을 목표로 한다. 실물·물류 실행은 **fulfillment 공급자**(예: 해내음코리아 등)에게 **allocation** 될 수 있다.
 
 필수 필드:
 - tenant_id (RULE-01)
