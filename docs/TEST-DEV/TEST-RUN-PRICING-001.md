@@ -21,7 +21,7 @@
 - `pricing_policies` 테이블 존재
 - `pricing_policy_targets` 테이블 존재
 - `commerce_order_items` 에 `applied_policy_id` / `base_price` / `applied_policy_snapshot` 컬럼 존재
-- **`platform_fee_rate`** 설정 확인 — allocation 수수료와 동일 축: `admin_settings.key = 'platform_fee_rate'` (정수 %, 예: `3` = 3%). 상세·검증 쿼리는 **`docs/TEST-RUN-ERP-001.md` STEP 0-1** 참조.
+- **`platform_fee_rate`** 설정 확인 — allocation 수수료와 동일 축: `admin_settings.key = 'platform_fee_rate'` (정수 %, 예: `3` = 3%). 상세·검증 쿼리는 **`docs/TEST-DEV/TEST-RUN-ERP-001.md` STEP 0-1** 참조.
 - pricing engine migration **적용 여부** (운영·스테이징 DB 기준)
 
 ### 확인 SQL
@@ -430,5 +430,5 @@ SQL 결과 요약:
 
 ## 관련 문서
 
-- **ERP 숫자 정합(수금·allocation·payable·fee)**: `docs/TEST-RUN-ERP-001.md` — **본 가이드로 품목 단가·스냅샷을 확인한 뒤** 진행하는 것을 권장한다.
+- **ERP 숫자 정합(수금·allocation·payable·fee)**: `docs/TEST-DEV/TEST-RUN-ERP-001.md` — **본 가이드로 품목 단가·스냅샷을 확인한 뒤** 진행하는 것을 권장한다.
 - 운영 체크리스트 상위 목록: `docs/TEST.md` §9 (pricing engine 항목).

@@ -14,9 +14,9 @@ TEST-RUN-PRICING-001: pricing engine P0 구현에 대해 **실제 검증을 나�
 
 ## 수정 파일 목록
 
-- `docs/TEST-RUN-PRICING-001.md` — 신규 (STEP 0~9·기록 템플릿·코드 기준 RPC명)
+- `docs/TEST-DEV/TEST-RUN-PRICING-001.md` — 신규 (STEP 0~9·기록 템플릿·코드 기준 RPC명)
 - `docs/TEST.md` — §7 migration 항목·§9 pricing 체크리스트 추가
-- `docs/TEST-RUN-ERP-001.md` — 선행 권장(pricing→ERP)·migration 표에 pricing 파일 1행
+- `docs/TEST-DEV/TEST-RUN-ERP-001.md` — 선행 권장(pricing→ERP)·migration 표에 pricing 파일 1행
 - `docs/tasks.md` — 문서 사용법 번호 정렬·OPS 작업 이력
 
 ## 변경 내용 요약

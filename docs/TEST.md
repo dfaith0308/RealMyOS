@@ -9,6 +9,16 @@
 > 테스트 환경:
 > dev 브랜치 기준
 
+## 문서 안내
+
+운영자 실행 가이드:
+→ [`docs/TEST-RUN/TEST-RUN-MASTER-001.md`](./TEST-RUN/TEST-RUN-MASTER-001.md)
+
+개발자 QA / SQL / forensic 문서:
+→ [`docs/TEST-DEV/`](./TEST-DEV/) (`TEST-RUN-001.md`, `TEST-RUN-ERP-001.md`, `TEST-RUN-PRICING-001.md`)
+
+---
+
 ## 표기
 
 - `[ ]` — 미검증 또는 미완료
@@ -74,7 +84,7 @@
 - [ ] **XLSX export**가 실제 xlsx로 열리는가 (확장자만 바꾼 파일이 아닌지).
 - [ ] export 파일 **한글**이 Excel·메모장에서 깨지지 않는가 (공급자 대외 품질).
 - [ ] export가 **한 줄 = 한 상품(라인)** 인지, 주문 1건 다품목이 **여러 행**으로 나오는지 (발주 실수·수량 누락 리스크).
-- [ ] storefront 주문을 **입금 확인 완료(`paid`)** 처리했을 때 **`payments`** 원장에 **`commerce_order_id`** 로 inbound `confirmed` 행이 자동 생성되는가 (`PLATFORM-ERP-P0-001`, 손 실행 순서는 **`docs/TEST-RUN-001.md` STEP 8**). 이후 **숫자·중복·취소·RLS**는 **`docs/TEST-RUN-ERP-001.md`** 로 검증한다.
+- [ ] storefront 주문을 **입금 확인 완료(`paid`)** 처리했을 때 **`payments`** 원장에 **`commerce_order_id`** 로 inbound `confirmed` 행이 자동 생성되는가 (`PLATFORM-ERP-P0-001`, 손 실행 순서는 **`docs/TEST-DEV/TEST-RUN-001.md` STEP 8**). 이후 **숫자·중복·취소·RLS**는 **`docs/TEST-DEV/TEST-RUN-ERP-001.md`** 로 검증한다.
 
 ### 상품 운영 UX
 
@@ -169,7 +179,7 @@
 
 ## 8. [ERP — 회계 숫자 정합성]
 
-> 손 실행 순서·SQL·PASS 정의: **`docs/TEST-RUN-ERP-001.md`**. UI가 아니라 **숫자·중복·취소·RLS**를 검증한다.
+> 손 실행 순서·SQL·PASS 정의: **`docs/TEST-DEV/TEST-RUN-ERP-001.md`**. UI가 아니라 **숫자·중복·취소·RLS**를 검증한다.
 
 - [ ] ERP 회계 정합성 검증 (**TEST-RUN-ERP-001** 참조)
 - [ ] allocation 중복 방지 확인
@@ -184,7 +194,7 @@
 
 ## 9. [PRICING] pricing engine (TEST-RUN-PRICING-001)
 
-> 손 실행 순서·SQL·PASS 정의: **`docs/TEST-RUN-PRICING-001.md`**. 주문 품목 **단가·정책 스냅샷**·폴백·우선순위·기간·로그를 검증한다. **allocation·`supplier_payables` 숫자 정합**은 이어서 **`docs/TEST-RUN-ERP-001.md`** 로 검증한다.
+> 손 실행 순서·SQL·PASS 정의: **`docs/TEST-DEV/TEST-RUN-PRICING-001.md`**. 주문 품목 **단가·정책 스냅샷**·폴백·우선순위·기간·로그를 검증한다. **allocation·`supplier_payables` 숫자 정합**은 이어서 **`docs/TEST-DEV/TEST-RUN-ERP-001.md`** 로 검증한다.
 
 - [ ] pricing engine 정책 적용 확인
 - [ ] 정책 우선순위 올바른지 확인

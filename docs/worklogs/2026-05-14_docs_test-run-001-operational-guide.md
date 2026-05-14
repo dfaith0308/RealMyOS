@@ -7,7 +7,7 @@
 
 ## 1. 작업 목적
 
-`docs/TEST.md`의 검증 항목을 정무님이 **브라우저에서 순서대로 실행**할 수 있도록, 실제 저장소 경로·액션명·테이블명만 근거로 한 **운영 테스트 실행 가이드**(`docs/TEST-RUN-001.md`)를 신규 작성한다.
+`docs/TEST.md`의 검증 항목을 정무님이 **브라우저에서 순서대로 실행**할 수 있도록, 실제 저장소 경로·액션명·테이블명만 근거로 한 **운영 테스트 실행 가이드**(`docs/TEST-DEV/TEST-RUN-001.md`)를 신규 작성한다.
 
 ## 2. 관련 `tasks.md` ID
 
@@ -15,7 +15,7 @@
 
 ## 3. 수정 파일 목록
 
-- `docs/TEST-RUN-001.md` (신규)
+- `docs/TEST-DEV/TEST-RUN-001.md` (신규)
 - `docs/tasks.md` (문서 사용법·OPS 작업 이력)
 - `docs/worklogs/2026-05-14_docs_test-run-001-operational-guide.md` (본 파일)
 

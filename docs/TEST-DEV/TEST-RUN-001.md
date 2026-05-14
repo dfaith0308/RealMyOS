@@ -517,8 +517,8 @@ STEP N — [제목]
 | 주문 `paid` 시 플랫폼 수금 row | `realmyos/src/actions/admin/commerce.ts` — `updateCommerceOrderStatus`, `tryRecordPlatformReceivablePayment` |
 | 무통장 계좌 설정(관리자) | `realmyos/src/app/(admin)/admin/commerce/storefront-bank/page.tsx`, `realmyos/src/actions/admin/storefront-bank-transfer.ts` |
 | 체크리스트 원문 | `docs/TEST.md` |
-| **ERP 회계 숫자 정합성** (storefront→allocation→payables·중복·취소·RLS) | `docs/TEST-RUN-ERP-001.md` |
+| **ERP 회계 숫자 정합성** (storefront→allocation→payables·중복·취소·RLS) | `docs/TEST-DEV/TEST-RUN-ERP-001.md` |
 
 ---
 
-storefront 운영 테스트(**본 문서** STEP 0~8)를 끝낸 뒤, 반드시 **`docs/TEST-RUN-ERP-001.md`** 를 수행해 **receivable / payable 숫자·중복 방지·취소 시나리오**를 검증한다.
+storefront 운영 테스트(**본 문서** STEP 0~8)를 끝낸 뒤, 반드시 **`docs/TEST-DEV/TEST-RUN-ERP-001.md`** 를 수행해 **receivable / payable 숫자·중복 방지·취소 시나리오**를 검증한다.

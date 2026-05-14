@@ -5,15 +5,15 @@
 
 ## 1. 작업 목적
 
-TEST-RUN-002: `commerce_orders` → `payments` P0 연결을 **운영 리허설**에서 순서대로 검증할 수 있도록 `docs/TEST-RUN-001.md`에 **STEP 8**을 추가하고, 기존 데이터 정리 절을 **STEP 9**로 번호 조정한다. `docs/TEST.md`에 동일 맥락 체크리스트·migration 점검 항목을 추가한다. **테스트 실행·코드 변경 없음.**
+TEST-RUN-002: `commerce_orders` → `payments` P0 연결을 **운영 리허설**에서 순서대로 검증할 수 있도록 `docs/TEST-DEV/TEST-RUN-001.md`에 **STEP 8**을 추가하고, 기존 데이터 정리 절을 **STEP 9**로 번호 조정한다. `docs/TEST.md`에 동일 맥락 체크리스트·migration 점검 항목을 추가한다. **테스트 실행·코드 변경 없음.**
 
 ## 2. 관련 `tasks.md` ID
 
-- **TEST-RUN-002** (문서 사용법 항목 19) · 연계: **PLATFORM-ERP-P0-001**, `docs/TEST-RUN-001.md`, `docs/TEST.md`
+- **TEST-RUN-002** (문서 사용법 항목 19) · 연계: **PLATFORM-ERP-P0-001**, `docs/TEST-DEV/TEST-RUN-001.md`, `docs/TEST.md`
 
 ## 3. 수정 파일 목록
 
-- `docs/TEST-RUN-001.md` — STEP 8(ERP bridge)·STEP 9(데이터 정리)·참조 표 보강
+- `docs/TEST-DEV/TEST-RUN-001.md` — STEP 8(ERP bridge)·STEP 9(데이터 정리)·참조 표 보강
 - `docs/TEST.md` — 관리자 주문 처리 체크 1줄, MIGRATION `20260515100000…` 1줄
 - `docs/tasks.md` — 문서 사용법 19·OPS·`[PLATFORM-ERP-001]` 작업 이력
 - `docs/worklogs/2026-05-14_docs_test-run-002-storefront-payments-bridge.md` (본 파일)

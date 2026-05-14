@@ -5,7 +5,7 @@
 
 ## 작업 목적
 
-storefront → ERP 축에서 **회계 숫자 정합성·중복 방지·취소·RLS**를 손으로 검증할 수 있도록 **`docs/TEST-RUN-ERP-001.md`** 를 신규 작성하고, `TEST.md`·`TEST-RUN-001.md`·`tasks.md`에 상호 참조를 남긴다. 코드·DB·migration 변경 없음.
+storefront → ERP 축에서 **회계 숫자 정합성·중복 방지·취소·RLS**를 손으로 검증할 수 있도록 **`docs/TEST-DEV/TEST-RUN-ERP-001.md`** 를 신규 작성하고, `TEST.md`·`TEST-RUN-001.md`·`tasks.md`에 상호 참조를 남긴다. 코드·DB·migration 변경 없음.
 
 ## 관련 `tasks.md` ID
 
@@ -13,9 +13,9 @@ storefront → ERP 축에서 **회계 숫자 정합성·중복 방지·취소·R
 
 ## 수정 파일 목록
 
-- `docs/TEST-RUN-ERP-001.md` — 신규
+- `docs/TEST-DEV/TEST-RUN-ERP-001.md` — 신규
 - `docs/TEST.md` — §8 ERP 체크리스트·주문 처리 항목에 ERP 가이드 링크
-- `docs/TEST-RUN-001.md` — 참조 표·말미에 TEST-RUN-ERP-001 수행 권고
+- `docs/TEST-DEV/TEST-RUN-001.md` — 참조 표·말미에 TEST-RUN-ERP-001 수행 권고
 - `docs/tasks.md` — 문서 인벤토리 번호 정리·OPS·`[PLATFORM-ERP-001]` 작업 이력
 
 ## 변경 내용 요약

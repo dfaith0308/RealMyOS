@@ -53,4 +53,4 @@
 
 ## 8. 다음 권장 작업
 
-- `docs/TEST-RUN-001.md` 또는 `TEST.md`에 무통장 계좌 표시 수동 확인 한 줄 추가 검토.
+- `docs/TEST-DEV/TEST-RUN-001.md` 또는 `TEST.md`에 무통장 계좌 표시 수동 확인 한 줄 추가 검토.

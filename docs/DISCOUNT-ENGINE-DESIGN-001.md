@@ -4,7 +4,7 @@
 > **근거**: 본 문서의 “현행 구조” 절은 `resturant_os`·`realmyos` 저장소의 **실제 코드·migration**를 열람·grep한 결과이다. 법률·세무 확정 조언은 하지 않는다.
 
 **연계 포렌식**: [`docs/DISCOUNT-FORENSIC-001.md`](./DISCOUNT-FORENSIC-001.md)  
-**ERP 연계**: [`docs/PLATFORM-ERP-DESIGN-001.md`](./PLATFORM-ERP-DESIGN-001.md), [`docs/TEST-RUN-ERP-001.md`](./TEST-RUN-ERP-001.md)
+**ERP 연계**: [`docs/PLATFORM-ERP-DESIGN-001.md`](./PLATFORM-ERP-DESIGN-001.md), [`docs/TEST-DEV/TEST-RUN-ERP-001.md`](./TEST-DEV/TEST-RUN-ERP-001.md)
 
 ---
 
