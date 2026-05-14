@@ -159,6 +159,7 @@
 
 - [ ] `20260514200000_commerce_orders_idempotency.sql` — `checkout_submission_id`·`idempotency_key` 및 부분 유니크 인덱스 (**식당OS 주문 멱등과 연동**)
 - [ ] `20260515100000_add_commerce_order_id_to_payments.sql` — storefront `paid` → `payments` 연결(`commerce_order_id`·`order_id` 배타 CHECK·`payment_method` CHECK 확장)
+- [ ] `20260515400000_create_pricing_policies.sql` — `pricing_policies`·`pricing_policy_targets`·`commerce_order_items` 스냅샷 컬럼·체크아웃 RPC (**식당OS 주문 가격 엔진**; 미적용 시 품목 INSERT 실패 가능)
 
 ### 적용 후 스모크
 
@@ -178,6 +179,22 @@
 - [ ] 멀티 공급자 allocation·payable 분리 확인
 - [ ] ERP audit trail (`admin_logs`) 확인
 - [ ] RLS 보안 확인 (`supplier_payables`·`commerce_order_allocations`)
+
+---
+
+## 9. [PRICING] pricing engine (TEST-RUN-PRICING-001)
+
+> 손 실행 순서·SQL·PASS 정의: **`docs/TEST-RUN-PRICING-001.md`**. 주문 품목 **단가·정책 스냅샷**·폴백·우선순위·기간·로그를 검증한다. **allocation·`supplier_payables` 숫자 정합**은 이어서 **`docs/TEST-RUN-ERP-001.md`** 로 검증한다.
+
+- [ ] pricing engine 정책 적용 확인
+- [ ] 정책 우선순위 올바른지 확인
+- [ ] fallback 동작 확인
+- [ ] snapshot immutability 확인
+- [ ] 기간 정책 조건 동작 확인
+- [ ] applies_to_all fallback 확인
+- [ ] pricing_policy_lookup_failed 로그 확인
+- [ ] pricing snapshot ERP 연결 확인
+- [ ] rollback 시 snapshot 유지 확인
 
 ---
 

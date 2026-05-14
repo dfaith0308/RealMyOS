@@ -15,6 +15,11 @@
 - allocation **확정(confirmed)** 시 `supplier_payables` INSERT(멱등: `commerce_order_allocation_id` UNIQUE).
 - 수수료: `platform_fee_amount = round(item_amount * feePercentNumerator / 100)`, `supplier_payable_amount = item_amount - platform_fee_amount` (`commerce-allocation.ts` — `feePercentNumerator`는 `admin_settings.platform_fee_rate` 정수 퍼센트).
 
+**선행 권장 (pricing → ERP 순서)**:
+
+- storefront **품목 단가·`applied_policy_snapshot`** 이 의도대로인지 먼저 **`docs/TEST-RUN-PRICING-001.md`** 로 확인한 뒤, 본 문서(**`TEST-RUN-ERP-001`**)로 **allocation / `supplier_payables` / 수수료** 정합을 검증한다.
+- P0 현행: allocation `item_amount` 는 **주문 시점 `unit_price` 기반**(청구 축); **`supplier_basis` 분리 없음** — 숫자 해석 시 설계 문서(`DECISIONS.md` [D-020] 등)와 혼동하지 않는다.
+
 ---
 
 ## STEP 0 — 사전 환경 확인
@@ -68,6 +73,7 @@ LIMIT 20;
 | `20260515200000_create_commerce_order_allocations.sql` | `commerce_order_allocations`·listing `supplier_tenant_id` |
 | `20260515210000_commerce_order_allocations_cancel_audit.sql` | `cancelled_at` / `cancelled_by` |
 | `20260515220000_create_supplier_payables.sql` | `supplier_payables`·RLS |
+| `20260515400000_create_pricing_policies.sql` | `pricing_policies`·targets·품목 스냅샷·체크아웃 RPC (`fetch_active_pricing_policies_for_checkout` 등) — **가격 검증은 `docs/TEST-RUN-PRICING-001.md`** |
 
 ```sql
 SELECT table_name
