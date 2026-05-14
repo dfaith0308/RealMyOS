@@ -46,6 +46,7 @@
 27. **`docs/DECISIONS.md` [D-021]** — ACCOUNTING-EVENT-POLICY-001: 정무님 확정 **회계 이벤트 정책**(append-only·운영/회계 분리·KPI 시점·부분 환불 금지·confirmed 수동 reversal).
 28. **`supabase/migrations/20260515500000_add_reversal_fields.sql`** + **`src/actions/admin/commerce-reversal.ts`** — **ACCOUNTING-REVERSAL-P0-001**: storefront 취소 시 `payments` reversal row·`supplier_payables` unpaid 취소·`admin_logs`(운영 DB 적용은 별도 승인).
 29. **`src/actions/admin/platform-revenue.ts`** + **`StorefrontRevenueKpiSection.tsx`** — **KPI-REVERSAL-P0-001**: storefront KPI gross/net/reversal·`platform_margin`·recent 목록 reversal 표시(RULE-02 유지).
+30. **`docs/PAYMENTS-TAXONOMY-DESIGN-001.md`** — **PAYMENTS-TAXONOMY-DESIGN-001**: `payments` 회계 이벤트 `type` taxonomy·lifecycle·KPI·append-only 평가 **설계 전용**(구현·migration 실행 없음).
 
 ### [OPS — AI worklog] 절차 기록 (감사 ID와 별도)
 
@@ -112,6 +113,7 @@
 - **작업 이력 (2026-05-14)**: **ACCOUNTING-EVENT-POLICY-001** 정무님 확정 정책 → `DECISIONS.md` **[D-021]** · `PRODUCT.md` · `CONTEXT.md` · `tasks.md` — worklog: [`docs/worklogs/2026-05-14_docs_accounting-event-policy-001.md`](./worklogs/2026-05-14_docs_accounting-event-policy-001.md)
 - **작업 이력 (2026-05-14)**: **ACCOUNTING-REVERSAL-P0-001** append-only reversal P0(migration·`commerce-reversal`·주문 cancelled 연동·allocations UI) — worklog: [`docs/worklogs/2026-05-14_feat_accounting-reversal-p0-001-append-only.md`](./worklogs/2026-05-14_feat_accounting-reversal-p0-001-append-only.md)
 - **작업 이력 (2026-05-14)**: **KPI-REVERSAL-P0-001** storefront KPI net=gross−reversal·`platform_margin`·recent reversal 필드 — worklog: [`docs/worklogs/2026-05-14_feat_kpi-reversal-p0-001-storefront-net.md`](./worklogs/2026-05-14_feat_kpi-reversal-p0-001-storefront-net.md)
+- **작업 이력 (2026-05-14)**: **PAYMENTS-TAXONOMY-DESIGN-001** `payments` type taxonomy 설계 문서(`docs/PAYMENTS-TAXONOMY-DESIGN-001.md`)·`tasks.md` — worklog: [`docs/worklogs/2026-05-14_docs_payments-taxonomy-design-001.md`](./worklogs/2026-05-14_docs_payments-taxonomy-design-001.md)
 
 ---
 
@@ -1114,6 +1116,13 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **산출물**: `docs/DECISIONS.md` **[D-021]** · `docs/PRODUCT.md`(10-9 보강) · `docs/CONTEXT.md`(`[ARCH-17A]`) · 본 `tasks.md` Epic
 - **범위 (향후 구현 과제로만 기술)**: reversal lifecycle · refund flow · KPI reversal 반영 · append-only reversal row · partial refund(장기) — 실행은 별도 승인
 - **연계**: [`docs/ACCOUNTING-EVENT-MODEL-001.md`](./ACCOUNTING-EVENT-MODEL-001.md), [`docs/ACCOUNTING-REVERSAL-DESIGN-001.md`](./ACCOUNTING-REVERSAL-DESIGN-001.md), **`[PLATFORM-ERP-001]`**, **[D-017]**, **[D-020]**
+
+#### [PAYMENTS-TAXONOMY-DESIGN-001] `payments` 회계 이벤트 taxonomy (설계 전용)
+- **우선순위**: HIGH (SSOT·KPI·reversal·settlement 정렬의 선행)
+- **상태**: **설계 문서만 (2026-05-14)** — 구현·migration 실행·DB 변경 없음
+- **산출물**: [`docs/PAYMENTS-TAXONOMY-DESIGN-001.md`](./PAYMENTS-TAXONOMY-DESIGN-001.md)
+- **연계**: **[ACCOUNTING-EVENT-MODEL-001](./ACCOUNTING-EVENT-MODEL-001.md)**, **[ACCOUNTING-REVERSAL-DESIGN-001](./ACCOUNTING-REVERSAL-DESIGN-001.md)**, **`[PLATFORM-ERP-001]`**, **[KPI-REVERSAL-P0-001]**, **`DECISIONS.md` [D-021]**
+- **작업 이력 (2026-05-14)**: 설계 문서·`tasks.md`·worklog — worklog: [`docs/worklogs/2026-05-14_docs_payments-taxonomy-design-001.md`](./worklogs/2026-05-14_docs_payments-taxonomy-design-001.md)
 
 #### [ACCOUNTING-EVENT-MODEL-001] 회계 이벤트 모델·immutable ledger 원칙 (최상위)
 - **우선순위**: HIGH (역환불·정산·KPI·SSOT의 기준 문서)
