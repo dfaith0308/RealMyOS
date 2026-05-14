@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { getCommerceOrders } from '@/actions/admin/commerce'
+import { getStorefrontRevenueKPI } from '@/actions/admin/platform-revenue'
 import OrdersClient from '@/components/commerce/OrdersClient'
+import StorefrontRevenueKpiSection from '@/components/commerce/StorefrontRevenueKpiSection'
 import s from '../../../admin-shared.module.css'
 
 type StatusFilter = 'all' | 'pending_payment' | 'paid' | 'preparing' | 'shipped' | 'completed' | 'cancelled' | 'refunded'
@@ -30,10 +32,13 @@ export default async function AdminCommerceOrdersPage(props: {
       ? rawPm
       : 'all'
 
-  const res = await getCommerceOrders({
-    status: statusFilter === 'all' ? undefined : statusFilter,
-    payment_method: paymentFilter === 'all' ? undefined : paymentFilter,
-  })
+  const [res, sfKpi] = await Promise.all([
+    getCommerceOrders({
+      status: statusFilter === 'all' ? undefined : statusFilter,
+      payment_method: paymentFilter === 'all' ? undefined : paymentFilter,
+    }),
+    getStorefrontRevenueKPI(),
+  ])
 
   if (!res.success) {
     return (
@@ -113,6 +118,14 @@ export default async function AdminCommerceOrdersPage(props: {
           </Link>
         </div>
       </header>
+
+      {!sfKpi.success ? (
+        <div className={s.alert} style={{ marginBottom: 16 }}>
+          Storefront 매출 KPI: {sfKpi.error}
+        </div>
+      ) : (
+        <StorefrontRevenueKpiSection data={sfKpi.data} />
+      )}
 
       <OrdersClient manualReviewQueue={manualReviewQueue} orders={orders} filterNav={filterNav} />
     </main>
