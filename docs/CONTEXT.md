@@ -1,7 +1,7 @@
 # CONTEXT.md — 식식이OS 시스템 구조 정의서
 > 목적: 운영 중인 시스템을 유지하면서 PRODUCT.md 기준으로 정렬 가능한 상태를 만드는 것
 > 코드 재작성 ❌ / DB 변경 ❌ / 추가(additive) 방식으로만 진행
-> 최종 업데이트: 2026-05-08
+> 최종 업데이트: 2026-05-14
 
 ---
 
@@ -18,7 +18,9 @@
 
 **모든 기능은 반드시 아래 3가지 중 하나에 속해야 한다.**
 ```
-1. 거래 생성 (RFQ → 주문)
+1. 거래 생성
+   - RFQ → 주문
+   - Storefront → Direct Order
 2. 돈 흐름   (수금 / 지급 / 원장)
 3. 행동 생성 (대시보드 / 자동화영업)
 ```
@@ -80,13 +82,13 @@ OS 간 직접 API 호출 금지. 상태 변경 기반 이벤트로만 연결.
 
 ## [ARCH-03] 현재 시스템 구조 요약 (코드 기준 실제 상태)
 
-### 운영 DB 테이블 전체 (SSOT 스냅샷 2026-05-08)
+### 운영 DB 테이블 전체 (SSOT 스냅샷 2026-05-14)
 
 단일 Supabase 인스턴스 **`public`** 기준 존재 테이블 인벤토리 (코드 참조 여부와 무관). `_etl_*`는 레거시/추출 성격으로 별도 관리 전제.
 
-`account_purposes`, `accounts`, `acquisition_channels`, `action_logs`, `action_queue`, `admin_logs`, `admin_settings`, `ai_decision_logs`, `categories`, `collection_allocations`, `collection_schedules`, `contact_logs`, `customer_deposits`, `customer_monthly_stats`, `customer_product_prices`, `customer_stats`, `customer_tag_logs`, `customer_tag_options`, `customer_tags`, `customers`, `deposit_logs`, `fixed_costs`, `fund_rules`, `fund_transfers`, `ingredients`, `menu_cost_cache`, `menu_ingredients`, `menus`, `message_logs`, `notices`, `notifications`, `opening_balance_logs`, `order_lines`, `order_logs`, `orders`, `payment_allocations`, `payments`, `price_history`, `product_categories`, `product_code_sequences`, `product_costs`, `product_logs`, `product_prices`, `product_related_manual`, `product_stats`, `products`, `purchases`, `quote_items`, `quote_logs`, `quotes`, `relationships`, `restaurant_order_items`, `rfq_bids`, `rfq_requests`, `sales_schedules`, `sales_scripts`, `savings_stats`, `settings`, `settings_logs`, `supplier_contacts`, `tenant_relationships`, `tenants`, `today_events`, `trust_scores`, `users`, `_etl_order_items`, `_etl_orders`, `_etl_payments_outgoing`, `_etl_restaurants`, `_etl_rfq_bids`, `_etl_rfq_requests`, `_etl_suppliers`
+`account_purposes`, `accounts`, `acquisition_channels`, `action_logs`, `action_queue`, `admin_logs`, `admin_settings`, `ai_decision_logs`, `categories`, `cart_items`, `collection_allocations`, `collection_schedules`, `contact_logs`, `customer_deposits`, `customer_monthly_stats`, `customer_product_prices`, `customer_stats`, `customer_tag_logs`, `customer_tag_options`, `customer_tags`, `customers`, `commerce_order_items`, `commerce_orders`, `commerce_product_listings`, `deposit_logs`, `fixed_costs`, `fund_rules`, `fund_transfers`, `ingredients`, `menu_cost_cache`, `menu_ingredients`, `menus`, `message_logs`, `notices`, `notifications`, `opening_balance_logs`, `order_lines`, `order_logs`, `orders`, `payment_allocations`, `payments`, `price_history`, `product_categories`, `product_code_sequences`, `product_costs`, `product_logs`, `product_prices`, `product_related_manual`, `product_stats`, `products`, `purchases`, `quote_items`, `quote_logs`, `quotes`, `relationships`, `restaurant_order_items`, `rfq_bids`, `rfq_requests`, `sales_schedules`, `sales_scripts`, `savings_stats`, `shipping_groups`, `settings`, `settings_logs`, `supplier_contacts`, `tenant_relationships`, `tenants`, `today_events`, `trust_scores`, `users`, `_etl_order_items`, `_etl_orders`, `_etl_payments_outgoing`, `_etl_restaurants`, `_etl_rfq_bids`, `_etl_rfq_requests`, `_etl_suppliers`
 
-**합계 70개** (코드에서 미참조·레거시 포함 가능).
+**합계 75개** (위 인벤토리는 `realmyos/supabase/migrations/`에 DDL이 존재하는 `cart_items`·`commerce_*`·`shipping_groups` 반영 후 개수. 코드 미참조·레거시 포함 가능).
 
 ### realmyos `supabase/migrations/` (저장소 DDL 추적)
 
@@ -113,6 +115,8 @@ OS 간 직접 API 호출 금지. 상태 변경 기반 이벤트로만 연결.
 
 **`relationships` 테이블**: DDL은 `supabase/migrations/20260507070000_create_relationships.sql`로 추적. **`src/actions/admin/trust-engine.ts`** 등 관리자OS 코드에서 조회 사용. 식당·공급자 간 관계 UI는 **`/admin/participants`**, **`/admin/participants/relationships`** 등에서 노출·확장 중이며, 과거 문서의 「코드 미사용=미구현」 표현은 **철회**.
 
+**`relationships`의 구조적 역할 (PRODUCT.md 기준 의도)**: RFQ 거래 형성, 반복주문 관계 유지, 재주문 추천, 자동발주 제안의 **연결 축**으로 쓰인다. 세부 필드·앱 플로와의 1:1 대응은 **부분 구현·정렬 진행** 상태이며, 본 문장은 **제품 정의상의 역할**만 고정한다.
+
 ### restaurant-os — 실제 사용 테이블
 
 | 테이블 | 실제 사용 방식 | 전환 상태 |
@@ -129,6 +133,11 @@ OS 간 직접 API 호출 금지. 상태 변경 기반 이벤트로만 연결.
 | `today_events` | 행동 유도 측정 | ✅ 사용 중 |
 | `ai_decision_logs` | AI 판단 학습 | ✅ 사용 중 |
 | `savings_stats` | 월별 절약 통계 | ✅ 사용 중 |
+| `commerce_orders` | storefront Direct Order 주문 테이블. `commerce_orders.tenant_id` = 구매자(식당) tenant로 사용됨(`resturant_os/src/actions/buy.ts` insert). 현재 RFQ `orders` / ledger / `payments` 학습 파이프라인과 **코드상 미연결**(PRODUCT.md §13 「3-2. 학습 파이프라인」명시). 구조 확정 전 임의 통합 금지. | ⚠️ 분리 유지 |
+| `commerce_order_items` | `commerce_orders` 라인 스냅샷. `listing_id` → `commerce_product_listings` 참조(migration `20260509010000_create_commerce_tables.sql`). | ✅ 사용 중 |
+| `commerce_product_listings` | 플랫폼 큐레이션 storefront 상품. `owner_type` CHECK에 `platform`·`approved_supplier` 존재; 관리자 생성 경로에서 `owner_type='platform'` insert(`realmyos/src/actions/admin/commerce.ts`). **공급자 직접 등록 구조 아님.** | ✅ 사용 중 |
+| `cart_items` | 장바구니. `tenant_id` + `listing_id`(migration 동일 파일). `resturant_os/src/actions/buy.ts`에서 사용. | ✅ 사용 중 |
+| `shipping_groups` | storefront 묶음배송 그룹. migration `20260510170000_create_shipping_groups.sql`. 관리자 RLS `is_admin()` 전용. | ✅ 사용 중 |
 
 **payments_outgoing 테이블**: schema.sql에 정의되어 있으나 실제 코드는 `payments` 테이블 사용 중 → schema.sql이 구버전
 
@@ -2137,6 +2146,14 @@ buy가 식당OS의 최상위 허브가 되어선 안 된다.
 - commerce_orders ≠ orders (흐름 다름 / 테이블 분리)
 - RFQ → commerce_order 전환 가능
   (rfq_request_id 보존 필수 / traceability 유지)
+
+Storefront는 RFQ를 대체하지 않는다.
+
+- RFQ = 신규 거래처 탐색
+- Storefront = 반복주문 / 재주문
+
+두 시스템은 역할이 다르며,
+식당 lifecycle 안에서 함께 동작한다.
 
 ---
 
