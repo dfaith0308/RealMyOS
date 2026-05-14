@@ -13,6 +13,7 @@ import {
 import type { ActionResult } from '@/types/order'
 import type { SupplierExportRow } from '@/lib/commerce-order-supplier-export'
 import { cancelPendingCommerceOrderAllocationsForOrder, createCommerceOrderAllocations } from '@/actions/admin/commerce-allocation'
+import { processCommerceOrderCancelledAccountingP0 } from '@/actions/admin/commerce-reversal'
 
 export type { ListingShippingType } from '@/lib/commerce-constants'
 
@@ -2289,7 +2290,12 @@ async function tryRecordPlatformReceivablePayment(
     payment_method: string
   },
 ): Promise<void> {
-  const { data: dup } = await supabase.from('payments').select('id').eq('commerce_order_id', order.id).maybeSingle()
+  const { data: dup } = await supabase
+    .from('payments')
+    .select('id')
+    .eq('commerce_order_id', order.id)
+    .is('reversal_of_id', null)
+    .maybeSingle()
   if (dup?.id) return
 
   const amt = typeof order.total_amount === 'number' && Number.isFinite(order.total_amount) ? order.total_amount : NaN
@@ -2493,6 +2499,13 @@ export async function updateCommerceOrderStatus(
 
   if (nextStatus === 'cancelled') {
     await cancelPendingCommerceOrderAllocationsForOrder(supabase, oid, auth.ctx.user_id)
+    const recordPaymentReversal = String(row.payment_status ?? '') === 'paid'
+    await processCommerceOrderCancelledAccountingP0(supabase, {
+      commerce_order_id: oid,
+      tenant_id: (row.tenant_id as string | null) ?? null,
+      admin_user_id: auth.ctx.user_id,
+      record_payment_reversal: recordPaymentReversal,
+    })
   }
 
   revalidatePath('/admin/commerce/orders')

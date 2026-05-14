@@ -138,7 +138,8 @@ export type CommerceAllocationListRow = {
   cancelled_by: string | null
   /** `users` 조회 성공 시 표시용(실패 시 null — UUID는 cancelled_by 에 유지) */
   cancelled_by_display: string | null
-  /** `supplier_payables` (PLATFORM-ERP-P2-003), 없으면 null */
+  /** storefront 주문에 대해 inbound `payments` reversal row(append-only)가 하나 이상 있는지 */
+  order_has_payment_reversal: boolean
   supplier_payable_id: string | null
   supplier_payable_status: string | null
 }
@@ -652,6 +653,20 @@ export async function getCommerceAllocationsAdminData(status: 'all' | 'pending' 
     }
   }
 
+  const orderIdsForRev = [...new Set(raw.map((r) => r.commerce_order_id).filter(Boolean))]
+  const ordersWithPaymentReversal = new Set<string>()
+  if (orderIdsForRev.length) {
+    const { data: revRows, error: revErr } = await supabase
+      .from('payments')
+      .select('commerce_order_id')
+      .in('commerce_order_id', orderIdsForRev)
+      .not('reversal_of_id', 'is', null)
+    if (revErr) return { success: false, error: revErr.message }
+    for (const rv of (revRows ?? []) as { commerce_order_id: string }[]) {
+      if (rv.commerce_order_id) ordersWithPaymentReversal.add(rv.commerce_order_id)
+    }
+  }
+
   const rows: CommerceAllocationListRow[] = raw.map((r) => {
     const on = r.commerce_orders
     const order_number = Array.isArray(on) ? on[0]?.order_number ?? null : on?.order_number ?? null
@@ -672,6 +687,7 @@ export async function getCommerceAllocationsAdminData(status: 'all' | 'pending' 
       cancelled_at: r.cancelled_at ?? null,
       cancelled_by: r.cancelled_by ?? null,
       cancelled_by_display: r.cancelled_by ? userDisplayMap.get(r.cancelled_by) ?? null : null,
+      order_has_payment_reversal: ordersWithPaymentReversal.has(r.commerce_order_id),
       supplier_payable_id: sp?.id ?? null,
       supplier_payable_status: sp?.status ?? null,
     }
