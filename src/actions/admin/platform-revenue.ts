@@ -48,15 +48,32 @@ export type StorefrontRecentPaymentRow = {
   status: string
   payment_date: string | null
   payment_id: string
+  /** `reversal_of_id` 기준 — append-only reversal 이벤트 */
+  is_reversal: boolean
+  reversal_reason: string | null
+  reversal_of_id: string | null
 }
 
 export type StorefrontRevenueKPI = {
+  /** 순매출 (gross − reversal), KST payment_date 기준 */
   today_revenue: number
   month_revenue: number
   total_revenue: number
   unpaid_amount: number
+  /** 누계 순매출과 동일 (net, RULE-02 실시간) */
   confirmed_payments_total: number
   recent_payments: StorefrontRecentPaymentRow[]
+  today_gross_revenue: number
+  today_reversal_amount: number
+  month_gross_revenue: number
+  month_reversal_amount: number
+  total_gross_revenue: number
+  total_reversal_amount: number
+  /** `total_revenue` − `supplier_payable_total` (운영 KPI, P0) */
+  platform_margin: number
+  supplier_payable_total: number
+  /** 조회된 reversal row 건수(상한 `PAY_FETCH_LIMIT`와 동일 범위) */
+  reversal_count: number
   rfq_today_revenue: number
   rfq_month_revenue: number
   rfq_total_revenue: number
@@ -65,18 +82,49 @@ export type StorefrontRevenueKPI = {
   combined_total_revenue: number
 }
 
-function sumPaymentAmounts(rows: { amount?: number | null }[] | null | undefined): number {
+type PayAggRow = {
+  id: string
+  amount: number | null
+  payment_date: string | null
+  status: string | null
+  direction: string | null
+  commerce_order_id: string | null
+  payee_tenant_id: string | null
+  payer_tenant_id: string | null
+  created_at: string | null
+  payment_method: string | null
+  reversal_of_id: string | null
+  reversal_reason: string | null
+}
+
+function sumAmountInRange(
+  rows: PayAggRow[],
+  pick: (paymentDate: string | null | undefined) => boolean,
+): number {
   let s = 0
-  for (const r of rows ?? []) {
+  for (const r of rows) {
+    if (!pick(r.payment_date)) continue
     const a = r.amount
     if (typeof a === 'number' && Number.isFinite(a)) s += a
   }
   return s
 }
 
+function storefrontInboundSelect(supabase: any) {
+  return supabase
+    .from('payments')
+    .select(
+      'id, amount, payment_date, status, direction, commerce_order_id, payee_tenant_id, payer_tenant_id, created_at, payment_method, reversal_of_id, reversal_reason',
+    )
+    .not('commerce_order_id', 'is', null)
+    .eq('direction', 'inbound')
+    .eq('payee_tenant_id', PLATFORM_OWNER_TENANT)
+}
+
 /**
  * Storefront(`commerce_order_id` 연결) 매출·미수·최근 입금 KPI.
- * RFQ `orders` 집계는 `getPlatformRevenue`와 동일 월 경계·금액 규칙을 **복제 조회**만 수행(해당 함수 미수정).
+ * Gross = 원본 입금(`status=confirmed`·`reversal_of_id` null); reversal = `reversal_of_id` not null (amount는 양수, 집계 시 차감).
+ * RFQ `orders` 집계는 `getPlatformRevenue`를 수정하지 않고 동일 월 경계·금액 규칙으로 복제 조회만 수행.
  */
 export async function getStorefrontRevenueKPI(): Promise<ActionResult<StorefrontRevenueKPI>> {
   const supabase = await createSupabaseServer()
@@ -87,43 +135,41 @@ export async function getStorefrontRevenueKPI(): Promise<ActionResult<Storefront
   const today = kstTodayDateString()
   const { start: monthStart, end: monthEnd } = monthRangeKstDateStrings()
 
-  const paySelect = 'id, amount, payment_date, status, direction, commerce_order_id, payee_tenant_id, payer_tenant_id, created_at, payment_method'
+  const inToday = (d: string | null | undefined) => d === today
+  const inMonth = (d: string | null | undefined) => Boolean(d && d >= monthStart && d <= monthEnd)
+  const allTime = () => true
 
-  const base = () =>
-    supabase
-      .from('payments')
-      .select(paySelect)
-      .not('commerce_order_id', 'is', null)
-      .eq('direction', 'inbound')
-      .eq('payee_tenant_id', PLATFORM_OWNER_TENANT)
-      .eq('status', 'confirmed')
-
-  const recentBase = () =>
-    supabase
-      .from('payments')
-      .select(paySelect)
-      .not('commerce_order_id', 'is', null)
-      .eq('direction', 'inbound')
-      .eq('payee_tenant_id', PLATFORM_OWNER_TENANT)
-      .neq('status', 'reversed')
-
-  const [todayRes, monthRes, totalRes, unpaidRes, recentRes] = await Promise.all([
-    base().eq('payment_date', today).limit(PAY_FETCH_LIMIT),
-    base().gte('payment_date', monthStart).lte('payment_date', monthEnd).limit(PAY_FETCH_LIMIT),
-    base().limit(PAY_FETCH_LIMIT),
+  const [grossRes, revRes, payablesRes, unpaidRes, recentRes] = await Promise.all([
+    storefrontInboundSelect(supabase).eq('status', 'confirmed').is('reversal_of_id', null).limit(PAY_FETCH_LIMIT),
+    storefrontInboundSelect(supabase).not('reversal_of_id', 'is', null).limit(PAY_FETCH_LIMIT),
+    supabase.from('supplier_payables').select('payable_amount, status').in('status', ['unpaid', 'paid']).limit(PAY_FETCH_LIMIT),
     supabase.from('commerce_orders').select('total_amount').eq('payment_status', 'unpaid').limit(PAY_FETCH_LIMIT),
-    recentBase().order('created_at', { ascending: false }).limit(10),
+    storefrontInboundSelect(supabase)
+      .or('reversal_of_id.not.is.null,and(status.eq.confirmed,reversal_of_id.is.null)')
+      .order('created_at', { ascending: false })
+      .limit(10),
   ])
 
-  if (todayRes.error) return { success: false, error: todayRes.error.message }
-  if (monthRes.error) return { success: false, error: monthRes.error.message }
-  if (totalRes.error) return { success: false, error: totalRes.error.message }
+  if (grossRes.error) return { success: false, error: grossRes.error.message }
+  if (revRes.error) return { success: false, error: revRes.error.message }
+  if (payablesRes.error) return { success: false, error: payablesRes.error.message }
   if (unpaidRes.error) return { success: false, error: unpaidRes.error.message }
   if (recentRes.error) return { success: false, error: recentRes.error.message }
 
-  const today_revenue = sumPaymentAmounts(todayRes.data as { amount?: number }[])
-  const month_revenue = sumPaymentAmounts(monthRes.data as { amount?: number }[])
-  const total_revenue = sumPaymentAmounts(totalRes.data as { amount?: number }[])
+  const grossRows = (grossRes.data ?? []) as PayAggRow[]
+  const revRows = (revRes.data ?? []) as PayAggRow[]
+
+  const today_gross_revenue = sumAmountInRange(grossRows, inToday)
+  const month_gross_revenue = sumAmountInRange(grossRows, inMonth)
+  const total_gross_revenue = sumAmountInRange(grossRows, allTime)
+
+  const today_reversal_amount = sumAmountInRange(revRows, inToday)
+  const month_reversal_amount = sumAmountInRange(revRows, inMonth)
+  const total_reversal_amount = sumAmountInRange(revRows, allTime)
+
+  const today_revenue = today_gross_revenue - today_reversal_amount
+  const month_revenue = month_gross_revenue - month_reversal_amount
+  const total_revenue = total_gross_revenue - total_reversal_amount
   const confirmed_payments_total = total_revenue
 
   let unpaid_amount = 0
@@ -131,6 +177,17 @@ export async function getStorefrontRevenueKPI(): Promise<ActionResult<Storefront
     const t = r.total_amount
     if (typeof t === 'number' && Number.isFinite(t)) unpaid_amount += t
   }
+
+  let supplier_payable_total = 0
+  for (const r of (payablesRes.data ?? []) as { payable_amount?: number; status?: string }[]) {
+    const st = r.status
+    if (st !== 'unpaid' && st !== 'paid') continue
+    const a = r.payable_amount
+    if (typeof a === 'number' && Number.isFinite(a)) supplier_payable_total += a
+  }
+
+  const platform_margin = total_revenue - supplier_payable_total
+  const reversal_count = revRows.length
 
   const [rfqTodayRes, rfqMonthRes, rfqTotalRes] = await Promise.all([
     supabase
@@ -164,17 +221,9 @@ export async function getStorefrontRevenueKPI(): Promise<ActionResult<Storefront
   const rfq_month_revenue = (rfqMonthRes.data ?? []).reduce((s, o) => s + orderAmount(o as RfqOrderRow), 0)
   const rfq_total_revenue = (rfqTotalRes.data ?? []).reduce((s, o) => s + orderAmount(o as RfqOrderRow), 0)
 
-  const payRows = (recentRes.data ?? []) as {
-    id: string
-    commerce_order_id: string
-    amount: number | null
-    payment_method: string | null
-    status: string | null
-    payment_date: string | null
-    payer_tenant_id: string | null
-  }[]
+  const payRows = (recentRes.data ?? []) as PayAggRow[]
 
-  const coIds = [...new Set(payRows.map((p) => p.commerce_order_id).filter(Boolean))]
+  const coIds = [...new Set(payRows.map((p) => p.commerce_order_id).filter(Boolean))] as string[]
   let orderMap = new Map<string, { order_number: string | null; tenant_id: string }>()
   if (coIds.length) {
     const { data: coRows, error: coErr } = await supabase
@@ -198,11 +247,13 @@ export async function getStorefrontRevenueKPI(): Promise<ActionResult<Storefront
   }
 
   const recent_payments: StorefrontRecentPaymentRow[] = payRows.map((p) => {
-    const co = orderMap.get(p.commerce_order_id)
+    const cid = String(p.commerce_order_id ?? '')
+    const co = orderMap.get(cid)
     const tid = co?.tenant_id ?? (p.payer_tenant_id as string) ?? ''
+    const revId = p.reversal_of_id != null ? String(p.reversal_of_id) : null
     return {
       payment_id: p.id,
-      commerce_order_id: p.commerce_order_id,
+      commerce_order_id: cid,
       order_number: co?.order_number ?? null,
       tenant_id: tid,
       tenant_name: tid ? tenantNameMap.get(tid) ?? null : null,
@@ -210,6 +261,9 @@ export async function getStorefrontRevenueKPI(): Promise<ActionResult<Storefront
       payment_method: String(p.payment_method ?? ''),
       status: String(p.status ?? ''),
       payment_date: p.payment_date ?? null,
+      is_reversal: revId != null && revId.length > 0,
+      reversal_reason: p.reversal_reason != null ? String(p.reversal_reason) : null,
+      reversal_of_id: revId,
     }
   })
 
@@ -222,6 +276,15 @@ export async function getStorefrontRevenueKPI(): Promise<ActionResult<Storefront
       unpaid_amount,
       confirmed_payments_total,
       recent_payments,
+      today_gross_revenue,
+      today_reversal_amount,
+      month_gross_revenue,
+      month_reversal_amount,
+      total_gross_revenue,
+      total_reversal_amount,
+      platform_margin,
+      supplier_payable_total,
+      reversal_count,
       rfq_today_revenue,
       rfq_month_revenue,
       rfq_total_revenue,
