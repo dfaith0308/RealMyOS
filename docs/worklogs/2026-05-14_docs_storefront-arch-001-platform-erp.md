@@ -55,6 +55,7 @@
 
 - “공급자가 storefront 고객 owner”로 읽히던 §13 구절 제거·대체.
 - `ADM-TODO-001` vs `ADM-CHECK-001` 충돌을 **문서 주석으로 명시**.
+- **후속**: `git pull --no-rebase` 병합으로 `tasks.md`에 **`[PLATFORM-ERP-001]` 이중 정의**가 생겨 `[ADM-CHECK-001]` 아래 중복 블록을 제거함.
 
 ## 5. migration 여부
 
