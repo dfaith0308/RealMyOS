@@ -70,6 +70,7 @@
 - **작업 이력 (2026-05-14)**: COMMERCE-009 운영 전환 정리(forensic·prompt·`TEST.md`) — worklog: [`docs/worklogs/2026-05-14_feat_commerce-009-ops-forensic-cleanup.md`](./worklogs/2026-05-14_feat_commerce-009-ops-forensic-cleanup.md)
 - **작업 이력 (2026-05-14)**: `docs/TEST-RUN-001.md` 운영 테스트 **실행 가이드**(STEP 0~8·비가역·기록 템플릿; 코드 기준 경로만) — worklog: [`docs/worklogs/2026-05-14_docs_test-run-001-operational-guide.md`](./worklogs/2026-05-14_docs_test-run-001-operational-guide.md)
 - **작업 이력 (2026-05-14)**: `docs/PAYMENT-FORENSIC-001.md` storefront 결제 구조 **포렌식**(무통장·카드·카카오·PG·주문-결제 관계) — worklog: [`docs/worklogs/2026-05-14_docs_payment-forensic-001-storefront-payment.md`](./worklogs/2026-05-14_docs_payment-forensic-001-storefront-payment.md)
+- **작업 이력 (2026-05-14)**: `BANK-TRANSFER-001` 무통장 계좌 `admin_settings` + 관리자 UI + 식당OS 체크아웃 표시 — worklog: [`docs/worklogs/2026-05-14_feat_bank-transfer-001-storefront-bank-settings.md`](./worklogs/2026-05-14_feat_bank-transfer-001-storefront-bank-settings.md)
 
 ---
 
@@ -1293,6 +1294,15 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **migration 필요**: NO (코드 정리·문서; DDL 별도 시 별 ID)
 - **작업 이력 (2026-05-14)**: 항목 신규 등록·범위·미착수 고정 — worklog: [`docs/worklogs/2026-05-14_docs_tasks-commerce-ops-alignment.md`](./worklogs/2026-05-14_docs_tasks-commerce-ops-alignment.md)
 - **작업 이력 (2026-05-14)**: forensic/debug 정리·prompt 제거·`TEST.md` 체크리스트 갱신 — worklog: [`docs/worklogs/2026-05-14_feat_commerce-009-ops-forensic-cleanup.md`](./worklogs/2026-05-14_feat_commerce-009-ops-forensic-cleanup.md)
+
+#### [BANK-TRANSFER-001] storefront 무통장 입금 계좌 운영 설정
+- **우선순위**: HIGH
+- **선행 조건**: 없음 (`admin_settings`·RLS `20260508050000` 기준)
+- **상태**: **완료 (2026-05-14)**
+- **설명**: `admin_settings.key=storefront_bank_transfer` JSON(은행·계좌·예금주·안내). 관리자OS `/admin/commerce/storefront-bank`에서 수정, 식당OS 무통장 주문 완료 화면에 표시. 미설정·부분입력 시 식당 측 fallback 문구.
+- **migration 필요**: NO
+- **비범위**: PG·`payments`·ledger
+- **작업 이력 (2026-05-14)**: 구현 — worklog: [`docs/worklogs/2026-05-14_feat_bank-transfer-001-storefront-bank-settings.md`](./worklogs/2026-05-14_feat_bank-transfer-001-storefront-bank-settings.md)
 
 #### [PAYMENT-FORENSIC-001] storefront 결제 구조 포렌식 (문서)
 - **우선순위**: HIGH (운영 기대치·실구현 정합)

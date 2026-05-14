@@ -23,6 +23,7 @@ const MENU: MenuItem[] = [
   { label: '상품관리', icon: '🛍️', href: '/admin/commerce/products' },
   { label: '카테고리', icon: '📂', href: '/admin/commerce/categories' },
   { label: '주문처리', icon: '📦', href: '/admin/commerce/orders' },
+  { label: '스토어 무통장', icon: '🏦', href: '/admin/commerce/storefront-bank' },
   { label: '로그', icon: '🧾', href: '/admin/logs' },
 ]
 
