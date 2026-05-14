@@ -515,6 +515,8 @@ export default function OrdersClient({
                             <th className={s.th}>수수료</th>
                             <th className={s.th}>지급예정</th>
                             <th className={s.th}>상태</th>
+                            <th className={s.th}>취소일시</th>
+                            <th className={s.th}>취소처리자</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -528,6 +530,17 @@ export default function OrdersClient({
                               <td className={s.td}>{formatKRW(a.platform_fee_amount)}</td>
                               <td className={s.td}>{formatKRW(a.supplier_payable_amount)}</td>
                               <td className={s.td}>{a.status}</td>
+                              <td className={s.tdNowrap}>{a.cancelled_at ?? '—'}</td>
+                              <td className={s.td}>
+                                {a.cancelled_by ? (
+                                  <>
+                                    <div className={s.cellStrong}>{a.cancelled_by_display ?? '—'}</div>
+                                    <div className={s.cellMutedSm}>{a.cancelled_by}</div>
+                                  </>
+                                ) : (
+                                  '—'
+                                )}
+                              </td>
                             </tr>
                           ))}
                         </tbody>

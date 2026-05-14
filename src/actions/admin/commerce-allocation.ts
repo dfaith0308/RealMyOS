@@ -60,6 +60,57 @@ type ListingRow = {
   product_id: string | null
 }
 
+async function fetchUserDisplayMap(supabase: any, userIds: string[]): Promise<Map<string, string>> {
+  const ids = [...new Set(userIds.map((x) => String(x ?? '').trim()).filter(Boolean))]
+  if (!ids.length) return new Map()
+  const { data, error } = await supabase.from('users').select('id, email').in('id', ids)
+  if (error || !data) return new Map()
+  const m = new Map<string, string>()
+  for (const u of data as { id: string; email?: string | null }[]) {
+    const em = u.email != null ? String(u.email).trim() : ''
+    m.set(u.id, em || `${u.id.slice(0, 8)}…`)
+  }
+  return m
+}
+
+/**
+ * storefront 주문이 취소될 때 **pending** allocation만 `cancelled`로 바꾸고 audit 기록.
+ * `confirmed` 행은 갱신하지 않음(cancelled_at 미기록).
+ */
+export async function cancelPendingCommerceOrderAllocationsForOrder(
+  supabase: any,
+  commerce_order_id: string,
+  admin_user_id: string,
+): Promise<void> {
+  const oid = String(commerce_order_id ?? '').trim()
+  if (!oid || !admin_user_id) return
+  const now = new Date().toISOString()
+  const { error } = await supabase
+    .from('commerce_order_allocations')
+    .update({
+      status: 'cancelled',
+      cancelled_at: now,
+      cancelled_by: admin_user_id,
+      updated_at: now,
+    })
+    .eq('commerce_order_id', oid)
+    .eq('status', 'pending')
+
+  if (error) {
+    await insertAdminLog(supabase, {
+      admin_id: admin_user_id,
+      action_type: 'commerce_allocation_cancel_failed',
+      target_table: 'commerce_orders',
+      target_id: oid,
+      new_value: { error: error.message },
+    }).catch(() => {})
+    return
+  }
+
+  revalidatePath('/admin/commerce/allocations')
+  revalidatePath('/admin/commerce/orders')
+}
+
 function resolveSupplierTenantId(listing: ListingRow, product: { tenant_id: string } | null): string | null {
   const P = PLATFORM_OWNER_TENANT
   if (listing.supplier_tenant_id && listing.supplier_tenant_id !== P) return listing.supplier_tenant_id
@@ -83,6 +134,10 @@ export type CommerceAllocationListRow = {
   supplier_payable_amount: number
   status: string
   created_at: string
+  cancelled_at: string | null
+  cancelled_by: string | null
+  /** `users` 조회 성공 시 표시용(실패 시 null — UUID는 cancelled_by 에 유지) */
+  cancelled_by_display: string | null
 }
 
 export type SupplierPayableSummaryRow = {
@@ -407,6 +462,8 @@ export async function getCommerceAllocationsAdminData(status: 'all' | 'pending' 
       supplier_payable_amount,
       status,
       created_at,
+      cancelled_at,
+      cancelled_by,
       commerce_orders ( order_number )
     `,
     )
@@ -431,8 +488,13 @@ export async function getCommerceAllocationsAdminData(status: 'all' | 'pending' 
     supplier_payable_amount: number
     status: string
     created_at: string
+    cancelled_at: string | null
+    cancelled_by: string | null
     commerce_orders: { order_number: string | null } | { order_number: string | null }[] | null
   }[]
+
+  const cancelledByIds = [...new Set(raw.map((r) => r.cancelled_by).filter((x): x is string => Boolean(x)))]
+  const userDisplayMap = await fetchUserDisplayMap(supabase, cancelledByIds)
 
   const aggRows = (aggRaw ?? []) as { supplier_tenant_id: string; status: string; supplier_payable_amount: number }[]
   const sumMap = new Map<string, { pending: number; confirmed: number }>()
@@ -469,6 +531,9 @@ export async function getCommerceAllocationsAdminData(status: 'all' | 'pending' 
       supplier_payable_amount: r.supplier_payable_amount,
       status: r.status,
       created_at: r.created_at,
+      cancelled_at: r.cancelled_at ?? null,
+      cancelled_by: r.cancelled_by ?? null,
+      cancelled_by_display: r.cancelled_by ? userDisplayMap.get(r.cancelled_by) ?? null : null,
     }
   })
 

@@ -12,7 +12,7 @@ import {
 } from '@/lib/commerce-constants'
 import type { ActionResult } from '@/types/order'
 import type { SupplierExportRow } from '@/lib/commerce-order-supplier-export'
-import { createCommerceOrderAllocations } from '@/actions/admin/commerce-allocation'
+import { cancelPendingCommerceOrderAllocationsForOrder, createCommerceOrderAllocations } from '@/actions/admin/commerce-allocation'
 
 export type { ListingShippingType } from '@/lib/commerce-constants'
 
@@ -1799,6 +1799,9 @@ export type CommerceAllocationDetailRow = {
   platform_fee_amount: number
   supplier_payable_amount: number
   status: string
+  cancelled_at: string | null
+  cancelled_by: string | null
+  cancelled_by_display: string | null
 }
 
 export type CommerceOrderDetail = Omit<CommerceOrderSummaryRow, 'items_count'> & {
@@ -2182,7 +2185,7 @@ export async function getCommerceOrderDetail(id: string): Promise<ActionResult<{
   const { data: allocData, error: allocErr } = await supabase
     .from('commerce_order_allocations')
     .select(
-      'id, commerce_order_item_id, supplier_tenant_id, item_amount, platform_fee_rate, platform_fee_amount, supplier_payable_amount, status',
+      'id, commerce_order_item_id, supplier_tenant_id, item_amount, platform_fee_rate, platform_fee_amount, supplier_payable_amount, status, cancelled_at, cancelled_by',
     )
     .eq('commerce_order_id', oid)
 
@@ -2195,17 +2198,38 @@ export async function getCommerceOrderDetail(id: string): Promise<ActionResult<{
         allocNameMap.set(t.id, t.name ?? null)
       }
     }
-    order.allocations = (allocData as CommerceAllocationDetailRow[]).map((a) => ({
-      id: a.id,
-      commerce_order_item_id: a.commerce_order_item_id,
-      supplier_tenant_id: a.supplier_tenant_id,
-      supplier_name: allocNameMap.get(a.supplier_tenant_id) ?? null,
-      item_amount: a.item_amount,
-      platform_fee_rate: Number(a.platform_fee_rate),
-      platform_fee_amount: a.platform_fee_amount,
-      supplier_payable_amount: a.supplier_payable_amount,
-      status: a.status,
-    }))
+    const cancelByIds = [
+      ...new Set(
+        (allocData as { cancelled_by?: string | null }[])
+          .map((a) => a.cancelled_by)
+          .filter((x): x is string => typeof x === 'string' && x.length > 0),
+      ),
+    ]
+    const userDisp = new Map<string, string>()
+    if (cancelByIds.length) {
+      const { data: usersRows } = await supabase.from('users').select('id, email').in('id', cancelByIds)
+      for (const u of (usersRows ?? []) as { id: string; email?: string | null }[]) {
+        const em = u.email != null ? String(u.email).trim() : ''
+        userDisp.set(u.id, em || `${u.id.slice(0, 8)}…`)
+      }
+    }
+    order.allocations = (allocData as Record<string, unknown>[]).map((a) => {
+      const cancelled_by = typeof a.cancelled_by === 'string' ? a.cancelled_by : null
+      return {
+        id: String(a.id),
+        commerce_order_item_id: String(a.commerce_order_item_id),
+        supplier_tenant_id: String(a.supplier_tenant_id),
+        supplier_name: allocNameMap.get(String(a.supplier_tenant_id)) ?? null,
+        item_amount: Number(a.item_amount),
+        platform_fee_rate: Number(a.platform_fee_rate),
+        platform_fee_amount: Number(a.platform_fee_amount),
+        supplier_payable_amount: Number(a.supplier_payable_amount),
+        status: String(a.status),
+        cancelled_at: typeof a.cancelled_at === 'string' ? a.cancelled_at : null,
+        cancelled_by,
+        cancelled_by_display: cancelled_by ? userDisp.get(cancelled_by) ?? null : null,
+      }
+    })
   }
 
   return { success: true, data: { order } }
@@ -2465,6 +2489,10 @@ export async function updateCommerceOrderStatus(
       payment_method: String(row.payment_method ?? ''),
     })
     await createCommerceOrderAllocations(oid)
+  }
+
+  if (nextStatus === 'cancelled') {
+    await cancelPendingCommerceOrderAllocationsForOrder(supabase, oid, auth.ctx.user_id)
   }
 
   revalidatePath('/admin/commerce/orders')

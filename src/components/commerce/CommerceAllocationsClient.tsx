@@ -115,6 +115,8 @@ export default function CommerceAllocationsClient({
                   <th className={s.th}>플랫폼 수수료</th>
                   <th className={s.th}>공급자 지급예정</th>
                   <th className={s.th}>상태</th>
+                  <th className={s.th}>취소일시</th>
+                  <th className={s.th}>취소처리자</th>
                   <th className={s.th}>액션</th>
                 </tr>
               </thead>
@@ -136,6 +138,25 @@ export default function CommerceAllocationsClient({
                     <td className={s.td}>{formatKRW(r.platform_fee_amount)}</td>
                     <td className={s.td}>{formatKRW(r.supplier_payable_amount)}</td>
                     <td className={s.td}>{r.status}</td>
+                    <td className={s.tdNowrap}>
+                      {r.cancelled_at ? (
+                        <>
+                          <div className={s.cellMutedSm}>{r.cancelled_at}</div>
+                        </>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    <td className={s.td}>
+                      {r.cancelled_by ? (
+                        <>
+                          <div className={s.cellStrong}>{r.cancelled_by_display ?? '—'}</div>
+                          <div className={s.cellMutedSm}>{r.cancelled_by}</div>
+                        </>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
                     <td className={s.td}>
                       {r.status === 'pending' ? (
                         <button type="button" className={s.primaryBtn} disabled={pending} onClick={() => onConfirm(r.id)}>
