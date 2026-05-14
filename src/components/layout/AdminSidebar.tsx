@@ -26,6 +26,7 @@ const MENU: MenuItem[] = [
   { label: '지급 예정(allocation)', icon: '🧾', href: '/admin/commerce/allocations' },
   { label: '공급자 지급 원장', icon: '📒', href: '/admin/commerce/payables' },
   { label: '스토어 무통장', icon: '🏦', href: '/admin/commerce/storefront-bank' },
+  { label: '가격 정책', icon: '🏷️', href: '/admin/commerce/pricing' },
   { label: '로그', icon: '🧾', href: '/admin/logs' },
 ]
 

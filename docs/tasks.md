@@ -1428,7 +1428,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 
 #### [DISCOUNT-ENGINE-001] B2B 가격정책 엔진 (구현 Epic)
 - **우선순위**: HIGH
-- **상태**: **설계·정책 완료 / 구현 미착수**
+- **상태**: **P0 최소 구현 진행 (2026-05-14)** — `pricing_policies`·주문 스냅샷·식당OS 연동; supplier_basis·allocation 연계는 미착수
 - **범위 (구현 시)**:
   - `pricing_policies` / `pricing_policy_targets` 테이블 및 RLS
   - 가격 우선순위 엔진
@@ -1438,6 +1438,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **연계**: **`DECISIONS.md` [D-020]**, [`docs/DISCOUNT-ENGINE-DESIGN-001.md`](./DISCOUNT-ENGINE-DESIGN-001.md), **`[PLATFORM-ERP-001]`**, `COMMERCE-*`
 - **migration 필요**: Epic 착수 시 별도 설계·승인
 - **작업 이력**: 정책 반영은 **DISCOUNT-ENGINE-POLICY-001** worklog 참조
+- **작업 이력 (2026-05-14)**: **DISCOUNT-ENGINE-P0-001** storefront 주문 가격정책 조회·스냅샷·관리자 정책 UI·RLS·체크아웃 RPC — worklog: [`docs/worklogs/2026-05-14_phase-discount-engine-p0-pricing.md`](./worklogs/2026-05-14_phase-discount-engine-p0-pricing.md)
 
 ---
 
