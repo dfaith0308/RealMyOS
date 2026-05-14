@@ -27,6 +27,7 @@
 8. **`docs/TEST.md`** — 운영 배포 전 **실운영 가능성** 체크리스트(STOREFRONT·ADMIN·RFQ·비가역 원칙·운영 부하·regression·migration). QA 시나리오가 아니라 **정무님·식당·공급자가 하루를 버티는지** 검증용.  
 9. **`docs/TEST-RUN-001.md`** — 위 체크리스트를 **손 실행 순서**로 푼 운영자용 가이드(환경 확인 STEP 0 ~ 데이터 정리 STEP 8·비가역 검증·기록 템플릿). 코드 경로·테이블명은 저장소 현행 기준.
 10. **`docs/PAYMENT-FORENSIC-001.md`** — storefront **결제·주문** 실구현 범위(Toss·무통장·카카오·`commerce_orders`) 포렌식; `COMMERCE-FLOW.md` 대비 코드 갭 명시.
+11. **`docs/ORDER-FORENSIC-001.md`** — 공급자 **`orders`/`order_lines`** 주문등록·수금동시처리·`point_used`/할인·거래처 연결·`order_edit_lock_days` 수정제한 포렌식; `commerce_orders`와 구분.
 
 ### [OPS — AI worklog] 절차 기록 (감사 ID와 별도)
 
@@ -70,6 +71,7 @@
 - **작업 이력 (2026-05-14)**: COMMERCE-009 운영 전환 정리(forensic·prompt·`TEST.md`) — worklog: [`docs/worklogs/2026-05-14_feat_commerce-009-ops-forensic-cleanup.md`](./worklogs/2026-05-14_feat_commerce-009-ops-forensic-cleanup.md)
 - **작업 이력 (2026-05-14)**: `docs/TEST-RUN-001.md` 운영 테스트 **실행 가이드**(STEP 0~8·비가역·기록 템플릿; 코드 기준 경로만) — worklog: [`docs/worklogs/2026-05-14_docs_test-run-001-operational-guide.md`](./worklogs/2026-05-14_docs_test-run-001-operational-guide.md)
 - **작업 이력 (2026-05-14)**: `docs/PAYMENT-FORENSIC-001.md` storefront 결제 구조 **포렌식**(무통장·카드·카카오·PG·주문-결제 관계) — worklog: [`docs/worklogs/2026-05-14_docs_payment-forensic-001-storefront-payment.md`](./worklogs/2026-05-14_docs_payment-forensic-001-storefront-payment.md)
+- **작업 이력 (2026-05-14)**: `ORDER-FORENSIC-001` 공급자 주문·수금·적립금 필드·수정잠금 포렌식 — worklog: [`docs/worklogs/2026-05-14_docs_order-forensic-001-supplier-orders.md`](./worklogs/2026-05-14_docs_order-forensic-001-supplier-orders.md)
 - **작업 이력 (2026-05-14)**: `BANK-TRANSFER-001` 무통장 계좌 `admin_settings` + 관리자 UI + 식당OS 체크아웃 표시 — worklog: [`docs/worklogs/2026-05-14_feat_bank-transfer-001-storefront-bank-settings.md`](./worklogs/2026-05-14_feat_bank-transfer-001-storefront-bank-settings.md)
 
 ---
@@ -1312,6 +1314,15 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **산출물**: [`docs/PAYMENT-FORENSIC-001.md`](./PAYMENT-FORENSIC-001.md)
 - **migration 필요**: NO
 - **작업 이력 (2026-05-14)**: 포렌식 문서 작성·`tasks.md` 반영 — worklog: [`docs/worklogs/2026-05-14_docs_payment-forensic-001-storefront-payment.md`](./worklogs/2026-05-14_docs_payment-forensic-001-storefront-payment.md)
+
+#### [ORDER-FORENSIC-001] 공급자 주문등록 / 수금동시 / 적립금필드 / 수정제한 포렌식 (문서)
+- **우선순위**: HIGH (원장·거래처 무결성 점검)
+- **선행 조건**: 없음 (읽기 전용 조사·문서화)
+- **상태**: **완료 (2026-05-14)** — 코드·문서·기존 `tasks.md` 기록(`DB-CHECK-001` 등)만 인용
+- **설명**: `createOrder`/`createPayment`/수정잠금(`order_edit_lock_days`)·`orders.point_used`·RFQ RPC `orders` insert·취소 RPC 등 **실제 코드 경로**를 구분해 기록. 운영 DB 고아 주문 **COUNT는 미실행**.
+- **산출물**: [`docs/ORDER-FORENSIC-001.md`](./ORDER-FORENSIC-001.md)
+- **migration 필요**: NO
+- **작업 이력 (2026-05-14)**: 포렌식 문서·문서 사용법·OPS 이력·본 블록 반영 — worklog: [`docs/worklogs/2026-05-14_docs_order-forensic-001-supplier-orders.md`](./worklogs/2026-05-14_docs_order-forensic-001-supplier-orders.md)
 
 ---
 
