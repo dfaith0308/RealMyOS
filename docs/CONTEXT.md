@@ -1477,6 +1477,40 @@ deposit_logs          → 예치금 변동 이력 (append-only)
 
 ---
 
+## Latent schema drift 기록
+
+### [SCHEMA-DRIFT-001] `planned` 상태 불일치 (payments.status)
+
+| 항목 | 내용 |
+|------|------|
+| **발견일** | 2026-05-14 |
+| **위치** | `accept_bid_atomic` RPC SQL(증분 migration) · `payments` `status` 관련 **CHECK** 정의(증분 migration) · **운영** `payments` 행의 `status` 실제 분포 |
+| **저장소·문서 관측** | **코드 경로**: `accept_bid_atomic` 내부 **`'planned'`** INSERT (`supabase/migrations/20260506150000_create_accept_bid_atomic.sql` 등). **migration CHECK**: 동일 시점 증분의 `payments_status_check` 등에 **`'planned'` 미포함** 가능성(문서 `PAYMENTS-TAXONOMY-DESIGN-001` 교차). **운영 DB(2026-05-14 기준 확인)**: `status = 'planned'` 인 row **없음**. |
+| **판단** | 단순 dead code 한 가지 설명으로 닫기 어렵고, **baseline migration 적용 순서 차이**·**semantics drift** 가능성을 함께 둔다. **코드 / migration / 운영 데이터가 동일 semantics를 공유하지 않을 수 있는 상태** → **latent schema drift** 사례로 공식 기록. |
+| **조치** | **P1 baseline synchronization** 시 재검증 · **taxonomy·type enforcement 전** 재확인 · **임의 수정 금지**(본 기록만). append-only accounting 구조에서 **민감 신호**로 취급. |
+
+---
+
+## payments semantics drift 관리 원칙
+
+- **코드 / migration / 운영 DB** 삼자 **의미 일치**를 목표로 한다.
+- **불일치 발견 시 즉시 기록**(`CONTEXT.md` 본 절·`[SCHEMA-DRIFT-*]` 누적) — **추정만으로 문서를 단정하지 않는다**.
+- **임의 수정 금지** — 특히 drift 확인 직후의 임의 CHECK·데이터 patch.
+- **enforcement 전 semantics alignment 필수**([`DECISIONS.md` **[D-022]**](../DECISIONS.md) 순서).
+- **append-only accounting**을 넓히기 **이전에** semantics consistency를 우선한다.
+
+---
+
+## taxonomy enforcement 상태 (`payments.type`)
+
+| 구분 | 내용 |
+|------|------|
+| **현재** | **Policy 확정 단계**(`PAYMENTS-TAXONOMY-POLICY-001` · **[D-022]**). **DB-level enforcement 미적용**. **legacy `type` NULL 허용**. |
+| **목표** | 신규 accounting row **`type` mandatory** → legacy **backfill·정렬 완료** → **P1 이후** **`NOT NULL`·CHECK 등 enforcement** 검토. |
+| **비고** | 상세 type 목록·KPI 규칙은 **`docs/PAYMENTS-TAXONOMY-DESIGN-001.md`**; **정책·순서는 [D-022]** 가 우선. |
+
+---
+
 ## [ECL] Execution Control Layer — 실행 통제 레이어
 
 > 이 레이어는 기존 구조를 수정하지 않는다.

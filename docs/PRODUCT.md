@@ -7097,6 +7097,42 @@ Low Risk 대상
 
 - 기존 이벤트 **삭제보다 reversal 이벤트 추가**를 우선하여, ERP·**forensic 재현**이 가능하도록 한다.
 
+#### `payments.type` taxonomy 정책 (**PAYMENTS-TAXONOMY-POLICY-001** · `DECISIONS.md` **[D-022]**)
+
+> 본 절은 위 **[회계 이벤트 정책]** 과 모순되지 않게 **`payments` 행의 분류(`type`)** 만 다룬다. 상세 설계는 **`docs/PAYMENTS-TAXONOMY-DESIGN-001.md`** — **정책 확정 문구는 [D-022]** 가 우선한다.
+
+**[`payments.type` 원칙]**
+
+- **신규 accounting 이벤트**(플랫폼·RFQ·정산 축에서 회계 의미를 갖는 INSERT): **`type` 명시 필수** 방향(앱·RPC 가드는 별도 과제).
+- **기존 `type` NULL**: **legacy debt** — 운영 부채로 추적; **임의 backfill 금지**.
+- **최종 목표**: 컬럼 **`NOT NULL`** — 시점은 **[D-022]** 에 따라 **P1 이후** 검토.
+- **enforcement**(DB CHECK·NOT NULL 등): **P1 이후**; 그 전에는 **taxonomy semantics alignment** 및 **settlement/payout lifecycle** 안정화가 선행.
+- **순서**: 정책 → lifecycle → enforcement(**enforcement 선행 금지**).
+
+**[현재 허용 type 상태]**
+
+- **`settlement`**: **transition taxonomy** — lifecycle·payout chain 완성 전 **세분화·리네임 금지**([D-022] Q2).
+- **storefront / RFQ**: 일부 경로 **`type` 미설정(NULL) 다수** — legacy.
+- **reversal**: append-only reversal row 방향(구현은 **`ACCOUNTING-REVERSAL-P0-001`** 등 별도).
+- **payout taxonomy**: **미완성**.
+
+**[현재 허용·표준 방향 type 목록(요약)]**
+
+- `storefront_collection` — **신규 표준 방향**(storefront 인바운드 수금 등).
+- `rfq_collection` — **신규 표준 방향**(RFQ 인바운드 등).
+- `settlement` — **현행 유지**(수수료·정산 인바운드 등 기존 코드 축).
+- `reversal` — **append-only 방향**.
+- `adjustment` — **조건부**(정책·감사 절차 하에서만).
+- **`NULL`** — **legacy only**; 신규 accounting row에 **의도적 NULL 금지** 방향.
+
+**[금지]**
+
+- enforcement 없이 **임의 taxonomy 변경**.
+- **`NULL` 임의 backfill**.
+- **`settlement` 명칭·의미 임의 세분화**(fee/payout/accrual 분리 등).
+- **semantics alignment 이전** migration·CHECK·NOT NULL **선행 enforcement**.
+- **drift 발견 후 근거 없는 임의 수정** — 기록·재검증 절차는 `CONTEXT.md` **[SCHEMA-DRIFT-001]** · semantics drift 원칙 따름.
+
 ---
 
 ### 10-10. 정책/실험 콘솔

@@ -284,6 +284,57 @@
 
 ---
 
+## [D-022] `payments.type` 회계 이벤트 taxonomy 정책 (enforcement 순서 · legacy NULL · settlement 명칭)
+
+- **결정일**: 2026-05-14
+- **결정자**: 정무님
+- **근거 문서**: [`docs/PAYMENTS-TAXONOMY-DESIGN-001.md`](./PAYMENTS-TAXONOMY-DESIGN-001.md) (**PAYMENTS-TAXONOMY-DESIGN-001**), [`docs/ACCOUNTING-EVENT-MODEL-001.md`](./ACCOUNTING-EVENT-MODEL-001.md) (**ACCOUNTING-EVENT-MODEL-001**), **`tasks.md` [ACCOUNTING-EVENT-POLICY-001]** / **`DECISIONS.md` [D-021]** (회계 이벤트 append-only·운영/회계 분리 정책 본문)
+- **연계 결정**: **[D-021]** — **append-only 회계 이벤트·overwrite 금지·reversal row 기반** 원칙. **[D-022]** — 동일 원장 위에서 **`payments.type` taxonomy를 언제·어떻게 강제할지**의 **순서·부채 관리** 원칙. **둘은 함께 동작**한다: append-only·스냅샷 불변은 [D-021], type 의미 정렬·DB enforcement 타이밍은 [D-022].
+
+### Q1. `payments.type` NULL 허용 기간
+
+- **확정: 옵션 B**
+- **원칙**:
+  - **기존 row**: `type` **NULL 허용 유지** — **legacy debt**(migration·백필 대상으로만 추적, 임의 backfill 금지).
+  - **신규 row**: **회계 이벤트로 취급되는 INSERT부터 `type` 명시 필수** 방향(앱·RPC 가드 준비는 별도 Epic).
+  - **즉시 DB `NOT NULL` 강제 금지** — 잘못된 의미 영구 저장 위험·settlement/payout semantics 미확정 상태에서 enforcement 선행 시 **향후 migration 비용 증가** 우려.
+  - **최종 목표**: `type` **`NOT NULL`** — **[D-022] 이후 단계(P1 이후)** 에서만 검토.
+  - **KPI·aggregation**: `type IS NULL` 인 행에 대한 **집계·제외 규칙**을 명시해야 함(구현·문서 후속).
+  - **신규 P0/P1 accounting flow**: **`type` 없는 INSERT 금지** 방향.
+
+### Q2. settlement type 명칭
+
+- **확정: 옵션 A — `type = 'settlement'` 유지**
+- **원칙**:
+  - 현재 `settlement`는 **최종 taxonomy가 아닌 transition taxonomy**(중간 의미 레이어).
+  - **settlement lifecycle / payout chain** 미완성 상태에서 **fee / payout / accrual 등으로 명칭·행 분리 금지**(premature naming 금지).
+  - **taxonomy 세분화**는 **accounting event 안정화 후**.
+
+### Q3. taxonomy 적용(DB enforcement) 시점
+
+- **확정: P1 범위에서 migration·CHECK·NOT NULL 등 enforcement 검토**
+- **순서(고정)**:
+  1. **taxonomy policy 확정**(본 결정 · `PAYMENTS-TAXONOMY-POLICY-001`)
+  2. **신규 row `type` 강제 준비**(앱·RPC 레벨 가드 등)
+  3. **settlement / payout lifecycle 설계 완료**
+  4. **reversal chain 정책 확정**
+  5. **migration enforcement (P1)**
+- **원칙**: **정책 → lifecycle → enforcement**. **enforcement 선행 금지**. 현재 단계는 **semantics alignment**이며, **DB-level enforcement는 아직 아님**.
+
+### Latent schema drift (기록만 · 임의 수정 금지)
+
+- **관측(저장소·정책 기록, 2026-05-14)**:
+  - **코드**: `accept_bid_atomic` 경로에서 `payments.status = 'planned'` INSERT(증분 migration `20260506150000_create_accept_bid_atomic.sql` 등 문서·저장소 기준).
+  - **migration CHECK**: 일부 증분 migration의 `payments_status_check` 등에 **`'planned'` 미포함** 가능성(**`docs/PAYMENTS-TAXONOMY-DESIGN-001.md`**·`CONTEXT.md` **[SCHEMA-DRIFT-001]** 참조).
+  - **운영 DB(2026-05-14 기준 확인)**: `status = 'planned'` 인 `payments` row **없음**(단, **baseline 적용 순서·환경별 차이**로 해석 여지 있음 — **P1 baseline synchronization 시 재검증**).
+- **판단**: 단순 dead code 가설만으로 닫지 않고, **코드 / migration / 운영 데이터가 동일 semantics를 공유하지 않을 수 있는 상태**를 **latent schema drift**로 본다. **settlement/payout 구현 전·type enforcement 전**에 정리·검증 필요. **본 턴에서는 발견·기록만**, 임의 스키마·데이터 수정 금지.
+
+### 금지
+
+- semantics alignment 이전 **임의 taxonomy 변경·NULL 임의 backfill·`settlement` 임의 세분화·CHECK만 선행 추가** 등.
+
+---
+
 ## 추가 원칙
 새로운 결정이 생기면 아래 형식으로 추가:
 
