@@ -34,6 +34,7 @@
 15. **`docs/PRODUCT.md` §5·§10·§12·§13 + `docs/CONTEXT.md` [ARCH-08A]·[ARCH-09]** — STOREFRONT-ARCH-001: 디닷페이스 플랫폼 주문·ERP·fulfillment(해내음)·정산 축 문서 정렬.
 16. **`docs/PLATFORM-ERP-ARCH-001.md`** — PLATFORM-ERP-ARCH-001: 관리자OS ERP capability·`commerce_orders` vs `orders`/`payments`·정산 KPI·원장 분리 **코드 기준 포렌식**.
 17. **`docs/PLATFORM-ERP-DESIGN-001.md`** — PLATFORM-ERP-DESIGN-001: `commerce_orders` 최소 ERP 연결(`payments` SSOT·receivable owner·동기화 시점·migration 설계 목록만).
+18. **`supabase/migrations/20260515100000_add_commerce_order_id_to_payments.sql`** + **`updateCommerceOrderStatus`** — PLATFORM-ERP-P0-001: `paid` 확정 시 `payments` inbound + `commerce_order_id` (운영 DB 적용은 별도 승인).
 
 ### [OPS — AI worklog] 절차 기록 (감사 ID와 별도)
 
@@ -85,6 +86,7 @@
 - **작업 이력 (2026-05-14)**: STOREFRONT-ARCH-001 — 디닷페이스 플랫폼 주문·ERP·fulfillment 문서 정렬(`PRODUCT`·`CONTEXT`·`[PLATFORM-ERP-001]`); **`origin/dev` 병합 후 `tasks.md` `[PLATFORM-ERP-001]` 중복 제거** — worklog: [`docs/worklogs/2026-05-14_docs_storefront-arch-001-platform-erp.md`](./worklogs/2026-05-14_docs_storefront-arch-001-platform-erp.md)
 - **작업 이력 (2026-05-14)**: PLATFORM-ERP-ARCH-001 — 관리자OS ERP capability·storefront→ERP 연결 **코드 포렌식**(`docs/PLATFORM-ERP-ARCH-001.md`) — worklog: [`docs/worklogs/2026-05-14_docs_platform-erp-arch-001-forensic.md`](./worklogs/2026-05-14_docs_platform-erp-arch-001-forensic.md)
 - **작업 이력 (2026-05-14)**: PLATFORM-ERP-DESIGN-001 — `commerce_orders` 최소 ERP 연결 **설계 문서**(`docs/PLATFORM-ERP-DESIGN-001.md`) — worklog: [`docs/worklogs/2026-05-14_docs_platform-erp-design-001-minimal-erp-link.md`](./worklogs/2026-05-14_docs_platform-erp-design-001-minimal-erp-link.md)
+- **작업 이력 (2026-05-14)**: PLATFORM-ERP-P0-001 — `commerce_orders` `paid` 시 `payments` inbound·`commerce_order_id`·`payment_method` CHECK 확장 migration + `tryRecordPlatformReceivablePayment` — worklog: [`docs/worklogs/2026-05-14_feat_platform-erp-p0-001-commerce-payments.md`](./worklogs/2026-05-14_feat_platform-erp-p0-001-commerce-payments.md)
 
 ---
 
@@ -1061,6 +1063,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **작업 이력 (2026-05-14)**: `origin/dev` 병합으로 생긴 **`[PLATFORM-ERP-001]` 중복 블록 제거** — worklog: 동일
 - **작업 이력 (2026-05-14)**: **PLATFORM-ERP-ARCH-001** 현행 갭 포렌식 문서 — worklog: [`docs/worklogs/2026-05-14_docs_platform-erp-arch-001-forensic.md`](./worklogs/2026-05-14_docs_platform-erp-arch-001-forensic.md)
 - **작업 이력 (2026-05-14)**: **PLATFORM-ERP-DESIGN-001** 최소 ERP 연결 설계 — worklog: [`docs/worklogs/2026-05-14_docs_platform-erp-design-001-minimal-erp-link.md`](./worklogs/2026-05-14_docs_platform-erp-design-001-minimal-erp-link.md)
+- **작업 이력 (2026-05-14)**: **PLATFORM-ERP-P0-001** `paid`→`payments` 최소 연결 구현 — worklog: [`docs/worklogs/2026-05-14_feat_platform-erp-p0-001-commerce-payments.md`](./worklogs/2026-05-14_feat_platform-erp-p0-001-commerce-payments.md)
 
 ### 🔍 확인 필요
 

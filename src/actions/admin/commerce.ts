@@ -2200,6 +2200,127 @@ function validateOrderTransition(
   return null
 }
 
+function kstTodayDateStringForPlatformPayment(): string {
+  return new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10)
+}
+
+/**
+ * storefront `commerce_orders`가 `paid`로 확정된 뒤, 플랫폼 미수 해소용 `payments` inbound 1건을 best-effort로 기록한다.
+ * INSERT 실패·로그 실패는 주문 성공을 막지 않는다 (PLATFORM-ERP-P0-001).
+ */
+async function tryRecordPlatformReceivablePayment(
+  supabase: any,
+  adminUserId: string,
+  order: {
+    id: string
+    tenant_id: string
+    order_number: string | null
+    total_amount: number
+    payment_method: string
+  },
+): Promise<void> {
+  const { data: dup } = await supabase.from('payments').select('id').eq('commerce_order_id', order.id).maybeSingle()
+  if (dup?.id) return
+
+  const amt = typeof order.total_amount === 'number' && Number.isFinite(order.total_amount) ? order.total_amount : NaN
+  if (!Number.isFinite(amt) || amt <= 0) {
+    console.error('[platform storefront payment] invalid total_amount', order.total_amount)
+    const logRes = await insertAdminLog(supabase, {
+      admin_id: adminUserId,
+      tenant_id: order.tenant_id,
+      action_type: 'platform_payment_insert_failed',
+      target_table: 'payments',
+      target_id: null,
+      new_value: {
+        commerce_order_id: order.id,
+        order_number: order.order_number,
+        error: 'invalid total_amount for platform payment',
+      },
+    })
+    if (!logRes.ok) console.error('[platform storefront payment] admin_logs insert failed', logRes.error)
+    return
+  }
+
+  const pm = String(order.payment_method ?? '')
+  if (pm !== 'bank_transfer' && pm !== 'kakao_manual' && pm !== 'card') {
+    console.error('[platform storefront payment] unsupported payment_method', pm)
+    const logRes = await insertAdminLog(supabase, {
+      admin_id: adminUserId,
+      tenant_id: order.tenant_id,
+      action_type: 'platform_payment_insert_failed',
+      target_table: 'payments',
+      target_id: null,
+      new_value: {
+        commerce_order_id: order.id,
+        order_number: order.order_number,
+        error: `unsupported payment_method: ${pm}`,
+      },
+    })
+    if (!logRes.ok) console.error('[platform storefront payment] admin_logs insert failed', logRes.error)
+    return
+  }
+
+  const paymentDate = kstTodayDateStringForPlatformPayment()
+  const label = `storefront 주문 ${order.order_number ?? order.id}`
+
+  const payload: Record<string, unknown> = {
+    tenant_id: PLATFORM_OWNER_TENANT,
+    payer_tenant_id: order.tenant_id,
+    payee_tenant_id: PLATFORM_OWNER_TENANT,
+    direction: 'inbound',
+    status: 'confirmed',
+    amount: amt,
+    commerce_order_id: order.id,
+    payment_method: pm,
+    payment_date: paymentDate,
+    due_date: paymentDate,
+    deposit_amount: 0,
+    order_id: null,
+    counterparty_name: label,
+    memo: label,
+    created_by: adminUserId,
+  }
+
+  const { data: inserted, error } = await supabase.from('payments').insert(payload).select('id').maybeSingle()
+
+  if (error) {
+    const code = (error as { code?: string }).code
+    if (code === '23505') return
+    console.error('[platform storefront payment] insert failed', error)
+    const logRes = await insertAdminLog(supabase, {
+      admin_id: adminUserId,
+      tenant_id: order.tenant_id,
+      action_type: 'platform_payment_insert_failed',
+      target_table: 'payments',
+      target_id: null,
+      new_value: {
+        commerce_order_id: order.id,
+        order_number: order.order_number,
+        error: error.message,
+      },
+    })
+    if (!logRes.ok) console.error('[platform storefront payment] admin_logs insert failed', logRes.error)
+    return
+  }
+
+  const payId = (inserted as { id?: string } | null)?.id ?? null
+  const okLog = await insertAdminLog(supabase, {
+    admin_id: adminUserId,
+    tenant_id: order.tenant_id,
+    action_type: 'platform_payment_recorded',
+    target_table: 'payments',
+    target_id: payId,
+    new_value: {
+      commerce_order_id: order.id,
+      amount: amt,
+      order_number: order.order_number,
+      payer_tenant_id: order.tenant_id,
+      payment_id: payId,
+    },
+  })
+  if (!okLog.ok) console.error('[platform storefront payment] platform_payment_recorded log failed', okLog.error)
+}
+
 export async function updateCommerceOrderStatus(
   id: string,
   status: string,
@@ -2225,7 +2346,7 @@ export async function updateCommerceOrderStatus(
   const { data: row, error: fetchErr } = await supabase
     .from('commerce_orders')
     .select(
-      'id, tenant_id, status, payment_method, payment_status, order_number, refund_required, refund_pending_at',
+      'id, tenant_id, status, payment_method, payment_status, order_number, refund_required, refund_pending_at, total_amount',
     )
     .eq('id', oid)
     .maybeSingle()
@@ -2288,6 +2409,16 @@ export async function updateCommerceOrderStatus(
     },
   })
   if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
+
+  if (nextStatus === 'paid') {
+    await tryRecordPlatformReceivablePayment(supabase, auth.ctx.user_id, {
+      id: oid,
+      tenant_id: String(row.tenant_id),
+      order_number: (row.order_number as string | null) ?? null,
+      total_amount: Number((row as { total_amount?: number }).total_amount ?? 0),
+      payment_method: String(row.payment_method ?? ''),
+    })
+  }
 
   revalidatePath('/admin/commerce/orders')
   return { success: true }
