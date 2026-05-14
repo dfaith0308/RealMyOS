@@ -1062,6 +1062,19 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **확인 방법**: 저장소 직접 열람·라우트 트리·미들웨어 정적 검증 완료. **과거 서술** 「`(admin)` 폴더 없음」→ **철회**.
 - **잔여**: 모든 관리자 행위의 `admin_logs` 강제 등은 **`ADM-*` · PRODUCT §10** 별도 감사.
 
+#### [PLATFORM-ERP-001] 플랫폼 주문·ERP 자동 동기화·공급 allocation·정산 (설계 Epic)
+- **우선순위**: HIGH
+- **상태**: **설계·문서 정렬 진행 중 (2026-05-14)** — 구현 완료로 쓰지 않음
+- **선행 조건**: `PRODUCT.md` §13·§12, `CONTEXT.md` [ARCH-08A]·[ARCH-09] STOREFRONT-ARCH-001 반영
+- **범위 (목표)**:
+  - storefront **플랫폼 주문**(`commerce_orders` 등)과 **디닷페이스 ERP(관리자OS)** 의 **자동 연동**(수동 이중 입력 제거 방향)
+  - **공급 allocation** → **Supplier Fulfillment**(예: 해내음코리아) → **Supplier Settlement**(공급자↔디닷페이스)
+  - **플랫폼 receivable·매출·수수료·PG/결제** 운영 축과의 SSOT
+- **비범위(본 Epic 문서만)**: ERP 전 구현·`payments` 스키마 변경·allocation RPC 일괄 추가 — 별 지시(`DISCOUNT-FIX-001` 등) 전까지 **설계·단계 과제 분해만**
+- **migration 필요**: 별도 결정(본 문서 턴에서는 **파일 추가 없음**)
+- **연계**: `COMMERCE-*`, `ADM-MISSING-006`, `POINT-FORENSIC-001`, `DISCOUNT-FORENSIC-001`
+- **작업 이력 (2026-05-14)**: Epic 신규 등록·PRODUCT/CONTEXT 정렬·본 블록 — worklog: [`docs/worklogs/2026-05-14_docs_storefront-arch-001-platform-erp.md`](./worklogs/2026-05-14_docs_storefront-arch-001-platform-erp.md)
+
 ---
 
 ## [커머스] 플랫폼 Listing·주문·식당OS `/buy` (COMMERCE-*)
