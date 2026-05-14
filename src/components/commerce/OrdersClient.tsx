@@ -1,13 +1,20 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useState, useTransition, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, useTransition, type ReactNode } from 'react'
 import {
   getCommerceOrderDetail,
+  getCommerceOrderSupplierExportRows,
   updateCommerceOrderStatus,
   type CommerceOrderDetail,
   type CommerceOrderSummaryRow,
 } from '@/actions/admin/commerce'
+import {
+  SUPPLIER_EXPORT_HEADERS,
+  supplierExportFilename,
+  supplierExportRowsToCsvString,
+  triggerBrowserDownload,
+} from '@/lib/commerce-order-supplier-export'
 import type { CommerceOrderStatus } from '@/lib/commerce-constants'
 import { formatKRW } from '@/lib/calc'
 import s from '@/app/(admin)/admin-shared.module.css'
@@ -64,6 +71,7 @@ export default function OrdersClient({
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
+  const [exportPending, startExportTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [detailId, setDetailId] = useState<string | null>(null)
   const [detail, setDetail] = useState<CommerceOrderDetail | null>(null)
@@ -73,6 +81,72 @@ export default function OrdersClient({
   const refresh = useCallback(() => {
     router.refresh()
   }, [router])
+
+  const exportOrderIds = useMemo(() => {
+    const ids: string[] = []
+    const seen = new Set<string>()
+    for (const o of manualReviewQueue) {
+      if (seen.has(o.id)) continue
+      seen.add(o.id)
+      ids.push(o.id)
+    }
+    for (const o of orders) {
+      if (seen.has(o.id)) continue
+      seen.add(o.id)
+      ids.push(o.id)
+    }
+    return ids
+  }, [manualReviewQueue, orders])
+
+  const runSupplierExport = useCallback(
+    (format: 'csv' | 'xlsx') => {
+      setError(null)
+      if (exportOrderIds.length === 0) {
+        setError('보낼 주문이 없습니다. 목록을 확인한 뒤 다시 시도해 주세요.')
+        return
+      }
+      startExportTransition(async () => {
+        const res = await getCommerceOrderSupplierExportRows(exportOrderIds)
+        if (!res.success) {
+          setError(res.error ?? '보내기 실패')
+          return
+        }
+        const rows = res.data?.rows ?? []
+        if (rows.length === 0) {
+          setError('보낼 품목 행이 없습니다. 새로고침 후 다시 시도해 주세요.')
+          return
+        }
+        if (format === 'csv') {
+          const csv = supplierExportRowsToCsvString(rows)
+          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+          triggerBrowserDownload(blob, supplierExportFilename('csv'))
+          return
+        }
+        const XLSX = await import('xlsx')
+        const ws = XLSX.utils.json_to_sheet(rows, { header: [...SUPPLIER_EXPORT_HEADERS] })
+        ws['!cols'] = [
+          { wch: 16 },
+          { wch: 20 },
+          { wch: 22 },
+          { wch: 10 },
+          { wch: 14 },
+          { wch: 36 },
+          { wch: 32 },
+          { wch: 6 },
+          { wch: 24 },
+          { wch: 12 },
+        ]
+        const wb = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(wb, ws, '발주')
+        const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+        const blob = new Blob([out], {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        })
+        triggerBrowserDownload(blob, supplierExportFilename('xlsx'))
+      })
+    },
+    [exportOrderIds],
+  )
 
   const runStatus = useCallback(
     (order: CommerceOrderSummaryRow, next: CommerceOrderStatus) => {
@@ -118,6 +192,32 @@ export default function OrdersClient({
           {error}
         </p>
       ) : null}
+
+      <div
+        className={s.actionsRow}
+        style={{ flexWrap: 'wrap', marginTop: 8, marginBottom: 12, alignItems: 'center', gap: 10 }}
+      >
+        <span style={{ fontSize: 12, color: 'var(--ds-text-secondary)' }}>공급자 전달</span>
+        <button
+          type="button"
+          className={s.ghostBtn}
+          disabled={exportPending || pending}
+          onClick={() => runSupplierExport('csv')}
+        >
+          CSV 다운로드
+        </button>
+        <button
+          type="button"
+          className={s.ghostBtn}
+          disabled={exportPending || pending}
+          onClick={() => runSupplierExport('xlsx')}
+        >
+          XLSX 다운로드
+        </button>
+        <span style={{ fontSize: 12, color: 'var(--ds-text-secondary)' }}>
+          현재 화면 주문 {exportOrderIds.length}건 · 품목당 1행
+        </span>
+      </div>
 
       <section
         className={s.kpiCard}

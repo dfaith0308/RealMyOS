@@ -58,6 +58,9 @@
 - **작업 이력 (2026-05-09)**: `COMMERCE-001` migration 파일 주석 운영 적용 완료(2026-05-09)로 갱신 — worklog: [`docs/worklogs/2026-05-09_docs_commerce-migration-applied-comment.md`](./worklogs/2026-05-09_docs_commerce-migration-applied-comment.md)
 - **작업 이력 (2026-05-09)**: COMMERCE-002 Listing 관리·COMMERCE-004 상품관리 메뉴 선반영 — worklog: [`docs/worklogs/2026-05-09_feat_commerce-002-listings-admin.md`](./worklogs/2026-05-09_feat_commerce-002-listings-admin.md)
 - **작업 이력 (2026-05-10)**: `realmyos`·`resturant_os` `src/actions/` `'use server'` export 전수 점검 — `LISTING_SHIPPING_TYPES` → `commerce-constants.ts` 분리 — worklog: [`docs/worklogs/2026-05-10_fix_use-server-actions-audit.md`](./worklogs/2026-05-10_fix_use-server-actions-audit.md)
+- **작업 이력 (2026-05-14)**: `PRODUCT.md` §13 「Storefront / 반복주문 시스템」추가 — 기존 자동발주 챕터는 §14로 번호 이동 — worklog: [`docs/worklogs/2026-05-14_docs_product-storefront-chapter.md`](./worklogs/2026-05-14_docs_product-storefront-chapter.md)
+- **작업 이력 (2026-05-14)**: `PRODUCT.md` §13 Storefront에「3-2. 학습 파이프라인」절 추가 — worklog: [`docs/worklogs/2026-05-14_docs_product-storefront-learning-pipeline.md`](./worklogs/2026-05-14_docs_product-storefront-learning-pipeline.md)
+- **작업 이력 (2026-05-14)**: `CONTEXT.md` storefront·commerce 테이블·ARCH-00·ARCH-09 경계 보완 — worklog: [`docs/worklogs/2026-05-14_docs_context-storefront-alignment.md`](./worklogs/2026-05-14_docs_context-storefront-alignment.md)
 
 ---
 
@@ -1029,7 +1032,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 
 ## [커머스] 플랫폼 Listing·주문·식당OS `/buy` (COMMERCE-*)
 
-> **SSOT 연계**: `docs/PRODUCT.md` §12·§13, `docs/CONTEXT.md` ARCH-09, `docs/rules.md` RULE-27~30·RULE-01·RULE-03·RULE-17 등.  
+> **SSOT 연계**: `docs/PRODUCT.md` §12·§13(Storefront)·§14(자동발주), `docs/CONTEXT.md` ARCH-09, `docs/rules.md` RULE-27~30·RULE-01·RULE-03·RULE-17 등.  
 > **집계**: `COMMERCE-*`는 `DB-*`/`SUP-*`/`ADM-*`/`RES-*` 유형별 표와 **별도 축** — 아래 **`#### [COMMERCE-…]`** 개수만 접두사별 합산에 포함.
 
 ### 📋 실행 과제 (미착수)
@@ -1184,12 +1187,14 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
   - 카카오 주문 확인 후 `paid` 수동 처리
   - 주문 상태 변경 (`COMMERCE-000` 전이 규칙 준수)
   - 주문 상세 (품목/금액/배송지/결제방식)
+  - 공급자 전달용 **CSV / XLSX** 보내기 (품목당 1행, 금액 컬럼 없음)
   - 상태 변경 이력 (`admin_logs` 기록 필수)
 - **migration 필요**: `20260509020000_add_commerce_orders_columns.sql` (`order_number`, `refund_required`, `refund_pending_at`, `generate_order_number`) — 저장소 반영; 운영 적용 여부는 배포 시 확인
 - **완료 기준**: 수동 결제 확인·상태 전이가 규칙 내에서만 가능하고 감사 로그에 남음
 - **상태**: **완료 (2026-05-09)** — `/admin/commerce/orders`, `OrdersClient`, `getCommerceOrders`·`getCommerceOrderDetail`·`updateCommerceOrderStatus`, 미처리 큐·필터·race 방지·`commerce_order_status_changed` 로그
 - **작업 이력 (2026-05-09)**: 관리자OS 주문 처리 화면·사이드바 주문처리 메뉴·COMMERCE-003 migration 소급 파일 — worklog: [`docs/worklogs/2026-05-09_feat_commerce-003-admin-orders.md`](./worklogs/2026-05-09_feat_commerce-003-admin-orders.md)
 - **작업 이력 (2026-05-09)**: `commerce.ts` `use server` 규약 — 주문 상태·결제 상수 `src/lib/commerce-constants.ts` 분리 — worklog: [`docs/worklogs/2026-05-09_chore_use-server-commerce-constants.md`](./worklogs/2026-05-09_chore_use-server-commerce-constants.md)
+- **작업 이력 (2026-05-14)**: 주문 처리 화면 공급자 전달용 **CSV·XLSX** export (`getCommerceOrderSupplierExportRows`, 품목 flatten, `tenants.name`·실패 시 `tenant_id`) — worklog: [`docs/worklogs/2026-05-14_feat_commerce-orders-supplier-export.md`](./worklogs/2026-05-14_feat_commerce-orders-supplier-export.md)
 
 #### [COMMERCE-004] 관리자OS 사이드바 커머스 메뉴 추가
 - **우선순위**: HIGH

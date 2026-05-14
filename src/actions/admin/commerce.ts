@@ -11,6 +11,7 @@ import {
   type ListingShippingType,
 } from '@/lib/commerce-constants'
 import type { ActionResult } from '@/types/order'
+import type { SupplierExportRow } from '@/lib/commerce-order-supplier-export'
 
 export type { ListingShippingType } from '@/lib/commerce-constants'
 
@@ -1512,6 +1513,172 @@ export async function getCommerceOrders(filters?: {
       orders: sortCommerceOrdersList(mainRows),
     },
   }
+}
+
+const SUPPLIER_EXPORT_ORDER_SELECT = `
+  id,
+  order_number,
+  tenant_id,
+  created_at,
+  shipping_name,
+  shipping_phone,
+  shipping_address,
+  delivery_memo,
+  payment_status,
+  commerce_order_items ( listing_title, quantity )
+`
+
+const SUPPLIER_EXPORT_MAX_IDS = 3000
+const SUPPLIER_EXPORT_CHUNK = 80
+
+function formatSupplierExportOrderWhen(iso: string): string {
+  try {
+    const d = new Date(iso)
+    return d.toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'medium' })
+  } catch {
+    return String(iso ?? '')
+  }
+}
+
+/** `commerce_orders.payment_status` 및 `updateCommerceOrderStatus`에서 설정되는 값 기준 */
+function formatSupplierExportPaymentStatus(paymentStatus: string | null | undefined): string {
+  const v = String(paymentStatus ?? '').trim()
+  if (v === 'paid') return '결제완료'
+  if (v === 'unpaid') return '미결제'
+  if (v === 'refunded') return '환불완료'
+  return v
+}
+
+async function buildTenantDisplayMapForExport(
+  supabase: any,
+  tenantIds: string[],
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>()
+  const unique = [...new Set(tenantIds.filter(Boolean))]
+  for (const id of unique) {
+    map.set(id, id)
+  }
+  if (unique.length === 0) return map
+  const { data, error } = await supabase.from('tenants').select('id, name').in('id', unique)
+  if (error) return map
+  for (const t of (data ?? []) as { id: string; name: string | null }[]) {
+    const nm = t.name?.trim()
+    if (nm) map.set(t.id, nm)
+  }
+  return map
+}
+
+type RawExportOrderRow = {
+  id: string
+  order_number: string | null
+  tenant_id: string
+  created_at: string
+  shipping_name: string | null
+  shipping_phone: string | null
+  shipping_address: string | null
+  delivery_memo: string | null
+  payment_status: string | null
+  commerce_order_items: { listing_title: string | null; quantity: number | null }[] | null
+}
+
+/**
+ * 화면에 표시된 주문 ID 집합 기준, `commerce_orders` + `commerce_order_items` 조인 후 품목당 1행 flatten.
+ * 식당명은 `tenants.name`(기존 `getCommerceOrders`와 동일), 실패·빈 이름 시 `tenant_id` 문자열.
+ */
+export async function getCommerceOrderSupplierExportRows(
+  orderIds: string[],
+): Promise<ActionResult<{ rows: SupplierExportRow[] }>> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const rawIds = (orderIds ?? []).map((x) => String(x ?? '').trim()).filter(Boolean)
+  const uniqueOrdered: string[] = []
+  const seen = new Set<string>()
+  for (const id of rawIds) {
+    if (seen.has(id)) continue
+    seen.add(id)
+    uniqueOrdered.push(id)
+  }
+
+  if (uniqueOrdered.length === 0) {
+    return { success: true, data: { rows: [] } }
+  }
+  if (uniqueOrdered.length > SUPPLIER_EXPORT_MAX_IDS) {
+    return { success: false, error: `한 번에 보낼 수 있는 주문은 최대 ${SUPPLIER_EXPORT_MAX_IDS}건입니다` }
+  }
+
+  const byId = new Map<string, RawExportOrderRow>()
+  for (let i = 0; i < uniqueOrdered.length; i += SUPPLIER_EXPORT_CHUNK) {
+    const slice = uniqueOrdered.slice(i, i + SUPPLIER_EXPORT_CHUNK)
+    const { data, error } = await supabase
+      .from('commerce_orders')
+      .select(SUPPLIER_EXPORT_ORDER_SELECT)
+      .in('id', slice)
+
+    if (error) return { success: false, error: error.message }
+    for (const row of (data ?? []) as RawExportOrderRow[]) {
+      byId.set(row.id, row)
+    }
+  }
+
+  const orderedRows: RawExportOrderRow[] = []
+  for (const id of uniqueOrdered) {
+    const r = byId.get(id)
+    if (r) orderedRows.push(r)
+  }
+
+  const tenantMap = await buildTenantDisplayMapForExport(
+    supabase,
+    orderedRows.map((r) => r.tenant_id),
+  )
+
+  const flat: SupplierExportRow[] = []
+  for (const o of orderedRows) {
+    const orderNo = String(o.order_number ?? '').trim() || o.id
+    const orderedAt = formatSupplierExportOrderWhen(o.created_at)
+    const restaurant = tenantMap.get(o.tenant_id) ?? o.tenant_id
+    const recipient = String(o.shipping_name ?? '')
+    const phone = String(o.shipping_phone ?? '')
+    const address = String(o.shipping_address ?? '')
+    const deliveryNote = String(o.delivery_memo ?? '')
+    const payLabel = formatSupplierExportPaymentStatus(o.payment_status)
+
+    const items = Array.isArray(o.commerce_order_items) ? o.commerce_order_items : []
+    if (items.length === 0) {
+      flat.push({
+        주문번호: orderNo,
+        주문일시: orderedAt,
+        식당명: restaurant,
+        받는사람: recipient,
+        연락처: phone,
+        배송지: address,
+        상품명: '',
+        수량: 0,
+        배송메시지: deliveryNote,
+        결제상태: payLabel,
+      })
+      continue
+    }
+    for (const it of items) {
+      const title = String(it.listing_title ?? '')
+      const qty = Number(it.quantity)
+      flat.push({
+        주문번호: orderNo,
+        주문일시: orderedAt,
+        식당명: restaurant,
+        받는사람: recipient,
+        연락처: phone,
+        배송지: address,
+        상품명: title,
+        수량: Number.isFinite(qty) ? qty : 0,
+        배송메시지: deliveryNote,
+        결제상태: payLabel,
+      })
+    }
+  }
+
+  return { success: true, data: { rows: flat } }
 }
 
 export async function getCommerceOrderDetail(id: string): Promise<ActionResult<{ order: CommerceOrderDetail }>> {
