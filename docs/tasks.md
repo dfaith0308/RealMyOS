@@ -1238,6 +1238,14 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **연계**: **[REFUND-LIFECYCLE-P1-001]**, **[PAYABLE-PAYOUT-P1-001]**, **[TEST-RUN-OPERATIONS-P1-001]**, **`DECISIONS.md` [D-021]~[D-024]**
 - **작업 이력 (2026-05-14)**: 운영 UX 안정화 — worklog: [`docs/worklogs/2026-05-14_feat_ops-ux-stability-001.md`](./worklogs/2026-05-14_feat_ops-ux-stability-001.md)
 
+#### [SYSTEM-BOUNDARY-AUDIT-001] 관리자OS / 식당OS / 공급자OS 경계 감사 (기록 전용)
+- **우선순위**: HIGH (영업 전 치명 리스크 식별, **구현·아키텍처 변경 아님**)
+- **상태**: **감사 기록 (2026-05-14)** — migration·코드 변경 없음(발견 시 별도 티켓)
+- **산출물**: 경계·tenant·append-only·KPI·UI/서버 정합 **정적 감사** — worklog: [`docs/worklogs/2026-05-14_audit_system-boundary-001.md`](./worklogs/2026-05-14_audit_system-boundary-001.md)
+- **비범위**: 신규 기능·리팩터·settlement·orchestration·KPI 재설계
+- **연계**: **[OPS-UX-STABILITY-001]**, **[REFUND-LIFECYCLE-P1-001]**, **[TEST-RUN-OPERATIONS-P1-001]**, **[PLATFORM-MARGIN-FIX-001]**, **`DECISIONS.md` [D-021]~[D-024]**
+- **작업 이력 (2026-05-14)**: 경계 감사 보고 — worklog: [`docs/worklogs/2026-05-14_audit_system-boundary-001.md`](./worklogs/2026-05-14_audit_system-boundary-001.md)
+
 #### [REFUND-LIFECYCLE-P1-001] cancelled→refunded 최소 보정·payout_outbound reversal 차단·KPI 케이스 B
 - **우선순위**: HIGH (lifecycle 불일치·payout reversal 위험·KPI 정합 P1, **완전 환불 자동화 아님**)
 - **상태**: **P1 코드 (2026-05-14)** — settlement↔payable·부분 환불·PG·refund payments 자동 생성 없음
