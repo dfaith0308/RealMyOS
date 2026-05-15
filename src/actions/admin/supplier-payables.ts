@@ -244,7 +244,10 @@ export async function markSupplierPayableAsPaid(
   if (!auth.ok) return { success: false, error: auth.error }
 
   const pid = String(payable_id ?? '').trim()
-  const rsn = String(reason ?? '').trim().slice(0, 500) || 'mark_supplier_payable_paid'
+  const userReasonTrim = String(reason ?? '').trim().slice(0, 500)
+  const memoDefault = `공급자 지급 완료: ${pid}`
+  const paymentMemo = userReasonTrim.length > 0 ? userReasonTrim : memoDefault
+  const rsn = userReasonTrim.length > 0 ? userReasonTrim : 'mark_supplier_payable_paid'
   if (!pid) return { success: false, error: 'payable ID가 필요합니다' }
 
   const rawOverride =
@@ -252,13 +255,14 @@ export async function markSupplierPayableAsPaid(
       ? String(payments_type_override).trim().slice(0, 64)
       : ''
   const resolvedPaymentType = rawOverride || PAYMENTS_TYPE_PAYOUT_OUTBOUND
-  const memo = `공급자 지급 완료: ${pid}`
+  /** 중복·멱등 조회용(금액·memo 가변 시에도 payable 단위 식별) */
+  const payoutMemoKey = memoDefault
   const nowIso = new Date().toISOString()
   const paymentDate = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10)
 
   const { data: row, error: gErr } = await supabase
     .from('supplier_payables')
-    .select('id, status, payable_amount, supplier_tenant_id, commerce_order_id, commerce_order_allocation_id')
+    .select('id, status, payable_amount, supplier_tenant_id, commerce_order_id, commerce_order_allocation_id, note')
     .eq('id', pid)
     .maybeSingle()
 
@@ -272,17 +276,21 @@ export async function markSupplierPayableAsPaid(
     supplier_tenant_id: string
     commerce_order_id: string
     commerce_order_allocation_id: string
+    note: string | null
   }
+  const prevNote = pr.note ?? null
+  const payoutMemosForLookup = [...new Set([payoutMemoKey, paymentMemo].filter((m) => m.length > 0))]
 
   if (pr.status === 'paid') {
-    const { data: existingPay } = await supabase
+    const { data: existingRows } = await supabase
       .from('payments')
       .select('id')
-      .eq('memo', memo)
+      .in('memo', payoutMemosForLookup)
       .eq('direction', 'outbound')
-      .maybeSingle()
+      .limit(1)
+    const existingPay = existingRows?.[0] as { id: string } | undefined
     if (existingPay?.id) {
-      return { success: true, data: { payout_payment_id: String((existingPay as { id: string }).id), already_done: true } }
+      return { success: true, data: { payout_payment_id: String(existingPay.id), already_done: true } }
     }
     return { success: false, error: '이미 paid인데 payout payments 행이 없습니다. 수동 검토가 필요합니다.' }
   }
@@ -299,14 +307,14 @@ export async function markSupplierPayableAsPaid(
     return { success: false, error: 'payable_amount가 유효하지 않습니다.' }
   }
 
-  const { data: dupPay, error: dupErr } = await supabase
+  const { data: dupRows, error: dupErr } = await supabase
     .from('payments')
     .select('id')
-    .eq('memo', memo)
+    .in('memo', payoutMemosForLookup)
     .eq('direction', 'outbound')
-    .maybeSingle()
+    .limit(2)
   if (dupErr) return { success: false, error: dupErr.message }
-  if (dupPay?.id) {
+  if (dupRows?.length) {
     return { success: false, error: '동일 payable에 대한 payout 기록이 이미 있습니다. 수동 검토가 필요합니다.' }
   }
 
@@ -314,14 +322,19 @@ export async function markSupplierPayableAsPaid(
   const counterparty_name =
     String((tn as { name?: string | null } | null)?.name ?? '').trim() || 'Supplier'
 
+  const paidRowUpdate: Record<string, unknown> = {
+    status: 'paid',
+    paid_at: nowIso,
+    paid_by: auth.ctx.user_id,
+    updated_at: nowIso,
+  }
+  if (userReasonTrim.length > 0) {
+    paidRowUpdate.note = userReasonTrim
+  }
+
   const { error: uErr, data: updRows } = await supabase
     .from('supplier_payables')
-    .update({
-      status: 'paid',
-      paid_at: nowIso,
-      paid_by: auth.ctx.user_id,
-      updated_at: nowIso,
-    })
+    .update(paidRowUpdate)
     .eq('id', pid)
     .eq('status', 'unpaid')
     .select('id')
@@ -340,7 +353,7 @@ export async function markSupplierPayableAsPaid(
     amount: pr.payable_amount,
     payment_method: 'platform',
     payment_date: paymentDate,
-    memo,
+    memo: paymentMemo,
     deposit_amount: 0,
     reversal_of_id: null,
     order_id: null,
@@ -359,6 +372,7 @@ export async function markSupplierPayableAsPaid(
         status: 'unpaid',
         paid_at: null,
         paid_by: null,
+        note: prevNote,
         updated_at: new Date().toISOString(),
       })
       .eq('id', pid)
@@ -392,6 +406,7 @@ export async function markSupplierPayableAsPaid(
         status: 'unpaid',
         paid_at: null,
         paid_by: null,
+        note: prevNote,
         updated_at: new Date().toISOString(),
       })
       .eq('id', pid)
