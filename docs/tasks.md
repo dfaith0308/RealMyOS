@@ -1254,6 +1254,14 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **연계**: **[SYSTEM-BOUNDARY-AUDIT-001]**, `supabase/migrations/*`, **`DECISIONS.md` [D-021]~[D-024]**
 - **작업 이력 (2026-05-14)**: merge 안전성 검토 — worklog: [`docs/worklogs/2026-05-14_audit_merge-safety-check-001.md`](./worklogs/2026-05-14_audit_merge-safety-check-001.md)
 
+#### [MERGE-002] dev→main 병합 (`Sidebar.tsx` 충돌 해결)
+- **우선순위**: HIGH (운영 브랜치 정렬)
+- **상태**: **완료 (2026-05-15)** — `main`에 `dev` merge + `Sidebar.tsx`만 수동 해결 후 push
+- **산출물**: merge commit `merge: resolve Sidebar.tsx conflict dev → main` — worklog: [`docs/worklogs/2026-05-15_chore_merge-002-sidebar-main.md`](./worklogs/2026-05-15_chore_merge-002-sidebar-main.md)
+- **비범위**: migration 실행·DB 변경·Sidebar 외 임의 수정
+- **연계**: **[MERGE-SAFETY-CHECK-001]**, MERGE-001 충돌 후속
+- **작업 이력 (2026-05-15)**: Sidebar 충돌 해결·main push — worklog: [`docs/worklogs/2026-05-15_chore_merge-002-sidebar-main.md`](./worklogs/2026-05-15_chore_merge-002-sidebar-main.md)
+
 #### [REFUND-LIFECYCLE-P1-001] cancelled→refunded 최소 보정·payout_outbound reversal 차단·KPI 케이스 B
 - **우선순위**: HIGH (lifecycle 불일치·payout reversal 위험·KPI 정합 P1, **완전 환불 자동화 아님**)
 - **상태**: **P1 코드 (2026-05-14)** — settlement↔payable·부분 환불·PG·refund payments 자동 생성 없음
