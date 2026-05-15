@@ -2508,6 +2508,72 @@ export async function updateCommerceOrderStatus(
     })
   }
 
+  if (nextStatus === 'refunded') {
+    const paymentStatusAfter = 'refunded'
+    let existingReversalExists = false
+    const { data: inboundOrig } = await supabase
+      .from('payments')
+      .select('id')
+      .eq('commerce_order_id', oid)
+      .eq('direction', 'inbound')
+      .is('reversal_of_id', null)
+
+    const origPaymentIds = (inboundOrig ?? [])
+      .map((r: { id: string }) => String(r.id ?? '').trim())
+      .filter(Boolean)
+    if (origPaymentIds.length) {
+      const { data: revChild } = await supabase
+        .from('payments')
+        .select('id')
+        .in('reversal_of_id', origPaymentIds)
+        .limit(1)
+      existingReversalExists = Boolean(revChild?.length)
+    }
+
+    const refundedLog = await insertAdminLog(supabase, {
+      admin_id: auth.ctx.user_id,
+      tenant_id: row.tenant_id,
+      action_type: 'commerce_order_refunded',
+      target_table: 'commerce_orders',
+      target_id: oid,
+      new_value: {
+        commerce_order_id: oid,
+        payment_status: paymentStatusAfter,
+        refund_required: refundRequired,
+        existing_reversal_exists: existingReversalExists,
+      },
+    })
+    if (!refundedLog.ok && process.env.NODE_ENV === 'development') {
+      console.warn('[commerce_order_refunded]', refundedLog.error)
+    }
+
+    const { data: paidPayables } = await supabase
+      .from('supplier_payables')
+      .select('id, payable_amount')
+      .eq('commerce_order_id', oid)
+      .eq('status', 'paid')
+
+    for (const p of paidPayables ?? []) {
+      const pid = String((p as { id: string }).id ?? '').trim()
+      if (!pid) continue
+      const warnLog = await insertAdminLog(supabase, {
+        admin_id: auth.ctx.user_id,
+        tenant_id: row.tenant_id,
+        action_type: 'commerce_refund_paid_payable_exists',
+        target_table: 'supplier_payables',
+        target_id: pid,
+        new_value: {
+          commerce_order_id: oid,
+          payable_id: pid,
+          payable_amount: Number((p as { payable_amount?: number }).payable_amount ?? 0),
+        },
+      })
+      if (!warnLog.ok && process.env.NODE_ENV === 'development') {
+        console.warn('[commerce_refund_paid_payable_exists]', warnLog.error)
+      }
+    }
+  }
+
   revalidatePath('/admin/commerce/orders')
   return { success: true }
 }

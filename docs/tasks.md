@@ -1222,6 +1222,14 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **연계**: **[ACCOUNTING-REVERSAL-P0-001]** (동일 `tasks.md` 블록), **PLATFORM-ERP-P1-001**, `supplier_payables`
 - **작업 이력 (2026-05-14)**: 구현 — worklog: [`docs/worklogs/2026-05-14_feat_kpi-reversal-p0-001-storefront-net.md`](./worklogs/2026-05-14_feat_kpi-reversal-p0-001-storefront-net.md)
 
+#### [REFUND-LIFECYCLE-P1-001] cancelled→refunded 최소 보정·payout_outbound reversal 차단·KPI 케이스 B
+- **우선순위**: HIGH (lifecycle 불일치·payout reversal 위험·KPI 정합 P1, **완전 환불 자동화 아님**)
+- **상태**: **P1 코드 (2026-05-14)** — settlement↔payable·부분 환불·PG·refund payments 자동 생성 없음
+- **산출물**: `updateCommerceOrderStatus` (`refunded` 분기 `admin_logs`: `commerce_order_refunded`, `commerce_refund_paid_payable_exists`) · `insertOutboundReversal` `payout_outbound` soft-block + `payout_reversal_blocked` 감사 · `getStorefrontRevenueKPI` refunded 상태이면서 inbound reversal 자식이 없을 때 gross만 제외 · migration `20260515700000_log_payment_reversal_audit_payout_blocked.sql` (RPC 화이트리스트 확장, **미적용 가정**)
+- **비범위**: settlement↔payable 연결·부분 환불·PG·refund orchestration·refund 전용 payments 자동 생성·settlement correction·adjustment·cancelled accounting·기존 reversal row 생성 구조 변경
+- **연계**: **`DECISIONS.md` [D-021]~[D-024]** · **[APPEND-ONLY-CONVERGENCE-P1-001]** · **[KPI-REVERSAL-P0-001]** · **[PAYABLE-PAYOUT-P1-001]** (`payout_outbound`) · **[ACCOUNTING-REVERSAL-P0-001]**
+- **작업 이력 (2026-05-14)**: P1 최소 보정 — worklog: [`docs/worklogs/2026-05-14_feat_refund-lifecycle-p1-001.md`](./worklogs/2026-05-14_feat_refund-lifecycle-p1-001.md)
+
 #### [PAYABLE-PAYOUT-P1-001] supplier_payables paid + append-only payout `payments` (최소)
 - **우선순위**: HIGH (**[D-023]** finality: paid = 실제 지급 이벤트·settlement와 분리)
 - **상태**: **P1 코드 (2026-05-14)** — settlement 자동화·배치 지급·PG·부분 지급 없음

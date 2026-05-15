@@ -124,6 +124,7 @@ function storefrontInboundSelect(supabase: any) {
 /**
  * Storefront(`commerce_order_id` 연결) 매출·미수·최근 입금 KPI.
  * Gross = 원본 입금(`status=confirmed`·`reversal_of_id` null); reversal = `reversal_of_id` not null (amount는 양수, 집계 시 차감).
+ * REFUND-LIFECYCLE-P1-001: 주문이 refunded(또는 payment_status=refunded)이면서 원본 입금에 대한 reversal 자식이 없을 때만 gross 원본 제외(케이스 B). cancelled 경로에서 reversal이 이미 있는 경우(케이스 A)는 gross 유지·net에서 reversal 차감 유지.
  * RFQ `orders` 집계는 `getPlatformRevenue`를 수정하지 않고 동일 월 경계·금액 규칙으로 복제 조회만 수행.
  */
 export async function getStorefrontRevenueKPI(): Promise<ActionResult<StorefrontRevenueKPI>> {
@@ -156,7 +157,59 @@ export async function getStorefrontRevenueKPI(): Promise<ActionResult<Storefront
   if (unpaidRes.error) return { success: false, error: unpaidRes.error.message }
   if (recentRes.error) return { success: false, error: recentRes.error.message }
 
-  const grossRows = (grossRes.data ?? []) as PayAggRow[]
+  let grossRows = (grossRes.data ?? []) as PayAggRow[]
+
+  const grossCommerceIds = [
+    ...new Set(
+      grossRows
+        .map((r) => r.commerce_order_id)
+        .filter((id): id is string => Boolean(id && String(id).trim())),
+    ),
+  ]
+  if (grossCommerceIds.length) {
+    const { data: coRows, error: coErr } = await supabase
+      .from('commerce_orders')
+      .select('id, status, payment_status')
+      .in('id', grossCommerceIds)
+
+    if (!coErr && coRows?.length) {
+      const refundedOrderIds = new Set(
+        (coRows as { id: string; status?: string | null; payment_status?: string | null }[])
+          .filter(
+            (o) =>
+              String(o.status ?? '') === 'refunded' ||
+              String(o.payment_status ?? '') === 'refunded',
+          )
+          .map((o) => String(o.id)),
+      )
+
+      if (refundedOrderIds.size) {
+        const candidatePaymentIds = grossRows
+          .filter((r) => refundedOrderIds.has(String(r.commerce_order_id ?? '')))
+          .map((r) => String(r.id))
+
+        if (candidatePaymentIds.length) {
+          const { data: revLinks } = await supabase
+            .from('payments')
+            .select('reversal_of_id')
+            .in('reversal_of_id', candidatePaymentIds)
+            .not('reversal_of_id', 'is', null)
+            .limit(PAY_FETCH_LIMIT)
+
+          const withReversal = new Set(
+            (revLinks ?? []).map((x: { reversal_of_id: string }) => String(x.reversal_of_id)),
+          )
+
+          grossRows = grossRows.filter((r) => {
+            const cid = String(r.commerce_order_id ?? '')
+            if (!refundedOrderIds.has(cid)) return true
+            return withReversal.has(String(r.id))
+          })
+        }
+      }
+    }
+  }
+
   const revRows = (revRes.data ?? []) as PayAggRow[]
 
   const today_gross_revenue = sumAmountInRange(grossRows, inToday)

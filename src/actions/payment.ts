@@ -3,7 +3,11 @@
 import { revalidatePath } from 'next/cache'
 import { linkActionResult } from '@/actions/action-log'
 import { createSupabaseServer, getAuthCtx, type AuthCtx } from '@/lib/supabase-server'
-import { fetchInboundSupersededOriginalPaymentIds, PAYMENTS_TYPE_PAYOUT_REVERSAL } from '@/lib/inbound-payment-superseded'
+import {
+  fetchInboundSupersededOriginalPaymentIds,
+  PAYMENTS_TYPE_PAYOUT_OUTBOUND,
+  PAYMENTS_TYPE_PAYOUT_REVERSAL,
+} from '@/lib/inbound-payment-superseded'
 import type { ActionResult } from '@/types/order'
 import { effectiveOrderAmount, getAccountsReceivable, getCustomerDeposit } from '@/lib/ledger-calc'
 
@@ -351,6 +355,19 @@ export async function insertOutboundReversal(
   if (!orig) return { success: false, error: '지급 내역을 찾을 수 없거나 취소할 수 없습니다.' }
 
   const origId = String((orig as { id: string }).id)
+
+  if (String((orig as Record<string, unknown>).type ?? '').trim() === PAYMENTS_TYPE_PAYOUT_OUTBOUND) {
+    await logPaymentReversalAudit(supabase, ctx, 'payout_reversal_blocked', {
+      payment_id: origId,
+      reason: rsn,
+      payment_type: PAYMENTS_TYPE_PAYOUT_OUTBOUND,
+      admin_user_id: ctx.user_id,
+    })
+    return {
+      success: false,
+      error: 'payout_outbound는 자동 reversal 불가. 수동 처리 필요.',
+    }
+  }
 
   const { data: dup } = await supabase
     .from('payments')
