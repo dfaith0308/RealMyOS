@@ -40,6 +40,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
+  // /admin 루트 → 대시보드 (redirect-only page 제거 시 manifest 빌드 이슈 방지)
+  if (pathname === '/admin' || pathname === '/admin/') {
+    const url = request.nextUrl.clone()
+    url.pathname = '/admin/dashboard'
+    return NextResponse.redirect(url)
+  }
+
   // /admin/* 보호: admin role만 접근 허용
   if (pathname.startsWith('/admin')) {
     const { data: { user }, error: userErr } = await supabase.auth.getUser()
