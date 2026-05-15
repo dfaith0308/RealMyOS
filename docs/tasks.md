@@ -1246,6 +1246,14 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **연계**: **[OPS-UX-STABILITY-001]**, **[REFUND-LIFECYCLE-P1-001]**, **[TEST-RUN-OPERATIONS-P1-001]**, **[PLATFORM-MARGIN-FIX-001]**, **`DECISIONS.md` [D-021]~[D-024]**
 - **작업 이력 (2026-05-14)**: 경계 감사 보고 — worklog: [`docs/worklogs/2026-05-14_audit_system-boundary-001.md`](./worklogs/2026-05-14_audit_system-boundary-001.md)
 
+#### [MERGE-SAFETY-CHECK-001] dev→main 운영 데이터 안전성 검증 (기록 전용)
+- **우선순위**: CRITICAL (해내음코리아 운영 DB, **코드·migration·DB 실행 없음**)
+- **상태**: **감사 기록 (2026-05-14)** — merge 판단용 정적 분석만
+- **산출물**: migration 파괴성·append-only·RLS·merge TOP 리스크·전략 권고 — worklog: [`docs/worklogs/2026-05-14_audit_merge-safety-check-001.md`](./worklogs/2026-05-14_audit_merge-safety-check-001.md)
+- **비범위**: 구현·migration 적용·스키마 변경
+- **연계**: **[SYSTEM-BOUNDARY-AUDIT-001]**, `supabase/migrations/*`, **`DECISIONS.md` [D-021]~[D-024]**
+- **작업 이력 (2026-05-14)**: merge 안전성 검토 — worklog: [`docs/worklogs/2026-05-14_audit_merge-safety-check-001.md`](./worklogs/2026-05-14_audit_merge-safety-check-001.md)
+
 #### [REFUND-LIFECYCLE-P1-001] cancelled→refunded 최소 보정·payout_outbound reversal 차단·KPI 케이스 B
 - **우선순위**: HIGH (lifecycle 불일치·payout reversal 위험·KPI 정합 P1, **완전 환불 자동화 아님**)
 - **상태**: **P1 코드 (2026-05-14)** — settlement↔payable·부분 환불·PG·refund payments 자동 생성 없음
