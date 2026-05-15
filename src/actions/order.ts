@@ -10,6 +10,7 @@ import type {
   CreatedOrder,
   CustomerForOrder,
   ProductForOrder,
+  OrderOperationStatus,
 } from '@/types/order'
 
 // ============================================================
@@ -34,6 +35,58 @@ async function logOrder(supabase: any, opts: {
     before_data: opts.before_data ?? null,
     after_data:  opts.after_data  ?? null,
   })
+}
+
+// ============================================================
+// SUP-MISSING-010: 주문상태(order_status) 변경
+// - status(거래상태)와 완전 분리
+// - 타입: OrderOperationStatus (D-019)
+// ============================================================
+
+export async function updateOrderStatus(
+  order_id: string,
+  order_status: OrderOperationStatus,
+): Promise<ActionResult> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const { data: before, error: bErr } = await supabase
+    .from('orders')
+    .select('id, status, order_status')
+    .eq('id', order_id)
+    // 전환 기간: seller_tenant_id 우선 + legacy tenant_id 병행
+    .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
+    .is('deleted_at', null)
+    .single()
+
+  if (bErr) return { success: false, error: bErr.message }
+  if (!before) return { success: false, error: '주문을 찾을 수 없습니다.' }
+
+  if (before.order_status === order_status) return { success: true }
+
+  const { error } = await supabase
+    .from('orders')
+    .update({ order_status, updated_at: new Date().toISOString() })
+    .eq('id', order_id)
+    // 전환 기간: seller_tenant_id 우선 + legacy tenant_id 병행
+    .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
+    .is('deleted_at', null)
+
+  if (error) return { success: false, error: error.message }
+
+  await logOrder(supabase, {
+    order_id,
+    user_id: ctx.user_id,
+    user_type: ctx.user_type,
+    action: 'update',
+    before_data: { order_status: before.order_status },
+    after_data: { order_status },
+  })
+
+  revalidatePath('/orders')
+  revalidatePath(`/orders/${order_id}`)
+  return { success: true }
 }
 
 function getCurrentCostPrice(
@@ -144,6 +197,7 @@ export async function createOrder(
 
   const totals      = calcOrderTotals(lineRows)
   const orderNumber = await issueOrderNumber(supabase, ctx.tenant_id, orderDate)
+  const orderStatus = input.status ?? 'confirmed'
 
   // 할인/적립금 — orders 레벨 처리 (상품 단가/라인 무관)
   const discount_raw = Number(input.discount_amount ?? 0)
@@ -164,18 +218,16 @@ export async function createOrder(
   }
 
   // final_amount는 DB generated / default — insert 금지 (할인·포인트는 아래 컬럼으로 전달)
-  console.error('[ORDER-AMOUNT]', { total: totals.total_amount, discount: discount_amount, point: point_used })
 
   const { data: newOrder, error: orderErr } = await supabase
     .from('orders')
     .insert({
       tenant_id:          ctx.tenant_id,
       seller_tenant_id:   ctx.tenant_id,
-      // TODO: buyer_tenant_id는 restaurant-os 연동 확정 후 입력 (현재 supplier CRM customer_id 기반)
       customer_id:        input.customer_id,
       order_number:       orderNumber,
       order_date:         orderDate,
-      status:             input.status ?? 'confirmed',
+      status:             orderStatus,
       total_supply_price: totals.total_supply_price,
       total_vat_amount:   totals.total_vat_amount,
       total_amount:       totals.total_amount,   // 상품 합계 (할인 전, 매출 기준)
@@ -192,53 +244,78 @@ export async function createOrder(
     .from('order_lines')
     .insert(lineRows.map((r) => ({ order_id: newOrder.id, tenant_id: ctx.tenant_id, ...r })))
   if (linesErr) {
-    await supabase.from('orders').update({ status: 'cancelled' }).eq('id', newOrder.id)
+    await supabase.from('orders').update({ status: 'cancelled' }).eq('id', newOrder.id).eq('tenant_id', ctx.tenant_id)
     return { success: false, error: `라인 저장 실패: ${linesErr.message}` }
   }
 
-  // 거래처별 마지막 거래 캐시 — upsert 대신 명시적 update+insert로 컬럼 누락 방지
-  for (const [i, r] of lineRows.entries()) {
-    const origLine     = input.lines[i]
-    const pricing_mode = origLine.line_total_override !== undefined ? 'total' : 'unit'
-    const cacheRow = {
-      customer_id:       input.customer_id,
-      product_id:        r.product_id,
-      last_price:        r.unit_price,
-      last_line_total:   r.line_total,
-      last_qty:          r.quantity,
-      last_pricing_mode: pricing_mode,
-      updated_at:        new Date().toISOString(),
+  // SUP-PARTIAL-002-D: 견적→주문 전환 처리 (best-effort, 동시성은 RPC가 담당)
+  if (orderStatus === 'confirmed' && input.source_quote_id && input.quote_conversions?.length) {
+    try {
+      const { data: rpcResult } = await supabase.rpc('convert_quote_items', {
+        p_quote_id:    input.source_quote_id,
+        p_tenant_id:   ctx.tenant_id,
+        p_conversions: JSON.stringify(input.quote_conversions.map((c) => ({ item_id: c.item_id, qty: c.qty }))),
+      })
+      if (!rpcResult?.success) {
+        // ignore: 주문 생성은 성공, 견적 전환은 보조
+      }
+    } catch {
+      // ignore
     }
-    console.error('[SAVE-PRICE]', { product_id: r.product_id, pricing_mode, unit_price: r.unit_price, line_total: r.line_total, qty: r.quantity })
+  }
 
-    // 1. 기존 row 존재 여부 확인
-    const { data: existing } = await supabase
-      .from('customer_product_prices')
-      .select('customer_id')
-      .eq('customer_id', input.customer_id)
-      .eq('product_id', r.product_id)
-      .maybeSingle()
+  // 거래처별 마지막 거래 단가 캐시 — confirmed 주문만 갱신 (N+1 금지 → batch upsert)
+  if (orderStatus === 'confirmed') {
+    const cacheRows = lineRows
+      .filter((r) => !!r.product_id && !!input.customer_id)
+      .map((r, idx) => {
+        const origLine = input.lines[idx]
+        const pricing_mode = origLine?.line_total_override !== undefined ? 'total' : 'unit'
+        return {
+          tenant_id:        ctx.tenant_id,
+          customer_id:      input.customer_id,
+          product_id:       r.product_id,
+          last_price:       r.unit_price,
+          last_qty:         r.quantity,
+          last_line_total:  r.line_total,
+          last_pricing_mode: pricing_mode,
+          source:           'order',
+          updated_at:       new Date().toISOString(),
+        }
+      })
 
-    if (existing) {
-      // 2a. 존재하면 명시적 UPDATE — 컬럼 하나하나 지정
-      const { error: updateErr } = await supabase
+    if (cacheRows.length > 0) {
+      await supabase
         .from('customer_product_prices')
-        .update({
-          last_price:        cacheRow.last_price,
-          last_line_total:   cacheRow.last_line_total,
-          last_qty:          cacheRow.last_qty,
-          last_pricing_mode: cacheRow.last_pricing_mode,
-          updated_at:        cacheRow.updated_at,
-        })
+        .upsert(cacheRows, { onConflict: 'customer_id,product_id' })
+    }
+  }
+
+  // SUP-PARTIAL-006-D: 영업이력 성과 연결 (best-effort)
+  // confirmed 주문 생성 시, 최근 7일 내 contact_log(미전환)에 converted_order_id 연결
+  if (orderStatus === 'confirmed') {
+    try {
+      const since = new Date(Date.now() - 7 * 86400000).toISOString()
+      const { data: lastLog } = await supabase
+        .from('contact_logs')
+        .select('id')
+        .eq('tenant_id', ctx.tenant_id)
         .eq('customer_id', input.customer_id)
-        .eq('product_id', r.product_id)
-      if (updateErr) console.error('[SAVE-PRICE-ERR] UPDATE 실패:', updateErr.message)
-    } else {
-      // 2b. 없으면 INSERT
-      const { error: insertErr } = await supabase
-        .from('customer_product_prices')
-        .insert(cacheRow)
-      if (insertErr) console.error('[SAVE-PRICE-ERR] INSERT 실패:', insertErr.message)
+        .is('converted_order_id', null)
+        .gte('contacted_at', since)
+        .order('contacted_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (lastLog?.id) {
+        await supabase
+          .from('contact_logs')
+          .update({ converted_order_id: newOrder.id })
+          .eq('id', lastLog.id)
+          .eq('tenant_id', ctx.tenant_id)
+      }
+    } catch {
+      // ignore: 전환 추적은 best-effort
     }
   }
 
@@ -350,29 +427,13 @@ export async function updateOrder(input: UpdateOrderInput): Promise<ActionResult
   // p_line_rows: jsonb 타입이면 객체 직접 전달, text 타입이면 stringify
   // → 이중 인코딩 방지를 위해 객체 직접 전달 시도
   const { error: rpcErr } = await supabase.rpc('update_order_lines', {
-    p_order_id:  input.order_id,
-    p_tenant_id: ctx.tenant_id,
-    p_line_rows: lineRows,  // JSON.stringify 제거 — supabase-js가 자동 직렬화
+    p_order_id:   input.order_id,
+    p_tenant_id:  ctx.tenant_id,
+    p_line_rows:  lineRows,  // JSON.stringify 제거 — supabase-js가 자동 직렬화
+    p_order_date: input.order_date ?? null,
+    p_memo:       input.memo ?? null,
   })
   if (rpcErr) return { success: false, error: `라인 저장 실패: ${rpcErr.message}` }
-
-  const newTotals = lineRows.reduce(
-    (s, r) => ({ total_supply_price: s.total_supply_price + r.supply_price, total_vat_amount: s.total_vat_amount + r.vat_amount, total_amount: s.total_amount + r.line_total }),
-    { total_supply_price: 0, total_vat_amount: 0, total_amount: 0 }
-  )
-
-  // orders 헤더 업데이트
-  const updatePayload: Record<string, any> = { ...newTotals }
-  if (input.order_date !== undefined) updatePayload.order_date = input.order_date
-  if (input.memo      !== undefined)  updatePayload.memo       = input.memo
-
-  const { error: orderErr } = await supabase
-    .from('orders')
-    .update(updatePayload)
-    .eq('id', input.order_id)
-    // 전환 기간: seller_tenant_id 우선 + legacy tenant_id 병행
-    .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
-  if (orderErr) return { success: false, error: orderErr.message }
 
   // order_logs: update
   const { data: afterLines } = await supabase
@@ -383,7 +444,7 @@ export async function updateOrder(input: UpdateOrderInput): Promise<ActionResult
     user_type:   ctx.user_type,
     action:      'update',
     before_data: beforeData,
-    after_data:  { lines: afterLines ?? [], ...updatePayload },
+    after_data:  { lines: afterLines ?? [] },
   })
 
   revalidatePath('/orders')
@@ -409,13 +470,12 @@ export async function cancelOrder(order_id: string, reason?: string): Promise<Ac
   if (!order)                       return { success: false, error: '주문을 찾을 수 없습니다.' }
   if (order.status === 'cancelled') return { success: false, error: '이미 취소된 주문입니다.' }
 
-  // status만 변경 — 데이터 삭제 금지
-  const { error } = await supabase
-    .from('orders').update({ status: 'cancelled' })
-    .eq('id', order_id)
-    // 전환 기간: seller_tenant_id 우선 + legacy tenant_id 병행
-    .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
-  if (error) return { success: false, error: error.message }
+  // 주문 취소 + 연결된 collection_allocations void 처리 (단일 RPC, RULE-19)
+  const { error: rpcErr } = await supabase.rpc('cancel_order_and_void_allocations', {
+    p_tenant_id: ctx.tenant_id,
+    p_order_id:  order_id,
+  })
+  if (rpcErr) return { success: false, error: rpcErr.message }
 
   // order_logs: cancel (취소 사유 after_data에 포함)
   await logOrder(supabase, {
@@ -427,6 +487,11 @@ export async function cancelOrder(order_id: string, reason?: string): Promise<Ac
     after_data:  { status: 'cancelled', reason: reason ?? null },
   })
 
+  // NOTE: customer_stats.current_balance는 RPC(update_customer_stats)에서
+  // delta 누적으로 갱신되는 캐시성 컬럼이며, RULE-02(원장 단일 소스) 위반으로
+  // deprecated 대상이다. 즉시 제거/DROP 금지.
+  // 원장 단일 소스 전환 완료 후 update_customer_stats 의존을 제거한다.
+  // [DB-DANGER-004] 참조
   // customer_stats 복구
   await supabase.rpc('update_customer_stats', {
     p_tenant_id:         ctx.tenant_id,
@@ -473,7 +538,7 @@ export async function getProductsForOrder(
       id, product_code, name, tax_type, procurement_type,
       product_costs ( cost_price, start_date, end_date ),
       product_prices ( price_type, price ),
-      customer_product_prices ( customer_id, last_price, last_line_total, last_qty, last_pricing_mode )
+      customer_product_prices ( tenant_id, customer_id, last_price, updated_at, last_line_total, last_qty, last_pricing_mode, source )
     `)
     .eq('tenant_id', ctx.tenant_id).is('deleted_at', null).order('name')
   if (error) return { success: false, error: error.message }
@@ -488,9 +553,16 @@ export async function getProductsForOrder(
       // 이 거래처의 구매 이력 — customer_id 정확히 일치하는 row만 사용
       // customer_product_prices는 모든 거래처 이력이 배열로 오므로 반드시 find 필터링 필요
       const customerRecord = customerId
-        ? (p.customer_product_prices ?? []).find(
-            (cp: any) => cp.customer_id === customerId && cp.last_price != null
-          )
+        ? (() => {
+            const rows = (p.customer_product_prices ?? [])
+              .filter((cp: any) =>
+                cp?.customer_id === customerId &&
+                cp?.last_price != null &&
+                cp?.tenant_id === ctx.tenant_id
+              )
+              .sort((a: any, b: any) => String(b.updated_at ?? '').localeCompare(String(a.updated_at ?? '')))
+            return rows[0]
+          })()
         : undefined
 
       const has_purchase_history = !!customerRecord
@@ -510,9 +582,6 @@ export async function getProductsForOrder(
         last_pricing_mode,
         last_line_total,
         last_qty,
-      }
-      if (has_purchase_history) {
-        console.error('[LOAD-PRICE]', { name: p.name, last_pricing_mode, last_unit_price, last_line_total, last_qty })
       }
       return productData
     }),

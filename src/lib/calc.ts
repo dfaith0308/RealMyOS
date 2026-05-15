@@ -55,6 +55,15 @@ export function formatKRW(amount: number | string | null | undefined): string {
   return n.toLocaleString('ko-KR') + '원'
 }
 
+/** 숫자만 남긴 문자열 → 천 단위 콤마 (금액 입력 필드 표시용, 접미사 없음) */
+export function formatDigitsForInput(digitsOnly: string): string {
+  const d = digitsOnly.replace(/\D/g, '')
+  if (!d) return ''
+  const n = Number(d)
+  if (!Number.isFinite(n)) return ''
+  return n.toLocaleString('ko-KR')
+}
+
 export function todayStr(): string {
   return new Date().toISOString().slice(0, 10)
 }

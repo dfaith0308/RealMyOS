@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import { getCategories } from '@/actions/category'
 import { getSettings } from '@/actions/settings'
 import { DEFAULT_SETTINGS } from '@/constants/settings'
-import { createSupabaseServer } from '@/lib/supabase-server'
+import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import ProductEditForm from '@/components/product/ProductEditForm'
 
 export const metadata = { title: '상품 수정 — RealMyOS' }
@@ -14,15 +14,16 @@ export default async function ProductEditPage({
 }) {
   const { id } = params
   const supabase = await createSupabaseServer()
-  const { data: { user } } = await supabase.auth.getUser()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) notFound()
 
   const [{ data: product }, catResult, settingsResult, { data: suppliers }] = await Promise.all([
     supabase.from('products')
       .select('id, product_code, name, tax_type, category_id, supplier_id, barcode, min_margin_rate, product_costs(cost_price,end_date), product_prices(price_type,price), product_logs(action,before_data,after_data,created_at)')
-      .eq('id', id).is('deleted_at', null).single(),
+      .eq('id', id).eq('tenant_id', ctx.tenant_id).is('deleted_at', null).single(),
     getCategories(),
     getSettings(),
-    user ? supabase.from('customers').select('id, name').eq('is_supplier', true).is('deleted_at', null).order('name') : Promise.resolve({ data: [] }),
+    supabase.from('customers').select('id, name').eq('tenant_id', ctx.tenant_id).eq('is_supplier', true).is('deleted_at', null).order('name'),
   ])
 
   if (!product) notFound()

@@ -1,0 +1,2028 @@
+'use client'
+
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
+import { flushSync } from 'react-dom'
+import {
+  createListingFull,
+  createShippingGroup,
+  deleteShippingGroup,
+  getAdminCategories,
+  getShippingGroups,
+  updateShippingGroup,
+  uploadListingImage,
+  type AdminCategoryNode,
+  type AdminCategoryRow,
+  type ListingShippingType,
+  type ShippingGroupListItem,
+} from '@/actions/admin/commerce'
+import { calcMarginRate, formatDigitsForInput, formatKRW } from '@/lib/calc'
+import mod from './listing-new-client.module.css'
+
+const MAX_DETAIL_IMAGES = 20
+const MAX_IMAGE_FILE_BYTES = 8 * 1024 * 1024
+/** 피커 필터(실제 허용은 validateImageFile과 동일 계열) */
+const ACCEPT_IMAGE =
+  'image/jpeg,image/jpg,image/pjpeg,image/png,image/webp,image/heic,image/heif,application/octet-stream,.jpg,.jpeg,.png,.webp,.heic,.heif'
+const MAX_THUMB_BADGES = 2
+const THUMB_H = 160
+
+function randomBlockId(): string {
+  try {
+    const c = globalThis.crypto
+    if (c && typeof c.randomUUID === 'function') {
+      return c.randomUUID()
+    }
+  } catch {
+    /* 일부 환경(비보안 컨텍스트 등)에서 randomUUID 사용 불가 */
+  }
+  return `blk_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`
+}
+
+export type DetailImageBlock = {
+  id: string
+  url: string
+  /** url: URL 추가 행 / file: 파일 업로드 행 */
+  blockKind: 'url' | 'file'
+  uploadStatus: 'idle' | 'uploading' | 'done_upload' | 'url_linked' | 'error'
+  errorMessage?: string
+  fileName?: string | null
+}
+
+function newBlock(partial?: Partial<DetailImageBlock>): DetailImageBlock {
+  return {
+    id: randomBlockId(),
+    url: partial?.url ?? '',
+    blockKind: partial?.blockKind ?? 'file',
+    uploadStatus: partial?.uploadStatus ?? 'idle',
+    errorMessage: partial?.errorMessage,
+    fileName: partial?.fileName ?? null,
+  }
+}
+
+function validateImageFile(file: File): string | null {
+  if (file.size === 0) return '빈 파일입니다'
+  if (file.size > MAX_IMAGE_FILE_BYTES) {
+    return '8MB 이하 이미지만 업로드 가능합니다'
+  }
+
+  const mimeRaw = (file.type ?? '').trim()
+  const mime = mimeRaw.toLowerCase()
+
+  const extOk = /\.(jpe?g|png|webp|heic|heif)$/i.test(file.name)
+
+  const mimeOk =
+    mime === 'image/jpeg' ||
+    mime === 'image/jpg' ||
+    mime === 'image/pjpeg' ||
+    mime === 'image/png' ||
+    mime === 'image/webp' ||
+    mime === 'image/heic' ||
+    mime === 'image/heif' ||
+    /^image\/heic/i.test(mime) ||
+    /^image\/heif/i.test(mime)
+
+  const octetOk = mime === 'application/octet-stream' && extOk
+
+  if (extOk) return null
+  if (mimeOk) return null
+  if (octetOk) return null
+
+  return 'JPG/PNG/WebP/HEIC·HEIF만 가능합니다(허용 확장자 또는 image/jpeg·png·webp·heic·heif, octet-stream은 확장자 필요)'
+}
+
+function blocksToSavedUrls(blocks: DetailImageBlock[]): string[] {
+  return blocks
+    .filter((b) => b.uploadStatus !== 'uploading' && b.uploadStatus !== 'error' && b.url.trim())
+    .map((b) => b.url.trim())
+}
+
+function detailBlockStatusLabel(block: DetailImageBlock): string {
+  if (block.uploadStatus === 'uploading') return '상태: 업로드 중'
+  if (block.uploadStatus === 'error') return '상태: 업로드 실패'
+  if (block.uploadStatus === 'done_upload') return '상태: 업로드 완료'
+  if (block.uploadStatus === 'url_linked') return '상태: 외부 URL 연결'
+  if (block.blockKind === 'url' && !block.url.trim()) return '상태: URL 입력 대기'
+  if (block.url.trim()) return '상태: 미리보기'
+  return '상태: 대기'
+}
+
+/** 하드코딩 썸네일 뱃지 (향후 뱃지 관리 화면에서 확장) */
+// TODO: 향후 뱃지 관리 화면에서 추가/수정/삭제 가능하게 확장 예정
+const THUMBNAIL_BADGE_OPTIONS: { label: string; bg: string; color: string }[] = [
+  { label: '오늘출발', bg: '#ea580c', color: '#ffffff' },
+  { label: '무료배송', bg: '#1f5d3a', color: '#ffffff' },
+  { label: '추천상품', bg: '#1f5d3a', color: '#ffffff' },
+  { label: '일시품절', bg: '#888888', color: '#ffffff' },
+  { label: '가격네고', bg: '#2563eb', color: '#ffffff' },
+  { label: 'BEST', bg: '#ea580c', color: '#ffffff' },
+]
+
+function thumbBadgeStyle(label: string): { bg: string; color: string } {
+  const o = THUMBNAIL_BADGE_OPTIONS.find((x) => x.label === label)
+  return o ? { bg: o.bg, color: o.color } : { bg: '#6b7280', color: '#ffffff' }
+}
+
+function toggleThumbBadge(current: string[], label: string): string[] {
+  if (current.includes(label)) return current.filter((x) => x !== label)
+  if (current.length >= MAX_THUMB_BADGES) return current
+  return [...current, label]
+}
+
+/** 향후 "상품 복제" 등에서 초기 상태를 재사용할 수 있도록 묶음 */
+export type ListingStudioFormState = {
+  rootCategoryId: string
+  subCategoryId: string
+  brandName: string
+  productName: string
+  spec: string
+  supplyPrice: string
+  commercePrice: string
+  originalPrice: string
+  marginMode: 'price' | 'margin'
+  marginInput: string
+  shippingType: ListingShippingType
+  shippingBoxQty: string
+  shippingBoxFee: string
+  conditionalFreeThreshold: string
+  shippingGroupId: string
+  thumbnailBadges: string[]
+  thumbnailUrl: string
+  detailBlocks: DetailImageBlock[]
+  listingDescription: string
+  adminMemo: string
+  visibility: 'draft' | 'visible'
+}
+
+export function createEmptyListingStudioForm(): ListingStudioFormState {
+  return {
+    rootCategoryId: '',
+    subCategoryId: '',
+    brandName: '',
+    productName: '',
+    spec: '',
+    supplyPrice: '',
+    commercePrice: '',
+    originalPrice: '',
+    marginMode: 'price',
+    marginInput: '',
+    shippingType: 'free',
+    shippingBoxQty: '',
+    shippingBoxFee: '',
+    conditionalFreeThreshold: '',
+    shippingGroupId: '',
+    thumbnailBadges: [],
+    thumbnailUrl: '',
+    detailBlocks: [],
+    listingDescription: '',
+    adminMemo: '',
+    visibility: 'draft',
+  }
+}
+
+function flattenAdminCategoryTree(nodes: AdminCategoryNode[]): AdminCategoryRow[] {
+  const out: AdminCategoryRow[] = []
+  function walk(n: AdminCategoryNode) {
+    const { children, ...row } = n
+    out.push(row)
+    for (const c of children) walk(c)
+  }
+  for (const n of nodes) walk(n)
+  return out
+}
+
+function sortCategoryRows(rows: AdminCategoryRow[]): AdminCategoryRow[] {
+  return [...rows].sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, 'ko'))
+}
+
+function buildBoxShippingTierPreview(boxQtyStr: string, boxFeeStr: string): string {
+  const q = parseInt(boxQtyStr.replace(/\D/g, ''), 10)
+  const fee = parseInt(boxFeeStr.replace(/\D/g, ''), 10)
+  if (!Number.isFinite(q) || q <= 0 || !Number.isFinite(fee) || fee <= 0) return ''
+  const parts: string[] = []
+  parts.push(`${q}개까지 ${formatKRW(fee)}`)
+  for (let b = 2; b <= 3; b++) {
+    const lo = (b - 1) * q + 1
+    const hi = b * q
+    parts.push(`${lo}~${hi}개 ${formatKRW(b * fee)}`)
+  }
+  return parts.join(' / ')
+}
+
+function productNameInitial(name: string): string {
+  const t = name.trim()
+  if (!t) return '?'
+  return t[0] ?? '?'
+}
+
+function PhBar({ width = '100%' }: { width?: string }) {
+  return <div className={mod.phBar} style={{ width }} aria-hidden />
+}
+
+export default function ListingNewClient() {
+  const router = useRouter()
+  const [pending, startTransition] = useTransition()
+
+  const empty = useMemo(() => createEmptyListingStudioForm(), [])
+
+  const [error, setError] = useState<string | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [toast, setToast] = useState<{ text: string; variant: 'success' | 'error' } | null>(null)
+
+  const [categoryFlat, setCategoryFlat] = useState<AdminCategoryRow[]>([])
+  const [rootCategoryId, setRootCategoryId] = useState(empty.rootCategoryId)
+  const [subCategoryId, setSubCategoryId] = useState(empty.subCategoryId)
+
+  const [brandName, setBrandName] = useState(empty.brandName)
+  const [productName, setProductName] = useState(empty.productName)
+  const [spec, setSpec] = useState(empty.spec)
+
+  const [supplyPrice, setSupplyPrice] = useState(empty.supplyPrice)
+  const [commercePrice, setCommercePrice] = useState(empty.commercePrice)
+  const [originalPrice, setOriginalPrice] = useState(empty.originalPrice)
+  const [marginMode, setMarginMode] = useState<'price' | 'margin'>(empty.marginMode)
+  const [marginInput, setMarginInput] = useState(empty.marginInput)
+
+  const [shippingType, setShippingType] = useState<ListingShippingType>(empty.shippingType)
+  const [shippingBoxQty, setShippingBoxQty] = useState(empty.shippingBoxQty)
+  const [shippingBoxFee, setShippingBoxFee] = useState(empty.shippingBoxFee)
+  const [conditionalFreeThreshold, setConditionalFreeThreshold] = useState(empty.conditionalFreeThreshold)
+  const [shippingGroupId, setShippingGroupId] = useState(empty.shippingGroupId)
+
+  const [shippingGroups, setShippingGroups] = useState<ShippingGroupListItem[]>([])
+  const [showAddShippingGroup, setShowAddShippingGroup] = useState(false)
+  const [newShippingGroupName, setNewShippingGroupName] = useState('')
+  const [shippingGroupActionBusy, setShippingGroupActionBusy] = useState(false)
+  const [manageShippingModal, setManageShippingModal] = useState(false)
+  const [modalEditGroupId, setModalEditGroupId] = useState<string | null>(null)
+  const [modalEditName, setModalEditName] = useState('')
+  const [modalEditDescription, setModalEditDescription] = useState('')
+
+  const [thumbnailBadges, setThumbnailBadges] = useState<string[]>(empty.thumbnailBadges)
+
+  const [thumbnailUrl, setThumbnailUrl] = useState(empty.thumbnailUrl)
+  const [showThumbUrlField, setShowThumbUrlField] = useState(false)
+  const [thumbUploadState, setThumbUploadState] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle')
+  const [thumbFileMeta, setThumbFileMeta] = useState<{ name: string } | null>(null)
+  const [thumbSource, setThumbSource] = useState<'none' | 'upload' | 'url'>('none')
+  const [thumbPublicWarning, setThumbPublicWarning] = useState(false)
+  const [detailBlocks, setDetailBlocks] = useState<DetailImageBlock[]>(empty.detailBlocks)
+  const [listingDescription, setListingDescription] = useState(empty.listingDescription)
+
+  useEffect(() => {
+    detailBlocksRef.current = detailBlocks
+  }, [detailBlocks])
+
+  const [adminMemo, setAdminMemo] = useState(empty.adminMemo)
+  const [visibility, setVisibility] = useState<'draft' | 'visible'>(empty.visibility)
+
+  const thumbFileRef = useRef<HTMLInputElement>(null)
+  const detailFilesRef = useRef<HTMLInputElement>(null)
+  const detailBlocksRef = useRef<DetailImageBlock[]>([])
+
+  const [previewTab, setPreviewTab] = useState<'card' | 'detail'>('card')
+
+  const cost = parseInt(supplyPrice.replace(/\D/g, ''), 10) || 0
+
+  const showToast = useCallback((text: string, variant: 'success' | 'error' = 'success') => {
+    setToast({ text, variant })
+    window.setTimeout(() => setToast(null), 2800)
+  }, [])
+
+  const refreshShippingGroups = useCallback(async () => {
+    const res = await getShippingGroups()
+    if (!res.success) {
+      showToast(res.error ?? '묶음배송 그룹 조회 실패', 'error')
+      setShippingGroups([])
+      return
+    }
+    setShippingGroups(res.data?.groups ?? [])
+  }, [showToast])
+
+  useEffect(() => {
+    let cancelled = false
+    getAdminCategories().then((res) => {
+      if (cancelled) return
+      if (!res.success) {
+        setError(res.error ?? '카테고리 조회 실패')
+        setCategoryFlat([])
+        return
+      }
+      setCategoryFlat(flattenAdminCategoryTree(res.data?.tree ?? []))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    void refreshShippingGroups()
+  }, [refreshShippingGroups])
+
+  useEffect(() => {
+    if (thumbnailUrl.trim()) setThumbPublicWarning(false)
+  }, [thumbnailUrl])
+
+  useEffect(() => {
+    if (visibility === 'draft') setThumbPublicWarning(false)
+  }, [visibility])
+
+  useEffect(() => {
+    setSubCategoryId('')
+  }, [rootCategoryId])
+
+  const rootOptions = useMemo(
+    () => sortCategoryRows(categoryFlat.filter((r) => r.parent_id == null && r.is_active)),
+    [categoryFlat],
+  )
+
+  const selectedRoot = useMemo(
+    () => rootOptions.find((r) => r.id === rootCategoryId),
+    [rootOptions, rootCategoryId],
+  )
+
+  const subCategoryOptions = useMemo(() => {
+    if (!rootCategoryId) return []
+    return sortCategoryRows(
+      categoryFlat.filter((r) => r.parent_id === rootCategoryId && r.is_active),
+    )
+  }, [categoryFlat, rootCategoryId])
+
+  const effectiveCategoryId = subCategoryId || rootCategoryId
+
+  const previewPrice = (() => {
+    const n = parseInt(commercePrice.replace(/\D/g, ''), 10)
+    return Number.isFinite(n) && n > 0 ? n : null
+  })()
+
+  const previewOriginal = (() => {
+    const n = parseInt(originalPrice.replace(/\D/g, ''), 10)
+    return Number.isFinite(n) && n > 0 ? n : null
+  })()
+
+  const savingsAmount =
+    previewPrice != null && previewOriginal != null && previewOriginal > previewPrice
+      ? previewOriginal - previewPrice
+      : null
+
+  const marginRateDisplay = (() => {
+    if (previewPrice == null || cost <= 0) return null
+    const rate = calcMarginRate(previewPrice, cost)
+    if (!isFinite(rate) || isNaN(rate)) return null
+    return rate
+  })()
+
+  function handleMarginInput(v: string) {
+    setMarginInput(v)
+    const m = Number(v) / 100
+    if (cost > 0 && m > 0 && m < 1) {
+      setCommercePrice(String(Math.round(cost / (1 - m))))
+    }
+  }
+
+  const boxTierPreview = useMemo(
+    () => buildBoxShippingTierPreview(shippingBoxQty, shippingBoxFee),
+    [shippingBoxQty, shippingBoxFee],
+  )
+
+  async function uploadHeroFile(file: File) {
+    const v = validateImageFile(file)
+    if (v) {
+      setUploadError(v)
+      setThumbUploadState('error')
+      return
+    }
+    setUploadError(null)
+    setThumbUploadState('uploading')
+    setThumbSource('upload')
+    const fd = new FormData()
+    fd.set('file', file)
+    try {
+      const res = await uploadListingImage(fd)
+      if (!res.success) {
+        setUploadError(res.error ?? '이미지 업로드에 실패했습니다.')
+        setThumbUploadState('error')
+        return
+      }
+      const url = res.data?.url ?? ''
+      setThumbnailUrl(url)
+      setThumbFileMeta({ name: file.name })
+      setThumbUploadState('success')
+      if (url.trim()) setThumbPublicWarning(false)
+    } catch {
+      setUploadError('네트워크 오류로 업로드에 실패했습니다. 잠시 후 다시 시도해 주세요.')
+      setThumbUploadState('error')
+    }
+  }
+
+  function onHeroFileInput(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    void uploadHeroFile(file)
+  }
+
+  function onHeroDrop(e: React.DragEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (pending || thumbUploadState === 'uploading') return
+    const file = e.dataTransfer.files?.[0]
+    if (!file) return
+    void uploadHeroFile(file)
+  }
+
+  async function uploadDetailBlockFile(blockId: string, file: File) {
+    try {
+      const v = validateImageFile(file)
+      if (v) {
+        setDetailBlocks((prev) => {
+          const idx = prev.findIndex((x) => x.id === blockId)
+          if (idx === -1) return prev
+          return prev.map((b) =>
+            b.id === blockId ? { ...b, uploadStatus: 'error' as const, errorMessage: v } : b,
+          )
+        })
+        return
+      }
+      setDetailBlocks((prev) => {
+        const idx = prev.findIndex((x) => x.id === blockId)
+        if (idx === -1) {
+          if (prev.length >= MAX_DETAIL_IMAGES) return prev
+          return [
+            ...prev,
+            {
+              id: blockId,
+              url: '',
+              blockKind: 'file' as const,
+              uploadStatus: 'uploading' as const,
+              fileName: file.name,
+              errorMessage: undefined,
+            },
+          ]
+        }
+        return prev.map((b) =>
+          b.id === blockId
+            ? { ...b, uploadStatus: 'uploading' as const, errorMessage: undefined }
+            : b,
+        )
+      })
+      const fd = new FormData()
+      fd.set('file', file)
+      try {
+        const res = await uploadListingImage(fd)
+        if (!res.success) {
+          const errMsg = res.error ?? '이미지 업로드에 실패했습니다.'
+          console.error('[ListingNew] uploadListingImage failed', errMsg)
+          setDetailBlocks((prev) => {
+            const idx = prev.findIndex((x) => x.id === blockId)
+            if (idx === -1) {
+              queueMicrotask(() => showToast(errMsg, 'error'))
+              return prev
+            }
+            return prev.map((b) =>
+              b.id === blockId
+                ? { ...b, uploadStatus: 'error' as const, errorMessage: errMsg }
+                : b,
+            )
+          })
+          return
+        }
+        const url = res.data?.url ?? ''
+        setDetailBlocks((prev) => {
+          const idx = prev.findIndex((x) => x.id === blockId)
+          if (idx === -1) {
+            if (prev.length >= MAX_DETAIL_IMAGES) return prev
+            return [
+              ...prev,
+              {
+                id: blockId,
+                url,
+                blockKind: 'file' as const,
+                uploadStatus: 'done_upload' as const,
+                fileName: file.name,
+                errorMessage: undefined,
+              },
+            ]
+          }
+          return prev.map((b) =>
+            b.id === blockId
+              ? {
+                  ...b,
+                  url,
+                  uploadStatus: 'done_upload' as const,
+                  fileName: file.name,
+                  errorMessage: undefined,
+                }
+              : b,
+          )
+        })
+        if (url.trim()) {
+          showToast(file.name ? `업로드 완료 · ${file.name}` : '상세 이미지 업로드 완료')
+        }
+      } catch (netErr) {
+        const errMsg = '네트워크 오류로 업로드에 실패했습니다. 잠시 후 다시 시도해 주세요.'
+        console.error('[ListingNew] uploadDetailBlockFile network error', netErr)
+        setDetailBlocks((prev) => {
+          const idx = prev.findIndex((x) => x.id === blockId)
+          if (idx === -1) {
+            queueMicrotask(() => showToast(errMsg, 'error'))
+            return prev
+          }
+          return prev.map((b) =>
+            b.id === blockId
+              ? { ...b, uploadStatus: 'error' as const, errorMessage: errMsg }
+              : b,
+          )
+        })
+      }
+    } catch (fatal) {
+      console.error('[ListingNew] uploadDetailBlockFile fatal', fatal)
+    }
+  }
+
+  function addDetailUrlRow() {
+    setDetailBlocks((prev) => {
+      if (prev.length >= MAX_DETAIL_IMAGES) return prev
+      return [...prev, newBlock({ url: '', blockKind: 'url', uploadStatus: 'idle' })]
+    })
+  }
+
+  /**
+   * 파일 선택/드롭 직시 검증·블록 추가(업로드 중)·flushSync 커밋 후 서버 업로드.
+   */
+  function processIncomingDetailFiles(fileArr: File[]) {
+    try {
+      const pairs: { file: File; block: DetailImageBlock }[] = []
+      const rejectSamples: string[] = []
+      for (const file of fileArr) {
+        const err = validateImageFile(file)
+        if (err) {
+          if (rejectSamples.length < MAX_DETAIL_IMAGES) {
+            rejectSamples.push(`${file.name} | MIME:${file.type || '(empty)'} | ${err}`)
+          }
+          continue
+        }
+        try {
+          const block = newBlock({
+            url: '',
+            blockKind: 'file',
+            uploadStatus: 'uploading',
+            fileName: file.name,
+          })
+          pairs.push({ file, block })
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e)
+          console.error('[ListingNew] newBlock failed', msg)
+          showToast('상세 이미지 블록을 만들 수 없습니다. 페이지를 새로고침 후 다시 시도해 주세요.', 'error')
+          return
+        }
+      }
+
+      if (pairs.length === 0) {
+        showToast(
+          rejectSamples[0] ??
+            `선택한 ${fileArr.length}개를 상세 이미지로 추가할 수 없습니다(형식·용량 확인).`,
+          'error',
+        )
+        return
+      }
+
+      let uploadJobs: { file: File; id: string }[] = []
+      const appendReducer = (prev: DetailImageBlock[]) => {
+        try {
+          const room = Math.max(0, MAX_DETAIL_IMAGES - prev.length)
+          const slice = pairs.slice(0, room)
+          uploadJobs = slice.map((p) => ({ file: p.file, id: p.block.id }))
+          const next =
+            slice.length === 0 ? prev : [...prev, ...slice.map((p) => p.block)]
+          return next
+        } catch (redErr) {
+          console.error('[ListingNew] appendReducer error', redErr)
+          throw redErr
+        }
+      }
+
+      try {
+        flushSync(() => {
+          setDetailBlocks(appendReducer)
+        })
+      } catch (e) {
+        console.error('[ListingNew] flushSync error', e)
+        setDetailBlocks(appendReducer)
+        requestAnimationFrame(() => {
+          for (const j of uploadJobs) {
+            void uploadDetailBlockFile(j.id, j.file).catch((upErr) => {
+              console.error('[ListingNew] upload after flushSync catch', upErr)
+            })
+          }
+        })
+        if (uploadJobs.length < pairs.length) {
+          showToast(`상세 이미지는 최대 ${MAX_DETAIL_IMAGES}장까지입니다`, 'error')
+        }
+        return
+      }
+
+      if (uploadJobs.length < pairs.length) {
+        showToast(`상세 이미지는 최대 ${MAX_DETAIL_IMAGES}장까지입니다`, 'error')
+      }
+
+      for (const j of uploadJobs) {
+        void uploadDetailBlockFile(j.id, j.file).catch((upErr) => {
+          console.error('[ListingNew] uploadDetailBlockFile promise rejection', upErr)
+        })
+      }
+    } catch (outer) {
+      console.error('[ListingNew] processIncomingDetailFiles outer error', outer)
+      showToast('상세 이미지 추가 중 오류가 발생했습니다. 콘솔을 확인해 주세요.', 'error')
+    }
+  }
+
+  function addDetailFilesFromPicker(e: React.ChangeEvent<HTMLInputElement>) {
+    /** FileList는 input과 라이브 연결됨 — value 초기화 후에는 같은 참조가 비어 보임. 반드시 먼저 배열 스냅샷. */
+    const filesArr = Array.from(e.currentTarget.files ?? [])
+    if (filesArr.length === 0) {
+      return
+    }
+    processIncomingDetailFiles(filesArr)
+    e.currentTarget.value = ''
+  }
+
+  function onDetailListDrop(e: React.DragEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (pending) return
+    const files = e.dataTransfer.files
+    if (files?.length) processIncomingDetailFiles(Array.from(files))
+  }
+
+  function parseOriginal(): number | null {
+    const raw = originalPrice.replace(/\D/g, '')
+    if (!raw) return null
+    const n = parseInt(raw, 10)
+    if (!Number.isFinite(n) || n <= 0) return null
+    return n
+  }
+
+  const [retryDetailId, setRetryDetailId] = useState<string | null>(null)
+  const retryDetailFileRef = useRef<HTMLInputElement>(null)
+
+  function removeDetailBlock(id: string) {
+    setDetailBlocks((prev) => prev.filter((b) => b.id !== id))
+  }
+
+  function clearAllDetailImages() {
+    if (!detailBlocks.length) return
+    if (!window.confirm('상세 이미지를 모두 삭제할까요?')) return
+    setDetailBlocks([])
+  }
+
+  function reorderDetailBlocks(fromIndex: number, toIndex: number) {
+    if (fromIndex === toIndex) return
+    setDetailBlocks((prev) => {
+      const next = [...prev]
+      const [removed] = next.splice(fromIndex, 1)
+      next.splice(toIndex, 0, removed)
+      return next
+    })
+  }
+
+  function setDetailBlockUrl(id: string, url: string) {
+    const t = url.trim()
+    setDetailBlocks((prev) =>
+      prev.map((b) => {
+        if (b.id !== id) return b
+        if (!t) return { ...b, url: '', uploadStatus: 'idle' as const }
+        const linked = /^https?:\/\//i.test(t)
+        return {
+          ...b,
+          url,
+          uploadStatus: linked ? ('url_linked' as const) : ('idle' as const),
+          fileName: null,
+          errorMessage: undefined,
+        }
+      }),
+    )
+  }
+
+  function startRetryDetailUpload(blockId: string) {
+    setRetryDetailId(blockId)
+    retryDetailFileRef.current?.click()
+  }
+
+  function onRetryDetailFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    const id = retryDetailId
+    e.target.value = ''
+    setRetryDetailId(null)
+    if (!file || !id) return
+    void uploadDetailBlockFile(id, file)
+  }
+
+  function applyResetForm() {
+    const base = createEmptyListingStudioForm()
+    setRootCategoryId(base.rootCategoryId)
+    setSubCategoryId(base.subCategoryId)
+    setBrandName(base.brandName)
+    setProductName(base.productName)
+    setSpec(base.spec)
+    setSupplyPrice(base.supplyPrice)
+    setCommercePrice(base.commercePrice)
+    setOriginalPrice(base.originalPrice)
+    setMarginMode(base.marginMode)
+    setMarginInput(base.marginInput)
+    setShippingType(base.shippingType)
+    setShippingBoxQty(base.shippingBoxQty)
+    setShippingBoxFee(base.shippingBoxFee)
+    setConditionalFreeThreshold(base.conditionalFreeThreshold)
+    setShippingGroupId(base.shippingGroupId)
+    setShowAddShippingGroup(false)
+    setNewShippingGroupName('')
+    setManageShippingModal(false)
+    setModalEditGroupId(null)
+    setThumbnailBadges(base.thumbnailBadges)
+    setThumbnailUrl(base.thumbnailUrl)
+    setShowThumbUrlField(false)
+    setThumbUploadState('idle')
+    setThumbFileMeta(null)
+    setThumbSource('none')
+    setThumbPublicWarning(false)
+    setDetailBlocks(base.detailBlocks)
+    setListingDescription(base.listingDescription)
+    setAdminMemo(base.adminMemo)
+    setVisibility(base.visibility)
+    setUploadError(null)
+    setRetryDetailId(null)
+  }
+
+  function submitWithStatus(status: 'draft' | 'visible', andReset: boolean) {
+    setError(null)
+    if (status === 'draft') {
+      setThumbPublicWarning(false)
+    } else if (status === 'visible' && !thumbnailUrl.trim()) {
+      setThumbPublicWarning(true)
+    } else {
+      setThumbPublicWarning(false)
+    }
+    const pn = productName.trim()
+    if (!pn) {
+      setError('상품명을 입력해 주세요')
+      showToast('상품명을 입력해 주세요', 'error')
+      return
+    }
+    if (!rootCategoryId) {
+      setError('대분류 카테고리를 선택해 주세요')
+      showToast('대분류 카테고리를 선택해 주세요', 'error')
+      return
+    }
+    if (!effectiveCategoryId) {
+      setError('카테고리를 선택해 주세요')
+      showToast('카테고리를 선택해 주세요', 'error')
+      return
+    }
+    const price = parseInt(commercePrice.replace(/\D/g, ''), 10)
+    if (!Number.isFinite(price) || price <= 0) {
+      setError('식식이 판매가는 1원 이상 정수로 입력해 주세요')
+      showToast('식식이 판매가는 1원 이상 정수로 입력해 주세요', 'error')
+      return
+    }
+
+    const op = parseOriginal()
+    const image_urls = blocksToSavedUrls(detailBlocks)
+    const badge_labels = thumbnailBadges.length > 0 ? thumbnailBadges : null
+
+    startTransition(async () => {
+      try {
+        const r = await createListingFull({
+          brand_name: brandName.trim() || null,
+          product_name: pn,
+          spec: spec.trim() || null,
+          thumbnail_url: thumbnailUrl.trim() || null,
+          image_urls: image_urls.length > 0 ? image_urls : null,
+          badge_labels,
+          category_id: effectiveCategoryId,
+          commerce_price: price,
+          original_price: op,
+          shipping_type: shippingType,
+          shipping_group_id: shippingGroupId.trim() || null,
+          admin_memo: adminMemo.trim() || null,
+          description: listingDescription.trim() || null,
+          status,
+        })
+        if (!r.success) {
+          const msg = r.error ?? '저장 실패'
+          console.error('[ListingNew] createListingFull failed', msg)
+          setError(msg)
+          showToast(msg, 'error')
+          return
+        }
+        const successToast =
+          status === 'draft'
+            ? '임시저장이 완료되었습니다'
+            : '상품이 저장되었습니다 · 스토어에 공개되었습니다'
+        if (andReset) {
+          showToast(successToast)
+          applyResetForm()
+          router.refresh()
+          return
+        }
+        showToast(successToast)
+        router.refresh()
+      } catch (e) {
+        console.error('[ListingNew] createListingFull threw', e)
+        const msg = e instanceof Error ? e.message : String(e)
+        setError(msg)
+        showToast('저장 중 오류가 발생했습니다. 콘솔을 확인해 주세요.', 'error')
+      }
+    })
+  }
+
+  const thumb = thumbnailUrl.trim()
+  const descPreview = listingDescription.trim()
+  const detailUrlsForPreview = blocksToSavedUrls(detailBlocks)
+  /** 업로드 중인 슬롯·저장 가능한 URL이 있는 블록(오류만 제외). 빈 URL 행(idle)은 제외 */
+  const detailRegisteredCount = useMemo(
+    () =>
+      detailBlocks.filter((b) => {
+        if (b.uploadStatus === 'error') return false
+        if (b.uploadStatus === 'uploading') return true
+        return Boolean(b.url.trim())
+      }).length,
+    [detailBlocks],
+  )
+  const marginModeDisabled = cost <= 0
+
+  function renderImageOverlays() {
+    if (thumbnailBadges.length === 0) return null
+    return (
+      <div className={mod.badgeStack}>
+        <div className={mod.badgeRow}>
+          {thumbnailBadges.map((lbl) => {
+            const st = thumbBadgeStyle(lbl)
+            return (
+              <span key={lbl} className={mod.badgePill} style={{ background: st.bg, color: st.color }}>
+                {lbl}
+              </span>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
+  async function submitNewShippingGroup() {
+    const n = newShippingGroupName.trim()
+    if (!n) {
+      showToast('그룹명을 입력해 주세요', 'error')
+      return
+    }
+    setShippingGroupActionBusy(true)
+    const res = await createShippingGroup({ name: n })
+    setShippingGroupActionBusy(false)
+    if (!res.success) {
+      showToast(res.error ?? '그룹 추가 실패', 'error')
+      return
+    }
+    await refreshShippingGroups()
+    setShippingGroupId(res.data?.id ?? '')
+    setNewShippingGroupName('')
+    setShowAddShippingGroup(false)
+    showToast('묶음배송 그룹이 추가되었습니다')
+  }
+
+  async function saveModalGroupEdit() {
+    if (!modalEditGroupId) return
+    setShippingGroupActionBusy(true)
+    const res = await updateShippingGroup(modalEditGroupId, {
+      name: modalEditName,
+      description: modalEditDescription,
+    })
+    setShippingGroupActionBusy(false)
+    if (!res.success) {
+      showToast(res.error ?? '저장 실패', 'error')
+      return
+    }
+    setModalEditGroupId(null)
+    await refreshShippingGroups()
+    showToast('저장했습니다')
+  }
+
+  async function removeShippingGroup(id: string) {
+    if (
+      !window.confirm(
+        '이 묶음배송 그룹을 비활성화할까요? (사용 중인 상품이 있으면 삭제되지 않습니다)',
+      )
+    ) {
+      return
+    }
+    setShippingGroupActionBusy(true)
+    const res = await deleteShippingGroup(id)
+    setShippingGroupActionBusy(false)
+    if (!res.success) {
+      showToast(res.error ?? '삭제 실패', 'error')
+      return
+    }
+    if (shippingGroupId === id) setShippingGroupId('')
+    setModalEditGroupId(null)
+    await refreshShippingGroups()
+    showToast('그룹을 비활성화했습니다')
+  }
+
+  function openManageShippingModal() {
+    setModalEditGroupId(null)
+    setManageShippingModal(true)
+    void refreshShippingGroups()
+  }
+
+  return (
+    <>
+      {toast ? (
+        <div
+          role="status"
+          style={{
+            position: 'fixed',
+            bottom: 24,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 100,
+            padding: '10px 18px',
+            borderRadius: 8,
+            background: toast.variant === 'success' ? '#15803d' : '#b91c1c',
+            color: '#fff',
+            fontSize: 13,
+            fontWeight: 600,
+            maxWidth: 'min(92vw, 420px)',
+            textAlign: 'center',
+            lineHeight: 1.35,
+          }}
+        >
+          {toast.text}
+        </div>
+      ) : null}
+
+      {manageShippingModal ? (
+        <div
+          className={mod.modalBackdrop}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="shipping-group-manage-title"
+          onClick={() => {
+            if (!shippingGroupActionBusy) setManageShippingModal(false)
+          }}
+        >
+          <div className={mod.modalPanel} onClick={(e) => e.stopPropagation()}>
+            <div className={mod.modalHeader}>
+              <h3 id="shipping-group-manage-title" className={mod.modalTitle}>
+                묶음배송 그룹 관리
+              </h3>
+              <button
+                type="button"
+                className={mod.btnGhost}
+                onClick={() => setManageShippingModal(false)}
+                disabled={shippingGroupActionBusy}
+              >
+                닫기
+              </button>
+            </div>
+            <div className={mod.modalBody}>
+              {shippingGroups.length === 0 ? (
+                <p className={mod.hint}>등록된 그룹이 없습니다</p>
+              ) : (
+                shippingGroups.map((g) => (
+                  <div key={g.id} className={mod.modalGroupRow}>
+                    {modalEditGroupId === g.id ? (
+                      <div className={mod.modalGroupEdit}>
+                        <input
+                          className={mod.input}
+                          value={modalEditName}
+                          onChange={(e) => setModalEditName(e.target.value)}
+                          placeholder="그룹명"
+                          disabled={shippingGroupActionBusy}
+                        />
+                        <input
+                          className={mod.input}
+                          value={modalEditDescription}
+                          onChange={(e) => setModalEditDescription(e.target.value)}
+                          placeholder="설명 (선택)"
+                          disabled={shippingGroupActionBusy}
+                        />
+                        <div className={mod.modalRowActions}>
+                          <button
+                            type="button"
+                            className={mod.btnGhost}
+                            onClick={() => void saveModalGroupEdit()}
+                            disabled={shippingGroupActionBusy}
+                          >
+                            저장
+                          </button>
+                          <button
+                            type="button"
+                            className={mod.btnGhost}
+                            onClick={() => setModalEditGroupId(null)}
+                            disabled={shippingGroupActionBusy}
+                          >
+                            취소
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className={mod.modalGroupRowView}>
+                        <div className={mod.modalGroupSummary}>
+                          <strong>{g.name}</strong>
+                          {g.description ? (
+                            <span className={mod.hint} style={{ display: 'block', marginTop: 4 }}>
+                              {g.description}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className={mod.modalRowActions}>
+                          <button
+                            type="button"
+                            className={mod.btnGhost}
+                            onClick={() => {
+                              setModalEditGroupId(g.id)
+                              setModalEditName(g.name)
+                              setModalEditDescription(g.description ?? '')
+                            }}
+                            disabled={shippingGroupActionBusy}
+                          >
+                            수정
+                          </button>
+                          <button
+                            type="button"
+                            className={mod.btnGhost}
+                            onClick={() => void removeShippingGroup(g.id)}
+                            disabled={shippingGroupActionBusy}
+                          >
+                            삭제
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <div className={mod.shell}>
+        <div className={mod.layout}>
+          <div className={mod.formColumn}>
+            {error ? <div className={mod.errorCard}>{error}</div> : null}
+            {thumbPublicWarning ? (
+              <div className={mod.warnBanner} role="status">
+                공개 저장 시 대표 썸네일이 없습니다. 카드·목록 노출이 약해질 수 있습니다. 저장은 계속됩니다.
+              </div>
+            ) : null}
+
+            <div className={mod.card}>
+              <div className={mod.sectionHeaderRow}>
+                <h2 className={mod.sectionTitle}>카테고리</h2>
+                <Link href="/admin/commerce/categories" className={mod.linkMuted}>
+                  카테고리 관리
+                </Link>
+              </div>
+              <div className={mod.fieldStack}>
+                <div>
+                  <div className={mod.label}>대분류 · 필수</div>
+                  <div className={mod.categorySelectRow}>
+                    {selectedRoot?.icon_url?.trim() ? (
+                      <img src={selectedRoot.icon_url.trim()} alt="" className={mod.catOptionIcon} />
+                    ) : (
+                      <span className={mod.catIconSpacer} aria-hidden />
+                    )}
+                    <select
+                      className={`${mod.select} ${mod.selectGrow}`}
+                      value={rootCategoryId}
+                      onChange={(e) => setRootCategoryId(e.target.value)}
+                    >
+                      <option value="">선택</option>
+                      {rootOptions.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <p className={mod.hint}>아이콘이 있는 대분류는 선택 시 왼쪽에 표시됩니다.</p>
+                </div>
+                <div>
+                  <div className={mod.label}>소분류</div>
+                  <select
+                    className={mod.select}
+                    value={subCategoryId}
+                    disabled={!rootCategoryId}
+                    onChange={(e) => setSubCategoryId(e.target.value)}
+                  >
+                    <option value="">선택 안 함 (대분류만)</option>
+                    {subCategoryOptions.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                  {rootCategoryId && subCategoryOptions.length === 0 ? (
+                    <p className={mod.hint}>등록된 소분류 없음 — 대분류만 적용</p>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+
+            <div className={mod.card}>
+              <h2 className={mod.sectionTitle}>기본 정보</h2>
+              <div className={mod.fieldStack}>
+                <div>
+                  <div className={mod.label}>브랜드명</div>
+                  <input
+                    className={mod.input}
+                    value={brandName}
+                    onChange={(e) => setBrandName(e.target.value)}
+                    placeholder="예: 해표, 청정원, 오뚜기"
+                  />
+                </div>
+                <div>
+                  <div className={mod.label}>상품명 · 필수</div>
+                  <input
+                    className={mod.input}
+                    value={productName}
+                    onChange={(e) => setProductName(e.target.value)}
+                    placeholder="예: 업소용 식용유, 진간장, 냉동 삼겹살"
+                  />
+                </div>
+                <div>
+                  <div className={mod.label}>규격·용량</div>
+                  <input
+                    className={mod.input}
+                    value={spec}
+                    onChange={(e) => setSpec(e.target.value)}
+                    placeholder="예: 18L, 5kg × 2개, 1kg 낱개"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className={mod.card}>
+              <h2 className={mod.sectionTitle}>가격 · 마진 계산</h2>
+              <div className={mod.fieldStack}>
+                <div>
+                  <div className={mod.label}>공급가 (원)</div>
+                  <input
+                    className={mod.input}
+                    inputMode="numeric"
+                    type="text"
+                    value={formatDigitsForInput(supplyPrice)}
+                    onChange={(e) => setSupplyPrice(e.target.value.replace(/\D/g, ''))}
+                    placeholder="예: 18,000"
+                  />
+                  <p className={mod.hint}>내부 운영용. 구매자에게 노출 안 됨</p>
+                </div>
+                <div>
+                  <div className={mod.modeBtnRow}>
+                    <button
+                      type="button"
+                      className={`${mod.modeBtn} ${marginMode === 'price' ? mod.modeBtnActive : ''}`}
+                      onClick={() => setMarginMode('price')}
+                    >
+                      판매가 직접 입력
+                    </button>
+                    <button
+                      type="button"
+                      className={`${mod.modeBtn} ${marginMode === 'margin' ? mod.modeBtnActive : ''}`}
+                      onClick={() => setMarginMode('margin')}
+                      disabled={marginModeDisabled}
+                    >
+                      마진율로 판매가 계산
+                    </button>
+                  </div>
+                  {marginMode === 'price' ? (
+                    <div>
+                      <div className={mod.label}>식식이 판매가 (원) · 필수</div>
+                      <input
+                        className={mod.input}
+                        inputMode="numeric"
+                        type="text"
+                        value={formatDigitsForInput(commercePrice)}
+                        onChange={(e) => setCommercePrice(e.target.value.replace(/\D/g, ''))}
+                        placeholder="예: 22,900"
+                      />
+                    </div>
+                  ) : (
+                    <div>
+                      <div className={mod.label}>마진율 (%)</div>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <input
+                          className={mod.input}
+                          style={{ flex: 1, minWidth: 120 }}
+                          type="number"
+                          value={marginInput}
+                          onChange={(e) => handleMarginInput(e.target.value)}
+                          placeholder="마진율 %"
+                          min={0}
+                          max={99}
+                        />
+                        {commercePrice ? (
+                          <span style={{ fontSize: 13, color: '#6b7280' }}>
+                            → {formatKRW(Number(commercePrice.replace(/\D/g, '') || 0))}
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className={mod.hint}>공급가를 먼저 입력한 뒤 사용할 수 있습니다.</p>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <div className={mod.label}>시중 정상가 (원)</div>
+                  <input
+                    className={mod.input}
+                    inputMode="numeric"
+                    type="text"
+                    value={formatDigitsForInput(originalPrice)}
+                    onChange={(e) => setOriginalPrice(e.target.value.replace(/\D/g, ''))}
+                    placeholder="예: 26,000"
+                  />
+                  <p className={mod.hint}>판매가보다 클 때만 절감액 표시</p>
+                </div>
+                {marginRateDisplay != null ? (
+                  <p style={{ margin: 0, fontSize: 13, color: '#1f5d3a' }}>
+                    마진율: {marginRateDisplay.toFixed(1)}%
+                  </p>
+                ) : null}
+                {savingsAmount != null && savingsAmount > 0 ? (
+                  <p style={{ margin: 0, fontSize: 13, color: '#1f5d3a' }}>절감액: {formatKRW(savingsAmount)}</p>
+                ) : null}
+              </div>
+            </div>
+
+            <div className={mod.card}>
+              <h2 className={mod.sectionTitle}>배송 정책</h2>
+              <div className={mod.fieldStack}>
+                <div>
+                  <div className={mod.label}>배송 유형 · 필수</div>
+                  <select
+                    className={mod.select}
+                    value={shippingType}
+                    onChange={(e) => setShippingType(e.target.value as ListingShippingType)}
+                  >
+                    <option value="free">무료배송</option>
+                    <option value="paid">유료배송</option>
+                    <option value="conditional_free">조건부 무료배송</option>
+                  </select>
+                </div>
+
+                {shippingType === 'paid' ? (
+                  <>
+                    <div>
+                      <div className={mod.label}>1박스 기준 수량</div>
+                      <input
+                        className={mod.input}
+                        type="number"
+                        inputMode="numeric"
+                        min={1}
+                        value={shippingBoxQty}
+                        onChange={(e) => setShippingBoxQty(e.target.value.replace(/\D/g, ''))}
+                        placeholder="예: 10 (10개까지 1박스)"
+                      />
+                    </div>
+                    <div>
+                      <div className={mod.label}>박스당 배송비 (원)</div>
+                      <input
+                        className={mod.input}
+                        type="text"
+                        inputMode="numeric"
+                        value={formatDigitsForInput(shippingBoxFee)}
+                        onChange={(e) => setShippingBoxFee(e.target.value.replace(/\D/g, ''))}
+                        placeholder="예: 3,000"
+                      />
+                      {/* TODO: 향후 shipping_fee, shipping_box_qty 컬럼 추가 후 DB 연결 예정 */}
+                      {boxTierPreview ? (
+                        <p className={mod.hint} style={{ color: '#1f5d3a' }}>
+                          {boxTierPreview}
+                        </p>
+                      ) : (
+                        <p className={mod.hint}>박스 수 = ⌈주문수량 ÷ 기준수량⌉ — 미리보기용 계산입니다.</p>
+                      )}
+                    </div>
+                  </>
+                ) : null}
+
+                {shippingType === 'conditional_free' ? (
+                  <div>
+                    <div className={mod.label}>무료배송 기준 금액 (원)</div>
+                    <input
+                      className={mod.input}
+                      type="text"
+                      inputMode="numeric"
+                      value={formatDigitsForInput(conditionalFreeThreshold)}
+                      onChange={(e) => setConditionalFreeThreshold(e.target.value.replace(/\D/g, ''))}
+                      placeholder="예: 50,000 (5만원 이상 무료배송)"
+                    />
+                    {/* TODO: 향후 free_shipping_threshold 컬럼 추가 후 DB 연결 예정 */}
+                  </div>
+                ) : null}
+
+                <div>
+                  <div className={mod.label}>묶음배송 그룹 (선택)</div>
+                  <p className={mod.hint}>같은 그룹 상품끼리 묶음배송 가능합니다</p>
+                  <div className={mod.shippingGroupToolbar}>
+                    <select
+                      className={`${mod.select} ${mod.shippingGroupSelect}`}
+                      value={shippingGroupId}
+                      onChange={(e) => setShippingGroupId(e.target.value)}
+                      disabled={pending || shippingGroupActionBusy}
+                    >
+                      <option value="">선택 안 함</option>
+                      {shippingGroups.map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className={mod.btnGhost}
+                      onClick={() => setShowAddShippingGroup((v) => !v)}
+                      disabled={pending || shippingGroupActionBusy}
+                    >
+                      + 그룹 추가
+                    </button>
+                    <button
+                      type="button"
+                      className={mod.btnGhost}
+                      onClick={openManageShippingModal}
+                      disabled={pending || shippingGroupActionBusy}
+                    >
+                      관리
+                    </button>
+                  </div>
+                  {showAddShippingGroup ? (
+                    <div className={mod.shippingGroupInlineAdd}>
+                      <input
+                        className={mod.input}
+                        value={newShippingGroupName}
+                        onChange={(e) => setNewShippingGroupName(e.target.value)}
+                        placeholder="그룹명"
+                        disabled={shippingGroupActionBusy}
+                      />
+                      <button
+                        type="button"
+                        className={mod.btnGhost}
+                        onClick={() => void submitNewShippingGroup()}
+                        disabled={shippingGroupActionBusy}
+                      >
+                        추가
+                      </button>
+                      <button
+                        type="button"
+                        className={mod.btnGhost}
+                        onClick={() => {
+                          setShowAddShippingGroup(false)
+                          setNewShippingGroupName('')
+                        }}
+                        disabled={shippingGroupActionBusy}
+                      >
+                        취소
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+
+            <div className={mod.card}>
+              <h2 className={mod.sectionTitle}>썸네일 뱃지</h2>
+              <p className={mod.hint}>상품 카드 썸네일에 표시됩니다 (최대 2개)</p>
+              <div className={mod.thumbBadgeToggle}>
+                <div className={mod.thumbBadgeRow}>
+                  {THUMBNAIL_BADGE_OPTIONS.map((opt) => {
+                    const checked = thumbnailBadges.includes(opt.label)
+                    const disabled = !checked && thumbnailBadges.length >= MAX_THUMB_BADGES
+                    return (
+                      <label
+                        key={opt.label}
+                        className={`${mod.thumbBadgeLabel} ${disabled ? mod.thumbBadgeLabelDisabled : ''}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={disabled}
+                          onChange={() => setThumbnailBadges((prev) => toggleThumbBadge(prev, opt.label))}
+                        />
+                        {opt.label}
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className={mod.card}>
+              <h2 className={mod.sectionTitle}>대표 썸네일 (목록·카드용)</h2>
+              <div className={mod.specCallout}>
+                <strong>권장 규격</strong>
+                <ul className={mod.specList}>
+                  <li>정사각형 이미지 · 1000×1000px 이상</li>
+                  <li>JPG / PNG / WebP · 최대 8MB</li>
+                  <li>상품 카드에서 정사각형으로 잘려 보입니다</li>
+                </ul>
+              </div>
+              <p className={mod.hint}>
+                목록·검색·카드용입니다. 아래 &quot;상세페이지&quot; 이미지와 역할이 다릅니다. 미리보기는 저장소에 반영된
+                URL로 표시합니다.
+              </p>
+              <input
+                ref={thumbFileRef}
+                type="file"
+                accept={ACCEPT_IMAGE}
+                className={mod.visuallyHidden}
+                onChange={onHeroFileInput}
+              />
+              <div
+                className={`${mod.heroThumbDrop} ${thumbUploadState === 'uploading' ? mod.heroThumbDropBusy : ''} ${thumbUploadState === 'error' ? mod.heroThumbDropError : ''} ${pending ? mod.heroThumbDropDisabled : ''}`}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                }}
+                onDrop={onHeroDrop}
+                onClick={() => {
+                  if (!pending && thumbUploadState !== 'uploading') thumbFileRef.current?.click()
+                }}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    if (!pending && thumbUploadState !== 'uploading') thumbFileRef.current?.click()
+                  }
+                }}
+              >
+                {thumb ? (
+                  <img src={thumb} alt="" className={mod.heroThumbPreviewImg} key={thumb} />
+                ) : (
+                  <div className={mod.heroThumbPlaceholder}>
+                    <span className={mod.heroThumbPlaceholderTitle}>이미지를 올려주세요</span>
+                    <span className={mod.heroThumbPlaceholderSub}>
+                      클릭 또는 드래그 · JPG, PNG, WebP · 파일당 최대{' '}
+                      {Math.round(MAX_IMAGE_FILE_BYTES / (1024 * 1024))}MB
+                    </span>
+                  </div>
+                )}
+                {thumbUploadState === 'uploading' ? (
+                  <div className={mod.progressIndeterminateWrap} aria-busy aria-label="업로드 중">
+                    <div className={mod.progressIndeterminate} />
+                  </div>
+                ) : null}
+              </div>
+              {thumbUploadState === 'uploading' ? (
+                <p className={mod.uploadStatusMuted}>업로드 중… 잠시만 기다려 주세요.</p>
+              ) : null}
+              {thumbUploadState === 'success' && thumbSource === 'upload' && thumb ? (
+                <div className={mod.uploadOkBox}>
+                  <span className={mod.uploadOkIcon} aria-hidden>
+                    ✓
+                  </span>
+                  <div>
+                    <div className={mod.uploadOkTitle}>업로드 완료</div>
+                    {thumbFileMeta?.name ? (
+                      <div className={mod.uploadMeta}>파일: {thumbFileMeta.name}</div>
+                    ) : null}
+                    <div className={mod.uploadMetaUrl} title={thumb}>
+                      저장 URL: {thumb}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+              {thumb && thumbSource === 'url' ? (
+                <div className={mod.uploadInfoBox}>
+                  외부 URL로 지정됨 · 미리보기는 아래 주소 기준입니다.
+                  <div className={mod.uploadMetaUrl} title={thumb}>
+                    {thumb}
+                  </div>
+                </div>
+              ) : null}
+              {thumbUploadState === 'error' ? (
+                <div className={mod.uploadErrBox}>
+                  <div className={mod.uploadErrTitle}>업로드 실패</div>
+                  {uploadError ? <p className={mod.uploadErrBody}>{uploadError}</p> : null}
+                  <button
+                    type="button"
+                    className={mod.btnGhost}
+                    onClick={() => {
+                      setThumbUploadState('idle')
+                      setUploadError(null)
+                      thumbFileRef.current?.click()
+                    }}
+                  >
+                    다시 시도
+                  </button>
+                </div>
+              ) : null}
+              <div className={mod.heroThumbActions}>
+                <button
+                  type="button"
+                  className={mod.btnEmphasis}
+                  disabled={pending || thumbUploadState === 'uploading'}
+                  onClick={() => thumbFileRef.current?.click()}
+                >
+                  이미지 업로드
+                </button>
+                <button
+                  type="button"
+                  className={mod.btnMuted}
+                  onClick={() => setShowThumbUrlField((v) => !v)}
+                >
+                  {showThumbUrlField ? 'URL 입력 닫기' : 'URL 입력 사용'}
+                </button>
+              </div>
+              {showThumbUrlField ? (
+                <div className={mod.thumbUrlSecondary}>
+                  <div className={mod.label}>외부 이미지 URL (보조)</div>
+                  <input
+                    className={mod.input}
+                    value={thumbnailUrl}
+                    onChange={(e) => {
+                      setThumbnailUrl(e.target.value)
+                      setThumbSource('url')
+                      setThumbFileMeta(null)
+                      setThumbUploadState('idle')
+                    }}
+                    placeholder="CDN 등 외부 주소 붙여넣기"
+                  />
+                </div>
+              ) : null}
+            </div>
+
+            <div
+              className={mod.card}
+              onDragOver={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                if (Array.from(e.dataTransfer.types).includes('Files')) {
+                  e.dataTransfer.dropEffect = 'copy'
+                }
+              }}
+              onDrop={onDetailListDrop}
+            >
+              <h2 className={mod.sectionTitle}>상품 상세페이지 제작</h2>
+              <p className={mod.detailCountLine}>
+                <strong>
+                  {detailRegisteredCount} / {MAX_DETAIL_IMAGES}장
+                </strong>{' '}
+                등록됨(업로드 중 포함) · 드래그(⋮⋮)로 순서 변경
+              </p>
+              <div className={mod.specCallout}>
+                <strong>권장 규격</strong>
+                <ul className={mod.specList}>
+                  <li>세로형 가능 · 가로 1000px 이상 권장</li>
+                  <li>JPG / PNG / WebP · 파일당 최대 8MB · 최대 {MAX_DETAIL_IMAGES}장</li>
+                </ul>
+              </div>
+              <p className={mod.hint}>구매자가 상세페이지에서 보는 설득용 이미지입니다. 업로드 완료 시 저장소 URL이 블록에 반영됩니다.</p>
+
+              <input
+                ref={detailFilesRef}
+                type="file"
+                accept={ACCEPT_IMAGE}
+                multiple
+                className={mod.visuallyHidden}
+                onChange={addDetailFilesFromPicker}
+              />
+              <input
+                ref={retryDetailFileRef}
+                type="file"
+                accept={ACCEPT_IMAGE}
+                className={mod.visuallyHidden}
+                onChange={onRetryDetailFile}
+              />
+
+              <div className={mod.detailToolbar}>
+                <button
+                  type="button"
+                  className={mod.btnEmphasis}
+                  disabled={pending || detailBlocks.length >= MAX_DETAIL_IMAGES}
+                  onClick={() => {
+                    detailFilesRef.current?.click()
+                  }}
+                >
+                  + 이미지 추가
+                </button>
+                <button
+                  type="button"
+                  className={mod.btnMuted}
+                  disabled={pending || detailBlocks.length >= MAX_DETAIL_IMAGES}
+                  onClick={addDetailUrlRow}
+                >
+                  URL 추가
+                </button>
+                <button
+                  type="button"
+                  className={mod.btnDangerQuiet}
+                  disabled={pending || detailBlocks.length === 0}
+                  onClick={clearAllDetailImages}
+                >
+                  전체 삭제
+                </button>
+              </div>
+              <div className={mod.detailBlockList}>
+                {detailBlocks.length === 0 ? (
+                  <p className={mod.hint} style={{ margin: 0 }}>
+                    아직 상세 이미지가 없습니다. &quot;+ 이미지 추가&quot;를 누르면 이 영역에 카드가 나타납니다.
+                  </p>
+                ) : null}
+                {detailBlocks.map((block, index) => (
+                  <div
+                    key={block.id}
+                    className={mod.detailBlock}
+                    onDragOver={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      if (Array.from(e.dataTransfer.types).includes('Files')) {
+                        e.dataTransfer.dropEffect = 'copy'
+                      } else {
+                        e.dataTransfer.dropEffect = 'move'
+                      }
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      if (e.dataTransfer.files?.length) {
+                        if (!pending) processIncomingDetailFiles(Array.from(e.dataTransfer.files))
+                        return
+                      }
+                      const from = parseInt(e.dataTransfer.getData('text/plain'), 10)
+                      if (Number.isNaN(from)) return
+                      reorderDetailBlocks(from, index)
+                    }}
+                  >
+                    <div className={mod.detailBlockHeader}>
+                      <span
+                        className={mod.dragHandle}
+                        draggable={
+                          detailBlocks.length >= 2 && block.uploadStatus !== 'uploading'
+                        }
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData('text/plain', String(index))
+                          e.dataTransfer.effectAllowed = 'move'
+                        }}
+                        aria-label="순서 변경"
+                      >
+                        ⋮⋮
+                      </span>
+                      <span className={mod.detailBlockOrder}>{index + 1}</span>
+                      <button
+                        type="button"
+                        className={mod.btnGhost}
+                        disabled={block.uploadStatus === 'uploading'}
+                        onClick={() => removeDetailBlock(block.id)}
+                      >
+                        삭제
+                      </button>
+                    </div>
+                    <div className={mod.detailBlockBody}>
+                      <p className={mod.detailBlockStatusTag}>{detailBlockStatusLabel(block)}</p>
+                      {block.uploadStatus === 'uploading' ? (
+                        <div className={mod.detailBlockStatus}>
+                          <div className={mod.detailSkeleton} aria-hidden />
+                          <p className={mod.uploadStatusMuted}>업로드 중…</p>
+                          <div className={mod.progressIndeterminateWrap} aria-busy>
+                            <div className={mod.progressIndeterminate} />
+                          </div>
+                        </div>
+                      ) : null}
+                      {block.uploadStatus === 'error' ? (
+                        <div className={mod.uploadErrBox}>
+                          <div className={mod.uploadErrTitle}>업로드 실패</div>
+                          {block.errorMessage ? (
+                            <p className={mod.uploadErrBody}>{block.errorMessage}</p>
+                          ) : null}
+                          <button
+                            type="button"
+                            className={mod.btnGhost}
+                            onClick={() => startRetryDetailUpload(block.id)}
+                          >
+                            다시 시도
+                          </button>
+                        </div>
+                      ) : null}
+                      {block.blockKind === 'url' &&
+                      !block.url.trim() &&
+                      block.uploadStatus === 'idle' ? (
+                        <div>
+                          <div className={mod.label}>외부 이미지 URL</div>
+                          <input
+                            className={mod.input}
+                            value={block.url}
+                            onChange={(e) => setDetailBlockUrl(block.id, e.target.value)}
+                            placeholder="https://… (CDN 등)"
+                          />
+                        </div>
+                      ) : null}
+                      {block.url.trim() && block.uploadStatus !== 'uploading' ? (
+                        <>
+                          <img
+                            src={block.url.trim()}
+                            alt=""
+                            className={mod.detailBlockPreview}
+                            key={block.url.trim()}
+                          />
+                          {block.uploadStatus === 'done_upload' ? (
+                            <div className={mod.uploadOkRow}>
+                              <span className={mod.uploadOkIconSm} aria-hidden>
+                                ✓
+                              </span>
+                              <span>업로드 완료</span>
+                              {block.fileName ? (
+                                <span className={mod.uploadMeta}> · {block.fileName}</span>
+                              ) : null}
+                            </div>
+                          ) : null}
+                          {block.uploadStatus === 'url_linked' ? (
+                            <div className={mod.uploadInfoRow}>외부 URL 연결됨 · 저장 시 그대로 저장됩니다</div>
+                          ) : null}
+                          <div className={mod.uploadMetaUrl} title={block.url.trim()}>
+                            {block.url.trim()}
+                          </div>
+                        </>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className={mod.descBlockCard}>
+                <div className={mod.label}>상세 설명 (하단 텍스트 블록)</div>
+                <p className={mod.hint}>
+                  상세 이미지 아래에 노출되는 안내 문구입니다. 원산지, 보관, 배송, 유통기한 등을 적어 주세요.
+                </p>
+                <textarea
+                  className={`${mod.textarea} ${mod.textareaNoResize}`}
+                  value={listingDescription}
+                  onChange={(e) => setListingDescription(e.target.value)}
+                  placeholder={
+                    '예시)\n원산지: 국내산\n보관법: 냉장 보관 (0~10℃)\n유통기한: 제조일로부터 12개월\n배송: 평일 영업일 기준 순차 출고\n조리 팁: 해동 후 바로 조리하면 육즙이 살아 있습니다'
+                  }
+                  rows={7}
+                />
+              </div>
+
+              <div>
+                <div className={mod.label}>내부 메모 (선택)</div>
+                <textarea
+                  className={`${mod.textarea} ${mod.textareaNoResize}`}
+                  value={adminMemo}
+                  onChange={(e) => setAdminMemo(e.target.value)}
+                  placeholder="구매자에게 보이지 않습니다"
+                  rows={2}
+                />
+              </div>
+            </div>
+
+            <div className={mod.card}>
+              {/* TODO: private / hidden / sold_out 상태 구조는
+                  다음 단계에서 별도 작업 예정 */}
+              <h2 className={mod.sectionTitle}>공개 설정</h2>
+              <div className={mod.fieldStack}>
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, color: '#2b2b2b' }}>
+                  <input type="radio" name="vis" checked={visibility === 'draft'} onChange={() => setVisibility('draft')} />
+                  <span>
+                    <strong>비공개</strong>
+                    <span className={mod.hint} style={{ display: 'block', marginTop: 4 }}>
+                      등록 후 직접 공개 처리합니다
+                    </span>
+                  </span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, color: '#2b2b2b' }}>
+                  <input type="radio" name="vis" checked={visibility === 'visible'} onChange={() => setVisibility('visible')} />
+                  <span>
+                    <strong>공개</strong>
+                    <span className={mod.hint} style={{ display: 'block', marginTop: 4 }}>
+                      등록 즉시 구매 화면에 표시됩니다
+                    </span>
+                  </span>
+                </label>
+                <p className={mod.hint}>하단 버튼이 실제 저장 방식을 결정합니다.</p>
+              </div>
+            </div>
+          </div>
+
+          <div className={mod.previewColumn}>
+            <div className={mod.previewSticky}>
+              <div className={mod.previewTabs}>
+                <button
+                  type="button"
+                  className={`${mod.previewTab} ${previewTab === 'card' ? mod.previewTabActive : ''}`}
+                  onClick={() => setPreviewTab('card')}
+                >
+                  카드 미리보기
+                </button>
+                <button
+                  type="button"
+                  className={`${mod.previewTab} ${previewTab === 'detail' ? mod.previewTabActive : ''}`}
+                  onClick={() => setPreviewTab('detail')}
+                >
+                  상세페이지
+                </button>
+              </div>
+
+              {previewTab === 'card' ? (
+                <>
+                  <div className={mod.previewCard}>
+                    <div style={{ position: 'relative', width: '100%' }}>
+                      {renderImageOverlays()}
+                      {thumb ? (
+                        <img
+                          src={thumb}
+                          alt=""
+                          width={280}
+                          height={THUMB_H}
+                          key={thumb}
+                          style={{
+                            width: '100%',
+                            height: THUMB_H,
+                            objectFit: 'cover',
+                            display: 'block',
+                            background: '#f5f5f5',
+                          }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            width: '100%',
+                            height: THUMB_H,
+                            background: '#eef4f0',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: 28,
+                            color: '#1f5d3a',
+                            fontWeight: 700,
+                          }}
+                          aria-hidden
+                        >
+                          {productNameInitial(productName)}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {brandName.trim() ? (
+                        <div style={{ fontSize: 11, color: '#1f5d3a', fontWeight: 600 }}>{brandName.trim()}</div>
+                      ) : (
+                        <PhBar width="40%" />
+                      )}
+                      {productName.trim() ? (
+                        <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.35, color: '#111' }}>
+                          {productName.trim()}
+                        </div>
+                      ) : (
+                        <PhBar width="90%" />
+                      )}
+                      {spec.trim() ? (
+                        <div style={{ fontSize: 12, color: '#6b7280' }}>{spec.trim()}</div>
+                      ) : (
+                        <PhBar width="55%" />
+                      )}
+                      {previewPrice != null ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4 }}>
+                          <span style={{ fontSize: 11, color: '#888' }}>식식이가</span>
+                          <span style={{ fontSize: 17, fontWeight: 700, color: '#111' }}>{formatKRW(previewPrice)}</span>
+                          {savingsAmount != null && savingsAmount > 0 ? (
+                            <span style={{ fontSize: 12, color: '#1f5d3a', fontWeight: 600 }}>
+                              {formatKRW(savingsAmount)} 절감
+                            </span>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <div style={{ marginTop: 4 }}>
+                          <span style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 4 }}>식식이가</span>
+                          <PhBar width="70%" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <p className={mod.previewFoot}>목록·검색에서 보이는 카드 형태입니다</p>
+                </>
+              ) : (
+                <>
+                  <div className={mod.phoneDetailShell}>
+                    <div className={mod.phoneDetailInner}>
+                      <p className={mod.phoneDetailEyebrow}>상세페이지 미리보기</p>
+                      <div style={{ position: 'relative', width: '100%' }}>
+                        {renderImageOverlays()}
+                        {thumb ? (
+                          <img src={thumb} alt="" className={mod.phoneDetailHero} key={thumb} />
+                        ) : (
+                          <div className={mod.phoneDetailHeroPlaceholder} aria-hidden>
+                            {productNameInitial(productName)}
+                          </div>
+                        )}
+                      </div>
+                      <div className={mod.phoneDetailProduct}>
+                        {brandName.trim() ? (
+                          <div className={mod.phoneDetailBrand}>{brandName.trim()}</div>
+                        ) : (
+                          <PhBar width="36%" />
+                        )}
+                        {productName.trim() ? (
+                          <h3 className={mod.phoneDetailTitle}>{productName.trim()}</h3>
+                        ) : (
+                          <PhBar width="92%" />
+                        )}
+                        {spec.trim() ? (
+                          <p className={mod.phoneDetailSpec}>{spec.trim()}</p>
+                        ) : (
+                          <PhBar width="55%" />
+                        )}
+                        {previewPrice != null ? (
+                          <div className={mod.phoneDetailPriceRow}>
+                            <span className={mod.phoneDetailPriceLabel}>식식이가</span>
+                            <span className={mod.phoneDetailPrice}>{formatKRW(previewPrice)}</span>
+                            {savingsAmount != null && savingsAmount > 0 ? (
+                              <span className={mod.phoneDetailSave}>{formatKRW(savingsAmount)} 절감</span>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <PhBar width="72%" />
+                        )}
+                      </div>
+                      <div className={mod.phoneDetailSection}>
+                        <p className={mod.phoneDetailSectionTitle}>상세 이미지</p>
+                        <div className={mod.phoneDetailImageStack}>
+                          {detailUrlsForPreview.length > 0 ? (
+                            detailUrlsForPreview.map((u, i) => (
+                              <img
+                                key={`${i}-${u.slice(0, 32)}`}
+                                src={u}
+                                alt=""
+                                className={mod.phoneDetailStackImg}
+                              />
+                            ))
+                          ) : (
+                            <p className={mod.hint} style={{ margin: 0 }}>
+                              상세 이미지를 추가하면 여기에 표시됩니다
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className={mod.phoneDetailSection}>
+                        <p className={mod.phoneDetailSectionTitle}>상품 정보</p>
+                        {descPreview ? (
+                          <p className={mod.phoneDetailDesc}>{listingDescription}</p>
+                        ) : (
+                          <p className={mod.hint} style={{ margin: 0 }}>
+                            하단 설명 텍스트가 여기에 표시됩니다
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <p className={mod.previewFoot}>
+                    대표 썸네일(카드용) → 상세 이미지(구매 설득) → 하단 설명 순입니다
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className={mod.ctaBar}>
+          <div className={mod.ctaInner}>
+            <Link href="/admin/commerce/products" className={`${mod.btn} ${mod.btnCancel}`}>
+              취소
+            </Link>
+            <button
+              type="button"
+              className={`${mod.btn} ${mod.btnDraft}`}
+              disabled={pending}
+              onClick={() => {
+                submitWithStatus('draft', false)
+              }}
+            >
+              임시저장
+            </button>
+            <button
+              type="button"
+              className={`${mod.btn} ${mod.btnNext}`}
+              disabled={pending}
+              onClick={() => {
+                submitWithStatus('visible', true)
+              }}
+            >
+              저장 후 다음 상품
+            </button>
+            <button
+              type="button"
+              className={`${mod.btn} ${mod.btnPrimary}`}
+              disabled={pending}
+              onClick={() => {
+                submitWithStatus('visible', false)
+              }}
+            >
+              저장 후 공개
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}

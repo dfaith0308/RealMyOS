@@ -3,7 +3,10 @@
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import type { ActionResult } from '@/types/order'
+import { getOverdueReceivable } from '@/lib/ledger-calc'
 import type { ContactResult, NextActionType } from '@/actions/contact'
+import { getAdminSettingNumber } from '@/actions/admin/policy-console'
+import { fetchInboundSupersededOriginalPaymentIds } from '@/lib/inbound-payment-superseded'
 
 // ============================================================
 // 타입
@@ -21,6 +24,18 @@ export interface SalesTarget {
   next_action_date:        string | null
   next_action_type:        string | null
   last_contact_result:     string | null
+}
+
+export interface ExecCenterTarget {
+  customer_id: string
+  customer_name: string
+  phone: string | null
+  score: number
+  recommended_action: 'call' | 'message' | 'visit'
+  last_contacted_at: string | null
+  days_since_last_order: number
+  days_since_last_contact: number | null
+  schedule_id: string | null
 }
 
 export interface SalesScript {
@@ -44,9 +59,11 @@ export interface SalesHistory {
   memo:             string | null
   next_action_date: string | null
   next_action_type: string | null
+  contacted_by:     string | null
   contacted_at:     string
   created_at:       string
   schedule_id:      string | null
+  converted_order_id: string | null
 }
 
 export interface SalesSchedule {
@@ -101,9 +118,25 @@ export async function getSalesTargets(): Promise<ActionResult<SalesTarget[]>> {
   const ctx = await getAuthCtx(supabase)
   if (!ctx) return { success: false, error: '로그인 필요' }
 
+  const orderCycleCount = await getAdminSettingNumber('order_cycle_calculation_count', { min: 2, max: 90 })
+
   const todayStr = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10)
   const today    = new Date(todayStr + 'T00:00:00Z')
   const d90ago   = new Date(today.getTime() - 90 * 86400000).toISOString().slice(0, 10)
+
+  const payeeScope = `payee_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`
+  const supersededInbound = await fetchInboundSupersededOriginalPaymentIds(supabase, payeeScope)
+
+  let paymentsQuery = supabase
+    .from('payments')
+    .select('customer_id, amount')
+    .or(payeeScope)
+    .eq('direction', 'inbound')
+    .eq('status', 'confirmed')
+    .is('reversal_of_id', null)
+  if (supersededInbound.length) {
+    paymentsQuery = paymentsQuery.not('id', 'in', `(${supersededInbound.join(',')})`)
+  }
 
   const [
     { data: customers },
@@ -117,18 +150,13 @@ export async function getSalesTargets(): Promise<ActionResult<SalesTarget[]>> {
       .eq('tenant_id', ctx.tenant_id).eq('is_buyer', true).is('deleted_at', null),
 
     supabase.from('orders')
-      .select('customer_id, total_amount, point_used, order_date')
+      .select('customer_id, total_amount, final_amount, order_date')
       // 전환: seller_tenant_id 우선 (legacy tenant_id 병행)
       .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
       .eq('status', 'confirmed').is('deleted_at', null)
       .order('order_date', { ascending: false }),
 
-    supabase.from('payments')
-      .select('customer_id, amount')
-      // 전환: payee_tenant_id 우선 (legacy tenant_id 병행)
-      .or(`payee_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
-      .eq('direction', 'inbound')
-      .eq('status', 'confirmed'),
+    paymentsQuery,
 
     supabase.from('contact_logs')
       .select('customer_id, contacted_at, result, next_action_date, next_action_type')
@@ -148,7 +176,7 @@ export async function getSalesTargets(): Promise<ActionResult<SalesTarget[]>> {
   // ── 집계 맵 ──────────────────────────────────────────────
 
   // per-order (overdue 계산용)
-  const orderRowsMap = new Map<string, Array<{ order_date: string; total_amount: number; point_used: number }>>()
+  const orderRowsMap = new Map<string, Array<{ order_date: string; final_amount?: number | null; total_amount: number }>>()
   // summary (lastDate)
   const orderMap     = new Map<string, { lastDate: string }>()
   const payMap       = new Map<string, number>()
@@ -158,7 +186,7 @@ export async function getSalesTargets(): Promise<ActionResult<SalesTarget[]>> {
 
   for (const o of orders ?? []) {
     const rows = orderRowsMap.get(o.customer_id) ?? []
-    rows.push({ order_date: o.order_date, total_amount: o.total_amount ?? 0, point_used: o.point_used ?? 0 })
+    rows.push({ order_date: o.order_date, final_amount: o.final_amount, total_amount: o.total_amount ?? 0 })
     orderRowsMap.set(o.customer_id, rows)
     if (!orderMap.has(o.customer_id)) orderMap.set(o.customer_id, { lastDate: o.order_date })
   }
@@ -186,29 +214,21 @@ export async function getSalesTargets(): Promise<ActionResult<SalesTarget[]>> {
 
   // ── 고객별 avg_order_cycle 계산 ──────────────────────────
   function calcAvgCycle(dates: string[]): number {
-    if (dates.length < 3) return 14  // 주문 3건 미만이면 기본 14일
+    if (dates.length < orderCycleCount) return 14
+    const slice = dates.slice(-orderCycleCount)
     const gaps: number[] = []
-    for (let i = 1; i < dates.length; i++) {
-      const diff = (new Date(dates[i] + 'T00:00:00Z').getTime() -
-                    new Date(dates[i-1] + 'T00:00:00Z').getTime()) / 86400000
+    for (let i = 1; i < slice.length; i++) {
+      const diff = (new Date(slice[i] + 'T00:00:00Z').getTime() -
+                    new Date(slice[i - 1] + 'T00:00:00Z').getTime()) / 86400000
       if (diff > 0) gaps.push(diff)
     }
     if (!gaps.length) return 14
     return Math.round(gaps.reduce((s, g) => s + g, 0) / gaps.length)
   }
 
-  // ── overdue_amount 계산 ───────────────────────────────────
   function calcOverdue(customerId: string, terms: number, paid: number): number {
     const rows = orderRowsMap.get(customerId) ?? []
-    let overdueOrders = 0
-    for (const row of rows) {
-      const dueDate = new Date(row.order_date + 'T00:00:00Z')
-      dueDate.setUTCDate(dueDate.getUTCDate() + terms)
-      if (dueDate <= today) {
-        overdueOrders += row.total_amount - (row.point_used ?? 0)
-      }
-    }
-    return Math.max(0, overdueOrders - paid)
+    return getOverdueReceivable(rows, terms, paid, todayStr)
   }
 
   // ── 최종 목표 목록 ─────────────────────────────────────────
@@ -244,6 +264,73 @@ export async function getSalesTargets(): Promise<ActionResult<SalesTarget[]>> {
     .sort((a, b) => b.score - a.score)
 
   return { success: true, data: sorted }
+}
+
+// ============================================================
+// 실행센터 TOP3 — 점수 기반 즉시 실행
+// ============================================================
+
+export async function getTopCustomersForContact(limit = 3): Promise<ActionResult<ExecCenterTarget[]>> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요', data: [] }
+
+  const targetsRes = await getSalesTargets()
+  if (!targetsRes.success) return { success: false, error: targetsRes.error ?? '조회 실패', data: [] }
+
+  const top = (targetsRes.data ?? []).slice(0, Math.max(1, Math.min(10, limit)))
+  if (top.length === 0) return { success: true, data: [] }
+
+  const ids = top.map((t) => t.customer_id)
+  const todayStr = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10)
+
+  // last_contacted_at (contact_logs)
+  const { data: contactsRaw } = await supabase
+    .from('contact_logs')
+    .select('customer_id, contacted_at')
+    .eq('tenant_id', ctx.tenant_id)
+    .in('customer_id', ids)
+    .order('contacted_at', { ascending: false })
+
+  const lastContactMap = new Map<string, string>()
+  for (const c of (contactsRaw ?? []) as any[]) {
+    if (!lastContactMap.has(c.customer_id) && c.contacted_at) lastContactMap.set(c.customer_id, c.contacted_at)
+  }
+
+  // today schedule id (sales_schedules)
+  const { data: schRaw } = await supabase
+    .from('sales_schedules')
+    .select('id, customer_id')
+    .eq('tenant_id', ctx.tenant_id)
+    .eq('scheduled_date', todayStr)
+    .eq('status', 'pending')
+    .in('customer_id', ids)
+
+  const scheduleMap = new Map<string, string>()
+  for (const s of (schRaw ?? []) as any[]) scheduleMap.set(s.customer_id, s.id)
+
+  const result: ExecCenterTarget[] = top.map((t) => {
+    const recommended_action: ExecCenterTarget['recommended_action'] =
+      t.overdue_amount > 0
+        ? 'call'
+        : (t.days_since_last_contact ?? 999) >= 14
+          ? 'message'
+          : 'visit'
+
+    return {
+      customer_id: t.customer_id,
+      customer_name: t.customer_name,
+      phone: t.phone ?? null,
+      score: t.score,
+      recommended_action,
+      last_contacted_at: lastContactMap.get(t.customer_id) ?? null,
+      days_since_last_order: t.days_since_last_order,
+      days_since_last_contact: t.days_since_last_contact,
+      schedule_id: scheduleMap.get(t.customer_id) ?? null,
+    }
+  })
+
+  return { success: true, data: result }
 }
 
 // ============================================================
@@ -305,7 +392,7 @@ export async function getSalesHistory(customerId?: string): Promise<ActionResult
   if (!ctx) return { success: false, error: '로그인 필요' }
 
   let q = supabase.from('contact_logs')
-    .select('id, customer_id, contact_method, methods, result, outcome_type, customer_status, memo, next_action_date, next_action_type, contacted_at, created_at, schedule_id, customers(name)')
+    .select('id, customer_id, contact_method, methods, result, outcome_type, customer_status, memo, next_action_date, next_action_type, contacted_by, contacted_at, created_at, schedule_id, converted_order_id, customers(name)')
     .eq('tenant_id', ctx.tenant_id)
     .in('contact_method', ['call', 'visit', 'message'])
     .not('contact_method', 'is', null)
@@ -327,8 +414,10 @@ export async function getSalesHistory(customerId?: string): Promise<ActionResult
       customer_status: r.customer_status ?? null,
       memo: r.memo, next_action_date: r.next_action_date,
       next_action_type: r.next_action_type,
+      contacted_by: r.contacted_by ?? null,
       contacted_at: r.contacted_at, created_at: r.created_at,
       schedule_id: r.schedule_id ?? null,
+      converted_order_id: r.converted_order_id ?? null,
     })),
   }
 }
@@ -550,17 +639,10 @@ export async function deleteSchedule(id: string): Promise<ActionResult> {
   const ctx = await getAuthCtx(supabase)
   if (!ctx) return { success: false, error: '로그인 필요' }
 
-  // 1. 연결된 영업이력 schedule_id 해제 (이력 자체는 보존)
-  await supabase
-    .from('contact_logs')
-    .update({ schedule_id: null })
-    .eq('schedule_id', id)
-    .eq('tenant_id', ctx.tenant_id)
-
-  // 2. 스케줄 삭제
+  // RULE-10: 물리 삭제 금지 → cancelled로 상태 변경
   const { error } = await supabase
     .from('sales_schedules')
-    .delete()
+    .update({ status: 'cancelled' })
     .eq('id', id)
     .eq('tenant_id', ctx.tenant_id)
 
@@ -656,7 +738,7 @@ export async function deleteContactLog(id: string): Promise<ActionResult> {
   // 3. 이력 삭제
   const { error } = await supabase
     .from('contact_logs')
-    .delete()
+    .update({ is_active: false })
     .eq('id', id)
     .eq('tenant_id', ctx.tenant_id)
 
@@ -735,7 +817,7 @@ export async function getCustomerSalesProfile(
   // 2. 영업이력 (최근 20건)
   const { data: logs } = await supabase
     .from('contact_logs')
-    .select('id, customer_id, contact_method, methods, result, outcome_type, customer_status, memo, next_action_date, next_action_type, contacted_at, created_at, schedule_id, customers(name)')
+    .select('id, customer_id, contact_method, methods, result, outcome_type, customer_status, memo, next_action_date, next_action_type, contacted_by, contacted_at, created_at, schedule_id, converted_order_id, customers(name)')
     .eq('customer_id', customerId)
     .eq('tenant_id', ctx.tenant_id)
     .in('contact_method', ['call', 'visit', 'message'])
@@ -755,9 +837,11 @@ export async function getCustomerSalesProfile(
     memo:             r.memo,
     next_action_date: r.next_action_date,
     next_action_type: r.next_action_type,
+    contacted_by:     r.contacted_by ?? null,
     contacted_at:     r.contacted_at,
     created_at:       r.created_at,
     schedule_id:      r.schedule_id ?? null,
+    converted_order_id: r.converted_order_id ?? null,
   }))
 
   // 3. 다음 행동 (가장 가까운 미래 날짜)

@@ -2,6 +2,33 @@ export type FulfillmentType = 'stock' | 'consignment'
 export type OrderStatus = 'draft' | 'confirmed' | 'cancelled'
 export type TaxType = 'taxable' | 'exempt'
 
+// 운영 상태(orders.order_status) — 거래상태(status)와 완전 분리 (D-019)
+export type OrderOperationStatus =
+  | '접수'
+  | '확인'
+  | '출고준비'
+  | '출고완료'
+  | '납품완료'
+  | '취소'
+
+export const ORDER_OPERATION_STATUS_LIST: OrderOperationStatus[] = [
+  '접수',
+  '확인',
+  '출고준비',
+  '출고완료',
+  '납품완료',
+  '취소',
+]
+
+export const ORDER_OPERATION_STATUS_LABEL: Record<OrderOperationStatus, string> = {
+  접수: '접수',
+  확인: '확인',
+  출고준비: '출고 준비',
+  출고완료: '출고 완료',
+  납품완료: '납품 완료',
+  취소: '취소',
+}
+
 export interface OrderLineInput {
   product_id: string
   quantity: number
@@ -24,6 +51,10 @@ export interface CreateOrderInput {
   status?:         OrderStatus
   discount_amount?: number   // 기간할인 (orders 레벨, 상품 무관)
   point_used?:      number   // 적립금 사용 (orders 레벨, 상품 무관)
+
+  // SUP-PARTIAL-002-D: 견적→주문 전환 컨텍스트
+  source_quote_id?: string
+  quote_conversions?: Array<{ item_id: string; qty: number }>
 }
 
 export interface LineCalculation {

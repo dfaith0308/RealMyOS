@@ -1,13 +1,19 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { cancelOrder } from '@/actions/order'
 import { formatKRW } from '@/lib/calc'
 import type { OrderListItem } from '@/actions/order-query'
+import { CommandStrip } from '@/components/dashboard/CommandStrip'
+import { Surface } from '@/components/ui/Surface'
+import { KPIBlock } from '@/components/ui/KPIBlock'
+import { StatusBadge } from '@/components/ui/StatusBadge'
+import { DataCell, DataTableRow } from '@/components/ui/DataTableRow'
+import styles from '@/app/(app)/orders/orders-ops.module.css'
+import { ORDER_OPERATION_STATUS_LIST, type OrderOperationStatus } from '@/types/order'
 
-interface Filters { from: string; to: string; status: string; customer_id: string }
+interface Filters { from: string; to: string; status: string; order_status: OrderOperationStatus | ''; customer_id: string }
 interface Customer { id: string; name: string }
 
 interface Props {
@@ -16,244 +22,365 @@ interface Props {
   filters: Filters
 }
 
-const STATUS_CFG: Record<string, { label: string; color: string; bg: string }> = {
-  draft:     { label: '임시저장', color: '#6b7280', bg: '#F3F4F6' },
-  confirmed: { label: '확정',    color: '#1D4ED8', bg: '#EFF6FF' },
-  cancelled: { label: '취소',    color: '#B91C1C', bg: '#FEF2F2' },
+type StatusChip = '' | 'draft' | 'confirmed' | 'cancelled' | 'today'
+type OpsTab = 'all' | 'today_delivery' | 'delayed' | 'prep' | 'done'
+type Preset = 'month' | '7d' | 'custom'
+
+function kstTodayStr() {
+  const now = new Date(Date.now() + 9 * 3600000)
+  return now.toISOString().slice(0, 10)
+}
+
+function monthStartStr() {
+  const d = new Date(Date.now() + 9 * 3600000)
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-01`
+}
+
+function daysAgoStr(n: number) {
+  const d = new Date(Date.now() + 9 * 3600000)
+  d.setUTCDate(d.getUTCDate() - n)
+  return d.toISOString().slice(0, 10)
 }
 
 export default function OrdersClient({ orders, customers, filters }: Props) {
   const router   = useRouter()
-  const [expandedId, setExpandedId]             = useState<string | null>(null)
-  const [cancelTarget, setCancelTarget]         = useState<OrderListItem | null>(null)
-  const [cancelReason, setCancelReason]         = useState('')
-  const [isPending, startTransition]            = useTransition()
-  const [localFilters, setLocalFilters]         = useState(filters)
 
-  const confirmed = orders.filter((o) => o.status === 'confirmed')
-  const totalAmt  = confirmed.reduce((s, o) => s + o.total_amount, 0)
+  const [from, setFrom] = useState(filters.from)
+  const [to, setTo] = useState(filters.to)
+  const [customerId, setCustomerId] = useState(filters.customer_id)
+  const [status, setStatus] = useState<StatusChip>(
+    filters.status === 'draft' || filters.status === 'confirmed' || filters.status === 'cancelled'
+      ? (filters.status as StatusChip)
+      : '',
+  )
+  const [opsTab, setOpsTab] = useState<OpsTab>('all')
+  const [orderStatus, setOrderStatus] = useState<OrderOperationStatus | ''>(filters.order_status ?? '')
 
-  function applyFilters() {
-    const params = new URLSearchParams()
-    if (localFilters.from)        params.set('from',        localFilters.from)
-    if (localFilters.to)          params.set('to',          localFilters.to)
-    if (localFilters.status)      params.set('status',      localFilters.status)
-    if (localFilters.customer_id) params.set('customer_id', localFilters.customer_id)
-    router.push(`/orders?${params.toString()}`)
-  }
+  const preset: Preset = useMemo(() => {
+    if (from === monthStartStr() && to === kstTodayStr()) return 'month'
+    if (from === daysAgoStr(6) && to === kstTodayStr()) return '7d'
+    return 'custom'
+  }, [from, to])
 
-  function handleCancel() {
-    if (!cancelTarget) return
-    startTransition(async () => {
-      await cancelOrder(cancelTarget.id, cancelReason || undefined)
-      setCancelTarget(null)
-      setCancelReason('')
-      router.refresh()
-    })
-  }
+  const debounce = useRef<number | null>(null)
+  useEffect(() => {
+    if (debounce.current) window.clearTimeout(debounce.current)
+    debounce.current = window.setTimeout(() => {
+      const params = new URLSearchParams()
+      if (from) params.set('from', from)
+      if (to) params.set('to', to)
+      if (customerId) params.set('customer_id', customerId)
+      if (status && status !== 'today') params.set('status', status)
+      if (orderStatus) params.set('order_status', orderStatus)
+      const q = params.toString()
+      router.push(q ? `/orders?${q}` : '/orders')
+    }, 250)
+    return () => {
+      if (debounce.current) window.clearTimeout(debounce.current)
+    }
+  }, [from, to, customerId, status, orderStatus, router])
 
-  // 거래내역 요약 (order_lines 기준)
+  const todayStr = useMemo(() => kstTodayStr(), [])
+
+  const baseOrders = useMemo(() => {
+    if (status === 'today') {
+      return orders.filter((o) => o.order_date === todayStr && o.status !== 'cancelled')
+    }
+    return orders
+  }, [orders, status, todayStr])
+
+  const opsFiltered = useMemo(() => {
+    const ms1d = 86400000
+    const todayMs = new Date(todayStr + 'T00:00:00Z').getTime()
+    const isDelayed = (o: OrderListItem) => {
+      // due_date 부재 → 운영 탭의 "지연"은 order_date 기준 근사치
+      if (o.order_status === '납품완료' || o.order_status === '취소') return false
+      const d = new Date(o.order_date + 'T00:00:00Z').getTime()
+      return d <= todayMs - ms1d
+    }
+    if (opsTab === 'all') return baseOrders
+    if (opsTab === 'prep') return baseOrders.filter((o) => o.order_status === '출고준비')
+    if (opsTab === 'done') return baseOrders.filter((o) => o.order_status === '납품완료')
+    if (opsTab === 'today_delivery') {
+      return baseOrders.filter(
+        (o) =>
+          o.order_date === todayStr &&
+          (o.order_status === '출고완료' || o.order_status === '납품완료'),
+      )
+    }
+    // delayed
+    return baseOrders.filter(isDelayed)
+  }, [baseOrders, opsTab, todayStr])
+
+  const counts = useMemo(() => {
+    const draft = orders.filter((o) => o.status === 'draft').length
+    const confirmed = orders.filter((o) => o.status === 'confirmed').length
+    const cancelled = orders.filter((o) => o.status === 'cancelled').length
+    const today = orders.filter((o) => o.order_date === todayStr && o.status !== 'cancelled').length
+    const todayNeeds = orders.filter((o) => o.order_date === todayStr && o.status === 'draft').length
+    const periodConfirmedAmt = orders
+      .filter((o) => o.status === 'confirmed')
+      .reduce((s, o) => s + o.total_amount, 0)
+    return { draft, confirmed, cancelled, today, todayNeeds, periodConfirmedAmt }
+  }, [orders, todayStr])
+
+  const headline = `오늘 처리할 주문 ${counts.today}건`
+  const subline = (
+    <>
+      처리 필요(draft) {counts.draft} · 오늘 주문 {counts.today} · 진행 {counts.confirmed}
+    </>
+  )
+
+  const badgeStatus = counts.draft > 0 ? ('warning' as const) : ('confirmed' as const)
+
   function summarizeLines(lines: OrderListItem['order_lines']): string {
     if (!lines.length) return '-'
     if (lines.length === 1) return `${lines[0].product_name} ${lines[0].quantity}개`
     return `${lines[0].product_name} 외 ${lines.length - 1}건`
   }
 
+  const groupedByDate = useMemo(() => {
+    const map = new Map<string, { date: string; rows: OrderListItem[]; cnt: number; sum: number }>()
+    for (const o of opsFiltered) {
+      const g = map.get(o.order_date) ?? { date: o.order_date, rows: [], cnt: 0, sum: 0 }
+      g.rows.push(o)
+      g.cnt += 1
+      g.sum += o.total_amount ?? 0
+      map.set(o.order_date, g)
+    }
+    return [...map.values()]
+  }, [opsFiltered])
+
   return (
     <>
-      {/* 헤더 */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <div>
-          <h1 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>주문 목록</h1>
-          <p style={{ fontSize: 12, color: '#9ca3af', margin: '4px 0 0 0' }}>
-            확정 {confirmed.length}건 · 합계 {formatKRW(totalAmt)}
-          </p>
-        </div>
-        <Link href="/orders/new" style={s.newBtn}>+ 주문 등록</Link>
-      </div>
+      <CommandStrip
+        kicker="Orders"
+        headline={headline}
+        subline={subline}
+        actions={[
+          { label: '주문 등록', href: '/orders/new', kind: 'primary' },
+          { label: 'Draft 보기', href: '/orders?status=draft', kind: 'secondary' },
+        ]}
+      />
 
-      {/* 필터 */}
-      <div style={s.filterRow}>
-        <input type="date" value={localFilters.from} style={s.input}
-          onChange={(e) => setLocalFilters((p) => ({ ...p, from: e.target.value }))} />
-        <span style={{ fontSize: 12, color: '#9ca3af' }}>~</span>
-        <input type="date" value={localFilters.to} style={s.input}
-          onChange={(e) => setLocalFilters((p) => ({ ...p, to: e.target.value }))} />
-        <select value={localFilters.customer_id} style={s.select}
-          onChange={(e) => setLocalFilters((p) => ({ ...p, customer_id: e.target.value }))}>
-          <option value="">전체 거래처</option>
-          {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-        <select value={localFilters.status} style={s.select}
-          onChange={(e) => setLocalFilters((p) => ({ ...p, status: e.target.value }))}>
-          <option value="">전체 상태</option>
-          <option value="confirmed">확정</option>
-          <option value="draft">임시저장</option>
-          <option value="cancelled">취소</option>
-        </select>
-        <button style={s.searchBtn} onClick={applyFilters}>검색</button>
-        <button style={s.resetBtn} onClick={() => router.push('/orders')}>초기화</button>
-      </div>
-
-      {orders.length === 0 && (
-        <p style={{ color: '#9ca3af', fontSize: 14 }}>주문이 없습니다.</p>
-      )}
-
-      {orders.length > 0 && (
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-          <thead>
-            <tr style={{ borderBottom: '1px solid #e5e7eb', background: '#f9fafb' }}>
-              <th style={th}>주문일</th>
-              <th style={th}>거래처</th>
-              <th style={th}>거래내역</th>
-              <th style={{ ...th, textAlign: 'right' }}>금액</th>
-              <th style={{ ...th, textAlign: 'right' }}>잔액</th>
-              <th style={th}>상태</th>
-              <th style={th}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {orders.map((o) => {
-              const cfg     = STATUS_CFG[o.status] ?? STATUS_CFG.confirmed
-              const expanded = expandedId === o.id
-
-              return (
-                <>
-                  <tr key={o.id}
-                    style={{ borderBottom: expanded ? 'none' : '1px solid #f3f4f6', cursor: 'pointer' }}
-                    onDoubleClick={() => setExpandedId(expanded ? null : o.id)}>
-                    <td style={{ ...td, color: '#6b7280', fontSize: 12, whiteSpace: 'nowrap' }}>
-                      {o.order_date}
-                    </td>
-                    <td style={{ ...td, fontWeight: 500 }}>{o.customer_name}</td>
-                    <td style={{ ...td, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      <span
-                        style={{ cursor: 'pointer', color: '#374151' }}
-                        onClick={() => setExpandedId(expanded ? null : o.id)}
-                        title={o.order_lines.map(l => `${l.product_name} ${l.quantity}개`).join(', ')}>
-                        {summarizeLines(o.order_lines)}
-                        {o.order_lines.length > 1 && (
-                          <span style={{ marginLeft: 4, fontSize: 10, color: '#9ca3af' }}>
-                            {expanded ? '▲' : '▼'}
-                          </span>
-                        )}
-                      </span>
-                    </td>
-                    <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>
-                      {formatKRW(o.total_amount)}
-                    </td>
-                    <td style={{
-                      ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums',
-                      fontSize: 12,
-                      color: o.current_balance === null ? '#d1d5db'
-                           : o.current_balance > 0    ? '#B91C1C'
-                           : (o.current_balance < 0 && Math.abs(o.current_balance) >= 100) ? '#1D4ED8'
-                           : '#6b7280',
-                      fontWeight: (o.current_balance && Math.abs(o.current_balance) >= 100) ? 600 : 400,
-                    }}>
-                      {(() => {
-                        const b = o.current_balance ?? 0
-                        if (o.current_balance === null) return '-'
-                        if (b < 0 && Math.abs(b) >= 100) return `예치 ${formatKRW(Math.abs(b))}`
-                        if (b < 0 && Math.abs(b) < 100)  return '0원'   // 예치 1원 노이즈 제거
-                        return formatKRW(b)
-                      })()}
-                    </td>
-                    <td style={td}>
-                      <span style={{ ...s.badge, color: cfg.color, background: cfg.bg }}>{cfg.label}</span>
-                    </td>
-                    <td style={{ ...td, display: 'flex', gap: 4, alignItems: 'center' }}>
-                      {o.status !== 'cancelled' && (
-                        <>
-                          <Link href={`/orders/${o.id}/edit`} style={s.editBtn}>수정</Link>
-                          <button style={s.cancelBtn}
-                            onClick={(e) => { e.stopPropagation(); setCancelTarget(o) }}>
-                            취소
-                          </button>
-                        </>
-                      )}
-
-                    </td>
-                  </tr>
-
-                  {/* 상세 품목 펼침 */}
-                  {expanded && (
-                    <tr key={`${o.id}-detail`} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                      <td colSpan={6} style={{ padding: '0 12px 10px 12px', background: '#f9fafb' }}>
-                        <table style={{ width: '100%', fontSize: 12 }}>
-                          <thead>
-                            <tr style={{ color: '#9ca3af' }}>
-                              <th style={{ ...th, fontSize: 10, padding: '4px 8px' }}>상품명</th>
-                              <th style={{ ...th, fontSize: 10, padding: '4px 8px', textAlign: 'right' }}>수량</th>
-                              <th style={{ ...th, fontSize: 10, padding: '4px 8px', textAlign: 'right' }}>단가</th>
-                              <th style={{ ...th, fontSize: 10, padding: '4px 8px', textAlign: 'right' }}>금액</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {o.order_lines.map((l, i) => (
-                              <tr key={i}>
-                                <td style={{ padding: '4px 8px' }}>{l.product_name}</td>
-                                <td style={{ padding: '4px 8px', textAlign: 'right' }}>{l.quantity}</td>
-                                <td style={{ padding: '4px 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{formatKRW(l.unit_price)}</td>
-                                <td style={{ padding: '4px 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>{formatKRW(l.line_total)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </td>
-                    </tr>
-                  )}
-                </>
-              )
-            })}
-          </tbody>
-        </table>
-      )}
-
-      {/* 취소 확인 모달 */}
-      {cancelTarget && (
-        <div style={s.overlay} onClick={() => setCancelTarget(null)}>
-          <div style={s.modal} onClick={(e) => e.stopPropagation()}>
-            <p style={s.modalTitle}>주문 취소</p>
-            <p style={s.modalDesc}>
-              [{cancelTarget.order_number}] {cancelTarget.customer_name}<br />
-              {formatKRW(cancelTarget.total_amount)} — 정말 취소하시겠습니까?
-            </p>
-            <input style={s.modalInput} value={cancelReason}
-              onChange={(e) => setCancelReason(e.target.value)}
-              placeholder="취소 사유 (선택)" />
-            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-              <button style={s.modalCancelBtn} onClick={() => setCancelTarget(null)}>아니오</button>
-              <button style={isPending ? s.modalConfirmOff : s.modalConfirmBtn}
-                onClick={handleCancel} disabled={isPending}>
-                {isPending ? '처리 중...' : '네, 취소합니다'}
-              </button>
+      <Surface variant="panel" density="comfortable">
+        <div className={styles.kpiStrip}>
+          <div className={styles.kpiBox}>
+            <div className={styles.kpiHead}>
+              <div className={styles.kpiHeadLabel}>처리 필요(draft)</div>
+              <StatusBadge status={badgeStatus} size="sm" />
             </div>
+            <KPIBlock
+              label="처리 필요(draft)"
+              value={`${counts.draft}건`}
+              valueSize="lg"
+              align="end"
+              hint={`오늘 draft ${counts.todayNeeds}건`}
+            />
           </div>
+
+          <KPIBlock label="오늘 주문" value={`${counts.today}건`} align="end" />
+          <KPIBlock label="진행(confirmed)" value={`${counts.confirmed}건`} align="end" />
+          <KPIBlock label="취소" value={`${counts.cancelled}건`} align="end" />
+          <KPIBlock label="기간 확정 매출" value={formatKRW(counts.periodConfirmedAmt)} align="end" />
         </div>
-      )}
+
+        <div className={styles.kpiNote}>
+          기간 {from} ~ {to}
+        </div>
+      </Surface>
+
+      <Surface variant="panel" density="comfortable">
+        <div className={styles.controls}>
+          <div className={styles.chipRow} aria-label="주문현황 탭">
+            <Chip active={opsTab === 'all'} onClick={() => setOpsTab('all')}>전체</Chip>
+            <Chip active={opsTab === 'today_delivery'} onClick={() => setOpsTab('today_delivery')}>오늘납품</Chip>
+            <Chip active={opsTab === 'delayed'} onClick={() => setOpsTab('delayed')}>지연</Chip>
+            <Chip active={opsTab === 'prep'} onClick={() => setOpsTab('prep')}>출고준비</Chip>
+            <Chip active={opsTab === 'done'} onClick={() => setOpsTab('done')}>완료</Chip>
+          </div>
+
+          <div className={styles.chipRow} aria-label="상태 필터">
+            <Chip active={status === ''} onClick={() => setStatus('')}>전체</Chip>
+            <Chip active={status === 'draft'} onClick={() => setStatus('draft')}>처리 필요</Chip>
+            <Chip active={status === 'confirmed'} onClick={() => setStatus('confirmed')}>진행</Chip>
+            <Chip active={status === 'cancelled'} onClick={() => setStatus('cancelled')}>취소</Chip>
+            <Chip
+              active={status === 'today'}
+              onClick={() => {
+                setStatus('today')
+                setFrom(todayStr)
+                setTo(todayStr)
+              }}
+            >
+              오늘
+            </Chip>
+          </div>
+
+          <select
+            className={styles.select}
+            value={customerId}
+            onChange={(e) => setCustomerId(e.target.value)}
+            aria-label="거래처"
+          >
+            <option value="">전체 거래처</option>
+            {customers.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+
+          <select
+            className={styles.select}
+            value={orderStatus}
+            onChange={(e) => setOrderStatus((e.target.value || '') as OrderOperationStatus | '')}
+            aria-label="주문상태"
+          >
+            <option value="">주문상태 전체</option>
+            {ORDER_OPERATION_STATUS_LIST.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+
+          <div className={styles.chipRow} aria-label="기간 프리셋">
+            <Chip active={preset === 'month'} onClick={() => {
+              setFrom(monthStartStr())
+              setTo(kstTodayStr())
+            }}>이번달</Chip>
+            <Chip active={preset === '7d'} onClick={() => {
+              setFrom(daysAgoStr(6))
+              setTo(kstTodayStr())
+            }}>최근7일</Chip>
+            <Chip active={preset === 'custom'} onClick={() => {}}>직접</Chip>
+          </div>
+
+          <input
+            className={styles.dateInput}
+            type="date"
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+            aria-label="시작일"
+          />
+          <span className={styles.sep}>~</span>
+          <input
+            className={styles.dateInput}
+            type="date"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+            aria-label="종료일"
+          />
+        </div>
+      </Surface>
+
+      <Surface variant="panel" density="comfortable">
+        <div className={styles.queue}>
+          {baseOrders.length === 0 ? (
+            <div className={styles.empty}>조건에 해당하는 주문이 없습니다</div>
+          ) : (
+            groupedByDate.map((g) => (
+              <div key={`g-${g.date}`}>
+                <div className={styles.groupHead}>
+                  <div className={styles.groupLeft}>
+                    <div className={styles.groupTitle}>{g.date}</div>
+                    <div className={styles.groupMeta}>{g.cnt}건</div>
+                  </div>
+                  <div className={styles.groupNums}>
+                    <span className={styles.gNum}>합계 {formatKRW(g.sum)}</span>
+                  </div>
+                </div>
+
+                {g.rows.map((o) => {
+                  const statusKey =
+                    o.status === 'draft'
+                      ? ('pending' as const)
+                      : o.status === 'confirmed'
+                        ? ('confirmed' as const)
+                        : ('cancelled' as const)
+
+                  const statusLabel =
+                    o.status === 'draft'
+                      ? '처리 필요'
+                      : o.status === 'confirmed'
+                        ? '진행'
+                        : '종료'
+
+                  const bal = o.current_balance ?? null
+                  const dep = o.deposit_amount ?? 0
+                  const hasDep = dep >= 100
+
+                  return (
+                    <DataTableRow key={o.id} density="compact">
+                      <DataCell>
+                        <div className={styles.rowMain}>
+                          <div className={styles.rowTitle}>
+                            {o.customer_name}{' '}
+                            <span className={styles.rowSub}>· #{o.order_number}</span>
+                          </div>
+                          <div className={styles.rowSub}>
+                            {summarizeLines(o.order_lines)}
+                          </div>
+                        </div>
+                      </DataCell>
+
+                      <DataCell align="end" tone="secondary">
+                        <StatusBadge status={statusKey} size="sm" />{' '}
+                        <span className={styles.rowSub}>{statusLabel}</span>
+                        {' '}
+                        <span className={styles.tag}>{o.order_status}</span>
+                      </DataCell>
+
+                      <DataCell align="end">
+                        <span className={styles.num}>{formatKRW(o.total_amount)}</span>
+                      </DataCell>
+
+                      <DataCell align="end" tone="secondary">
+                        <span className={styles.numSecondary}>
+                          {bal === null ? '미수 -' : `미수 ${formatKRW(bal)}`}
+                        </span>
+                      </DataCell>
+
+                      <DataCell align="end" tone="muted">
+                        {hasDep ? <span className={styles.tag}>예치 {formatKRW(dep)}</span> : null}
+                      </DataCell>
+
+                      <DataCell align="end">
+                        <Link href={`/orders/${o.id}`} className={styles.btnOpen}>
+                          열기
+                        </Link>
+                      </DataCell>
+                    </DataTableRow>
+                  )
+                })}
+              </div>
+            ))
+          )}
+        </div>
+      </Surface>
     </>
   )
 }
 
-const th: React.CSSProperties = { padding: '7px 10px', textAlign: 'left' as const }
-const td: React.CSSProperties = { padding: '7px 10px', verticalAlign: 'middle', whiteSpace: 'nowrap' }
-const s: Record<string, React.CSSProperties> = {
-  newBtn:         { padding: '8px 16px', background: '#111827', color: '#fff', borderRadius: 8, fontSize: 13, fontWeight: 500, textDecoration: 'none' },
-  filterRow:      { display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' },
-  input:          { padding: '7px 10px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13, outline: 'none' },
-  select:         { padding: '7px 10px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13, background: '#fff' },
-  searchBtn:      { padding: '7px 14px', background: '#111827', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, cursor: 'pointer' },
-  resetBtn:       { padding: '7px 14px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, cursor: 'pointer', color: '#6b7280' },
-  badge:          { display: 'inline-block', padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600 },
-  editBtn:        { padding: '4px 8px', background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 11, color: '#374151', textDecoration: 'none' },
-  cancelBtn:      { padding: '4px 8px', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 6, fontSize: 11, color: '#B91C1C', cursor: 'pointer' },
-  overlay:        { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  modal:          { background: '#fff', borderRadius: 12, padding: 24, width: 360, boxShadow: '0 20px 60px rgba(0,0,0,0.15)' },
-  modalTitle:     { fontSize: 16, fontWeight: 600, margin: '0 0 8px 0', color: '#B91C1C' },
-  modalDesc:      { fontSize: 13, color: '#374151', lineHeight: 1.6, margin: '0 0 12px 0' },
-  modalInput:     { padding: '9px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13, outline: 'none', width: '100%', boxSizing: 'border-box' },
-  modalCancelBtn: { flex: 1, padding: '10px', background: '#fff', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13, cursor: 'pointer' },
-  modalConfirmBtn:{ flex: 2, padding: '10px', background: '#B91C1C', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, cursor: 'pointer', fontWeight: 500 },
-  modalConfirmOff:{ flex: 2, padding: '10px', background: '#9ca3af', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, cursor: 'not-allowed' },
+function Chip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      className={[styles.chip, active ? styles.chipActive : '']
+        .filter(Boolean)
+        .join(' ')}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  )
 }

@@ -1,0 +1,792 @@
+/* 관리자 서버 페이지·테이블 공통 — `--ds-*` 기준 */
+
+.main {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.mainSimple {
+  padding: 24px;
+}
+
+.headerBetween {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.title {
+  font-size: 18px;
+  font-weight: 900;
+  margin: 0;
+  color: var(--ds-text-primary);
+}
+
+.subtitle {
+  font-size: 13px;
+  color: var(--ds-text-secondary);
+  margin: 6px 0 0;
+}
+
+.subtitleMax720 {
+  font-size: 13px;
+  color: var(--ds-text-secondary);
+  margin: 6px 0 0;
+  max-width: 720px;
+}
+
+.subtitleMax780 {
+  font-size: 13px;
+  color: var(--ds-text-secondary);
+  margin: 6px 0 0;
+  max-width: 780px;
+}
+
+.actionsRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.grid2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.grid3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.grid4 {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.kpiCard {
+  background: var(--ds-surface-panel);
+  border: 1px solid var(--ds-border-default);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.kpiTitle {
+  font-size: 12px;
+  color: var(--ds-text-secondary);
+  margin-bottom: 8px;
+  font-weight: 800;
+}
+
+.kpiValue {
+  font-size: 26px;
+  font-weight: 900;
+  color: var(--ds-text-primary);
+}
+
+.kpiValueMd {
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--ds-text-primary);
+}
+
+.kpiValueWarn {
+  font-size: 22px;
+  font-weight: 900;
+  color: color-mix(in srgb, var(--ds-status-warning) 85%, black);
+}
+
+.panel {
+  background: var(--ds-surface-panel);
+  border: 1px solid var(--ds-border-default);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.panelHeader {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--ds-border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.panelTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--ds-text-primary);
+}
+
+.panelBody {
+  padding: 14px;
+}
+
+.panelBodyTight {
+  padding: 16px;
+}
+
+.panelPadded {
+  padding: 16px;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.theadRow {
+  background: color-mix(in srgb, var(--ds-neutral-50) 92%, white);
+}
+
+.th {
+  text-align: left;
+  font-size: 11px;
+  color: var(--ds-text-secondary);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--ds-border-default);
+  white-space: nowrap;
+}
+
+.td {
+  font-size: 13px;
+  color: var(--ds-text-primary);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--ds-border-subtle);
+  vertical-align: top;
+}
+
+.tdNowrap {
+  font-size: 13px;
+  color: var(--ds-text-primary);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--ds-border-subtle);
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.tdWide {
+  font-size: 13px;
+  color: var(--ds-text-primary);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--ds-border-subtle);
+  vertical-align: top;
+  max-width: 520px;
+}
+
+.cellStrong {
+  font-weight: 800;
+  color: var(--ds-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cellMutedSm {
+  font-size: 12px;
+  color: var(--ds-text-secondary);
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cellMutedXs {
+  font-size: 11px;
+  color: var(--ds-text-muted);
+  font-family: ui-monospace, monospace;
+}
+
+.primaryBtn {
+  padding: 7px 12px;
+  border: none;
+  border-radius: 8px;
+  background: var(--ds-brand-text);
+  color: var(--ds-text-inverse);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.primaryBtn:hover {
+  opacity: 0.92;
+}
+
+.primaryBtnMd {
+  padding: 9px 14px;
+  border: none;
+  border-radius: 10px;
+  background: var(--ds-brand-text);
+  color: var(--ds-text-inverse);
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.ghostBtn {
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--ds-border-default);
+  background: var(--ds-surface-panel);
+  color: var(--ds-brand-text);
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+  display: inline-block;
+  cursor: pointer;
+}
+
+.ghostBtnMd {
+  padding: 9px 14px;
+  border: 1px solid var(--ds-border-default);
+  border-radius: 10px;
+  background: var(--ds-surface-panel);
+  color: var(--ds-brand-text);
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.secondaryBtnMd {
+  padding: 9px 14px;
+  border: none;
+  border-radius: 10px;
+  background: var(--ds-brand-primary);
+  color: var(--ds-text-inverse);
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.alert {
+  background: color-mix(in srgb, var(--ds-status-danger) 8%, white);
+  color: var(--ds-status-danger);
+  border: 1px solid color-mix(in srgb, var(--ds-status-danger) 22%, white);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.empty {
+  padding: 14px;
+  color: var(--ds-text-muted);
+  font-size: 13px;
+}
+
+.inlineMuted {
+  font-size: 12px;
+  color: var(--ds-text-secondary);
+}
+
+.riskLabel {
+  color: color-mix(in srgb, var(--ds-status-warning) 88%, black);
+  font-weight: 900;
+}
+
+.mutedDash {
+  color: var(--ds-text-muted);
+}
+
+.code {
+  font-size: 12px;
+  font-family: ui-monospace, monospace;
+}
+
+.badgeCritical {
+  background: color-mix(in srgb, var(--ds-status-danger) 14%, white);
+  color: color-mix(in srgb, var(--ds-status-danger) 82%, black);
+}
+
+.badgeHigh {
+  background: color-mix(in srgb, var(--ds-status-warning) 18%, white);
+  color: color-mix(in srgb, var(--ds-status-warning) 78%, black);
+}
+
+.badgeToday {
+  background: color-mix(in srgb, var(--ds-brand-primary) 12%, white);
+  color: color-mix(in srgb, var(--ds-brand-primary) 55%, black);
+}
+
+.badgeNormal {
+  background: var(--ds-neutral-100);
+  color: var(--ds-text-secondary);
+}
+
+.badgeCritical,
+.badgeHigh,
+.badgeToday,
+.badgeNormal {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.badgeL3 {
+  background: color-mix(in srgb, var(--ds-status-danger) 14%, white);
+  color: color-mix(in srgb, var(--ds-status-danger) 82%, black);
+}
+
+.badgeL2 {
+  background: color-mix(in srgb, var(--ds-status-warning) 18%, white);
+  color: color-mix(in srgb, var(--ds-status-warning) 78%, black);
+}
+
+.badgeL1 {
+  background: color-mix(in srgb, var(--ds-status-warning) 10%, white);
+  color: color-mix(in srgb, #a16207 90%, black);
+}
+
+.badgeL0 {
+  background: var(--ds-neutral-100);
+  color: var(--ds-text-secondary);
+}
+
+.badgeL3,
+.badgeL2,
+.badgeL1,
+.badgeL0 {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.badgeScoreLow {
+  background: color-mix(in srgb, var(--ds-status-danger) 14%, white);
+  color: color-mix(in srgb, var(--ds-status-danger) 82%, black);
+}
+
+.badgeScoreMid {
+  background: color-mix(in srgb, var(--ds-status-warning) 18%, white);
+  color: color-mix(in srgb, var(--ds-status-warning) 78%, black);
+}
+
+.badgeScoreBlue {
+  background: color-mix(in srgb, var(--ds-brand-primary) 12%, white);
+  color: color-mix(in srgb, var(--ds-brand-primary) 55%, black);
+}
+
+.badgeScoreOk {
+  background: color-mix(in srgb, var(--ds-status-success) 12%, white);
+  color: color-mix(in srgb, var(--ds-status-success) 75%, black);
+}
+
+.badgeScoreLow,
+.badgeScoreMid,
+.badgeScoreBlue,
+.badgeScoreOk {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.progressTrack {
+  height: 10px;
+  background: var(--ds-neutral-100);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background: var(--ds-brand-text);
+  width: var(--progress-pct, 0%);
+}
+
+.rowStat {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--ds-border-subtle);
+}
+
+.rowStatLabel {
+  font-size: 13px;
+  color: var(--ds-text-secondary);
+  font-weight: 700;
+}
+
+.rowStatValue {
+  font-size: 13px;
+  color: var(--ds-text-primary);
+  font-weight: 900;
+}
+
+.checkOk {
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--ds-status-success);
+}
+
+.checkBad {
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--ds-status-danger);
+}
+
+.gmvAmount {
+  font-size: 28px;
+  font-weight: 900;
+  margin-top: 8px;
+  color: var(--ds-text-primary);
+}
+
+.gmvSuffix {
+  font-size: 14px;
+  font-weight: 700;
+  margin-left: 6px;
+  color: var(--ds-text-secondary);
+}
+
+.chartRow {
+  padding: 16px;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  min-height: 160px;
+}
+
+.chartCol {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.chartBar {
+  width: 100%;
+  height: var(--bar-h, 4px);
+  border-radius: 8px;
+  background: linear-gradient(
+    180deg,
+    var(--ds-brand-primary),
+    color-mix(in srgb, var(--ds-brand-primary) 72%, black)
+  );
+}
+
+.chartMonth {
+  font-size: 11px;
+  color: var(--ds-text-secondary);
+  font-weight: 700;
+}
+
+.filterBar {
+  background: var(--ds-surface-panel);
+  border: 1px solid var(--ds-border-default);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.input {
+  padding: 8px 10px;
+  border: 1px solid var(--ds-border-default);
+  border-radius: 10px;
+  font-size: 13px;
+  background: var(--ds-surface-panel);
+  color: var(--ds-text-primary);
+}
+
+.primaryBtnSm {
+  padding: 6px 10px;
+  border: none;
+  border-radius: 8px;
+  background: var(--ds-brand-text);
+  color: var(--ds-text-inverse);
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.ghostBtnSm {
+  padding: 6px 10px;
+  border: 1px solid var(--ds-border-default);
+  border-radius: 8px;
+  background: var(--ds-surface-panel);
+  color: var(--ds-brand-text);
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.sectionListHead {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--ds-border-subtle);
+  display: flex;
+  justify-content: space-between;
+}
+
+.sectionListTitle {
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--ds-text-primary);
+}
+
+.errText {
+  color: var(--ds-status-danger);
+  margin-top: 12px;
+}
+
+.stackCol {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ── 모달 (정책 콘솔·정산) ───────────────────────────────── */
+.overlayModal {
+  position: fixed;
+  inset: 0;
+  background: color-mix(in srgb, var(--ds-brand-text) 35%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 16px;
+}
+
+.modalBox {
+  width: min(440px, 100%);
+  background: var(--ds-surface-panel);
+  border-radius: 14px;
+  padding: 22px 20px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.18);
+}
+
+.modalWide {
+  width: min(560px, 100%);
+}
+
+.modalTitle {
+  margin: 0 0 10px;
+  font-size: 16px;
+  font-weight: 900;
+  color: var(--ds-text-primary);
+}
+
+.modalBody {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ds-text-primary);
+  line-height: 1.55;
+}
+
+.modalMuted {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--ds-text-secondary);
+}
+
+.modalPre {
+  margin: 12px 0 0;
+  padding: 10px;
+  background: var(--ds-neutral-50);
+  border-radius: 8px;
+  font-size: 13px;
+  overflow: auto;
+  max-height: 120px;
+  font-family: ui-monospace, monospace;
+}
+
+.modalFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.modalFooterLoose {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.modalAlert {
+  color: var(--ds-status-danger);
+  font-size: 13px;
+  font-weight: 700;
+  margin-top: 12px;
+}
+
+.loadingHint {
+  margin-top: 12px;
+  font-size: 13px;
+}
+
+.emptyHist {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--ds-text-muted);
+}
+
+.historyTableWrap {
+  overflow-x: auto;
+  margin-top: 12px;
+}
+
+.thSm {
+  text-align: left;
+  font-size: 11px;
+  color: var(--ds-text-secondary);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--ds-border-default);
+}
+
+.tdSm {
+  font-size: 12px;
+  color: var(--ds-text-primary);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--ds-border-subtle);
+  vertical-align: top;
+  word-break: break-all;
+}
+
+/* ── 정책 콘솔 행 ─────────────────────────────────────────── */
+.policyNotifyRow {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.policyRowsStack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.policyRowCard {
+  border: 1px solid var(--ds-border-default);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.policyLabel {
+  font-weight: 900;
+  font-size: 14px;
+  color: var(--ds-text-primary);
+}
+
+.policyDesc {
+  font-size: 12px;
+  color: var(--ds-text-secondary);
+  margin-top: 4px;
+}
+
+.policyEditGap {
+  margin-top: 10px;
+}
+
+.policyValue {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ds-text-primary);
+  word-break: break-all;
+}
+
+.policyActionsCol {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+}
+
+.policyActionsRow {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.policyInput {
+  width: 100%;
+  max-width: 420px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--ds-border-default);
+  font-size: 14px;
+  background: var(--ds-surface-panel);
+  color: var(--ds-text-primary);
+}
+
+.policySecondaryBtn {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: none;
+  background: var(--ds-brand-primary);
+  color: var(--ds-text-inverse);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.policySecondaryBtn:hover {
+  opacity: 0.92;
+}
+
+.policyCompactPrimary {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: none;
+  background: var(--ds-brand-text);
+  color: var(--ds-text-inverse);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.policyCompactGhost {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--ds-border-default);
+  background: var(--ds-surface-panel);
+  color: var(--ds-brand-text);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.policyCompactGhost:disabled,
+.policyCompactPrimary:disabled,
+.policySecondaryBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.testMsg {
+  font-size: 13px;
+  color: var(--ds-text-primary);
+}
+
+.panelInsetTop {
+  margin-top: 12px;
+}

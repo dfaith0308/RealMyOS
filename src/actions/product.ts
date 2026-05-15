@@ -3,6 +3,9 @@
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import type { ActionResult } from '@/types/order'
+import { effectiveOrderAmount } from '@/lib/ledger-calc'
+import { getSettings } from '@/actions/settings'
+import { DEFAULT_SETTINGS } from '@/constants/settings'
 
 // ── 공통 ─────────────────────────────────────────────────────
 
@@ -28,6 +31,8 @@ export interface CreateProductInput {
   category_id?: string
   supplier_id?: string
   barcode?: string
+  ingredients?: string
+  item_report_number?: string
   min_margin_rate?: number
   cost_price: number
   selling_price?: number
@@ -104,6 +109,8 @@ export async function createProduct(
       category_id: input.category_id ?? null,
       supplier_id: input.supplier_id ?? null,
       barcode: input.barcode?.trim() || null,
+      ingredients: input.ingredients?.trim() || null,
+      item_report_number: input.item_report_number?.trim() || null,
       min_margin_rate: input.min_margin_rate ?? null,
       procurement_type: 'consignment',
     })
@@ -256,11 +263,13 @@ export async function updateProduct(input: UpdateProductInput): Promise<ActionRe
     { price_type: 'bulk',         price: input.bulk_price },
   ].filter((p) => p.price !== undefined)
 
-  for (const p of priceUpdates) {
-    await supabase.from('product_prices').upsert(
-      { product_id: input.id, price_type: p.price_type, price: p.price },
-      { onConflict: 'product_id,price_type' }
-    )
+  if (priceUpdates.length > 0) {
+    const rows = priceUpdates.map((p) => ({
+      product_id: input.id,
+      price_type: p.price_type,
+      price: p.price,
+    }))
+    await supabase.from('product_prices').upsert(rows, { onConflict: 'product_id,price_type' })
   }
 
   // 가격 변경과 상품정보 변경 로그 분리
@@ -320,8 +329,8 @@ export async function getProducts(filters?: {
   q?: string
 }): Promise<ActionResult<ProductListItem[]>> {
   const supabase = await createSupabaseServer()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { success: false, error: '로그인 필요' }
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
 
   let query = supabase
     .from('products')
@@ -333,6 +342,7 @@ export async function getProducts(filters?: {
       product_prices ( price_type, price ),
       product_stats ( avg_unit_price, used_by_count )
     `)
+    .eq('tenant_id', ctx.tenant_id)
     .is('deleted_at', null)
     .order('name')
 
@@ -607,4 +617,496 @@ export async function getProductById(
   if (error || !data) return { success: false, error: '상품을 찾을 수 없습니다.' }
 
   return { success: true, data: data as ProductCopyData }
+}
+
+// ============================================================
+// SUP-MISSING-009: 상품 상세(탭) 데이터
+// ============================================================
+
+export interface ProductDetail {
+  id: string
+  product_code: string
+  name: string
+  category_id: string | null
+  category_name: string | null
+  unit: string | null
+  spec: string | null
+  barcode: string | null
+  storage_condition: string | null
+  status: string | null
+  memo: string | null
+  ingredients: string | null
+  item_report_number: string | null
+  selling_price: number | null
+  min_margin_rate: number | null
+  current_cost_price: number | null
+}
+
+export async function getProductDetail(
+  product_id: string,
+): Promise<ActionResult<ProductDetail>> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const { data, error } = await supabase
+    .from('products')
+    .select(`
+      id, product_code, name, category_id, unit, spec, barcode,
+      storage_condition, status, memo, ingredients, item_report_number,
+      min_margin_rate,
+      product_categories(name),
+      product_costs(cost_price, start_date, end_date, created_at),
+      product_prices(price_type, price)
+    `)
+    .eq('tenant_id', ctx.tenant_id)
+    .eq('id', product_id)
+    .is('deleted_at', null)
+    .maybeSingle()
+
+  if (error) return { success: false, error: error.message }
+  if (!data) return { success: false, error: '상품을 찾을 수 없습니다.' }
+
+  const currentCost = (data.product_costs ?? [])
+    .filter((c: any) => c.end_date === null)
+    .sort((a: any, b: any) => String(b.start_date).localeCompare(String(a.start_date)))[0]
+    ?.cost_price ?? null
+
+  const priceMap = Object.fromEntries((data.product_prices ?? []).map((pp: any) => [pp.price_type, pp.price]))
+
+  const cat = (data as any).product_categories
+  const category_name =
+    Array.isArray(cat) ? (cat[0]?.name ?? null) : (cat?.name ?? null)
+
+  return {
+    success: true,
+    data: {
+      id: data.id,
+      product_code: data.product_code,
+      name: data.name,
+      category_id: data.category_id,
+      category_name,
+      unit: data.unit ?? null,
+      spec: data.spec ?? null,
+      barcode: data.barcode ?? null,
+      storage_condition: (data as any).storage_condition ?? null,
+      status: (data as any).status ?? null,
+      memo: data.memo ?? null,
+      ingredients: (data as any).ingredients ?? null,
+      item_report_number: (data as any).item_report_number ?? null,
+      selling_price: priceMap.normal ?? null,
+      min_margin_rate: data.min_margin_rate ?? null,
+      current_cost_price: currentCost,
+    },
+  }
+}
+
+export interface ProductCostHistoryRow {
+  id: string
+  start_date: string
+  end_date: string | null
+  cost_price: number
+  created_at: string
+}
+
+export async function getProductCostHistory(
+  product_id: string,
+): Promise<ActionResult<ProductCostHistoryRow[]>> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const { data, error } = await supabase
+    .from('product_costs')
+    .select('id, start_date, end_date, cost_price, created_at')
+    .eq('tenant_id', ctx.tenant_id)
+    .eq('product_id', product_id)
+    .order('start_date', { ascending: false })
+    .order('created_at', { ascending: false })
+
+  if (error) return { success: false, error: error.message }
+  return { success: true, data: (data ?? []) as ProductCostHistoryRow[] }
+}
+
+export interface CustomerPriceRow {
+  customer_id: string
+  customer_name: string
+  unit_price: number | null
+  pricing_mode: string | null
+  updated_at: string | null
+  source: 'order'
+}
+
+export async function getCustomerProductPrices(
+  product_id: string,
+): Promise<ActionResult<CustomerPriceRow[]>> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const { data, error } = await supabase
+    .from('customer_product_prices')
+    .select('customer_id, last_price, last_pricing_mode, updated_at, customers(name)')
+    .eq('tenant_id', ctx.tenant_id)
+    .eq('product_id', product_id)
+    .order('updated_at', { ascending: false, nullsFirst: false })
+    .limit(200)
+
+  if (error) return { success: false, error: error.message }
+  return {
+    success: true,
+    data: (data ?? []).map((r: any) => ({
+      customer_id: r.customer_id,
+      customer_name: r.customers?.name ?? '-',
+      unit_price: r.last_price ?? null,
+      pricing_mode: r.last_pricing_mode ?? null,
+      updated_at: r.updated_at ?? null,
+      source: 'order',
+    })),
+  }
+}
+
+export interface ManualRelatedRow {
+  id: string
+  related_product_id: string
+  related_product_name: string
+  is_active: boolean
+  created_at: string
+}
+
+// NOTE: 테이블명은 운영 SSOT에 의존 (migration 없음). 없으면 빈 목록 반환.
+const MANUAL_RELATED_TABLE = 'product_related_manual'
+
+export async function getProductRelatedManual(
+  product_id: string,
+): Promise<ActionResult<ManualRelatedRow[]>> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  try {
+    const { data, error } = await supabase
+      .from(MANUAL_RELATED_TABLE)
+      .select('id, related_product_id, is_active, created_at, products!related_product_id(name)')
+      .eq('tenant_id', ctx.tenant_id)
+      .eq('product_id', product_id)
+      .order('created_at', { ascending: false })
+
+    if (error) return { success: false, error: error.message }
+    return {
+      success: true,
+      data: (data ?? []).map((r: any) => ({
+        id: r.id,
+        related_product_id: r.related_product_id,
+        related_product_name: Array.isArray(r.products)
+          ? (r.products[0]?.name ?? '-')
+          : ((r.products as any)?.name ?? '-'),
+        is_active: r.is_active ?? true,
+        created_at: r.created_at,
+      })),
+    }
+  } catch (e) {
+    // 테이블 부재 등: UI에서 안내 문구를 표시할 수 있도록 빈 목록으로 성공 반환
+    return { success: true, data: [] }
+  }
+}
+
+export async function addRelatedProduct(
+  product_id: string,
+  related_id: string,
+): Promise<ActionResult<{ id: string }>> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+  if (!related_id) return { success: false, error: 'related_id 필수' }
+  if (related_id === product_id) return { success: false, error: '동일 상품은 등록할 수 없습니다.' }
+
+  const { data, error } = await supabase
+    .from(MANUAL_RELATED_TABLE)
+    .insert({
+      tenant_id: ctx.tenant_id,
+      product_id,
+      related_product_id: related_id,
+      is_active: true,
+      created_at: new Date().toISOString(),
+    })
+    .select('id')
+    .single()
+
+  if (error || !data) return { success: false, error: error?.message ?? '저장 실패' }
+  revalidatePath(`/products/${product_id}`)
+  return { success: true, data: { id: data.id } }
+}
+
+export async function removeRelatedProduct(id: string, product_id: string): Promise<ActionResult> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const { error } = await supabase
+    .from(MANUAL_RELATED_TABLE)
+    .update({ is_active: false, updated_at: new Date().toISOString() })
+    .eq('tenant_id', ctx.tenant_id)
+    .eq('id', id)
+
+  if (error) return { success: false, error: error.message }
+  revalidatePath(`/products/${product_id}`)
+  return { success: true }
+}
+
+export interface UsagePatternResult {
+  trade_count: number
+  top_customers: Array<{ customer_id: string; customer_name: string; order_count: number }>
+  co_purchase_top: Array<{ product_name: string; count: number }>
+  monthly_qty_6m: Array<{ ym: string; qty: number }>
+  avg_order_qty: number | null
+  data_ok: boolean
+}
+
+export async function getProductUsagePattern(
+  product_id: string,
+): Promise<ActionResult<UsagePatternResult>> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  // 최근 6개월 범위 (KST day 기준)
+  const now = new Date(Date.now() + 9 * 3600000)
+  const to = now.toISOString().slice(0, 10)
+  const fromDate = new Date(now)
+  fromDate.setUTCMonth(fromDate.getUTCMonth() - 5)
+  fromDate.setUTCDate(1)
+  const from = fromDate.toISOString().slice(0, 10)
+
+  // 1) 이 상품이 포함된 주문 라인 (order_lines 스냅샷 기반)
+  const { data: lines, error: lErr } = await supabase
+    .from('order_lines')
+    .select('order_id, quantity')
+    .eq('tenant_id', ctx.tenant_id)
+    .eq('product_id', product_id)
+    .gte('created_at', from)
+    .limit(5000)
+
+  if (lErr) return { success: false, error: lErr.message }
+  const orderIds = [...new Set((lines ?? []).map((l) => l.order_id))].filter(Boolean)
+
+  if (orderIds.length === 0) {
+    return {
+      success: true,
+      data: {
+        trade_count: 0,
+        top_customers: [],
+        co_purchase_top: [],
+        monthly_qty_6m: [],
+        avg_order_qty: null,
+        data_ok: false,
+      },
+    }
+  }
+
+  // 2) 주문 헤더(confirmed, 범위 내) + customer
+  const { data: orders, error: oErr } = await supabase
+    .from('orders')
+    .select('id, order_date, customer_id, customers(name), status')
+    .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
+    .in('id', orderIds)
+    .eq('status', 'confirmed')
+    .gte('order_date', from)
+    .lte('order_date', to)
+
+  if (oErr) return { success: false, error: oErr.message }
+  const confirmedIds = new Set((orders ?? []).map((o) => o.id))
+
+  // trade_count: confirmed 주문 기준
+  const trade_count = confirmedIds.size
+  const data_ok = trade_count >= 10
+
+  // 월별 판매량(수량) + 평균 주문 수량(이 상품 라인 qty 평균)
+  const monthly = new Map<string, number>()
+  let qtySum = 0
+  let qtyCnt = 0
+  for (const o of orders ?? []) {
+    const ym = String(o.order_date ?? '').slice(0, 7)
+    if (!ym) continue
+    // 해당 주문에서 해당 상품 라인 qty 합
+    const q = (lines ?? [])
+      .filter((l: any) => l.order_id === o.id)
+      .reduce((s: number, r: any) => s + (r.quantity ?? 0), 0)
+    monthly.set(ym, (monthly.get(ym) ?? 0) + q)
+    if (q > 0) {
+      qtySum += q
+      qtyCnt += 1
+    }
+  }
+
+  const monthly_qty_6m = [...monthly.entries()]
+    .map(([ym, qty]) => ({ ym, qty }))
+    .sort((a, b) => a.ym.localeCompare(b.ym))
+    .slice(-6)
+
+  const avg_order_qty = qtyCnt > 0 ? Math.round((qtySum / qtyCnt) * 10) / 10 : null
+
+  // TOP 거래처(주문 횟수)
+  const byCust = new Map<string, { name: string; cnt: number }>()
+  for (const o of orders ?? []) {
+    const cid = o.customer_id
+    if (!cid) continue
+    const prev = byCust.get(cid)
+    byCust.set(cid, {
+      name: (o.customers as any)?.name ?? '-',
+      cnt: (prev?.cnt ?? 0) + 1,
+    })
+  }
+  const top_customers = [...byCust.entries()]
+    .map(([customer_id, v]) => ({ customer_id, customer_name: v.name, order_count: v.cnt }))
+    .sort((a, b) => b.order_count - a.order_count)
+    .slice(0, 5)
+
+  // 함께 구매 상품 TOP5 (same order, other product_name)
+  const ids = (orders ?? []).map((o) => o.id)
+  const { data: allLines, error: alErr } = await supabase
+    .from('order_lines')
+    .select('order_id, product_id, product_name')
+    .eq('tenant_id', ctx.tenant_id)
+    .in('order_id', ids)
+    .limit(20000)
+  if (alErr) return { success: false, error: alErr.message }
+
+  const co = new Map<string, number>()
+  for (const l of allLines ?? []) {
+    if (!confirmedIds.has(l.order_id)) continue
+    if (l.product_id === product_id) continue
+    const key = l.product_name ?? '-'
+    if (key === '-') continue
+    co.set(key, (co.get(key) ?? 0) + 1)
+  }
+  const co_purchase_top = [...co.entries()]
+    .map(([product_name, count]) => ({ product_name, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5)
+
+  return {
+    success: true,
+    data: {
+      trade_count,
+      top_customers,
+      co_purchase_top,
+      monthly_qty_6m,
+      avg_order_qty,
+      data_ok,
+    },
+  }
+}
+
+export interface AutoRecommendResult {
+  enabled: boolean
+  reason_disabled?: string
+  recommendations: Array<{ product_name: string; score: number }>
+  stats: { trade_count: number; co_purchase_count: number; distinct_customers: number }
+}
+
+export async function getProductAutoRecommend(
+  product_id: string,
+): Promise<ActionResult<AutoRecommendResult>> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  // 최근 6개월 confirmed 주문 중 이 상품 포함 주문을 기반으로 조건/추천 계산
+  const usage = await getProductUsagePattern(product_id)
+  if (!usage.success || !usage.data) return usage as any
+
+  const trade_count = usage.data.trade_count
+  const distinct_customers = usage.data.top_customers.length > 0
+    ? new Set(usage.data.top_customers.map((c) => c.customer_id)).size
+    : 0
+  const co_purchase_count = usage.data.co_purchase_top.reduce((s, r) => s + r.count, 0)
+
+  const cond1 = trade_count >= 20
+  const cond2 = co_purchase_count >= 30
+  const cond3 = distinct_customers >= 5
+  const ok = [cond1, cond2, cond3].filter(Boolean).length >= 2
+
+  if (!ok) {
+    return {
+      success: true,
+      data: {
+        enabled: false,
+        reason_disabled: '데이터가 더 쌓이면 자동 추천이 활성화됩니다',
+        recommendations: [],
+        stats: { trade_count, co_purchase_count, distinct_customers },
+      },
+    }
+  }
+
+  return {
+    success: true,
+    data: {
+      enabled: true,
+      recommendations: usage.data.co_purchase_top.map((r) => ({ product_name: r.product_name, score: r.count })),
+      stats: { trade_count, co_purchase_count, distinct_customers },
+    },
+  }
+}
+
+export interface MarginAnalysis {
+  selling_price: number | null
+  current_cost_price: number | null
+  current_margin_rate: number | null
+  avg_unit_price: number | null
+  avg_margin_rate: number | null
+  threshold: number
+}
+
+export async function getProductMarginAnalysis(
+  product_id: string,
+): Promise<ActionResult<MarginAnalysis>> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const [detailRes, settingsRes, { data: stats, error: sErr }] = await Promise.all([
+    getProductDetail(product_id),
+    getSettings(),
+    supabase
+      .from('product_stats')
+      .select('avg_unit_price')
+      .eq('tenant_id', ctx.tenant_id)
+      .eq('product_id', product_id)
+      .maybeSingle(),
+  ])
+
+  if (!detailRes.success || !detailRes.data) return detailRes as any
+  if (sErr) return { success: false, error: sErr.message }
+
+  const selling_price = detailRes.data.selling_price
+  const current_cost_price = detailRes.data.current_cost_price
+  const current_margin_rate =
+    selling_price && current_cost_price !== null && selling_price > 0
+      ? ((selling_price - current_cost_price) / selling_price) * 100
+      : null
+
+  const avg_unit_price = (stats as any)?.avg_unit_price ?? null
+  const avg_margin_rate =
+    avg_unit_price && current_cost_price !== null && avg_unit_price > 0
+      ? ((avg_unit_price - current_cost_price) / avg_unit_price) * 100
+      : null
+
+  const thresholdDefault =
+    settingsRes.success && settingsRes.data
+      ? settingsRes.data.margin_warning_threshold
+      : DEFAULT_SETTINGS.margin_warning_threshold
+  const threshold = detailRes.data.min_margin_rate ?? thresholdDefault
+
+  return {
+    success: true,
+    data: {
+      selling_price,
+      current_cost_price,
+      current_margin_rate,
+      avg_unit_price,
+      avg_margin_rate,
+      threshold,
+    },
+  }
 }

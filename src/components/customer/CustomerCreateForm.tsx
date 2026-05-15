@@ -4,18 +4,30 @@ import Link from 'next/link'
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { createCustomer, checkCustomerDuplicate } from '@/actions/customer'
-import { addAcquisitionChannel } from '@/actions/acquisition-channel'
 import { formatPaymentTerms } from '@/lib/payment-terms'
-import type { AcquisitionChannel } from '@/actions/acquisition-channel'
 import type { PaymentTermsType } from '@/lib/payment-terms'
 
-interface Props {
-  channels: AcquisitionChannel[]
-}
+interface Props {}
 
 type CustomerType = 'business' | 'individual' | 'prospect'
 
-export default function CustomerCreateForm({ channels: init }: Props) {
+function buildPaymentTermsString(
+  termsType: PaymentTermsType,
+  termsDay: string,
+  termsDays: string,
+) {
+  if (termsType === 'monthly_day') {
+    const d = Number(termsDay)
+    return d ? `monthly_day:${d}` : 'monthly_day'
+  }
+  if (termsType === 'days_after') {
+    const n = Number(termsDays)
+    return n ? `days_after:${n}` : 'days_after'
+  }
+  return termsType
+}
+
+export default function CustomerCreateForm(_: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -26,37 +38,17 @@ export default function CustomerCreateForm({ channels: init }: Props) {
   const [bizNumber, setBizNumber] = useState('')
   const [name, setName] = useState('')
   const [repName, setRepName] = useState('')
-  const [bizType, setBizType] = useState('')
+  const [bizType, setBizType] = useState('') // 업태
+  const [bizItem, setBizItem] = useState('') // 종목 (schema 없으면 business_type에 합쳐 저장)
   const [phone, setPhone] = useState('')
   const [address, setAddress] = useState('')
+  const [email, setEmail] = useState('')
 
   const [openingBalance, setOpeningBalance] = useState('')
   const [openingDate, setOpeningDate] = useState(new Date().toISOString().slice(0, 10))
   const [termsType, setTermsType] = useState<PaymentTermsType>('immediate')
   const [termsDays, setTermsDays] = useState('')
   const [termsDay, setTermsDay] = useState('')
-  const [targetRevenue, setTargetRevenue] = useState('')
-  const [isBuyer, setIsBuyer] = useState(true)
-  const [isSupplier, setIsSupplier] = useState(false)
-
-  const [channels, setChannels] = useState(init)
-  const [channelId, setChannelId] = useState('')
-  const [newChannelName, setNewChannelName] = useState('')
-  const [showAddChannel, setShowAddChannel] = useState(false)
-  const [, startCh] = useTransition()
-
-  function handleAddChannel() {
-    if (!newChannelName.trim()) return
-    startCh(async () => {
-      const r = await addAcquisitionChannel(newChannelName)
-      if (r.success && r.data) {
-        setChannels((p) => [...p, r.data!])
-        setChannelId(r.data.id)
-        setNewChannelName('')
-        setShowAddChannel(false)
-      }
-    })
-  }
 
   // payment_terms_days 역산
   function getTermsDays(): number {
@@ -68,18 +60,25 @@ export default function CustomerCreateForm({ channels: init }: Props) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
-    if (!name.trim()) { setError('거래처명을 입력해주세요.'); return }
+    if (!name.trim()) { setError('상호명/이름을 입력해주세요.'); return }
+    if (!phone.trim()) { setError('연락처를 입력해주세요.'); return }
     if (dupBlock) { setError('이미 등록된 사업자번호입니다. 기존 거래처를 수정해주세요.'); return }
 
     startTransition(async () => {
+      const bizCombined =
+        customerType === 'business'
+          ? [bizType.trim(), bizItem.trim()].filter(Boolean).join(' / ')
+          : ''
+
       const result = await createCustomer({
         customer_type:          customerType,
         name,
-        phone:                  phone || undefined,
+        phone:                  phone,
         address:                address || undefined,
+        email:                  email || undefined,
         biz_number:             bizNumber || undefined,
         representative_name:    repName || undefined,
-        business_type:          bizType || undefined,
+        business_type:          bizCombined || undefined,
         opening_balance:        openingBalance ? Number(openingBalance) : 0,
         opening_balance_date:   openingDate,
         payment_terms_type:     termsType,
@@ -87,10 +86,8 @@ export default function CustomerCreateForm({ channels: init }: Props) {
         payment_day:            termsType === 'monthly_day' ? (termsDay ? Number(termsDay) : undefined)
                               : termsType === 'days_after'  ? (termsDays ? Number(termsDays) : undefined)
                               : undefined,
-        target_monthly_revenue: targetRevenue ? Number(targetRevenue) : undefined,
-        acquisition_channel_id: channelId || undefined,
-        is_buyer:  isBuyer,
-        is_supplier: isSupplier,
+        payment_terms: buildPaymentTermsString(termsType, termsDay, termsDays),
+        // 분류/유입/연락상태/역할/목표매출은 등록 폼에서 제거 (상세 분류/기본정보에서 관리)
       })
       if (result.success) router.push('/customers')
       else setError(result.error ?? '저장 실패')
@@ -106,8 +103,8 @@ export default function CustomerCreateForm({ channels: init }: Props) {
 
       <form onSubmit={handleSubmit} style={s.form}>
 
-        {/* 고객 유형 */}
-        <F label="고객 유형 *">
+        {/* 고객유형 */}
+        <F label="고객유형 (선택)">
           <Seg options={[
             { value: 'business',   label: '사업자' },
             { value: 'individual', label: '개인' },
@@ -144,7 +141,7 @@ export default function CustomerCreateForm({ channels: init }: Props) {
           </F>
         )}
 
-        <F label="상호명 / 이름 *">
+        <F label="상호명 / 이름 (필수)">
           <input style={s.input} value={name}
             onChange={(e) => setName(e.target.value)} placeholder="예: 정무식당" required />
         </F>
@@ -155,14 +152,18 @@ export default function CustomerCreateForm({ channels: init }: Props) {
               <input style={s.input} value={repName}
                 onChange={(e) => setRepName(e.target.value)} placeholder="홍길동" />
             </F>
-            <F label="업태">
-              <input style={s.input} value={bizType}
-                onChange={(e) => setBizType(e.target.value)} placeholder="음식점업" />
+            <F label="업태·종목">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <input style={s.input} value={bizType}
+                  onChange={(e) => setBizType(e.target.value)} placeholder="업태 (예: 음식점업)" />
+                <input style={s.input} value={bizItem}
+                  onChange={(e) => setBizItem(e.target.value)} placeholder="종목 (예: 한식)" />
+              </div>
             </F>
           </>
         )}
 
-        <F label="연락처">
+        <F label="연락처 (필수)">
           <input style={s.input} value={phone}
             onChange={(e) => { setPhone(e.target.value); setDupWarning(null) }}
             onBlur={async () => {
@@ -185,11 +186,19 @@ export default function CustomerCreateForm({ channels: init }: Props) {
             onChange={(e) => setAddress(e.target.value)} placeholder="주소 입력" />
         </F>
 
+        <F label="이메일">
+          <input style={s.input} value={email}
+            onChange={(e) => setEmail(e.target.value)} placeholder="선택 입력" />
+        </F>
+
         <div style={s.divider} />
 
         <F label="최초 미수금">
           <input style={s.input} type="number" value={openingBalance}
             onChange={(e) => setOpeningBalance(e.target.value)} placeholder="0" />
+          <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>
+            기존에 발생한 미수금이 있을 경우 입력하세요. 등록 후 직접 수정은 이력과 함께 진행합니다.
+          </div>
         </F>
 
         <F label="최초 미수금 기준일">
@@ -197,62 +206,38 @@ export default function CustomerCreateForm({ channels: init }: Props) {
             onChange={(e) => setOpeningDate(e.target.value)} />
         </F>
 
-        {/* 결제조건 */}
-        <F label={`결제조건 — ${termsPreview}`}>
-          <Seg options={[
-            { value: 'immediate',   label: '즉시' },
-            { value: 'monthly_end', label: '말일' },
-            { value: 'monthly_day', label: '매월N일' },
-            { value: 'days_after',  label: 'N일후' },
-          ]} value={termsType} onChange={(v) => setTermsType(v as PaymentTermsType)} />
+        {/* 거래 설정 */}
+        <F label={`결제조건 (선택) — ${termsPreview}`}>
+          <select
+            style={s.input}
+            value={termsType}
+            onChange={(e) => setTermsType(e.target.value as PaymentTermsType)}
+          >
+            <option value="immediate">즉시결제</option>
+            <option value="monthly_end">말일</option>
+            <option value="monthly_day">매월N일</option>
+            <option value="days_after">N일후</option>
+          </select>
           {termsType === 'monthly_day' && (
-            <input style={{ ...s.input, marginTop: 8 }} type="number"
-              value={termsDay} onChange={(e) => setTermsDay(e.target.value)}
-              placeholder="몇 일? (예: 15)" min={1} max={31} />
+            <input
+              style={{ ...s.input, marginTop: 8 }}
+              type="number"
+              value={termsDay}
+              onChange={(e) => setTermsDay(e.target.value)}
+              placeholder="몇 일? (예: 15)"
+              min={1}
+              max={31}
+            />
           )}
           {termsType === 'days_after' && (
-            <input style={{ ...s.input, marginTop: 8 }} type="number"
-              value={termsDays} onChange={(e) => setTermsDays(e.target.value)}
-              placeholder="며칠 후? (예: 30)" min={1} />
-          )}
-        </F>
-
-        <F label="목표 월매출">
-          <input style={s.input} type="number" value={targetRevenue}
-            onChange={(e) => setTargetRevenue(e.target.value)}
-            placeholder="미입력 시 기본값 적용" />
-        </F>
-
-        <F label="역할">
-          <div style={{ display: 'flex', gap: 16 }}>
-            <label style={s.check}>
-              <input type="checkbox" checked={isBuyer}
-                onChange={(e) => setIsBuyer(e.target.checked)} /> 매출처
-            </label>
-            <label style={s.check}>
-              <input type="checkbox" checked={isSupplier}
-                onChange={(e) => setIsSupplier(e.target.checked)} /> 매입처
-            </label>
-          </div>
-        </F>
-
-        <F label="유입경로">
-          <div style={{ display: 'flex', gap: 8 }}>
-            <select style={{ ...s.input, flex: 1 }} value={channelId}
-              onChange={(e) => setChannelId(e.target.value)}>
-              <option value="">선택 안 함</option>
-              {channels.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-            <button type="button" style={s.iconBtn}
-              onClick={() => setShowAddChannel((v) => !v)}>+</button>
-          </div>
-          {showAddChannel && (
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <input style={{ ...s.input, flex: 1 }} value={newChannelName}
-                onChange={(e) => setNewChannelName(e.target.value)}
-                placeholder="새 채널명" />
-              <button type="button" style={s.saveBtn} onClick={handleAddChannel}>추가</button>
-            </div>
+            <input
+              style={{ ...s.input, marginTop: 8 }}
+              type="number"
+              value={termsDays}
+              onChange={(e) => setTermsDays(e.target.value)}
+              placeholder="며칠 후? (예: 30)"
+              min={1}
+            />
           )}
         </F>
 

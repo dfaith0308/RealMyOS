@@ -40,6 +40,29 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
+  // /admin/* 보호: admin role만 접근 허용
+  if (pathname.startsWith('/admin')) {
+    const { data: { user }, error: userErr } = await supabase.auth.getUser()
+    if (userErr || !user) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/login'
+      return NextResponse.redirect(url)
+    }
+
+    const { data: userRow, error: rowErr } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    const role = (userRow as any)?.role as string | undefined
+    if (rowErr || role !== 'admin') {
+      const url = request.nextUrl.clone()
+      url.pathname = '/dashboard'
+      return NextResponse.redirect(url)
+    }
+  }
+
   // 루트(/) → /dashboard
   if (pathname === '/') {
     const url = request.nextUrl.clone()

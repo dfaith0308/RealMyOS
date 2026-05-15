@@ -8,8 +8,11 @@ import {
   isSalesOrder,
   buildCustomerKey,
   resolveCustomerName,
+  getAccountsReceivable,
 } from '@/lib/ledger-calc'
 import type { ActionResult } from '@/types/order'
+import { fallbackMessage } from '@/lib/dashboard-utils'
+import { fetchInboundSupersededOriginalPaymentIds } from '@/lib/inbound-payment-superseded'
 
 function todayKST(): string {
   return new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10)
@@ -25,10 +28,19 @@ export interface DashboardData {
   total_deposit:      number
   monthly_sales:      number
   total_overdue:      number
+  rfq_unanswered_count: number
+  fund_items: Array<{
+    rule_name:      string
+    planned_amount: number
+    actual_amount:  number
+    status:         string
+  }>
   top_customers: Array<{
     id: string; name: string; score: number; primary_reason: string; status: string
+    days_since_order: number
+    payment_terms_days: number
   }>
-  top_customer_sales: Array<{ name: string; amount: number }>
+  top_customer_sales: Array<{ name: string; amount: number; quantity: number }>
   top_product_sales:  Array<{ name: string; amount: number }>
   overdue_count:      number
   uncontacted_count:  number
@@ -58,6 +70,7 @@ export async function getDashboardData(): Promise<ActionResult<DashboardData>> {
     { data: customerSalesRaw },
     { data: ordersForProductSales },
     { data: draftOrders },
+    { count: rfq_unanswered_count },
   ] = await Promise.all([
     getCustomersWithScore(),
     getDailyFundPlan(today),
@@ -65,21 +78,21 @@ export async function getDashboardData(): Promise<ActionResult<DashboardData>> {
     supabase.from('orders')
       .select('total_amount, final_amount, order_type')
       .or(`seller_tenant_id.eq.${tid},tenant_id.eq.${tid}`)
-      .in('status', ['confirmed', 'delivered'])
+      .eq('status', 'confirmed')
       .is('deleted_at', null)
       .gte('order_date', monthStart).lte('order_date', today),
 
     supabase.from('orders')
-      .select('customer_id, customer_name, total_amount, final_amount, order_type, customers(name)')
+      .select('customer_id, customer_name, total_amount, final_amount, order_type, customers(name), order_lines(quantity)')
       .or(`seller_tenant_id.eq.${tid},tenant_id.eq.${tid}`)
-      .in('status', ['confirmed', 'delivered'])
+      .eq('status', 'confirmed')
       .is('deleted_at', null)
       .gte('order_date', monthStart).lte('order_date', today),
 
     supabase.from('orders')
       .select('order_lines(product_name, line_total), order_type')
       .or(`seller_tenant_id.eq.${tid},tenant_id.eq.${tid}`)
-      .in('status', ['confirmed', 'delivered'])
+      .eq('status', 'confirmed')
       .is('deleted_at', null)
       .gte('order_date', monthStart).lte('order_date', today),
 
@@ -88,13 +101,20 @@ export async function getDashboardData(): Promise<ActionResult<DashboardData>> {
       .or(`seller_tenant_id.eq.${tid},tenant_id.eq.${tid}`)
       .eq('status', 'draft')
       .is('deleted_at', null),
+
+    supabase
+      .from('rfq_requests')
+      .select('id', { count: 'exact', head: true })
+      .eq('tenant_id', ctx.tenant_id)
+      .eq('status', 'open')
+      .lt('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()),
   ])
 
   const customers = scoreResult.data ?? []
 
   // KPI
   const total_receivable = customers.reduce((s, c) => s + Math.max(0, c.receivable_amount), 0)
-  const total_deposit    = 0  // 예치금 기능 미완성 — 항상 0
+  const total_deposit    = customers.reduce((s, c) => s + (c.deposit_amount ?? 0), 0)
   const total_overdue    = customers.reduce((s, c) => s + c.overdue_amount, 0)
   const monthly_sales    = (monthlySalesRaw ?? [])
     .filter((o) => isSalesOrder(o))
@@ -115,18 +135,37 @@ export async function getDashboardData(): Promise<ActionResult<DashboardData>> {
       primary_reason = '주문주기 초과'
     else if (c.receivable_amount > 0)
       primary_reason = `미수금 ${Math.round(c.receivable_amount / 10000)}만원`
-    return { id: c.id, name: c.name, score: c.action_score, primary_reason, status: c.status }
+    return {
+      id: c.id,
+      name: c.name,
+      score: c.action_score,
+      primary_reason,
+      status: c.status,
+      days_since_order: c.days_since_order ?? 0,
+      payment_terms_days: c.payment_terms_days ?? 30,
+    }
   })
 
   // 거래처 매출 TOP5 — customer_name snapshot 우선, purchase 제외
-  const custSalesMap = new Map<string, { name: string; amount: number }>()
+  const custSalesMap = new Map<string, { name: string; amount: number; quantity: number }>()
   for (const o of customerSalesRaw ?? []) {
     if (!isSalesOrder(o)) continue
     const key  = buildCustomerKey(o)
     const name = resolveCustomerName(o as { customer_name?: string | null; customers?: { name?: string | null } | null })
     const amt  = effectiveOrderAmount(o)
-    const cur  = custSalesMap.get(key) ?? { name, amount: 0 }
-    custSalesMap.set(key, { name, amount: cur.amount + amt })
+    const qty = ((o as any).order_lines ?? []).reduce(
+      (s: number, l: { quantity?: number | null }) => s + (l.quantity ?? 0),
+      0,
+    )
+    const cur  = custSalesMap.get(key) ?? { name, amount: 0, quantity: 0 }
+    const prev = cur.name
+    const merged =
+      name.trim() !== '' && name !== '알 수 없음'
+        ? name
+        : prev.trim() !== '' && prev !== '알 수 없음'
+          ? prev
+          : name || prev || '알 수 없음'
+    custSalesMap.set(key, { name: merged, amount: cur.amount + amt, quantity: cur.quantity + qty })
   }
   const top_customer_sales = [...custSalesMap.values()]
     .sort((a, b) => b.amount - a.amount).slice(0, 5)
@@ -151,6 +190,12 @@ export async function getDashboardData(): Promise<ActionResult<DashboardData>> {
   const fund_total_actual  = fundPlan.filter((f) => f.actual_amount !== null)
     .reduce((s, f) => s + (f.actual_amount ?? 0), 0)
   const fund_pending_count = fundPlan.filter((f) => f.status === 'pending').length
+  const fund_items = fundPlan.slice(0, 5).map((f) => ({
+    rule_name:      f.rule_name ?? '-',
+    planned_amount: f.planned_amount ?? 0,
+    actual_amount:  f.actual_amount ?? 0,
+    status:         f.status ?? 'pending',
+  }))
 
   const top1 = customers[0]
   const ai_context = {
@@ -165,25 +210,20 @@ export async function getDashboardData(): Promise<ActionResult<DashboardData>> {
     success: true,
     data: {
       total_receivable, total_deposit, monthly_sales, total_overdue,
+      rfq_unanswered_count: rfq_unanswered_count ?? 0,
       top_customers, top_customer_sales, top_product_sales,
       overdue_count, uncontacted_count, draft_order_count,
       fund_total_planned, fund_total_actual, fund_pending_count,
+      fund_items,
       ai_context,
     },
   }
 }
 
-function fallbackMessage(ctx: DashboardData['ai_context']): string {
-  if (ctx.overdue_count > 0)
-    return `사장님, 연체 거래처가 ${ctx.overdue_count}곳입니다. 오늘 ${ctx.top_score_name}에 먼저 연락해보세요.`
-  if (ctx.max_days_contact >= 14)
-    return `사장님, ${ctx.max_days_contact}일 이상 연락이 없는 거래처가 있습니다. 오늘 미연락 거래처부터 확인하세요.`
-  if (ctx.receivable_amount > 0)
-    return `사장님, 미수금 ${Math.round(ctx.receivable_amount / 10000)}만원이 있습니다. 오늘 미수금과 자금계획부터 확인하세요.`
-  return '사장님, 오늘은 매출 현황과 자금계획을 확인하고 하루를 시작하세요.'
-}
+export async function getAiInsight(ctx: DashboardData['ai_context']): Promise<string | null> {
+  const apiKey = process.env.ANTHROPIC_API_KEY?.trim() ?? ''
+  if (!apiKey) return null
 
-export async function getAiInsight(ctx: DashboardData['ai_context']): Promise<string> {
   try {
     const prompt = `당신은 한국 식품 도매 유통업 사장의 비서입니다.
 아래 데이터를 보고 딱 1문장으로 오늘의 핵심 행동을 알려주세요.
@@ -195,24 +235,37 @@ export async function getAiInsight(ctx: DashboardData['ai_context']): Promise<st
 - 총 미수금: ${Math.round(ctx.receivable_amount / 10000)}만원
 규칙: 반드시 1문장, 50자 이내, 구체적인 행동 포함`
 
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 10000)
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 120,
         messages: [{ role: 'user', content: prompt }],
       }),
-    })
-    const data = await res.json()
-    return data.content?.[0]?.text?.trim() ?? fallbackMessage(ctx)
+    }).catch(() => null)
+    clearTimeout(timeout)
+    if (!res) return null
+    if (!res.ok) return null
+
+    const data = await res.json().catch(() => null) as any
+    return data?.content?.[0]?.text?.trim() ?? null
   } catch {
-    return fallbackMessage(ctx)
+    return null
   }
 }
 
 export interface CollectionTarget {
-  id: string; name: string; current_balance: number
+  id: string; name: string
+  /** 미수금(AR). 레거시 필드명 유지 */
+  current_balance: number
   last_payment_date: string | null; days_since_payment: number | null
 }
 
@@ -224,17 +277,29 @@ export async function getTodayCollections(): Promise<ActionResult<CollectionTarg
   const todayStr = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10)
   const tid      = ctx.tenant_id
 
+  const payeeScope = `payee_tenant_id.eq.${tid},tenant_id.eq.${tid}`
+  const supersededInbound = await fetchInboundSupersededOriginalPaymentIds(supabase, payeeScope)
+
+  let paymentsQuery = supabase
+    .from('payments')
+    .select('customer_id, amount, payment_date')
+    .or(payeeScope)
+    .eq('direction', 'inbound')
+    .eq('status', 'confirmed')
+    .is('reversal_of_id', null)
+  if (supersededInbound.length) {
+    paymentsQuery = paymentsQuery.not('id', 'in', `(${supersededInbound.join(',')})`)
+  }
+
   const [{ data: customers }, { data: orders }, { data: payments }] = await Promise.all([
     supabase.from('customers').select('id, name, opening_balance')
       .eq('tenant_id', tid).is('deleted_at', null),
     supabase.from('orders')
       .select('customer_id, customer_name, final_amount, total_amount, order_type')
       .or(`seller_tenant_id.eq.${tid},tenant_id.eq.${tid}`)
-      .in('status', ['confirmed', 'delivered'])
+      .eq('status', 'confirmed')
       .is('deleted_at', null),
-    supabase.from('payments').select('customer_id, amount, payment_date')
-      .or(`payee_tenant_id.eq.${tid},tenant_id.eq.${tid}`)
-      .eq('direction', 'inbound').eq('status', 'confirmed'),
+    paymentsQuery,
   ])
 
   // customer_name → id 역매핑 (동명이인 제외)
@@ -254,7 +319,6 @@ export async function getTodayCollections(): Promise<ActionResult<CollectionTarg
     let cid = o.customer_id
     if (!cid && o.customer_name) {
       if (nameDups.has(o.customer_name)) {
-        console.warn(`[getTodayCollections] 동명이인 제외: ${o.customer_name}`)
         continue
       }
       cid = nameToId.get(o.customer_name) ?? null
@@ -272,7 +336,12 @@ export async function getTodayCollections(): Promise<ActionResult<CollectionTarg
 
   const result: CollectionTarget[] = []
   for (const c of customers ?? []) {
-    const balance = (c.opening_balance ?? 0) + (finalMap.get(c.id) ?? 0) - (payMap.get(c.id) ?? 0)
+    const balance = getAccountsReceivable(
+      c.opening_balance ?? 0,
+      finalMap.get(c.id) ?? 0,
+      payMap.get(c.id) ?? 0,
+      0,
+    )
     if (balance <= 0) continue
     const lastPay   = lastPayMap.get(c.id) ?? null
     const daysSince = lastPay

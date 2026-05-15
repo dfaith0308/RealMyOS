@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { getCustomerSalesProfile, getConversionStats } from '@/actions/sales'
 import CustomerSalesClient from './CustomerSalesClient'
+import { CustomerTagsSectionClient } from '@/components/customer/CustomerTagsSectionClient'
 
 export const metadata = { title: '거래처 상세 — RealMyOS' }
 
@@ -33,6 +34,10 @@ export default async function CustomerDetailPage({
         nextAction={next_action}
         conversionStats={convResult.data ?? null}
       />
+
+      <div style={{ marginTop: 12 }}>
+        <CustomerTagsSectionClient customerId={customer.id} />
+      </div>
     </div>
   )
 }

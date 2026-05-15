@@ -1,0 +1,76 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.alignStart {
+  align-items: flex-start;
+}
+
+.alignEnd {
+  align-items: flex-end;
+}
+
+.head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--ds-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.value {
+  color: var(--ds-text-primary);
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.valueLg {
+  font-size: 28px;
+  font-weight: 900;
+}
+
+.sub {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.below {
+  margin-top: -2px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.delta {
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.deltaNeutral {
+  color: var(--ds-text-secondary);
+}
+.deltaSuccess {
+  color: var(--ds-status-success);
+}
+.deltaWarning {
+  color: var(--ds-status-warning);
+}
+.deltaDanger {
+  color: var(--ds-status-danger);
+}
+
+.hint {
+  color: var(--ds-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+

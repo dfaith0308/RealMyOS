@@ -5,34 +5,13 @@ import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import { updateActionConversion } from '@/actions/action-log'
 import type { ConversionStatus } from '@/actions/action-log'
 import type { ActionResult } from '@/types/order'
+import type { CustomerStatusType, OutcomeType } from '@/lib/contact-options'
 
 export type ContactMethod = 'call' | 'visit' | 'message' | 'payment'
 export type ContactResult  = 'connected' | 'no_answer' | 'interested' | 'rejected' | 'scheduled'
 export type NextActionType = 'call' | 'visit' | 'message'
 
-export const OUTCOME_TYPES = [
-  { value: 'interested',         label: '관심있음' },
-  { value: 'potential',          label: '잠재고객' },
-  { value: 'maintained',         label: '관계유지' },
-  { value: 'churn_risk',         label: '이탈위험' },
-  { value: 'competitor',         label: '경쟁사사용' },
-  { value: 'rejected',           label: '거절' },
-  { value: 'no_answer',          label: '부재중' },
-  { value: 'callback_requested', label: '콜백요청' },
-  { value: 'order_placed',       label: '주문성사' },
-] as const
-
-export type OutcomeType = typeof OUTCOME_TYPES[number]['value']
-
-export const CUSTOMER_STATUS_OPTIONS = [
-  { value: 'regular', label: '단골' },
-  { value: 'new',     label: '신규' },
-  { value: 'churn',   label: '이탈' },
-  { value: 'dormant', label: '휴면' },
-] as const
-
-export type CustomerStatusType = typeof CUSTOMER_STATUS_OPTIONS[number]['value']
-
+export type { CustomerStatusType, OutcomeType }
 export interface CreateContactLogInput {
   customer_id:        string
   contact_method:     ContactMethod
@@ -53,8 +32,9 @@ export async function createContactLog(
 ): Promise<ActionResult<{ id: string }>> {
   try {
     const supabase = await createSupabaseServer()
-    const ctx      = await getAuthCtx(supabase)
-    if (!ctx) return { success: false, error: '로그인 필요' }
+    const ctxRaw   = await getAuthCtx(supabase)
+    if (!ctxRaw) return { success: false, error: '로그인 필요' }
+    const ctx = ctxRaw
 
     // ── 거래처 존재 확인 ────────────────────────────────────
     const { data: customer, error: custCheckErr } = await supabase
@@ -70,6 +50,72 @@ export async function createContactLog(
       return { success: false, error: custCheckErr?.message ?? '유효하지 않은 거래처' }
     }
 
+    // ── next_action_date 자동 계산 (PRODUCT §6-13) ─────────────
+    async function calcAvgCycle90Days(customerId: string): Promise<number> {
+      const todayStr = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10)
+      const today = new Date(todayStr + 'T00:00:00Z')
+      const d90ago = new Date(today.getTime() - 90 * 86400000).toISOString().slice(0, 10)
+
+      const { data } = await supabase
+        .from('orders')
+        .select('order_date')
+        .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
+        .eq('customer_id', customerId)
+        .eq('status', 'confirmed')
+        .is('deleted_at', null)
+        .gte('order_date', d90ago)
+        .order('order_date', { ascending: true })
+
+      const dates = (data ?? []).map((r: any) => r.order_date).filter(Boolean)
+      if (dates.length < 3) return 7
+      const gaps: number[] = []
+      for (let i = 1; i < dates.length; i++) {
+        const diff = (new Date(dates[i] + 'T00:00:00Z').getTime() - new Date(dates[i - 1] + 'T00:00:00Z').getTime()) / 86400000
+        if (diff > 0) gaps.push(diff)
+      }
+      if (!gaps.length) return 7
+      return Math.round(gaps.reduce((s, g) => s + g, 0) / gaps.length)
+    }
+
+    function calcNextActionDate(outcome: string, avgCycle: number): string {
+      const cycle = Math.max(1, avgCycle || 7)
+      const fixed2 = new Set(['no_answer'])
+      if (fixed2.has(outcome)) {
+        const d = new Date(Date.now() + 9 * 3600000)
+        d.setDate(d.getDate() + 2)
+        return d.toISOString().slice(0, 10)
+      }
+
+      const mult: Record<string, number> = {
+        interested: 0.3,
+        potential: 0.5,
+        maintained: 0.8,
+        churn_risk: 0.2,
+        rejected: 2.0,
+        order_placed: 0.9,
+      }
+      const days = Math.max(1, Math.round(cycle * (mult[outcome] ?? 1)))
+      const d = new Date(Date.now() + 9 * 3600000)
+      d.setDate(d.getDate() + days)
+      return d.toISOString().slice(0, 10)
+    }
+
+    let next_action_date = input.next_action_date ?? null
+    let next_action_type = input.next_action_type ?? null
+    if (!next_action_date && input.outcome_type) {
+      try {
+        const avg = await calcAvgCycle90Days(input.customer_id)
+        next_action_date = calcNextActionDate(input.outcome_type, avg)
+        next_action_type = (input.next_action_type ?? 'call') as any
+      } catch {
+        // fallback: 7일
+        const d = new Date(Date.now() + 9 * 3600000)
+        d.setDate(d.getDate() + 7)
+        next_action_date = d.toISOString().slice(0, 10)
+        next_action_type = (input.next_action_type ?? 'call') as any
+      }
+    }
+
     // ── insert payload ────────────────────────────────────────
     const payload = {
       tenant_id:        ctx.tenant_id,
@@ -81,8 +127,8 @@ export async function createContactLog(
       action_log_id:    input.action_log_id     ?? null,
       outcome_type:     input.outcome_type      ?? null,
       customer_status:  input.customer_status   ?? null,
-      next_action_date: input.next_action_date  ?? null,
-      next_action_type: input.next_action_type  ?? null,
+      next_action_date,
+      next_action_type,
       schedule_id:      input.schedule_id       ?? null,
       methods:          input.methods           ?? null,
       // 레거시 — 기존 코드 호환

@@ -1,11 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { snoozeSchedule, updateScheduleStatus, createSalesSchedule, deleteSchedule, updateSchedule, getScheduleById } from '@/actions/sales'
 import QuickActionButton from '@/components/sales/QuickActionButton'
 import { createContactLog } from '@/actions/contact'
 import type { SalesTarget, SalesScript, SalesSchedule } from '@/actions/sales'
 import type { ContactResult, NextActionType } from '@/actions/contact'
+import { checkAndCreateSalesTriggers } from '@/actions/sales-trigger'
 
 // ============================================================
 // 유틸
@@ -155,8 +157,11 @@ export default function SalesScheduleClient({ initialTargets, initialScripts, in
   initialScripts:   SalesScript[]
   initialSchedules: SalesSchedule[]
 }) {
+  const router = useRouter()
+  const [isTriggering, startTrigger] = useTransition()
   const [schedules,    setSchedules]    = useState(initialSchedules)
   const [selectedDate, setSelectedDate] = useState(todayKST())
+  const [view,         setView]         = useState<'calendar' | 'list'>('calendar')
   const [snoozingId,   setSnoozingId]   = useState<string | null>(null)
   const [doneIds,      setDoneIds]      = useState<Set<string>>(new Set())
   const [actionSchedule, setActionSchedule] = useState<{id: string; customerId: string; customerName: string; phone?: string|null} | null>(null)
@@ -182,6 +187,32 @@ export default function SalesScheduleClient({ initialTargets, initialScripts, in
 
   // 선택 날짜 스케줄
   const daySchedules = schedules.filter(s => s.scheduled_date === selectedDate && s.status !== 'cancelled')
+
+  // ── 상단 요약 (오늘 기준) ─────────────────────────────────
+  const today = todayKST()
+  const todaySchedules = schedules.filter((s) => s.scheduled_date === today && s.status !== 'cancelled')
+  const todayTotal = todaySchedules.length
+  const todayDone = todaySchedules.filter((s) => s.status === 'done' || doneIds.has(s.id)).length
+  const todayPending = todaySchedules.filter((s) => s.status !== 'done' && !doneIds.has(s.id)).length
+
+  // ── 리스트 뷰 데이터 ──────────────────────────────────────
+  const targetMap = useMemo(() => new Map(initialTargets.map((t) => [t.customer_id, t])), [initialTargets])
+  const defaultScriptTitle = useMemo(() => {
+    const m = new Map<'call' | 'message' | 'visit', string>()
+    for (const t of ['call', 'message', 'visit'] as const) {
+      const s = initialScripts.find((x) => x.type === t && x.is_default)
+        ?? initialScripts.find((x) => x.type === t)
+      if (s?.title) m.set(t, s.title)
+    }
+    return m
+  }, [initialScripts])
+
+  const pendingList = useMemo(() => {
+    return schedules
+      .filter((s) => s.status !== 'done' && s.status !== 'cancelled')
+      .slice()
+      .sort((a, b) => (a.scheduled_date < b.scheduled_date ? -1 : a.scheduled_date > b.scheduled_date ? 1 : 0))
+  }, [schedules])
 
   async function handleSnooze(sch: SalesSchedule) {
     if (snoozingId) return
@@ -220,9 +251,9 @@ export default function SalesScheduleClient({ initialTargets, initialScripts, in
   }
 
   async function handleDeleteSchedule(id: string) {
-    if (!confirm('이 스케줄을 삭제하시겠습니까?')) return
+    if (!confirm('이 스케줄을 취소할까요? (삭제되지 않습니다)')) return
     const res = await deleteSchedule(id)
-    if (res.success) setSchedules(prev => prev.filter(s => s.id !== id))
+    if (res.success) setSchedules(prev => prev.map(s => s.id === id ? { ...s, status: 'cancelled' } : s))
   }
 
   async function handleUpdateSchedule(id: string, data: { scheduled_date?: string; action_type?: string }) {
@@ -261,9 +292,113 @@ export default function SalesScheduleClient({ initialTargets, initialScripts, in
   return (
     <>
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '28px 24px', fontFamily: '-apple-system, "Noto Sans KR", sans-serif' }}>
-      <h1 style={{ fontSize: 20, fontWeight: 600, margin: '0 0 20px' }}>영업 스케쥴</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, marginBottom: 20 }}>
+        <div>
+          <h1 style={{ fontSize: 20, fontWeight: 600, margin: 0 }}>영업 스케쥴</h1>
+          <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 12, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 999, padding: '6px 10px', color: '#374151' }}>
+              오늘 할 일 <b>{todayTotal}</b>
+            </div>
+            <div style={{ fontSize: 12, background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 999, padding: '6px 10px', color: '#15803D' }}>
+              오늘 완료 <b>{todayDone}</b>
+            </div>
+            <div style={{ fontSize: 12, background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 999, padding: '6px 10px', color: '#92400E' }}>
+              미처리 <b>{todayPending}</b>
+            </div>
+          </div>
+        </div>
 
-      <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{ display: 'flex', border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+            <button
+              type="button"
+              onClick={() => setView('calendar')}
+              style={{ padding: '8px 12px', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, background: view === 'calendar' ? '#111827' : '#fff', color: view === 'calendar' ? '#fff' : '#374151' }}
+            >
+              달력
+            </button>
+            <button
+              type="button"
+              onClick={() => setView('list')}
+              style={{ padding: '8px 12px', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, background: view === 'list' ? '#111827' : '#fff', color: view === 'list' ? '#fff' : '#374151' }}
+            >
+              리스트
+            </button>
+          </div>
+
+          <button
+            type="button"
+            disabled={isTriggering}
+            onClick={() => {
+              startTrigger(async () => {
+                const res = await checkAndCreateSalesTriggers()
+                if (!res.success) alert(res.error ?? '트리거 실행 실패')
+                router.refresh()
+              })
+            }}
+            style={{ padding: '8px 12px', background: isTriggering ? '#9ca3af' : '#111827', color: '#fff', border: 'none', borderRadius: 10, fontSize: 12, cursor: isTriggering ? 'not-allowed' : 'pointer' }}
+            title="분류 기반 트리거를 확인하고 오늘 스케줄을 생성합니다"
+          >
+            {isTriggering ? '트리거 실행 중…' : '분류 트리거 체크'}
+          </button>
+        </div>
+      </div>
+
+      {view === 'list' ? (
+        <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, overflow: 'hidden', background: '#fff' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr .6fr .8fr 1fr .7fr 1fr .7fr', background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+            {['거래처명', '점수', '행동유형', '추천 스크립트', '상태', '즉시 실행', '내일로'].map((h) => (
+              <div key={h} style={{ padding: '10px 10px', fontSize: 11, fontWeight: 800, color: '#6b7280' }}>{h}</div>
+            ))}
+          </div>
+
+          {pendingList.length === 0 ? (
+            <div style={{ padding: 18, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
+              미처리 스케줄이 없습니다.
+            </div>
+          ) : (
+            pendingList.map((sch) => {
+              const t = targetMap.get(sch.customer_id)
+              const score = t ? Math.round(t.score) : '-'
+              const scriptTitle =
+                initialScripts.find((s) => s.id === sch.script_id)?.title
+                ?? defaultScriptTitle.get(sch.action_type as any)
+                ?? '-'
+              const statusLabel = sch.status === 'pending' ? '미처리' : sch.status
+              return (
+                <div key={sch.id} style={{ display: 'grid', gridTemplateColumns: '1.4fr .6fr .8fr 1fr .7fr 1fr .7fr', borderBottom: '1px solid #f3f4f6', alignItems: 'center' }}>
+                  <div style={{ padding: '10px 10px' }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{sch.customer_name}</div>
+                    <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>{sch.scheduled_date}</div>
+                  </div>
+                  <div style={{ padding: '10px 10px', fontSize: 13, color: '#111827' }}>{score}</div>
+                  <div style={{ padding: '10px 10px', fontSize: 12, color: '#374151' }}>{METHOD_LABEL[sch.action_type]}</div>
+                  <div style={{ padding: '10px 10px', fontSize: 12, color: '#374151' }}>{scriptTitle}</div>
+                  <div style={{ padding: '10px 10px', fontSize: 12, color: '#6b7280' }}>{statusLabel}</div>
+                  <div style={{ padding: '10px 10px' }}>
+                    <button
+                      onClick={() => handleActionSchedule(sch)}
+                      style={{ padding: '6px 10px', background: '#111827', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}
+                    >
+                      🎯 즉시 실행
+                    </button>
+                  </div>
+                  <div style={{ padding: '10px 10px' }}>
+                    <button
+                      onClick={() => handleSnooze(sch)}
+                      disabled={snoozingId === sch.id}
+                      style={{ padding: '6px 10px', background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 8, fontSize: 12, cursor: 'pointer', color: '#92400E', fontWeight: 600, whiteSpace: 'nowrap' }}
+                    >
+                      {snoozingId === sch.id ? '...' : '내일로'}
+                    </button>
+                  </div>
+                </div>
+              )
+            })
+          )}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
 
         {/* ── 왼쪽: 캘린더 ── */}
         <div style={{ width: 260, flexShrink: 0 }}>
@@ -343,6 +478,11 @@ export default function SalesScheduleClient({ initialTargets, initialScripts, in
                   <div>
                     <span style={{ fontWeight: 600 }}>{sch.customer_name}</span>
                     <span style={{ marginLeft: 10, fontSize: 12, color: '#6b7280' }}>{METHOD_LABEL[sch.action_type]}</span>
+                    {sch.memo ? (
+                      <div style={{ marginTop: 6, fontSize: 12, color: '#2563EB', fontWeight: 600 }}>
+                        {sch.memo}
+                      </div>
+                    ) : null}
                   </div>
                   {isSnoozed && (
                     <div style={{ fontSize: 11, color: '#D97706', textAlign: 'right' }}>
@@ -431,6 +571,7 @@ export default function SalesScheduleClient({ initialTargets, initialScripts, in
           </div>
         )}
       </div>
+      )}
     </div>
 
     {/* 스케줄 수정 모달 */}

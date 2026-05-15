@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useTransition, useRef, useCallback, useMemo } from 'react'
 import { createOrder, getCustomersForOrder, getProductsForOrder } from '@/actions/order'
+import { getCustomerProductPrice } from '@/actions/customer-product-prices'
 import { createPayment } from '@/actions/payment'
 import type { PaymentMethod } from '@/actions/payment'
 import { calcMarginRate, formatKRW, todayStr } from '@/lib/calc'
@@ -75,7 +76,6 @@ function resolveLine(line: LineItem): ResolvedLine {
 
   // 세금 계산 검증 — supply + vat === line_total 보장
   if (supply_price + vat_amount !== line_total) {
-    console.error('[TAX-MISMATCH]', { line_total, supply_price, vat_amount, diff: line_total - supply_price - vat_amount })
     // 부가세 보정: line_total이 진실값이므로 vat를 맞춤
     vat_amount = line_total - supply_price
   }
@@ -150,9 +150,10 @@ interface OrderCreateFormProps {
     product_id: string; product_name: string; product_code: string
     quantity: number; unit_price: number; tax_type?: string
   }>
+  quoteContext?: { quote_id: string; conversions: Array<{ item_id: string; qty: number }> }
 }
 
-export default function OrderCreateForm({ initialCustomerId, reorderLines }: OrderCreateFormProps = {}) {
+export default function OrderCreateForm({ initialCustomerId, reorderLines, quoteContext }: OrderCreateFormProps = {}) {
   const [isPending, startTransition] = useTransition()
 
   const [customers,       setCustomers]       = useState<CustomerForOrder[]>([])
@@ -306,15 +307,51 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
       total_input      = ''  // resolveLine이 재계산
       quantity         = 1
     }
-    // 구매 이력 없음 → 빈 값
+    // 구매 이력 없음 → 기본가 자동 추천 (PRODUCT 우선순위의 3번 케이스)
+    if (!p.has_purchase_history && p.last_unit_price > 0) {
+      mode             = 'unit'
+      unit_price_input = String(p.last_unit_price)
+      total_input      = ''
+      quantity         = 1
+    }
 
+    const uid = crypto.randomUUID()
     setLines((prev) => [...prev, {
-      uid: crypto.randomUUID(), product: p,
+      uid, product: p,
       quantity, unit_price_input, total_input, mode,
     }])
+
+    // 명시 요구: 거래처+상품 선택 시 최근 단가 조회 (best-effort)
+    if (selectedCustomer) {
+      getCustomerProductPrice(selectedCustomer.id, p.id).then((r) => {
+        if (!r.success || !r.data) return
+        const cp = r.data
+        setLines((prev) => prev.map((l) => {
+          if (l.uid !== uid) return l
+          const nextMode = (cp.last_pricing_mode ?? 'unit') as 'unit' | 'total'
+          if (nextMode === 'total' && cp.last_line_total != null) {
+            return {
+              ...l,
+              mode: 'total',
+              quantity: cp.last_qty ?? l.quantity,
+              total_input: String(Math.abs(cp.last_line_total)),
+              unit_price_input: '',
+            }
+          }
+          return {
+            ...l,
+            mode: 'unit',
+            quantity: cp.last_qty ?? l.quantity,
+            unit_price_input: String(cp.last_price ?? l.product.last_unit_price ?? 0),
+            total_input: '',
+          }
+        }))
+      })
+    }
+
     setProductQuery(''); setShowProductDd(false)
     productRef.current?.focus()
-  }, [])
+  }, [selectedCustomer])
 
   // ── 라인 수정 — 단방향, 무한루프 없음 ────────────────────
 
@@ -384,13 +421,6 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
 
       // 세금 검증: supply + vat === line_total 강제
       if (r.supply_price + r.vat_amount !== r.line_total) {
-        console.error('[TAX MISMATCH]', {
-          product: l.product.name,
-          line_total: r.line_total,
-          supply: r.supply_price,
-          vat: r.vat_amount,
-          diff: r.line_total - r.supply_price - r.vat_amount,
-        })
         setError(`[${l.product.name}] 세금 계산 오류가 발생했습니다. 새로고침 후 다시 시도해주세요.`)
         return
       }
@@ -401,7 +431,6 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
 
     const verifyTotal = resolvedLines.reduce((sum, l) => sum + l.resolved.line_total, 0)
     if (verifyTotal !== totals.total) {
-      console.error('[TOTAL MISMATCH]', { verifyTotal, displayedTotal: totals.total })
       setError(`금액 불일치 오류: 계산값 ${verifyTotal} ≠ 표시값 ${totals.total}`)
       setIsSubmitting(false)
       return
@@ -438,6 +467,8 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
         lines:           lineInputs,
         discount_amount: discountNum,
         point_used:      pointNum,
+        source_quote_id:   quoteContext?.quote_id,
+        quote_conversions: quoteContext?.conversions,
       })
       if (!res.success || !res.data) {
         setError(res.error ?? '저장 실패'); setIsSubmitting(false); return
@@ -457,10 +488,9 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines }: Ord
           })
           if (pr.success && pr.data) {
             const dep  = pr.data.deposit_amount
-            const mode = pr.data.mode === 'fallback' ? ' (직접저장)' : ''
             successMsg += dep > 0
-              ? ` | 수금 완료${mode} · 예치금 +${formatKRW(dep)}`
-              : ` | 수금 완료${mode}`
+              ? ` | 수금 완료 · 예치금 +${formatKRW(dep)}`
+              : ` | 수금 완료`
             setPaymentError(null); setPaymentFailed(null)
             setPaymentWarning(pr.data.warning ?? null)
           } else {

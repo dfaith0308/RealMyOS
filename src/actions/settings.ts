@@ -80,7 +80,19 @@ export async function saveSettings(input: Partial<TenantSettings>): Promise<Acti
     input.overdue_warning_amount >= input.overdue_danger_amount
   ) return { success: false, error: '연체 경고 금액은 연체 위험 금액보다 작아야 합니다.' }
 
-  const rows = Object.entries(input).map(([key, value]) => ({
+  const entries = Object.entries(input).filter(([, value]) => value !== undefined)
+  if (entries.length === 0) return { success: true }
+
+  const keys = entries.map(([key]) => key)
+  const { data: existingRows } = await supabase
+    .from('settings')
+    .select('key, value')
+    .eq('tenant_id', ctx.tenant_id)
+    .in('key', keys)
+
+  const oldMap = new Map((existingRows ?? []).map((r: any) => [r.key as string, r.value as string]))
+
+  const rows = entries.map(([key, value]) => ({
     tenant_id:  ctx.tenant_id,
     key,
     value:      String(value),
@@ -92,6 +104,26 @@ export async function saveSettings(input: Partial<TenantSettings>): Promise<Acti
     .upsert(rows, { onConflict: 'tenant_id,key' })
 
   if (error) return { success: false, error: `저장 실패: ${error.message}` }
+
+  const logRows = rows
+    .map((r) => ({
+      tenant_id:   ctx.tenant_id,
+      key:         r.key,
+      old_value:   oldMap.get(r.key) ?? null,
+      new_value:   r.value,
+      changed_by:  ctx.user_id,
+    }))
+    .filter((r) => r.old_value !== r.new_value)
+
+  if (logRows.length > 0) {
+    try {
+      await supabase
+        .from('settings_logs')
+        .insert(logRows)
+    } catch {
+      // best-effort: settings 저장은 성공, logs 실패는 무시
+    }
+  }
 
   revalidatePath('/settings')
   revalidatePath('/customers')

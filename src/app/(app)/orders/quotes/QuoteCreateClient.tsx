@@ -146,7 +146,7 @@ export default function QuoteCreateClient({ initialCustomers }: { initialCustome
     })
 
     if (res.success) {
-      router.push(`/orders/quotes/${res.data!.quote_id}`)
+      router.push(`/quotes/${res.data!.quote_id}`)
     } else {
       setError(res.error ?? '저장 실패')
       setSubmitting(false)

@@ -1,0 +1,50 @@
+.page {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 28px 24px 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.line {
+  height: 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--ds-border-default) 40%, white);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.lineStrong {
+  height: 18px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  gap: 14px;
+}
+
+.box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 980px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
