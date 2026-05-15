@@ -22,7 +22,7 @@ export default async function AdminCommercePayablesPage(props: { searchParams?: 
         <div>
           <h1 className={s.title}>공급자 지급 예정 원장</h1>
           <p className={s.subtitleMax780}>
-            확정된 allocation과 1:1로 연결된 <code>supplier_payables</code> 입니다. 실제 지급 실행·은행이체·paid 처리 UI는 포함하지 않습니다.
+            확정된 allocation과 1:1로 연결된 <code>supplier_payables</code> 입니다. 미지급 행은 관리자가 지급 완료 처리 시 paid로 전환되며 append-only <code>payments</code> outbound(payout) 이벤트가 생성됩니다.
           </p>
         </div>
         <div className={s.actionsRow}>

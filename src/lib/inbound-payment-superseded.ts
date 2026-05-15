@@ -8,6 +8,9 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 /** `payments.type` taxonomy — `PAYMENTS-TAXONOMY-DESIGN-001` §3.2 `payout_reversal` */
 export const PAYMENTS_TYPE_PAYOUT_REVERSAL = 'payout_reversal' as const
 
+/** 실제 공급자 지급(outbound) — `PAYMENTS-TAXONOMY-DESIGN-001` `payout_outbound` */
+export const PAYMENTS_TYPE_PAYOUT_OUTBOUND = 'payout_outbound' as const
+
 /**
  * @param tenantPayeeScope `payee_tenant_id.eq.{tid},tenant_id.eq.{tid}` (inbound 수금 테넌트)
  */

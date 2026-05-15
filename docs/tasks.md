@@ -1222,6 +1222,14 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **연계**: **[ACCOUNTING-REVERSAL-P0-001]** (동일 `tasks.md` 블록), **PLATFORM-ERP-P1-001**, `supplier_payables`
 - **작업 이력 (2026-05-14)**: 구현 — worklog: [`docs/worklogs/2026-05-14_feat_kpi-reversal-p0-001-storefront-net.md`](./worklogs/2026-05-14_feat_kpi-reversal-p0-001-storefront-net.md)
 
+#### [PAYABLE-PAYOUT-P1-001] supplier_payables paid + append-only payout `payments` (최소)
+- **우선순위**: HIGH (**[D-023]** finality: paid = 실제 지급 이벤트·settlement와 분리)
+- **상태**: **P1 코드 (2026-05-14)** — settlement 자동화·배치 지급·PG·부분 지급 없음
+- **산출물**: `markSupplierPayableAsPaid` (`src/actions/admin/supplier-payables.ts`) · outbound `payments` (`type=payout_outbound`, `payment_method=platform`) · paid 시 `cancelSupplierPayable` 차단 강화(`supplier_payable_manual_review_required`) · `/admin/commerce/payables` 지급 완료 모달
+- **비범위**: settlement cycle 자동화·payout batch·PG·부분 지급·reconciliation·DB enforcement·NULL backfill
+- **연계**: **PLATFORM-ERP-P2-003**, **[ACCOUNTING-LIFECYCLE-POLICY-001]** ([D-023]), **[PAYMENTS-TAXONOMY-DESIGN-001](./PAYMENTS-TAXONOMY-DESIGN-001.md)** (`payout_outbound`), **[KPI-REVERSAL-P0-001]**, **`[PLATFORM-ERP-001]`**
+- **작업 이력 (2026-05-14)**: 구현 — worklog: [`docs/worklogs/2026-05-14_feat_payable-payout-p1-001-minimal-paid-payout.md`](./worklogs/2026-05-14_feat_payable-payout-p1-001-minimal-paid-payout.md)
+
 #### [ACCOUNTING-REVERSAL-DESIGN-001] 주문 취소·환불 역흐름 (`payments`·allocation·payables·스냅샷)
 - **우선순위**: HIGH (ERP 정합·감사추적)
 - **상태**: **설계 문서만 (2026-05-14)** — 구현·migration 실행·DB 변경 없음

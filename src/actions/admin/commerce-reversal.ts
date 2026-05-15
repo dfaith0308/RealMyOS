@@ -109,9 +109,21 @@ export async function cancelSupplierPayableWithClient(
   if (st === 'cancelled') return { success: true }
 
   if (st === 'paid') {
-    await logPayableManualReview(supabase, aid, pr, {
-      reason: 'paid payable — 자동 reversal·cancel 금지([D-021])',
-    })
+    await insertAdminLog(supabase, {
+      admin_id: aid,
+      tenant_id: pr.supplier_tenant_id,
+      action_type: 'supplier_payable_manual_review_required',
+      target_table: 'supplier_payables',
+      target_id: pr.id,
+      new_value: {
+        payable_id: pr.id,
+        supplier_tenant_id: pr.supplier_tenant_id,
+        amount: pr.payable_amount,
+        status: pr.status,
+        commerce_order_id: pr.commerce_order_id,
+        reason: 'paid payable — UPDATE·자동 reversal 금지 ([D-023])',
+      },
+    }).catch(() => {})
     return { success: false, error: '이미 지급 처리된 payable은 취소할 수 없습니다. 수동 검토가 필요합니다.' }
   }
 
