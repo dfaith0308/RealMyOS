@@ -69,9 +69,17 @@ export type StorefrontRevenueKPI = {
   month_reversal_amount: number
   total_gross_revenue: number
   total_reversal_amount: number
-  /** `total_revenue` − `supplier_payable_total` (운영 KPI, P0) */
+  /**
+   * 누계 storefront 순매출(net)에서 공급자 payable을 차감한 운영 마진.
+   * `supplier_payable_unpaid + supplier_payable_paid`와 동일 합을 빼므로 수치는 기존 `supplier_payable_total` 합과 같음(의미 분리).
+   */
   platform_margin: number
+  /** `unpaid` + `paid` 합(legacy·호환). `cancelled` 제외. */
   supplier_payable_total: number
+  /** 아직 지급해야 하는 공급자 원장 합(`status = unpaid`). */
+  supplier_payable_unpaid: number
+  /** 이미 지급 완료된 공급자 원장 합(`status = paid`). */
+  supplier_payable_paid: number
   /** 조회된 reversal row 건수(상한 `PAY_FETCH_LIMIT`와 동일 범위) */
   reversal_count: number
   rfq_today_revenue: number
@@ -125,6 +133,7 @@ function storefrontInboundSelect(supabase: any) {
  * Storefront(`commerce_order_id` 연결) 매출·미수·최근 입금 KPI.
  * Gross = 원본 입금(`status=confirmed`·`reversal_of_id` null); reversal = `reversal_of_id` not null (amount는 양수, 집계 시 차감).
  * REFUND-LIFECYCLE-P1-001: 주문이 refunded(또는 payment_status=refunded)이면서 원본 입금에 대한 reversal 자식이 없을 때만 gross 원본 제외(케이스 B). cancelled 경로에서 reversal이 이미 있는 경우(케이스 A)는 gross 유지·net에서 reversal 차감 유지.
+ * PLATFORM-MARGIN-FIX-001: `supplier_payables`를 unpaid / paid 금액으로 분리 노출·`platform_margin`은 동일 수치를 `total_revenue − unpaid − paid`로 표기(합은 기존 `supplier_payable_total`과 동일).
  * RFQ `orders` 집계는 `getPlatformRevenue`를 수정하지 않고 동일 월 경계·금액 규칙으로 복제 조회만 수행.
  */
 export async function getStorefrontRevenueKPI(): Promise<ActionResult<StorefrontRevenueKPI>> {
@@ -232,14 +241,19 @@ export async function getStorefrontRevenueKPI(): Promise<ActionResult<Storefront
   }
 
   let supplier_payable_total = 0
+  let supplier_payable_unpaid = 0
+  let supplier_payable_paid = 0
   for (const r of (payablesRes.data ?? []) as { payable_amount?: number; status?: string }[]) {
     const st = r.status
     if (st !== 'unpaid' && st !== 'paid') continue
     const a = r.payable_amount
-    if (typeof a === 'number' && Number.isFinite(a)) supplier_payable_total += a
+    if (typeof a !== 'number' || !Number.isFinite(a)) continue
+    supplier_payable_total += a
+    if (st === 'unpaid') supplier_payable_unpaid += a
+    if (st === 'paid') supplier_payable_paid += a
   }
 
-  const platform_margin = total_revenue - supplier_payable_total
+  const platform_margin = total_revenue - supplier_payable_unpaid - supplier_payable_paid
   const reversal_count = revRows.length
 
   const [rfqTodayRes, rfqMonthRes, rfqTotalRes] = await Promise.all([
@@ -337,6 +351,8 @@ export async function getStorefrontRevenueKPI(): Promise<ActionResult<Storefront
       total_reversal_amount,
       platform_margin,
       supplier_payable_total,
+      supplier_payable_unpaid,
+      supplier_payable_paid,
       reversal_count,
       rfq_today_revenue,
       rfq_month_revenue,

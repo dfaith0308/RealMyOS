@@ -43,7 +43,7 @@ export default function StorefrontRevenueKpiSection({ data }: { data: Storefront
             <div className={s.kpiValueWarn}>{won(data.unpaid_amount)}</div>
           </div>
         </div>
-        <div className={s.grid3} style={{ marginTop: 12 }}>
+        <div className={s.grid2} style={{ marginTop: 12 }}>
           <div className={s.kpiCard}>
             <div className={s.kpiTitle}>오늘 취소·역처리(reversal) 금액</div>
             <div className={s.kpiValueMd} style={{ color: 'var(--ds-text-warning, #b45309)' }}>
@@ -56,11 +56,28 @@ export default function StorefrontRevenueKpiSection({ data }: { data: Storefront
               {won(data.month_reversal_amount)}
             </div>
           </div>
+        </div>
+        <div className={s.grid3} style={{ marginTop: 12 }}>
           <div className={s.kpiCard}>
-            <div className={s.kpiTitle}>플랫폼 마진(P0)</div>
+            <div className={s.kpiTitle}>공급자 미지급</div>
+            <div className={s.kpiValueWarn}>{won(data.supplier_payable_unpaid)}</div>
+            <div className={s.cellMutedSm} style={{ marginTop: 6 }}>
+              supplier_payables · unpaid · cancelled 제외
+            </div>
+          </div>
+          <div className={s.kpiCard}>
+            <div className={s.kpiTitle}>공급자 지급완료</div>
+            <div className={s.kpiValueMd}>{won(data.supplier_payable_paid)}</div>
+            <div className={s.cellMutedSm} style={{ marginTop: 6 }}>
+              supplier_payables · paid · 누적 지급 원장
+            </div>
+          </div>
+          <div className={s.kpiCard}>
+            <div className={s.kpiTitle}>플랫폼 마진(운영 KPI)</div>
             <div className={s.kpiValueMd}>{won(data.platform_margin)}</div>
             <div className={s.cellMutedSm} style={{ marginTop: 6 }}>
-              순누계 {won(data.total_revenue)} − 지급예정·지급완료 payable {won(data.supplier_payable_total)}
+              순누계 {won(data.total_revenue)} − 미지급 {won(data.supplier_payable_unpaid)} − 지급완료{' '}
+              {won(data.supplier_payable_paid)}
             </div>
           </div>
         </div>

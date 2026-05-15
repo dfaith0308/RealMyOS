@@ -1222,6 +1222,14 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **연계**: **[ACCOUNTING-REVERSAL-P0-001]** (동일 `tasks.md` 블록), **PLATFORM-ERP-P1-001**, `supplier_payables`
 - **작업 이력 (2026-05-14)**: 구현 — worklog: [`docs/worklogs/2026-05-14_feat_kpi-reversal-p0-001-storefront-net.md`](./worklogs/2026-05-14_feat_kpi-reversal-p0-001-storefront-net.md)
 
+#### [PLATFORM-MARGIN-FIX-001] storefront payable 분리·platform_margin 운영 정합
+- **우선순위**: MEDIUM (운영자가 미지급 vs 지급완료 payable을 즉시 구분)
+- **상태**: **P1 코드 (2026-05-14)** — KPI 전체 재설계·RFQ·settlement·migration 없음
+- **산출물**: `getStorefrontRevenueKPI`에 `supplier_payable_unpaid`·`supplier_payable_paid` 추가, `supplier_payable_total` 유지, `platform_margin = total_revenue − unpaid − paid`(수치 기존과 동일)·`StorefrontRevenueKpiSection` 카드 2+1
+- **비범위**: accounting P&L 완성·gross/net semantics 변경·payout lifecycle·reconciliation
+- **연계**: **[KPI-REVERSAL-P0-001]**, **[PAYABLE-PAYOUT-P1-001]**, **`DECISIONS.md` [D-023]**
+- **작업 이력 (2026-05-14)**: 운영 정합 보정 — worklog: [`docs/worklogs/2026-05-14_feat_platform-margin-fix-001.md`](./worklogs/2026-05-14_feat_platform-margin-fix-001.md)
+
 #### [REFUND-LIFECYCLE-P1-001] cancelled→refunded 최소 보정·payout_outbound reversal 차단·KPI 케이스 B
 - **우선순위**: HIGH (lifecycle 불일치·payout reversal 위험·KPI 정합 P1, **완전 환불 자동화 아님**)
 - **상태**: **P1 코드 (2026-05-14)** — settlement↔payable·부분 환불·PG·refund payments 자동 생성 없음
