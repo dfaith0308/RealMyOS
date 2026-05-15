@@ -13,6 +13,21 @@ import s from '@/app/(admin)/admin-shared.module.css'
 
 type StatusTab = 'all' | 'pending' | 'confirmed' | 'cancelled'
 
+function allocationRowStatusKr(st: string): string {
+  if (st === 'pending') return '확정 대기'
+  if (st === 'confirmed') return '지급예정 확정'
+  if (st === 'cancelled') return '취소됨'
+  return st
+}
+
+function supplierPayableSnapshotKr(st: string | null | undefined): string {
+  if (st == null || String(st).trim() === '') return ''
+  if (st === 'unpaid') return '미지급'
+  if (st === 'paid') return '지급완료'
+  if (st === 'cancelled') return '취소됨'
+  return String(st)
+}
+
 export default function CommerceAllocationsClient({
   status,
   summaries,
@@ -78,7 +93,7 @@ export default function CommerceAllocationsClient({
     if (!pid) return
     const reason = payableCancelReason.trim()
     if (!reason) {
-      setError('역처리 사유를 입력해 주세요')
+      setError('취소 사유를 입력해 주세요')
       return
     }
     setError(null)
@@ -86,7 +101,7 @@ export default function CommerceAllocationsClient({
     startTransition(async () => {
       const r = await cancelSupplierPayable(pid, reason)
       if (!r.success) {
-        setError(r.error ?? '역처리 실패')
+        setError(r.error ?? '취소 실패')
         return
       }
       setPayableCancelId(null)
@@ -112,8 +127,8 @@ export default function CommerceAllocationsClient({
         {(
           [
             ['all', '전체'],
-            ['pending', '지급 예정(pending)'],
-            ['confirmed', '지급 예정 확정'],
+            ['pending', '확정 대기'],
+            ['confirmed', '지급예정 확정'],
             ['cancelled', '취소됨'],
           ] as const
         ).map(([key, label]) => (
@@ -200,13 +215,13 @@ export default function CommerceAllocationsClient({
                     <td className={s.td}>{formatKRW(r.item_amount)}</td>
                     <td className={s.td}>{formatKRW(r.platform_fee_amount)}</td>
                     <td className={s.td}>{formatKRW(r.supplier_payable_amount)}</td>
-                    <td className={s.td}>{r.status}</td>
+                    <td className={s.td}>{allocationRowStatusKr(r.status)}</td>
                     <td className={s.td}>
                       {r.supplier_payable_id ? (
                         <>
                           <div className={s.cellStrong}>연결됨</div>
                           <div className={s.cellMutedSm}>{r.supplier_payable_id}</div>
-                          <div className={s.cellMutedSm}>{r.supplier_payable_status ?? ''}</div>
+                          <div className={s.cellMutedSm}>{supplierPayableSnapshotKr(r.supplier_payable_status)}</div>
                         </>
                       ) : r.status === 'confirmed' ? (
                         <div className={s.cellStrong} style={{ color: 'var(--ds-text-warning, #b45309)' }}>
@@ -259,7 +274,7 @@ export default function CommerceAllocationsClient({
                         </button>
                       ) : r.status === 'confirmed' && r.supplier_payable_id && r.supplier_payable_status === 'unpaid' ? (
                         <button type="button" className={s.ghostBtn} disabled={pending} onClick={() => openPayableCancel(r.supplier_payable_id!)}>
-                          수동 역처리
+                          지급 예정 취소 (수동)
                         </button>
                       ) : (
                         '—'
@@ -292,8 +307,11 @@ export default function CommerceAllocationsClient({
         >
           <div className={s.kpiCard} style={{ maxWidth: 440, width: '100%' }} onClick={(e) => e.stopPropagation()}>
             <h3 id="payable-reversal-title" className={s.title} style={{ fontSize: 16 }}>
-              supplier payable 수동 역처리
+              지급 예정 취소 (수동)
             </h3>
+            <p className={s.subtitle} style={{ marginTop: 10 }}>
+              이 항목은 이미 지급 예정 확정 상태입니다. 취소 시 supplier payable이 cancelled 처리됩니다. 실제 지급이 완료된 경우 이 기능을 사용하지 마세요.
+            </p>
             <p className={s.subtitle} style={{ marginTop: 10 }}>
               unpaid payable만 취소 처리됩니다. 사유는 admin_logs에 기록됩니다.
             </p>
@@ -313,7 +331,7 @@ export default function CommerceAllocationsClient({
                 닫기
               </button>
               <button type="button" className={s.primaryBtn} disabled={pending} onClick={() => submitPayableCancel()}>
-                역처리 실행
+                지급 예정 취소 실행
               </button>
             </div>
           </div>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import type { SupplierPayablesAdminPayload } from '@/actions/admin/supplier-payables'
 import { markSupplierPayableAsPaid } from '@/actions/admin/supplier-payables'
@@ -13,6 +13,13 @@ function shortId(id: string | null | undefined): string {
   const v = String(id ?? '').trim()
   if (!v) return '—'
   return v.length <= 10 ? v : `${v.slice(0, 6)}…`
+}
+
+function payableStatusBadge(st: string): string {
+  if (st === 'unpaid') return '미지급'
+  if (st === 'paid') return '지급완료'
+  if (st === 'cancelled') return '취소됨'
+  return st
 }
 
 export default function CommercePayablesClient({
@@ -29,21 +36,23 @@ export default function CommercePayablesClient({
 
   const [payableMarkId, setPayableMarkId] = useState<string | null>(null)
   const [markReason, setMarkReason] = useState('공급자 지급 완료(수동 확인)')
-  const [pending, setPending] = useState(false)
+  const [markPending, startMarkTransition] = useTransition()
   const [actionError, setActionError] = useState<string | null>(null)
 
-  async function submitMarkPaid() {
+  function submitMarkPaid() {
     if (!payableMarkId) return
-    setPending(true)
     setActionError(null)
-    const res = await markSupplierPayableAsPaid(payableMarkId, markReason)
-    setPending(false)
-    if (!res.success) {
-      setActionError(res.error ?? '처리 실패')
-      return
-    }
-    setPayableMarkId(null)
-    router.refresh()
+    const id = payableMarkId
+    const reason = markReason
+    startMarkTransition(async () => {
+      const res = await markSupplierPayableAsPaid(id, reason)
+      if (!res.success) {
+        setActionError(res.error ?? '처리 실패')
+        return
+      }
+      setPayableMarkId(null)
+      router.refresh()
+    })
   }
 
   return (
@@ -185,20 +194,7 @@ export default function CommercePayablesClient({
                     </td>
                     <td className={s.td}>{formatKRW(r.payable_amount)}</td>
                     <td className={s.td}>
-                      <span className={s.cellStrong}>{r.status}</span>
-                      {r.status === 'paid' ? (
-                        <span
-                          style={{
-                            marginLeft: 8,
-                            fontSize: 11,
-                            padding: '2px 6px',
-                            borderRadius: 4,
-                            background: 'var(--ds-bg-subtle, #e2e8f0)',
-                          }}
-                        >
-                          paid
-                        </span>
-                      ) : null}
+                      <span className={s.cellStrong}>{payableStatusBadge(r.status)}</span>
                     </td>
                     <td className={s.tdNowrap}>
                       <span className={s.cellMutedSm}>{r.created_at}</span>
@@ -218,7 +214,7 @@ export default function CommercePayablesClient({
                           type="button"
                           className={s.primaryBtn}
                           style={{ fontSize: 12, padding: '6px 10px' }}
-                          disabled={pending}
+                          disabled={markPending}
                           onClick={() => {
                             setPayableMarkId(r.id)
                             setMarkReason('공급자 지급 완료(수동 확인)')
@@ -254,7 +250,7 @@ export default function CommercePayablesClient({
             zIndex: 50,
             padding: 16,
           }}
-          onClick={() => !pending && setPayableMarkId(null)}
+          onClick={() => !markPending && setPayableMarkId(null)}
         >
           <div className={s.kpiCard} style={{ maxWidth: 440, width: '100%' }} onClick={(e) => e.stopPropagation()}>
             <h3 id="payable-mark-paid-title" className={s.title} style={{ fontSize: 16 }}>
@@ -270,15 +266,15 @@ export default function CommercePayablesClient({
               className={s.input}
               rows={3}
               value={markReason}
-              disabled={pending}
+              disabled={markPending}
               onChange={(e) => setMarkReason(e.target.value)}
               style={{ width: '100%', marginTop: 6, resize: 'vertical' }}
             />
             <div className={s.actionsRow} style={{ marginTop: 16, justifyContent: 'flex-end' }}>
-              <button type="button" className={s.ghostBtn} disabled={pending} onClick={() => setPayableMarkId(null)}>
+              <button type="button" className={s.ghostBtn} disabled={markPending} onClick={() => setPayableMarkId(null)}>
                 닫기
               </button>
-              <button type="button" className={s.primaryBtn} disabled={pending} onClick={() => void submitMarkPaid()}>
+              <button type="button" className={s.primaryBtn} disabled={markPending} onClick={() => submitMarkPaid()}>
                 실행
               </button>
             </div>

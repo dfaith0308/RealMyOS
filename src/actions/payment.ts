@@ -1098,6 +1098,8 @@ export interface DisbursementListItem {
   due_date:           string | null
   status:             string
   payment_method:     string
+  /** `payments.type` — OPS-UX: `payout_outbound` 는 UI에서 지급 취소 버튼 숨김 */
+  type:               string | null
   order_id:           string | null
   memo:               string | null
   created_at:         string
@@ -1112,7 +1114,7 @@ export async function getDisbursementList(filters?: {
 
   let query = supabase
     .from('payments')
-    .select('id, counterparty_name, amount, due_date, status, payment_method, order_id, memo, created_at')
+    .select('id, counterparty_name, amount, due_date, status, payment_method, type, order_id, memo, created_at')
     .eq('direction', 'outbound')
     .or(`payer_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
     .is('reversal_of_id', null)
@@ -1134,6 +1136,7 @@ export async function getDisbursementList(filters?: {
       due_date:          p.due_date,
       status:            p.status,
       payment_method:    p.payment_method,
+      type:              (p as { type?: string | null }).type ?? null,
       order_id:          p.order_id,
       memo:              p.memo,
       created_at:        p.created_at,

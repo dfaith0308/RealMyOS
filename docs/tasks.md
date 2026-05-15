@@ -1230,6 +1230,14 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **연계**: **[KPI-REVERSAL-P0-001]**, **[PAYABLE-PAYOUT-P1-001]**, **`DECISIONS.md` [D-023]**
 - **작업 이력 (2026-05-14)**: 운영 정합 보정 — worklog: [`docs/worklogs/2026-05-14_feat_platform-margin-fix-001.md`](./worklogs/2026-05-14_feat_platform-margin-fix-001.md)
 
+#### [OPS-UX-STABILITY-001] 관리자OS ERP 운영 UX 안정화 (버튼·안내·중복 클릭)
+- **우선순위**: MEDIUM (실수·혼동 최소화, **새 ERP 아님**)
+- **상태**: **P1 코드 (2026-05-14)** — lifecycle·append-only·KPI·settlement·migration 변경 없음
+- **산출물**: `DisbursementsClient` `payout_outbound` 취소 버튼 숨김·`getDisbursementList` `type` 필드·`CommercePayablesClient` 상태 한글·지급완료 `useTransition`·`CommerceAllocationsClient` 취소 문구·`OrdersClient` paid 취소 모달·환불 안내
+- **비범위**: 자동화·settlement·partial refund·대규모 UI·Server Action 전이 규칙 변경
+- **연계**: **[REFUND-LIFECYCLE-P1-001]**, **[PAYABLE-PAYOUT-P1-001]**, **[TEST-RUN-OPERATIONS-P1-001]**, **`DECISIONS.md` [D-021]~[D-024]**
+- **작업 이력 (2026-05-14)**: 운영 UX 안정화 — worklog: [`docs/worklogs/2026-05-14_feat_ops-ux-stability-001.md`](./worklogs/2026-05-14_feat_ops-ux-stability-001.md)
+
 #### [REFUND-LIFECYCLE-P1-001] cancelled→refunded 최소 보정·payout_outbound reversal 차단·KPI 케이스 B
 - **우선순위**: HIGH (lifecycle 불일치·payout reversal 위험·KPI 정합 P1, **완전 환불 자동화 아님**)
 - **상태**: **P1 코드 (2026-05-14)** — settlement↔payable·부분 환불·PG·refund payments 자동 생성 없음

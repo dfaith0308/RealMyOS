@@ -391,14 +391,16 @@ export default function OrdersClient({
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className={s.title} style={{ fontSize: 16 }}>
-              결제 취소 확인
+              입금 확인 주문 취소
             </h3>
-            <p className={s.subtitle} style={{ marginTop: 10 }}>
-              결제된 주문을 취소합니다.
+            <p className={s.subtitle} style={{ marginTop: 10, lineHeight: 1.6 }}>
+              이 주문은 입금 확인된 주문입니다. 취소 시 reversal 회계 이벤트가 생성됩니다.
               <br />
-              환불 처리가 필요합니다.
               <br />
-              계속하시겠습니까?
+              공급자 지급 예정(payable)이 이미 생성된 경우 추가 확인이 필요할 수 있습니다.
+              <br />
+              <br />
+              계속 진행하시겠습니까?
             </p>
             <div className={s.actionsRow} style={{ marginTop: 16, justifyContent: 'flex-end' }}>
               <button
@@ -407,7 +409,7 @@ export default function OrdersClient({
                 disabled={pending}
                 onClick={() => setPaidCancelTarget(null)}
               >
-                닫기
+                돌아가기
               </button>
               <button
                 type="button"
@@ -419,7 +421,7 @@ export default function OrdersClient({
                   if (t) runStatus(t, 'cancelled')
                 }}
               >
-                취소 처리
+                취소 진행
               </button>
             </div>
           </div>
@@ -579,6 +581,7 @@ function OrderActions({
   const { status, payment_method, refund_required } = order
 
   return (
+    <>
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
       <button type="button" className={s.ghostBtn} disabled={pending} onClick={onDetail}>
         상세
@@ -634,5 +637,11 @@ function OrderActions({
         </button>
       ) : null}
     </div>
+    {status === 'paid' ? (
+      <p className={s.cellMutedSm} style={{ marginTop: 8, fontSize: 12, lineHeight: 1.55, maxWidth: 420 }}>
+        환불 처리는 먼저 주문을 취소(cancelled)한 뒤 진행해 주세요. 취소 후 「환불 완료 처리」 버튼이 표시됩니다.
+      </p>
+    ) : null}
+    </>
   )
 }

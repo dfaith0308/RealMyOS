@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { cancelDisbursement } from '@/actions/payment'
 import { formatKRW } from '@/lib/calc'
+import { PAYMENTS_TYPE_PAYOUT_OUTBOUND } from '@/lib/inbound-payment-superseded'
 import type { DisbursementListItem } from '@/actions/payment'
 
 const METHOD_LABEL: Record<string, string> = {
@@ -95,6 +96,8 @@ export default function DisbursementsClient({ rows, filters }: Props) {
                   bg:    '#F9FAFB',
                 }
                 const isReversed = r.status === 'reversed'
+                const isPayoutOutbound = String(r.type ?? '').trim() === PAYMENTS_TYPE_PAYOUT_OUTBOUND
+                const showCancelBtn = r.status === 'pending' && !isPayoutOutbound
                 return (
                   <tr key={r.id} style={{ borderBottom: '1px solid #f3f4f6',
                     opacity: isReversed ? 0.55 : 1,
@@ -118,12 +121,14 @@ export default function DisbursementsClient({ rows, filters }: Props) {
                       {METHOD_LABEL[r.payment_method] ?? r.payment_method}
                     </td>
                     <td style={td}>
-                      {r.status === 'pending' && (
+                      {showCancelBtn ? (
                         <button type="button" style={s.cancelBtn}
                           onClick={() => setCancelTarget(r)}>
                           취소
                         </button>
-                      )}
+                      ) : r.status === 'pending' && isPayoutOutbound ? (
+                        <span style={{ fontSize: 11, color: '#6b7280' }}>수동 처리 필요</span>
+                      ) : null}
                     </td>
                   </tr>
                 )
