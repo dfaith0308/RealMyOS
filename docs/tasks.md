@@ -1230,6 +1230,13 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **연계**: **`DECISIONS.md` [D-021]~[D-024]** · **[APPEND-ONLY-CONVERGENCE-P1-001]** · **[KPI-REVERSAL-P0-001]** · **[PAYABLE-PAYOUT-P1-001]** (`payout_outbound`) · **[ACCOUNTING-REVERSAL-P0-001]**
 - **작업 이력 (2026-05-14)**: P1 최소 보정 — worklog: [`docs/worklogs/2026-05-14_feat_refund-lifecycle-p1-001.md`](./worklogs/2026-05-14_feat_refund-lifecycle-p1-001.md)
 
+#### [TEST-RUN-OPERATIONS-P1-001] 운영 E2E 리허설 검증 (runbook)
+- **우선순위**: HIGH (치명 버그·데이터 corruption·append-only·KPI·UX 위험 조기 탐지)
+- **상태**: **정적 검증 + 치명 1건 수정 (2026-05-14)** — 브라우저·AUTO SQL 실행은 운영자 환경에서 별도 수행
+- **범위**: `TEST-RUN-P1-` 식별 규칙·테스트 tenant·DELETE 금지 전제 하에 `docs/TEST-RUN/TEST-RUN-MASTER-001.md`·`docs/TEST-DEV/TEST-RUN-ERP-001.md`와 동일 축 검증; 새 기능·설계 문서·대규모 수정 금지
+- **연계**: **[REFUND-LIFECYCLE-P1-001]**, **[APPEND-ONLY-CONVERGENCE-P1-001]**, **`docs/TEST-DEV/TEST-RUN-ERP-001.md`**, **`[KPI-REVERSAL-P0-001]`**
+- **작업 이력 (2026-05-14)**: 코드 정적 검증·`cancelDisbursement` payout 차단 우회 치명 수정 — worklog: [`docs/worklogs/2026-05-14_test-run-operations-p1-001.md`](./worklogs/2026-05-14_test-run-operations-p1-001.md)
+
 #### [PAYABLE-PAYOUT-P1-001] supplier_payables paid + append-only payout `payments` (최소)
 - **우선순위**: HIGH (**[D-023]** finality: paid = 실제 지급 이벤트·settlement와 분리)
 - **상태**: **P1 코드 (2026-05-14)** — settlement 자동화·배치 지급·PG·부분 지급 없음

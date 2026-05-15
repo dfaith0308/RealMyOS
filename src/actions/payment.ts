@@ -321,6 +321,10 @@ async function recalculatePurchasesAfterOutboundAppendOnly(
   return { ok: true }
 }
 
+/** `insertOutboundReversal` 차단 시 메시지 — `cancelDisbursement`가 legacy RPC로 우회하지 않도록 동일 값으로 비교 */
+export const PAYOUT_OUTBOUND_REVERSAL_BLOCKED_ERROR =
+  'payout_outbound는 자동 reversal 불가. 수동 처리 필요.' as const
+
 function pickReversalPaymentType(origType: unknown): { type: string; warned: boolean } {
   if (origType != null && String(origType).trim() !== '') {
     return { type: String(origType), warned: false }
@@ -365,7 +369,7 @@ export async function insertOutboundReversal(
     })
     return {
       success: false,
-      error: 'payout_outbound는 자동 reversal 불가. 수동 처리 필요.',
+      error: PAYOUT_OUTBOUND_REVERSAL_BLOCKED_ERROR,
     }
   }
 
@@ -1212,6 +1216,10 @@ export async function cancelDisbursement(payment_id: string): Promise<ActionResu
 
   const append = await insertOutboundReversal(payment_id, 'disbursement_cancelled')
   if (append.success) return { success: true }
+
+  if (!append.success && append.error === PAYOUT_OUTBOUND_REVERSAL_BLOCKED_ERROR) {
+    return { success: false, error: append.error }
+  }
 
   // D-024 transition debt fallback; remove after P1 verification
   const { error } = await supabase.rpc('reverse_disbursement', {
