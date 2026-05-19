@@ -7,7 +7,6 @@ import {
   effectiveOrderAmount,
   isSalesOrder,
   buildCustomerKey,
-  resolveCustomerName,
   getAccountsReceivable,
 } from '@/lib/ledger-calc'
 import type { ActionResult } from '@/types/order'
@@ -48,6 +47,52 @@ function resolveDashboardOrderAmount(order: {
   if (total !== null && total !== 0) return total
   if (lineSum !== 0) return lineSum
   return final ?? total ?? 0
+}
+
+type DashboardOrderCustomerJoin =
+  | { name?: string | null }
+  | Array<{ name?: string | null }>
+  | null
+
+function joinedCustomerName(customers: DashboardOrderCustomerJoin | undefined): string {
+  if (!customers) return ''
+  if (Array.isArray(customers)) return customers[0]?.name?.trim() ?? ''
+  return customers.name?.trim() ?? ''
+}
+
+/** TOP5 거래처명 — 스냅샷·조인(배열/객체)·CRM 목록 순 fallback */
+function resolveDashboardCustomerName(
+  order: {
+    customer_id?: string | null
+    customer_name?: string | null
+    customers?: DashboardOrderCustomerJoin
+  },
+  customerNameById: Map<string, string>,
+): string {
+  const snap = order.customer_name?.trim()
+  if (snap) return snap
+
+  const joined = joinedCustomerName(order.customers)
+  if (joined) return joined
+
+  const cid = order.customer_id?.trim()
+  if (cid) {
+    const fromCrm = customerNameById.get(cid)?.trim()
+    if (fromCrm) return fromCrm
+  }
+
+  return '알 수 없음'
+}
+
+function mergeTopSalesCustomerName(current: string, incoming: string): string {
+  const usable = (s: string) => {
+    const t = s.trim()
+    return t.length > 0 && t !== '알 수 없음'
+  }
+  if (usable(incoming)) return incoming.trim()
+  if (usable(current)) return current.trim()
+  const fallback = incoming.trim() || current.trim()
+  return fallback || '알 수 없음'
 }
 
 export interface DashboardData {
@@ -138,6 +183,9 @@ export async function getDashboardData(): Promise<ActionResult<DashboardData>> {
   ])
 
   const customers = scoreResult.data ?? []
+  const customerNameById = new Map(
+    customers.map((c) => [c.id, c.name?.trim() || ''] as const).filter(([, n]) => n.length > 0),
+  )
 
   // KPI
   const total_receivable = customers.reduce((s, c) => s + Math.max(0, c.receivable_amount), 0)
@@ -178,7 +226,7 @@ export async function getDashboardData(): Promise<ActionResult<DashboardData>> {
   for (const o of customerSalesRaw ?? []) {
     if (!isSalesOrder(o)) continue
     const key  = buildCustomerKey(o)
-    const name = resolveCustomerName(o as { customer_name?: string | null; customers?: { name?: string | null } | null })
+    const name = resolveDashboardCustomerName(o, customerNameById)
     const lines = o.order_lines ?? []
     const amt  = resolveDashboardOrderAmount(o)
     const qty = lines.reduce(
@@ -186,13 +234,7 @@ export async function getDashboardData(): Promise<ActionResult<DashboardData>> {
       0,
     )
     const cur  = custSalesMap.get(key) ?? { name, amount: 0, quantity: 0 }
-    const prev = cur.name
-    const merged =
-      name.trim() !== '' && name !== '알 수 없음'
-        ? name
-        : prev.trim() !== '' && prev !== '알 수 없음'
-          ? prev
-          : name || prev || '알 수 없음'
+    const merged = mergeTopSalesCustomerName(cur.name, name)
     custSalesMap.set(key, { name: merged, amount: cur.amount + amt, quantity: cur.quantity + qty })
   }
   const top_customer_sales = [...custSalesMap.values()]

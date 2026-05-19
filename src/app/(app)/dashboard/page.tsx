@@ -138,7 +138,7 @@ export default async function DashboardPage() {
                 {d.top_customer_sales.slice(0, 5).map((c, i) => (
                   <DataTableRow key={`cs-${i}`} href="/customers" density="compact">
                     <DataCell tone="secondary">{i + 1}</DataCell>
-                    <DataCell>{c.name}</DataCell>
+                    <DataCell>{c.name?.trim() || '알 수 없음'}</DataCell>
                     <DataCell align="end">{formatKRW(c.amount)}</DataCell>
                   </DataTableRow>
                 ))}
