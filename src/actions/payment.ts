@@ -331,7 +331,6 @@ function pickReversalPaymentType(origType: unknown): { type: string; warned: boo
   }
   return { type: PAYMENTS_TYPE_PAYOUT_REVERSAL, warned: true }
 }
-
 /**
  * RFQ outbound 지급 append-only 상쇅 row ([D-024]). 원본 `payments` UPDATE 금지.
  */

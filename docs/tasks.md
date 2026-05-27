@@ -1259,6 +1259,10 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **연계**: **[SYSTEM-BOUNDARY-AUDIT-001]**, `supabase/migrations/*`, **`DECISIONS.md` [D-021]~[D-024]**
 - **작업 이력 (2026-05-14)**: merge 안전성 검토 — worklog: [`docs/worklogs/2026-05-14_audit_merge-safety-check-001.md`](./worklogs/2026-05-14_audit_merge-safety-check-001.md)
 
+#### [BUILD-FIX-PAYMENT-USE-SERVER-001] payment.ts use server export 분리
+- **상태**: **완료 (2026-05-15)** — `PAYOUT_OUTBOUND_REVERSAL_BLOCKED_ERROR`·`pickReversalPaymentType`만 `src/lib/payments/*`로 이동, accounting 로직 무변경
+- **작업 이력 (2026-05-15)**: build green — worklog: [`docs/worklogs/2026-05-15_fix_payment-use-server-export.md`](./worklogs/2026-05-15_fix_payment-use-server-export.md)
+
 #### [MERGE-002] dev→main 병합 (`Sidebar.tsx` 충돌 해결)
 - **우선순위**: HIGH (운영 브랜치 정렬)
 - **상태**: **완료 (2026-05-15)** — `main`에 `dev` merge + `Sidebar.tsx`만 수동 해결 후 push
