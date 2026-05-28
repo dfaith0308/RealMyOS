@@ -68,6 +68,7 @@
 - **작업 이력 (2026-05-07)**: Dashboard visual polish 2차(Queue/KPI hierarchy, spacing rhythm, QuickActions 경량화, 분석 약화) — worklog: [`docs/worklogs/2026-05-07_dashboard-visual-polish-v2.md`](./worklogs/2026-05-07_dashboard-visual-polish-v2.md)
 - **작업 이력 (2026-05-07)**: Customers 채권 운영 콘솔 row list 적용(즉시 필터링 + 행 클릭 원장 + 수금 액션 1개) — worklog: [`docs/worklogs/2026-05-07_customers-ops-row-list.md`](./worklogs/2026-05-07_customers-ops-row-list.md)
 - **작업 이력 (2026-05-27)**: Customers 운영 목록 CSS 미세조정(헤더-KPI 간격/상태 뱃지 강화/수금 버튼 항상 표시 + 미수 0원 dim) — worklog: [`docs/worklogs/2026-05-27_chore_customers-ops-css-tweaks.md`](./worklogs/2026-05-27_chore_customers-ops-css-tweaks.md)
+- **작업 이력 (2026-05-28)**: 거래처 등록 폼 단일컬럼/카드 분리 + Sticky 하단 버튼 적용, 유입경로·목표월매출 입력 연결 — worklog: [`docs/worklogs/2026-05-28_feat_customer-create-form-layout.md`](./worklogs/2026-05-28_feat_customer-create-form-layout.md)
 - **작업 이력 (2026-05-07)**: Ledger 돈 흐름 콘솔 재설계(테이블 제거 + 날짜 그룹 sticky/subtotal + 즉시 필터 + KPI hierarchy) — worklog: [`docs/worklogs/2026-05-07_ledger-money-flow-console.md`](./worklogs/2026-05-07_ledger-money-flow-console.md)
 - **작업 이력 (2026-05-07)**: Orders 운영 Queue 콘솔 재설계(테이블 제거 + Queue/sticky 날짜 그룹 + 즉시 필터 + CommandStrip/KPI 스트립) — worklog: [`docs/worklogs/2026-05-07_orders-ops-queue-console.md`](./worklogs/2026-05-07_orders-ops-queue-console.md)
 - **작업 이력 (2026-05-08)**: 관리자OS 성장/영업 엔진 + 수익/정산 통제(ADM-MISSING-005/006) — worklog: [`docs/worklogs/2026-05-07_adm-missing-005-006_growth-settlement.md`](./worklogs/2026-05-07_adm-missing-005-006_growth-settlement.md)

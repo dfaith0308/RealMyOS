@@ -21,6 +21,8 @@ export interface CustomerInput {
   payment_day?: number
   payment_terms?: string
   target_per_order?: number
+  acquisition_channel_id?: string
+  target_monthly_revenue?: number
   is_buyer?: boolean
   is_supplier?: boolean
   trade_status?: 'active' | 'inactive' | 'lead'
@@ -77,6 +79,8 @@ export async function createCustomer(
       payment_day:            input.payment_day ?? null,
       payment_terms:          input.payment_terms?.trim() || null,
       target_per_order:       input.target_per_order || null,
+      acquisition_channel_id: input.acquisition_channel_id || null,
+      target_monthly_revenue: input.target_monthly_revenue || null,
       is_buyer:               input.is_buyer ?? true,
       is_supplier:            input.is_supplier ?? false,
       trade_status:           input.trade_status ?? 'active',
