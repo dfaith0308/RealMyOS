@@ -16,22 +16,36 @@ function normalize(s: string) {
   return s.trim().toLowerCase()
 }
 
-function tagTexts(c: CustomerWithScore) {
-  const tags: string[] = []
-  if (c.status === 'new') tags.push('신규')
-  if (c.status === 'normal') tags.push('정상')
-  if (c.status === 'danger') tags.push('위험')
-  if (c.status === 'scheduled') tags.push('수금예정')
-  if (c.overdue_amount > 0) tags.push('연체')
-  // cap 2
-  return tags.slice(0, 2)
+function getRowVariant(c: CustomerWithScore): 'danger' | 'amber' | 'normal' {
+  if (c.overdue_amount > 0) return 'danger'
+  if ((c.days_since_payment ?? 0) >= 14 && (c.receivable_amount ?? 0) > 0) return 'amber'
+  return 'normal'
 }
 
-function badgeStatus(c: CustomerWithScore): 'overdue' | 'warning' | 'pending' | null {
-  if (c.overdue_amount > 0) return 'overdue'
-  if (c.status === 'scheduled') return 'pending'
-  if (c.status === 'danger' || c.status === 'warning') return 'warning'
-  return null
+function getBadgeClass(
+  c: CustomerWithScore,
+  styles: Record<string, string>,
+): string {
+  if (c.overdue_amount > 0) return styles.badgeDanger
+  if ((c.days_since_payment ?? 0) >= 14 && (c.receivable_amount ?? 0) > 0) return styles.badgeAmber
+  if (c.status === 'new') return styles.badgeNew
+  return styles.badgeNormal
+}
+
+function getBadgeLabel(c: CustomerWithScore): string {
+  if (c.overdue_amount > 0) return '연체'
+  if ((c.days_since_payment ?? 0) >= 14 && (c.receivable_amount ?? 0) > 0) return '수금 지연'
+  if (c.status === 'new') return '신규'
+  return '정상'
+}
+
+function getDaysClass(
+  c: CustomerWithScore,
+  styles: Record<string, string>,
+): string {
+  if (c.overdue_amount > 0) return styles.daysRed
+  if ((c.days_since_payment ?? 0) >= 14) return styles.daysAmber
+  return styles.daysOk
 }
 
 export function CustomersOpsListClient({
@@ -71,42 +85,48 @@ export function CustomersOpsListClient({
 
   return (
     <div className={styles.wrap}>
-      <Surface variant="panel" density="comfortable">
-        <div className={styles.filters}>
-          <input
-            className={styles.search}
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="거래처 검색 (이름/전화)"
-            aria-label="거래처 검색"
-          />
+      <div className={styles.filterRow}>
+        <input
+          className={styles.search}
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="거래처 검색 (이름 / 전화번호)"
+          aria-label="거래처 검색"
+        />
 
-          <div className={styles.chips} role="tablist" aria-label="거래처 필터">
-            <Chip active={filter === 'all'} onClick={() => setFilter('all')}>
-              전체 {counts.all}
-            </Chip>
-            <Chip active={filter === 'overdue'} onClick={() => setFilter('overdue')}>
-              연체 {counts.overdue}
-            </Chip>
-            <Chip active={filter === 'risk'} onClick={() => setFilter('risk')}>
-              위험 {counts.risk}
-            </Chip>
-            <Chip active={filter === 'new'} onClick={() => setFilter('new')}>
-              신규 {counts.new}
-            </Chip>
-            <Chip active={filter === 'normal'} onClick={() => setFilter('normal')}>
-              정상 {counts.normal}
-            </Chip>
-          </div>
+        <div className={styles.chips}>
+          <Chip active={filter === 'all'} onClick={() => setFilter('all')}>
+            전체 {counts.all}
+          </Chip>
+          <Chip active={filter === 'overdue'} onClick={() => setFilter('overdue')} variant="danger">
+            연체 {counts.overdue}
+          </Chip>
+          <Chip active={filter === 'risk'} onClick={() => setFilter('risk')} variant="amber">
+            수금 지연 {counts.risk}
+          </Chip>
+          <Chip active={filter === 'new'} onClick={() => setFilter('new')}>
+            신규 {counts.new}
+          </Chip>
+          <Chip active={filter === 'normal'} onClick={() => setFilter('normal')}>
+            정상 {counts.normal}
+          </Chip>
         </div>
-      </Surface>
+      </div>
 
-      <Surface variant="panel" density="comfortable">
+      <div className={styles.listCard}>
         <div className={styles.listHead}>
-          <div className={styles.listTitle}>거래처 (채권 운영)</div>
+          <div className={styles.listTitle}>거래처 목록 · 수금 우선순위 정렬</div>
           <div className={styles.listMeta}>
             {visible.length} / {items.length}
           </div>
+        </div>
+
+        <div className={styles.colHeader}>
+          <span>상태</span>
+          <span>거래처</span>
+          <span className={styles.alR}>마지막 수금</span>
+          <span className={styles.alR}>미수금</span>
+          <span className={styles.alR}>액션</span>
         </div>
 
         <div className={styles.rows}>
@@ -114,87 +134,93 @@ export function CustomersOpsListClient({
             <div className={styles.empty}>해당 거래처가 없습니다</div>
           ) : (
             visible.map((c) => {
-              const badge = badgeStatus(c)
-              const tags = tagTexts(c)
+              const variant = getRowVariant(c)
               const ledgerHref = `/customers/${c.id}/ledger`
+              const rowClass = [
+                styles.row,
+                variant === 'danger' ? styles.rowDanger : '',
+                variant === 'amber' ? styles.rowAmber : '',
+              ].filter(Boolean).join(' ')
+
+              const badgeCls = [styles.badge, getBadgeClass(c, styles)].join(' ')
+              const daysCls = [styles.daysVal, getDaysClass(c, styles)].join(' ')
+
+              const moneyMainCls = [
+                styles.moneyMain,
+                c.overdue_amount > 0 ? styles.moneyDanger : '',
+                (c.receivable_amount ?? 0) === 0 ? styles.moneyZero : '',
+              ].filter(Boolean).join(' ')
+
+              const moneySubCls = [
+                styles.moneySub,
+                c.overdue_amount > 0 ? styles.moneySubDanger : '',
+              ].filter(Boolean).join(' ')
+
+              const btnCls = [
+                styles.regBtn,
+                (c.receivable_amount ?? 0) === 0 ? styles.regBtnDim : '',
+              ].filter(Boolean).join(' ')
 
               return (
-                <DataTableRow
+                <div
                   key={c.id}
-                  density="compact"
+                  className={rowClass}
                   onClick={() => router.push(ledgerHref)}
+                  role="button"
+                  tabIndex={0}
                 >
-                  <DataCell>
-                    <div className={styles.rowLeft}>
-                      <div className={styles.nameRow}>
-                        {badge ? <StatusBadge status={badge} size="sm" /> : null}
-                        <div className={styles.name}>{c.name}</div>
-                        {tags.length > 0 ? (
-                          <div className={styles.tags}>
-                            {tags.map((t) => (
-                              <span key={`${c.id}-${t}`} className={styles.tag}>
-                                {t}
-                              </span>
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
+                  <div className={badgeCls}>
+                    {getBadgeLabel(c)}
+                  </div>
 
-                      <div className={styles.evidence}>
-                        <span className={styles.eItem}>
-                          조건 {c.payment_terms_days ?? 0}일
-                        </span>
-                        <span className={styles.eItem}>
-                          {c.last_payment_date
-                            ? `마지막 수금 D+${c.days_since_payment ?? 0}`
-                            : '수금 이력 없음'}
-                        </span>
-                        <span className={styles.eItem}>
-                          연락{' '}
-                          {c.last_contacted_at
-                            ? `D+${c.days_since_contact ?? 0}`
-                            : '기록 없음'}
-                        </span>
-                      </div>
+                  <div className={styles.rowInfo}>
+                    <div className={styles.rowName}>{c.name}</div>
+                    <div className={styles.rowSub}>
+                      <span>조건 {c.payment_terms_days ?? 0}일</span>
+                      <span>·</span>
+                      <span>
+                        {c.last_payment_date
+                          ? `마지막 수금 D+${c.days_since_payment ?? 0}`
+                          : '수금 이력 없음'}
+                      </span>
+                      <span>·</span>
+                      <span>
+                        {c.last_contacted_at
+                          ? `연락 D+${c.days_since_contact ?? 0}`
+                          : '연락 기록 없음'}
+                      </span>
                     </div>
-                  </DataCell>
+                  </div>
 
-                  <DataCell align="end">
-                    <div className={styles.moneyCol}>
-                      <div className={styles.moneyMain}>
-                        {formatKRW(c.receivable_amount ?? 0)}
-                      </div>
-                      <div
-                        className={[
-                          styles.moneySub,
-                          c.overdue_amount > 0 ? styles.moneySubStrong : '',
-                        ]
-                          .filter(Boolean)
-                          .join(' ')}
-                      >
-                        연체 {formatKRW(c.overdue_amount ?? 0)}
-                      </div>
-                      <div className={styles.moneySub}>
-                        예치 {formatKRW((c as any).deposit_amount ?? 0)}
-                      </div>
+                  <div className={styles.colDays}>
+                    <div className={daysCls}>
+                      {c.last_payment_date
+                        ? `D+${c.days_since_payment ?? 0}`
+                        : '이력 없음'}
                     </div>
-                  </DataCell>
+                    <div className={styles.daysSub}>마지막 수금</div>
+                  </div>
 
-                  <DataCell align="end">
+                  <div className={styles.colMoney}>
+                    <div className={moneyMainCls}>{formatKRW(c.receivable_amount ?? 0)}</div>
+                    <div className={moneySubCls}>연체 {formatKRW(c.overdue_amount ?? 0)}</div>
+                  </div>
+
+                  <div className={styles.colAction}>
                     <Link
                       href={`/payments/new?customer_id=${c.id}`}
-                      className={styles.actionBtn}
+                      className={btnCls}
                       onClick={(e) => e.stopPropagation()}
                     >
                       수금 등록
                     </Link>
-                  </DataCell>
-                </DataTableRow>
+                  </div>
+                </div>
               )
             })
           )}
         </div>
-      </Surface>
+      </div>
     </div>
   )
 }
@@ -203,17 +229,24 @@ function Chip({
   active,
   onClick,
   children,
+  variant,
 }: {
   active: boolean
   onClick: () => void
   children: React.ReactNode
+  variant?: 'danger' | 'amber'
 }) {
+  const cls = [
+    styles.chip,
+    active && variant === 'danger' ? styles.chipActiveDanger :
+    active && variant === 'amber'  ? styles.chipActiveAmber  :
+    active                         ? styles.chipActive       : '',
+  ].filter(Boolean).join(' ')
+
   return (
     <button
       type="button"
-      className={[styles.chip, active ? styles.chipActive : '']
-        .filter(Boolean)
-        .join(' ')}
+      className={cls}
       onClick={onClick}
     >
       {children}
