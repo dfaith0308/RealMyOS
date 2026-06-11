@@ -150,10 +150,14 @@ function SidebarInner({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <div style={s.wrap}>
-      <div style={s.brand}>
+      <Link
+        href="/dashboard"
+        style={s.brandLink}
+        onClick={() => onNavigate?.()}
+      >
         <span style={s.brandAccent} />
         <div style={s.brandText}>식식이OS</div>
-      </div>
+      </Link>
 
       <div style={s.menuList}>
         {MENU.map((group) => {
@@ -366,6 +370,16 @@ const s: Record<string, React.CSSProperties> = {
     gap: 10,
     padding: '18px 16px 14px',
     borderBottom: '1px solid rgba(255,255,255,0.10)',
+  },
+  brandLink: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    padding: '18px 16px 14px',
+    borderBottom: '1px solid rgba(255,255,255,0.10)',
+    textDecoration: 'none',
+    color: 'inherit',
+    cursor: 'pointer',
   },
   brandAccent: {
     width: 10,
