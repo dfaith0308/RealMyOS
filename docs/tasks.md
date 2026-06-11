@@ -76,6 +76,7 @@
 - **작업 이력 (2026-06-11)**: 거래처 검색 통일(상호·대표자·연락처) + `/ledger` combobox 교체 — worklog: [`docs/worklogs/2026-06-11_feat_customer-search-unified.md`](./worklogs/2026-06-11_feat_customer-search-unified.md)
 - **작업 이력 (2026-06-11)**: 거래처 combobox 키보드 네비게이션(↑↓ Enter Esc) 4화면 적용 — worklog: [`docs/worklogs/2026-06-11_feat_customer-combobox-keyboard.md`](./worklogs/2026-06-11_feat_customer-combobox-keyboard.md)
 - **작업 이력 (2026-06-11)**: Sidebar 로고 클릭 → `/dashboard` 이동 — worklog: [`docs/worklogs/2026-06-11_feat_sidebar-logo-dashboard-link.md`](./worklogs/2026-06-11_feat_sidebar-logo-dashboard-link.md)
+- **작업 이력 (2026-06-11)**: 서브도메인 분기 미들웨어(`app.*` / `admin.*`) — worklog: [`docs/worklogs/2026-06-11_feat_middleware-subdomain-routing.md`](./worklogs/2026-06-11_feat_middleware-subdomain-routing.md)
 - **작업 이력 (2026-05-07)**: Ledger 돈 흐름 콘솔 재설계(테이블 제거 + 날짜 그룹 sticky/subtotal + 즉시 필터 + KPI hierarchy) — worklog: [`docs/worklogs/2026-05-07_ledger-money-flow-console.md`](./worklogs/2026-05-07_ledger-money-flow-console.md)
 - **작업 이력 (2026-05-07)**: Orders 운영 Queue 콘솔 재설계(테이블 제거 + Queue/sticky 날짜 그룹 + 즉시 필터 + CommandStrip/KPI 스트립) — worklog: [`docs/worklogs/2026-05-07_orders-ops-queue-console.md`](./worklogs/2026-05-07_orders-ops-queue-console.md)
 - **작업 이력 (2026-05-08)**: 관리자OS 성장/영업 엔진 + 수익/정산 통제(ADM-MISSING-005/006) — worklog: [`docs/worklogs/2026-05-07_adm-missing-005-006_growth-settlement.md`](./worklogs/2026-05-07_adm-missing-005-006_growth-settlement.md)
