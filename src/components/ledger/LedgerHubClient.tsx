@@ -29,6 +29,7 @@ export default function LedgerHubClient({
   const [supplier, setSupplier] = useState(initialSupplier)
   const [search, setSearch]     = useState('')
   const [open, setOpen]         = useState(false)
+  const [activeIndex, setActiveIndex] = useState(-1)
 
   const supplierOptions = useMemo(() => suppliers.filter((s) => s.trim().length > 0), [suppliers])
 
@@ -69,6 +70,29 @@ export default function LedgerHubClient({
     pushQuery({ kind: 'purchases', supplier: name })
   }
 
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!open || filtered.length === 0) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setActiveIndex((prev) => Math.min(prev + 1, filtered.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setActiveIndex((prev) => Math.max(prev - 1, 0))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      if (activeIndex >= 0 && filtered[activeIndex]) {
+        const c = filtered[activeIndex]
+        setSearch(c.name)
+        setOpen(false)
+        setActiveIndex(-1)
+        selectCustomer(c.id)
+      }
+    } else if (e.key === 'Escape') {
+      setOpen(false)
+      setActiveIndex(-1)
+    }
+  }
+
   return (
     <div>
       <div style={s.tabs}>
@@ -104,21 +128,31 @@ export default function LedgerHubClient({
             <input
               className={styles.searchInput}
               value={search}
-              onChange={(e) => { setSearch(e.target.value); setOpen(true) }}
+              onChange={(e) => {
+                setSearch(e.target.value)
+                setOpen(true)
+                setActiveIndex(-1)
+              }}
               onFocus={() => setOpen(true)}
               onBlur={() => setTimeout(() => setOpen(false), 150)}
+              onKeyDown={handleKeyDown}
               placeholder="거래처명 · 대표자명 · 연락처로 검색"
               autoComplete="off"
             />
             {open && filtered.length > 0 && (
               <ul className={styles.dropdown}>
-                {filtered.map((c) => (
+                {filtered.map((c, idx) => (
                   <li
                     key={c.id}
-                    className={styles.dropdownItem}
+                    className={[
+                      styles.dropdownItem,
+                      activeIndex === idx ? styles.dropdownItemActive : '',
+                    ].filter(Boolean).join(' ')}
+                    onMouseEnter={() => setActiveIndex(idx)}
                     onMouseDown={() => {
                       setSearch(c.name)
                       setOpen(false)
+                      setActiveIndex(-1)
                       selectCustomer(c.id)
                     }}
                   >

@@ -37,7 +37,7 @@ export default function QuoteCreateClient({ initialCustomers }: { initialCustome
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerForOrder | null>(null)
   const [customerQuery, setCustomerQuery]       = useState('')
   const [showCustomerDd, setShowCustomerDd]     = useState(false)
-  const [customerHiIdx, setCustomerHiIdx]       = useState(0)
+  const [customerHiIdx, setCustomerHiIdx]       = useState(-1)
 
   const [productQuery, setProductQuery]   = useState('')
   const [showProductDd, setShowProductDd] = useState(false)
@@ -120,13 +120,25 @@ export default function QuoteCreateClient({ initialCustomers }: { initialCustome
     setCreatingProspect(false)
   }
 
-  function handleCustomerKeyDown(e: React.KeyboardEvent) {
+  function handleCustomerKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     const list = filteredCustomers.slice(0, 8)
-    if (!list.length) return
-    if (e.key === 'ArrowDown') { e.preventDefault(); setCustomerHiIdx((p) => Math.min(p + 1, list.length - 1)) }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); setCustomerHiIdx((p) => Math.max(p - 1, 0)) }
-    else if (e.key === 'Enter') { e.preventDefault(); const s = list[customerHiIdx]; if (s) selectCustomer(s) }
-    else if (e.key === 'Escape') setShowCustomerDd(false)
+    if (!showCustomerDd || list.length === 0) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setCustomerHiIdx((prev) => Math.min(prev + 1, list.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setCustomerHiIdx((prev) => Math.max(prev - 1, 0))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      if (customerHiIdx >= 0 && list[customerHiIdx]) {
+        selectCustomer(list[customerHiIdx])
+        setCustomerHiIdx(-1)
+      }
+    } else if (e.key === 'Escape') {
+      setShowCustomerDd(false)
+      setCustomerHiIdx(-1)
+    }
   }
 
   function handleProductKeyDown(e: React.KeyboardEvent) {
@@ -199,7 +211,11 @@ export default function QuoteCreateClient({ initialCustomers }: { initialCustome
           <div style={{ position: 'relative' }}>
             <input style={s.input} placeholder="거래처명 · 대표자명 · 연락처 검색..."
               value={customerQuery}
-              onChange={(e) => { setCustomerQuery(e.target.value); setShowCustomerDd(true); setCustomerHiIdx(0) }}
+              onChange={(e) => {
+                setCustomerQuery(e.target.value)
+                setShowCustomerDd(true)
+                setCustomerHiIdx(-1)
+              }}
               onFocus={() => setShowCustomerDd(true)}
               onBlur={() => setTimeout(() => setShowCustomerDd(false), 150)}
               onKeyDown={handleCustomerKeyDown} autoComplete="off" />
@@ -207,7 +223,7 @@ export default function QuoteCreateClient({ initialCustomers }: { initialCustome
               <ul style={s.dd}>
                 {filteredCustomers.slice(0, 8).map((c, idx) => (
                   <li key={c.id}
-                    style={{ ...s.ddItem, background: idx === customerHiIdx ? '#EFF6FF' : undefined }}
+                    style={{ ...s.ddItem, ...(customerHiIdx === idx ? s.ddItemActive : null) }}
                     onMouseDown={() => selectCustomer(c)}
                     onMouseEnter={() => setCustomerHiIdx(idx)}>
                     <div style={s.customerInfo}>
@@ -369,6 +385,7 @@ const styles: Record<string, React.CSSProperties> = {
   input:   { width: '100%', padding: '9px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, outline: 'none', background: '#fff', boxSizing: 'border-box' },
   dd:      { position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.1)', zIndex: 50, maxHeight: 280, overflowY: 'auto', listStyle: 'none', margin: 0, padding: 0 },
   ddItem:  { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', cursor: 'pointer', fontSize: 14, borderBottom: '1px solid #f9fafb' },
+  ddItemActive: { background: 'var(--ds-neutral-100)' },
   customerInfo: { display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 },
   customerName: { fontSize: 14, fontWeight: 600, color: '#111827' },
   customerSub:  { fontSize: 11.5, color: '#9ca3af' },

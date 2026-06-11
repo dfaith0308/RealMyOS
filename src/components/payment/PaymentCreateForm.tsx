@@ -25,6 +25,7 @@ export default function PaymentCreateForm({ initialCustomerId = '', collectionSc
   const [customers, setCustomers] = useState<CustomerForOrder[]>([])
   const [customerQuery, setCustomerQuery] = useState('')
   const [showDd, setShowDd] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(-1)
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerForOrder | null>(null)
 
   const [balance, setBalance]   = useState<number | null>(null)
@@ -83,6 +84,34 @@ export default function PaymentCreateForm({ initialCustomerId = '', collectionSc
       (c.representative_name ?? '').toLowerCase().includes(q)
     )
   })
+
+  const visibleCustomers = filteredCustomers.slice(0, 8)
+
+  function pickCustomer(c: CustomerForOrder) {
+    setSelectedCustomer(c)
+    setCustomerQuery('')
+    setShowDd(false)
+    setActiveIndex(-1)
+  }
+
+  function handleCustomerKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!showDd || visibleCustomers.length === 0) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setActiveIndex((prev) => Math.min(prev + 1, visibleCustomers.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setActiveIndex((prev) => Math.max(prev - 1, 0))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      if (activeIndex >= 0 && visibleCustomers[activeIndex]) {
+        pickCustomer(visibleCustomers[activeIndex])
+      }
+    } else if (e.key === 'Escape') {
+      setShowDd(false)
+      setActiveIndex(-1)
+    }
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -162,12 +191,21 @@ export default function PaymentCreateForm({ initialCustomerId = '', collectionSc
             value={selectedCustomer ? selectedCustomer.name : customerQuery}
             placeholder="거래처명 · 대표자명 · 연락처 검색"
             onFocus={() => { setShowDd(true); if (selectedCustomer) setCustomerQuery('') }}
-            onChange={(e) => { setCustomerQuery(e.target.value); setSelectedCustomer(null); setShowDd(true) }} />
-          {showDd && filteredCustomers.length > 0 && (
+            onChange={(e) => {
+              setCustomerQuery(e.target.value)
+              setSelectedCustomer(null)
+              setShowDd(true)
+              setActiveIndex(-1)
+            }}
+            onKeyDown={handleCustomerKeyDown}
+            autoComplete="off" />
+          {showDd && visibleCustomers.length > 0 && (
             <div style={s.dd}>
-              {filteredCustomers.slice(0, 8).map((c) => (
-                <button key={c.id} type="button" style={s.ddItem}
-                  onClick={() => { setSelectedCustomer(c); setCustomerQuery(''); setShowDd(false) }}>
+              {visibleCustomers.map((c, idx) => (
+                <button key={c.id} type="button"
+                  style={{ ...s.ddItem, ...(activeIndex === idx ? s.ddItemActive : null) }}
+                  onMouseEnter={() => setActiveIndex(idx)}
+                  onClick={() => pickCustomer(c)}>
                   <div style={s.customerName}>{c.name}</div>
                   {c.representative_name && (
                     <div style={s.customerSub}>{c.representative_name}</div>
@@ -310,6 +348,7 @@ const s: Record<string, React.CSSProperties> = {
   input:         { padding: '9px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, outline: 'none', width: '100%', boxSizing: 'border-box' },
   dd:            { position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', maxHeight: 200, overflowY: 'auto', marginTop: 4 },
   ddItem:        { display: 'block', width: '100%', padding: '9px 12px', border: 'none', borderBottom: '1px solid #f3f4f6', background: '#fff', fontSize: 14, textAlign: 'left', cursor: 'pointer' },
+  ddItemActive:  { background: 'var(--ds-neutral-100)' },
   customerName:  { fontSize: 14, fontWeight: 600, color: '#111827' },
   customerSub:   { fontSize: 11.5, color: '#9ca3af', marginTop: 2 },
   balanceBox:    { background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: '12px 16px' },
