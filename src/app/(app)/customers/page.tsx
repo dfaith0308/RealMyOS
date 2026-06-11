@@ -56,6 +56,9 @@ export default async function CustomersPage({
         </div>
 
         <div className={styles.pageActions}>
+          <Link href="/customers/all" className={styles.btnGhost}>
+            전체 목록 보기
+          </Link>
           <Link href="/customers?filter=overdue" className={styles.btnGhost}>
             연체 거래처 보기
           </Link>

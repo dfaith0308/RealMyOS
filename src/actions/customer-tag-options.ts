@@ -20,7 +20,8 @@ const DEFAULT_SEED: Array<{ category: string; options: string[] }> = [
   { category: '식식이OS', options: ['구독', '미구독'] },
   { category: '관리등급', options: ['방치', '정기관리', '주력관리'] },
   { category: '유입경로', options: ['쿠팡', '스마트스토어', '소개', '오프라인', '기타'] },
-  { category: '업종', options: ['고깃집', '분식', '카페', '식당', '기타'] },
+  { category: '업종', options: ['카페', '고깃집', '분식', '한식', '중식', '일식', '기타'] },
+  { category: '운영관계', options: ['식당/업소', '도매처', '협력업체', '매입처', '개인소비자', '예비업장'] },
   { category: '연락상태', options: ['미확인', '안심번호', '연락가능', '전환완료'] },
 ]
 

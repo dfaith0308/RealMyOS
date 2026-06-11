@@ -1,8 +1,6 @@
 'use client'
 
 import { useEffect, useMemo, useState, useTransition } from 'react'
-import { Surface } from '@/components/ui/Surface'
-import { DataCell, DataTableRow } from '@/components/ui/DataTableRow'
 import {
   deactivateCustomerTag,
   getCustomerTags,
@@ -80,55 +78,55 @@ export function CustomerTagsSectionClient({ customerId }: { customerId: string }
   }
 
   return (
-    <Surface variant="panel" density="comfortable">
-      <div className={styles.root}>
-        <div className={styles.head}>
-          <div className={styles.title}>분류</div>
-          <div className={styles.meta}>
-            Category/Value · 변경 이력 기록 ·{' '}
-            <Link href="/settings/tags" style={{ color: 'var(--ds-brand-primary)', textDecoration: 'none' }}>
-              ⚙️ 분류 관리
-            </Link>
-          </div>
-        </div>
-
-        {err ? <div className={styles.err}>{err}</div> : null}
-
-        <div className={styles.rows}>
-          {optionGroups.length === 0 ? (
-            <div className={styles.empty}>분류 옵션이 없습니다. (⚙️ 분류 관리에서 추가)</div>
-          ) : (
-            optionGroups.map((g) => (
-              <div key={`g-${g.category}`}>
-                <div className={styles.groupHead}>
-                  <div className={styles.groupTitle}>{g.category}</div>
-                  <div className={styles.pill}>
-                    {selectedByCategory.get(g.category)?.value ?? '-'}
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: 12 }}>
-                  {g.options.map((o) => {
-                    const active = selectedByCategory.get(g.category)?.value === o.value
-                    return (
-                      <button
-                        key={o.id}
-                        type="button"
-                        className={[styles.btn, active ? styles.btnPrimary : ''].filter(Boolean).join(' ')}
-                        onClick={() => toggle(g.category, o.value)}
-                        disabled={isPending}
-                      >
-                        {o.value}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
+    <div className={styles.card}>
+      <div className={styles.cardHead}>
+        <div className={styles.cardTitle}>분류 태그</div>
+        <Link href="/settings/tags" className={styles.cardLink}>
+          ⚙️ 태그 관리
+        </Link>
       </div>
-    </Surface>
+
+      {err && <div className={styles.err}>{err}</div>}
+
+      <div className={styles.body}>
+        {optionGroups.length === 0 ? (
+          <div className={styles.empty}>
+            분류 옵션이 없습니다.{' '}
+            태그 관리에서 추가하세요.
+          </div>
+        ) : (
+          optionGroups.map((g) => (
+            <div key={`g-${g.category}`} className={styles.group}>
+              <div className={styles.groupHead}>
+                <div className={styles.groupTitle}>{g.category}</div>
+                {selectedByCategory.get(g.category) && (
+                  <div className={styles.selectedPill}>
+                    {selectedByCategory.get(g.category)?.value}
+                  </div>
+                )}
+              </div>
+
+              <div className={styles.chips}>
+                {g.options.map((o) => {
+                  const active = selectedByCategory.get(g.category)?.value === o.value
+                  return (
+                    <button
+                      key={o.id}
+                      type="button"
+                      className={[styles.chip, active ? styles.chipOn : ''].filter(Boolean).join(' ')}
+                      onClick={() => toggle(g.category, o.value)}
+                      disabled={isPending}
+                    >
+                      {o.value}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
   )
 }
 

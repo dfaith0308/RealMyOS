@@ -68,7 +68,11 @@
 - **작업 이력 (2026-05-07)**: Dashboard visual polish 2차(Queue/KPI hierarchy, spacing rhythm, QuickActions 경량화, 분석 약화) — worklog: [`docs/worklogs/2026-05-07_dashboard-visual-polish-v2.md`](./worklogs/2026-05-07_dashboard-visual-polish-v2.md)
 - **작업 이력 (2026-05-07)**: Customers 채권 운영 콘솔 row list 적용(즉시 필터링 + 행 클릭 원장 + 수금 액션 1개) — worklog: [`docs/worklogs/2026-05-07_customers-ops-row-list.md`](./worklogs/2026-05-07_customers-ops-row-list.md)
 - **작업 이력 (2026-05-27)**: Customers 운영 목록 CSS 미세조정(헤더-KPI 간격/상태 뱃지 강화/수금 버튼 항상 표시 + 미수 0원 dim) — worklog: [`docs/worklogs/2026-05-27_chore_customers-ops-css-tweaks.md`](./worklogs/2026-05-27_chore_customers-ops-css-tweaks.md)
+- **작업 이력 (2026-06-11)**: 거래처 운영 목록→`/customers/all`·원장→상세/수정 네비게이션 링크 추가 — worklog: [`docs/worklogs/2026-06-11_feat_hidden-page-nav-links.md`](./worklogs/2026-06-11_feat_hidden-page-nav-links.md)
 - **작업 이력 (2026-05-28)**: 거래처 등록 폼 단일컬럼/카드 분리 + Sticky 하단 버튼 적용, 유입경로·목표월매출 입력 연결 — worklog: [`docs/worklogs/2026-05-28_feat_customer-create-form-layout.md`](./worklogs/2026-05-28_feat_customer-create-form-layout.md)
+- **작업 이력 (2026-05-28)**: 거래처 태그 UI 디자인 시스템 정상화 + `/customers/new`에서 태그 선택/저장 연결 — worklog: [`docs/worklogs/2026-05-28_feat_customer-tags-connect.md`](./worklogs/2026-05-28_feat_customer-tags-connect.md)
+- **작업 이력 (2026-05-29)**: 운영분류 관리 UI 정리(Surface·prompt/confirm 제거) + 거래처 등록 태그 드롭다운화 + DEFAULT_SEED 업종/운영관계 분리 — worklog: [`docs/worklogs/2026-05-29_feat_ops-tag-system-cleanup.md`](./worklogs/2026-05-29_feat_ops-tag-system-cleanup.md)
+- **작업 이력 (2026-06-11)**: 숨겨진 페이지 5경로 네비게이션 추가(설정 하위 메뉴·허브 카드·원장 상세/수정·전체 목록) — worklog: [`docs/worklogs/2026-06-11_feat_hidden-page-nav-links.md`](./worklogs/2026-06-11_feat_hidden-page-nav-links.md)
 - **작업 이력 (2026-05-07)**: Ledger 돈 흐름 콘솔 재설계(테이블 제거 + 날짜 그룹 sticky/subtotal + 즉시 필터 + KPI hierarchy) — worklog: [`docs/worklogs/2026-05-07_ledger-money-flow-console.md`](./worklogs/2026-05-07_ledger-money-flow-console.md)
 - **작업 이력 (2026-05-07)**: Orders 운영 Queue 콘솔 재설계(테이블 제거 + Queue/sticky 날짜 그룹 + 즉시 필터 + CommandStrip/KPI 스트립) — worklog: [`docs/worklogs/2026-05-07_orders-ops-queue-console.md`](./worklogs/2026-05-07_orders-ops-queue-console.md)
 - **작업 이력 (2026-05-08)**: 관리자OS 성장/영업 엔진 + 수익/정산 통제(ADM-MISSING-005/006) — worklog: [`docs/worklogs/2026-05-07_adm-missing-005-006_growth-settlement.md`](./worklogs/2026-05-07_adm-missing-005-006_growth-settlement.md)
@@ -599,6 +603,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
     - 사용자 승인 없는 자동 발송 금지 준수
     - migration: 🔍 (로그 테이블/필드 필요 가능)
     - **작업 이력 (2026-05-07)**: 알리고 실제 연동 구현(`sendAligo` Server Action) + SMS/LMS 자동 분기(90바이트) + 설정 화면 알리고 설정/테스트 발송 + 실행센터 실제 발송(확인 모달)로 교체 + D-015 결정 추가 — worklog: `docs/worklogs/2026-05-07_sup-partial-006c_aligo-api.md`
+    - **작업 이력 (2026-06-11)**: 사이드바·설정 허브에서 `/settings/messages` 메시지 템플릿 진입 링크 추가 — worklog: [`docs/worklogs/2026-06-11_feat_hidden-page-nav-links.md`](./worklogs/2026-06-11_feat_hidden-page-nav-links.md)
   - **[SUP-PARTIAL-006-D] 영업이력 컬럼/필터/성과 연결 검증**
     - converted_order_id 기반 “영업→주문 전환” 표시/링크
     - outcome_type 기반 next_action_date 자동 계산(서버에서 저장)
@@ -858,6 +863,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **migration**: `customer_tags`/`customer_tag_logs` 테이블 신설 (**적용 완료** ✅)
 - **작업 이력 (2026-05-07)**: 분류 CRUD 액션 + 거래처 상세 “분류” 섹션 연결(물리 삭제 금지, 변경 이력 기록) — worklog: `docs/worklogs/2026-05-07_sup-missing-001_customer-tags.md`
 - **작업 이력 (2026-05-07)**: `customer_tag_options` 기반 동적 분류(하드코딩 제거) + 분류 관리 화면(`/settings/tags`) + 등록 폼에서 분류 필드 제거(PRODUCT §6-3 정합) — worklog: `docs/worklogs/2026-05-07_customer-form-tags-refactor.md`
+- **작업 이력 (2026-06-11)**: 사이드바·설정 허브에서 `/settings/tags` 진입 링크 추가 — worklog: [`docs/worklogs/2026-06-11_feat_hidden-page-nav-links.md`](./worklogs/2026-06-11_feat_hidden-page-nav-links.md)
 
 #### [SUP-MISSING-002] 거래처 등록 필드 누락 (PRODUCT §6-3 확정 필드)
 - **PRODUCT 정의 위치**: PRODUCT §6-3 거래처등록 — 확정 필드

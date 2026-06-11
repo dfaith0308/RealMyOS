@@ -99,6 +99,12 @@ export default async function CustomerLedgerPage({
           </div>
 
           <div className={styles.ctaRow}>
+            <Link href={`/customers/${id}`} className={styles.btn}>
+              거래처 정보
+            </Link>
+            <Link href={`/customers/${id}/edit`} className={styles.btn}>
+              거래처 수정
+            </Link>
             <Link
               href={`/payments/new?customer_id=${id}`}
               className={[styles.btn, styles.btnPrimary].join(' ')}

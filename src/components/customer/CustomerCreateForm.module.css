@@ -94,6 +94,16 @@
   margin-left: auto;
 }
 
+.secLink {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ds-brand-primary);
+  text-decoration: none;
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+.secLink:hover { text-decoration: underline; }
+
 .secBody {
   padding: 18px 22px;
   display: flex;
@@ -321,4 +331,3 @@
   .fieldRow { grid-template-columns: 1fr; }
   .stickyFoot { left: 0; }
 }
-
