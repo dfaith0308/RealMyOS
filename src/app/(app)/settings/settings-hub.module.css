@@ -1,0 +1,47 @@
+.hubSection {
+  margin-bottom: 28px;
+}
+
+.hubGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.hubCard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 18px;
+  background: var(--color-bg-card);
+  border: 1px solid var(--ds-border-default);
+  border-radius: 10px;
+  box-shadow: var(--ds-shadow-subtle);
+  text-decoration: none;
+  color: inherit;
+  transition: box-shadow 0.15s;
+}
+
+.hubCard:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.hubCardTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ds-text-primary);
+  letter-spacing: -0.02em;
+}
+
+.hubCardDesc {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ds-text-secondary);
+  line-height: 1.45;
+}
+
+@media (max-width: 640px) {
+  .hubGrid {
+    grid-template-columns: 1fr;
+  }
+}

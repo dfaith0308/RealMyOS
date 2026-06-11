@@ -1,8 +1,10 @@
+import Link from 'next/link'
 import { getSettings } from '@/actions/settings'
 import { DEFAULT_SETTINGS } from '@/constants/settings'
 import SettingsForm from '@/components/settings/SettingsForm'
 import { getAligoSettings } from '@/actions/message'
 import AligoSettingsForm from '@/components/settings/AligoSettingsForm'
+import hubStyles from './settings-hub.module.css'
 
 export const metadata = { title: '설정 — RealMyOS' }
 
@@ -20,6 +22,24 @@ export default async function SettingsPage() {
             모든 기준값은 여기서 관리합니다. 코드 수정 없이 변경 가능합니다.
           </p>
         </div>
+
+        <section className={hubStyles.hubSection} aria-label="설정 하위 메뉴">
+          <div className={hubStyles.hubGrid}>
+            <Link href="/settings/tags" className={hubStyles.hubCard}>
+              <div className={hubStyles.hubCardTitle}>운영분류 관리</div>
+              <div className={hubStyles.hubCardDesc}>
+                거래처 분류 카테고리와 옵션을 직접 만들고 관리합니다.
+              </div>
+            </Link>
+            <Link href="/settings/messages" className={hubStyles.hubCard}>
+              <div className={hubStyles.hubCardTitle}>메시지 템플릿</div>
+              <div className={hubStyles.hubCardDesc}>
+                자동화 영업에 사용할 메시지 템플릿을 관리합니다.
+              </div>
+            </Link>
+          </div>
+        </section>
+
         <SettingsForm initial={settings} />
         <div style={{ height: 24 }} />
         <AligoSettingsForm initial={aligo.data ?? {}} />

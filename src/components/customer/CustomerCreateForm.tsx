@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { createCustomer, checkCustomerDuplicate } from '@/actions/customer'
+import { upsertCustomerTag } from '@/actions/customer-tags'
 import { formatPaymentTerms } from '@/lib/payment-terms'
 import type { PaymentTermsType } from '@/lib/payment-terms'
 import type { AcquisitionChannel } from '@/actions/acquisition-channel'
@@ -30,8 +31,10 @@ function buildPaymentTermsString(
 
 export default function CustomerCreateForm({
   channels: initChannels,
+  tagOptions,
 }: {
   channels: AcquisitionChannel[]
+  tagOptions: Array<{ id: string; category: string; value: string; sort_order: number }>
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -65,11 +68,25 @@ export default function CustomerCreateForm({
   const [, startCh] = useTransition()
   const [targetRevenue, setTargetRevenue] = useState('')
 
+  const [selectedTags, setSelectedTags] = useState<Map<string, string>>(new Map())
+
   // payment_terms_days 역산
   function getTermsDays(): number {
     if (termsType === 'immediate') return 0
     if (termsType === 'days_after') return Number(termsDays) || 0
     return 0
+  }
+
+  function selectTag(category: string, value: string) {
+    setSelectedTags((prev) => {
+      const next = new Map(prev)
+      if (value === '') {
+        next.delete(category)
+      } else {
+        next.set(category, value)
+      }
+      return next
+    })
   }
 
   function handleAddChannel() {
@@ -127,6 +144,14 @@ export default function CustomerCreateForm({
         acquisition_channel_id: channelId || undefined,
         target_monthly_revenue: targetRevenue ? Number(targetRevenue) : undefined,
       })
+
+      if (result.success && result.data?.id) {
+        const customerId = result.data.id
+        for (const [category, value] of selectedTags.entries()) {
+          await upsertCustomerTag({ customer_id: customerId, category, value })
+        }
+      }
+
       if (result.success) router.push('/customers')
       else setError(result.error ?? '저장 실패')
     })
@@ -313,8 +338,16 @@ export default function CustomerCreateForm({
         <section className={styles.secCard}>
           <div className={styles.secHead}>
             <div className={styles.secNum}>2</div>
-            <div className={styles.secTitle}>운영 분류</div>
-            <div className={styles.secDesc}>CRM · 자동화영업에 활용</div>
+            <span className={styles.secTitle}>운영 분류</span>
+            <span className={styles.secDesc}>CRM · 자동화영업에 활용</span>
+            <a
+              href="/settings/tags"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={styles.secLink}
+            >
+              ⚙️ 운영분류 설정
+            </a>
           </div>
 
           <div className={styles.secBody}>
@@ -408,6 +441,42 @@ export default function CustomerCreateForm({
                 inputMode="numeric"
               />
             </div>
+
+            {(() => {
+              const groups = new Map<string, Array<{ id: string; value: string }>>()
+              for (const o of tagOptions) {
+                const list = groups.get(o.category) ?? []
+                list.push({ id: o.id, value: o.value })
+                groups.set(o.category, list)
+              }
+              const sorted = [...groups.entries()].sort(([a], [b]) =>
+                a === '업종' ? -1 : b === '업종' ? 1 : a.localeCompare(b),
+              )
+              if (sorted.length === 0) return null
+              return (
+                <>
+                  {sorted.map(([category, opts]) => (
+                    <div key={`tag-${category}`} className={styles.field}>
+                      <div className={styles.label}>
+                        {category} <span className={styles.opt}>(선택)</span>
+                      </div>
+                      <select
+                        className={styles.select}
+                        value={selectedTags.get(category) ?? ''}
+                        onChange={(e) => selectTag(category, e.target.value)}
+                      >
+                        <option value="">선택 안 함</option>
+                        {opts.map((o) => (
+                          <option key={o.id} value={o.value}>
+                            {o.value}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                </>
+              )
+            })()}
           </div>
         </section>
 

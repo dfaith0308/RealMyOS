@@ -81,7 +81,13 @@ const MENU: MenuGroup[] = [
       { label: '자금 설정', href: '/funds/settings' },
     ],
   },
-  { label: '설정', href: '/settings' },
+  {
+    label: '설정', href: '/settings',
+    items: [
+      { label: '운영분류 관리', href: '/settings/tags' },
+      { label: '메시지 템플릿', href: '/settings/messages' },
+    ],
+  },
   { label: '원장관리', href: '/ledger' },
   {
     label: '자동화영업', href: '/sales/schedule',

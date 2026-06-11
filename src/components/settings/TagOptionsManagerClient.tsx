@@ -1,7 +1,6 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
-import { Surface } from '@/components/ui/Surface'
 import styles from './TagOptionsManagerClient.module.css'
 import type { TagOptionRow } from '@/actions/customer-tag-options'
 import {
@@ -23,6 +22,15 @@ export default function TagOptionsManagerClient({
   const [options, setOptions] = useState<TagOptionRow[]>(initialOptions)
   const [err, setErr] = useState<string | null>(null)
   const [newCat, setNewCat] = useState('')
+  const [newOptionInputs, setNewOptionInputs] = useState<Record<string, string>>({})
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingValue, setEditingValue] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState<{
+    type: 'option' | 'category'
+    id?: string
+    category?: string
+    label: string
+  } | null>(null)
 
   const grouped = useMemo(() => {
     const m = new Map<string, TagOptionRow[]>()
@@ -77,177 +85,227 @@ export default function TagOptionsManagerClient({
   }
 
   function addOption(category: string) {
-    const v = prompt(`${category} — 새 옵션값`)?.trim()
+    const v = (newOptionInputs[category] ?? '').trim()
     if (!v) return
     setErr(null)
     startTransition(async () => {
       const r = await addTagOption(category, v)
-      if (!r.success) setErr(r.error ?? '추가 실패')
+      if (!r.success) {
+        setErr(r.error ?? '추가 실패')
+        return
+      }
+      setNewOptionInputs((p) => ({ ...p, [category]: '' }))
       refresh()
     })
   }
 
-  function editOption(id: string, before: string) {
-    const v = prompt(`옵션 수정`, before)?.trim()
-    if (!v || v === before) return
+  function commitEdit() {
+    if (!editingId || !editingValue.trim()) return
     setErr(null)
     startTransition(async () => {
-      const r = await updateTagOption(id, v)
-      if (!r.success) setErr(r.error ?? '수정 실패')
+      const r = await updateTagOption(editingId, editingValue.trim())
+      if (!r.success) {
+        setErr(r.error ?? '수정 실패')
+        return
+      }
+      setEditingId(null)
+      setEditingValue('')
       refresh()
     })
   }
 
-  function removeOption(id: string) {
-    if (!confirm('이 옵션을 비활성화하시겠습니까?')) return
+  function handleRemoveOption(id: string, label: string) {
+    setConfirmDelete({ type: 'option', id, label })
+  }
+
+  function handleRemoveCategory(category: string) {
+    setConfirmDelete({ type: 'category', category, label: category })
+  }
+
+  function executeDelete() {
+    if (!confirmDelete) return
     setErr(null)
     startTransition(async () => {
-      const r = await deactivateTagOption(id)
+      const r =
+        confirmDelete.type === 'option'
+          ? await deactivateTagOption(confirmDelete.id!)
+          : await deactivateTagCategory(confirmDelete.category!)
       if (!r.success) setErr(r.error ?? '삭제 실패')
-      refresh()
-    })
-  }
-
-  function removeCategory(category: string) {
-    if (
-      !confirm(
-        `이 카테고리를 삭제(비활성화)하면 해당 분류가 적용된 거래처에서도 모두 제거됩니다. 계속하시겠습니까?\n\n- ${category}`,
-      )
-    )
-      return
-    setErr(null)
-    startTransition(async () => {
-      const r = await deactivateTagCategory(category)
-      if (!r.success) setErr(r.error ?? '삭제 실패')
+      setConfirmDelete(null)
       refresh()
     })
   }
 
   return (
-    <Surface variant="panel" density="comfortable">
-      <div className={styles.root}>
-        <div className={styles.cardHead}>
-          <div>
-            <div className={styles.title}>옵션 관리</div>
-            <div className={styles.meta}>is_active=false로만 비활성화합니다.</div>
-          </div>
-          <div className={styles.topBar}>
-            <button
-              type="button"
-              className={styles.btn}
-              onClick={ensureSeed}
-              disabled={isPending}
-            >
-              기본 시드 적용
-            </button>
-            <button
-              type="button"
-              className={[styles.btn, styles.btnPrimary].join(' ')}
-              onClick={refresh}
-              disabled={isPending}
-            >
-              새로고침
-            </button>
+    <div className={styles.page}>
+      {confirmDelete && (
+        <div className={styles.overlay} role="dialog" aria-modal="true">
+          <div className={styles.modal}>
+            <div className={styles.modalTitle}>삭제 확인</div>
+            <div className={styles.modalDesc}>
+              {confirmDelete.type === 'category'
+                ? `"${confirmDelete.label}" 카테고리를 삭제하면 해당 분류가 적용된 거래처에서도 제거됩니다.`
+                : `"${confirmDelete.label}" 옵션을 비활성화합니다.`}
+            </div>
+            <div className={styles.modalFoot}>
+              <button
+                type="button"
+                className={styles.btnGhost}
+                onClick={() => setConfirmDelete(null)}
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                className={styles.btnDanger}
+                onClick={executeDelete}
+                disabled={isPending}
+              >
+                삭제
+              </button>
+            </div>
           </div>
         </div>
+      )}
 
-        <div className={styles.topBar} style={{ marginTop: 8 }}>
+      <div className={styles.pageHead}>
+        <div className={styles.pageTitle}>운영분류 관리</div>
+        <div className={styles.pageSub}>
+          공급자가 직접 분류 기준을 만들고 관리합니다.
+          삭제 시 비활성화 처리됩니다.
+        </div>
+      </div>
+
+      {err && <div className={styles.errBanner}>{err}</div>}
+
+      <div className={styles.addCatCard}>
+        <div className={styles.addCatLabel}>새 분류 카테고리 추가</div>
+        <div className={styles.addCatRow}>
           <input
             className={styles.input}
             value={newCat}
             onChange={(e) => setNewCat(e.target.value)}
-            placeholder="새 카테고리명"
+            placeholder="예: 지역, 영업담당, 결제방식"
+            onKeyDown={(e) => e.key === 'Enter' && addCategory()}
           />
           <button
             type="button"
-            className={[styles.btn, styles.btnPrimary].join(' ')}
+            className={styles.btnPrimary}
             onClick={addCategory}
             disabled={isPending}
           >
-            + 새 카테고리 추가
+            + 카테고리 추가
           </button>
         </div>
+      </div>
 
-        {err ? <div className={styles.err}>{err}</div> : null}
+      <div className={styles.catList}>
+        {grouped.length === 0 ? (
+          <div className={styles.empty}>
+            분류가 없습니다. 위에서 카테고리를 추가하세요.
+          </div>
+        ) : (
+          grouped.map((g) => (
+            <div key={g.category} className={styles.catCard}>
+              <div className={styles.catHead}>
+                <div className={styles.catName}>{g.category}</div>
+                <button
+                  type="button"
+                  className={styles.btnDangerSm}
+                  onClick={() => handleRemoveCategory(g.category)}
+                  disabled={isPending}
+                >
+                  카테고리 삭제
+                </button>
+              </div>
 
-        <div className={styles.categoryBlock}>
-          {grouped.length === 0 ? (
-            <div className={styles.muted} style={{ padding: 12 }}>
-              활성 옵션이 없습니다.
-            </div>
-          ) : (
-            grouped.map((g) => (
-              <div key={g.category}>
-                <div className={styles.categoryHead}>
-                  <div className={styles.catName}>{g.category}</div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button
-                      type="button"
-                      className={styles.btn}
-                      onClick={() => addOption(g.category)}
-                      disabled={isPending}
-                    >
-                      + 옵션 추가
-                    </button>
-                    <button
-                      type="button"
-                      className={[styles.btn, styles.btnDanger].join(' ')}
-                      onClick={() => removeCategory(g.category)}
-                      disabled={isPending}
-                    >
-                      삭제
-                    </button>
-                  </div>
-                </div>
-
+              <div className={styles.optList}>
                 {g.items.length === 0 ? (
-                  <div className={styles.row}>
-                    <div className={styles.muted}>옵션이 없습니다.</div>
-                    <button
-                      type="button"
-                      className={styles.btn}
-                      onClick={() => addOption(g.category)}
-                      disabled={isPending}
-                    >
-                      + 옵션 추가
-                    </button>
-                  </div>
+                  <div className={styles.optEmpty}>옵션이 없습니다.</div>
                 ) : (
                   g.items.map((o) => (
-                    <div key={o.id} className={styles.row}>
-                      <div className={styles.rowLeft}>
-                        <div className={styles.opt}>{o.value}</div>
-                        <div className={styles.muted}>
-                          sort {o.sort_order} · {String(o.updated_at).slice(0, 16).replace('T', ' ')}
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <button
-                          type="button"
-                          className={styles.btn}
-                          onClick={() => editOption(o.id, o.value)}
-                          disabled={isPending}
-                        >
-                          수정
-                        </button>
-                        <button
-                          type="button"
-                          className={[styles.btn, styles.btnDanger].join(' ')}
-                          onClick={() => removeOption(o.id)}
-                          disabled={isPending}
-                        >
-                          삭제
-                        </button>
+                    <div key={o.id} className={styles.optRow}>
+                      {editingId === o.id ? (
+                        <input
+                          className={styles.inputSm}
+                          value={editingValue}
+                          onChange={(e) => setEditingValue(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && commitEdit()}
+                          autoFocus
+                        />
+                      ) : (
+                        <div className={styles.optValue}>{o.value}</div>
+                      )}
+                      <div className={styles.optActions}>
+                        {editingId === o.id ? (
+                          <>
+                            <button
+                              type="button"
+                              className={styles.btnSm}
+                              onClick={commitEdit}
+                              disabled={isPending}
+                            >
+                              저장
+                            </button>
+                            <button
+                              type="button"
+                              className={styles.btnGhost}
+                              onClick={() => setEditingId(null)}
+                            >
+                              취소
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              className={styles.btnSm}
+                              onClick={() => {
+                                setEditingId(o.id)
+                                setEditingValue(o.value)
+                              }}
+                            >
+                              수정
+                            </button>
+                            <button
+                              type="button"
+                              className={styles.btnDangerSm}
+                              onClick={() => handleRemoveOption(o.id, o.value)}
+                              disabled={isPending}
+                            >
+                              삭제
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
                   ))
                 )}
+
+                <div className={styles.addOptRow}>
+                  <input
+                    className={styles.inputSm}
+                    value={newOptionInputs[g.category] ?? ''}
+                    onChange={(e) =>
+                      setNewOptionInputs((p) => ({ ...p, [g.category]: e.target.value }))
+                    }
+                    placeholder="새 옵션 입력"
+                    onKeyDown={(e) => e.key === 'Enter' && addOption(g.category)}
+                  />
+                  <button
+                    type="button"
+                    className={styles.btnPrimary}
+                    onClick={() => addOption(g.category)}
+                    disabled={isPending}
+                  >
+                    + 추가
+                  </button>
+                </div>
               </div>
-            ))
-          )}
-        </div>
+            </div>
+          ))
+        )}
       </div>
-    </Surface>
+    </div>
   )
 }
-
