@@ -1039,6 +1039,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **migration 필요**: NO
 - **작업 이력 (2026-05-07)**: 관리자OS `(admin)` route group 신설 + `/admin/*` admin role 보호 + 관리자 대시보드 기본 화면 추가 — worklog: `docs/worklogs/2026-05-07_adm-todo-001_admin-os-route.md`
 - **작업 이력 (2026-05-07)**: `/admin/tenants` 테넌트 관리(승인/정지) + `/admin/logs` 로그 화면 + admin action 로깅 추가 — worklog: `docs/worklogs/2026-05-07_adm-todo-001_admin-tenant-management.md`
+- **작업 이력 (2026-06-11)**: `/admin/tenants` 계정 CRUD(공급자·식당 생성/수정/소프트삭제) + 역할 탭·모달 UI — `approveTenant`/`suspendTenant` 유지 — worklog: `docs/worklogs/2026-06-11_feat_admin-tenant-crud.md`
 
 #### [ADM-MISSING-001] 거래 흐름 관제 미구현 (PRODUCT §10-4)
 - **PRODUCT 정의 위치**: PRODUCT §10-4
