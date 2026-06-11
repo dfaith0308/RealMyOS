@@ -41,6 +41,7 @@
   transition: background .1s;
 }
 .dropdownItem:hover { background: var(--ds-neutral-50); }
+.dropdownItemActive { background: var(--ds-neutral-100); }
 .itemName {
   font-size: 13px;
   font-weight: 600;
