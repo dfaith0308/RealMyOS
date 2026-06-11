@@ -28,6 +28,27 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/login') ||
     pathname.startsWith('/auth') ||
     pathname.startsWith('/onboarding')
+
+  const hostname = request.headers.get('host') ?? ''
+  const isAdminDomain = hostname.startsWith('admin.')
+  const isAppDomain = hostname.startsWith('app.')
+
+  // admin.siksiki.com 접속 시 /admin/* 경로로 rewrite
+  if (isAdminDomain) {
+    if (!pathname.startsWith('/admin') && !isPublic) {
+      const url = request.nextUrl.clone()
+      url.pathname = pathname === '/' ? '/admin/dashboard' : `/admin${pathname}`
+      return NextResponse.rewrite(url)
+    }
+  }
+
+  // app.siksiki.com 접속 시 /admin 경로 차단
+  if (isAppDomain && pathname.startsWith('/admin')) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/dashboard'
+    return NextResponse.redirect(url)
+  }
+
   if (isPublic) return supabaseResponse
 
   // 세션 존재 여부만 확인 (쿠키 파싱, 네트워크 없음)
