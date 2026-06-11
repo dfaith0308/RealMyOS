@@ -87,6 +87,8 @@ export interface CreatedOrder {
 export interface CustomerForOrder {
   id: string
   name: string
+  phone: string | null
+  representative_name: string | null
   payment_terms_days: number
 }
 

@@ -248,9 +248,15 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines, quote
 
   // ── 필터 ─────────────────────────────────────────────────
 
-  const filteredCustomers = customers.filter((c) =>
-    c.name.toLowerCase().includes(customerQuery.toLowerCase()),
-  )
+  const filteredCustomers = customers.filter((c) => {
+    const q = customerQuery.trim().toLowerCase()
+    if (!q) return true
+    return (
+      c.name.toLowerCase().includes(q) ||
+      (c.phone ?? '').replace(/-/g, '').includes(q.replace(/-/g, '')) ||
+      (c.representative_name ?? '').toLowerCase().includes(q)
+    )
+  })
   const filteredProducts = products.filter(
     (p) =>
       !lines.find((l) => l.product.id === p.id) &&
@@ -623,7 +629,7 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines, quote
         <div style={{ ...s.field, flex: 2 }}>
           <label style={s.label}>거래처 *</label>
           <div style={s.rel}>
-            <input style={s.input} placeholder="거래처명 검색... (↑↓ 이동, Enter 선택)"
+            <input style={s.input} placeholder="거래처명 · 대표자명 · 연락처 검색 (↑↓ 이동, Enter 선택)"
               value={customerQuery}
               onChange={(e) => { setCustomerQuery(e.target.value); setShowCustomerDd(true); setCustomerHiIdx(0) }}
               onFocus={() => setShowCustomerDd(true)}
@@ -637,7 +643,15 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines, quote
                     style={{ ...s.ddItem, background: idx === customerHiIdx ? '#EFF6FF' : undefined }}
                     onMouseDown={() => selectCustomer(c)}
                     onMouseEnter={() => setCustomerHiIdx(idx)}>
-                    <span>{c.name}</span>
+                    <div style={s.customerInfo}>
+                      <div style={s.customerName}>{c.name}</div>
+                      {c.representative_name && (
+                        <div style={s.customerSub}>{c.representative_name}</div>
+                      )}
+                      {c.phone && (
+                        <div style={s.customerSub}>{c.phone}</div>
+                      )}
+                    </div>
                     {c.payment_terms_days > 0 && <span style={s.pill}>{c.payment_terms_days}일 외상</span>}
                   </li>
                 ))}
@@ -961,6 +975,9 @@ const s: Record<string, React.CSSProperties> = {
   input:            { width: '100%', padding: '9px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, outline: 'none', background: '#fff', boxSizing: 'border-box' },
   dd:               { position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.10)', zIndex: 50, maxHeight: 320, overflowY: 'auto', listStyle: 'none', margin: 0, padding: 0 },
   ddItem:           { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', cursor: 'pointer', fontSize: 14, borderBottom: '1px solid #f9fafb' },
+  customerInfo:     { display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 },
+  customerName:     { fontSize: 14, fontWeight: 600, color: '#111827' },
+  customerSub:      { fontSize: 11.5, color: '#9ca3af' },
   pill:             { marginLeft: 'auto', fontSize: 11, padding: '2px 7px', borderRadius: 12, background: '#FEF3C7', color: '#92400E' },
   pillGray:         { fontSize: 11, padding: '2px 7px', borderRadius: 12, background: '#F3F4F6', color: '#6b7280' },
   prevBadge:        { marginLeft: 6, fontSize: 10, padding: '1px 5px', borderRadius: 8, background: '#DCFCE7', color: '#15803D', fontWeight: 500 },

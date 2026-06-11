@@ -55,9 +55,15 @@ export default function QuoteCreateClient({ initialCustomers }: { initialCustome
 
   const productRef = useRef<HTMLInputElement>(null)
 
-  const filteredCustomers = customers.filter((c) =>
-    c.name.toLowerCase().includes(customerQuery.toLowerCase())
-  )
+  const filteredCustomers = customers.filter((c) => {
+    const q = customerQuery.trim().toLowerCase()
+    if (!q) return true
+    return (
+      c.name.toLowerCase().includes(q) ||
+      (c.phone ?? '').replace(/-/g, '').includes(q.replace(/-/g, '')) ||
+      (c.representative_name ?? '').toLowerCase().includes(q)
+    )
+  })
   const filteredProducts = products.filter(
     (p) => !lines.find((l) => l.product.id === p.id) &&
       (p.name.includes(productQuery) || p.product_code.includes(productQuery))
@@ -98,6 +104,8 @@ export default function QuoteCreateClient({ initialCustomers }: { initialCustome
       const newCustomer: CustomerForOrder = {
         id: res.data.customer_id,
         name: prospectName.trim(),
+        phone: prospectPhone.trim() || null,
+        representative_name: null,
         payment_terms_days: 0,
       }
       selectCustomer(newCustomer)
@@ -189,7 +197,7 @@ export default function QuoteCreateClient({ initialCustomers }: { initialCustome
         <div style={{ flex: 2, position: 'relative' }}>
           <label style={s.label}>거래처 *</label>
           <div style={{ position: 'relative' }}>
-            <input style={s.input} placeholder="거래처명 검색..."
+            <input style={s.input} placeholder="거래처명 · 대표자명 · 연락처 검색..."
               value={customerQuery}
               onChange={(e) => { setCustomerQuery(e.target.value); setShowCustomerDd(true); setCustomerHiIdx(0) }}
               onFocus={() => setShowCustomerDd(true)}
@@ -202,7 +210,15 @@ export default function QuoteCreateClient({ initialCustomers }: { initialCustome
                     style={{ ...s.ddItem, background: idx === customerHiIdx ? '#EFF6FF' : undefined }}
                     onMouseDown={() => selectCustomer(c)}
                     onMouseEnter={() => setCustomerHiIdx(idx)}>
-                    {c.name}
+                    <div style={s.customerInfo}>
+                      <div style={s.customerName}>{c.name}</div>
+                      {c.representative_name && (
+                        <div style={s.customerSub}>{c.representative_name}</div>
+                      )}
+                      {c.phone && (
+                        <div style={s.customerSub}>{c.phone}</div>
+                      )}
+                    </div>
                   </li>
                 ))}
                 <li style={{ ...s.ddItem, color: '#2563EB', borderTop: '1px solid #e5e7eb', fontSize: 13 }}
@@ -353,4 +369,7 @@ const styles: Record<string, React.CSSProperties> = {
   input:   { width: '100%', padding: '9px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, outline: 'none', background: '#fff', boxSizing: 'border-box' },
   dd:      { position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.1)', zIndex: 50, maxHeight: 280, overflowY: 'auto', listStyle: 'none', margin: 0, padding: 0 },
   ddItem:  { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', cursor: 'pointer', fontSize: 14, borderBottom: '1px solid #f9fafb' },
+  customerInfo: { display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 },
+  customerName: { fontSize: 14, fontWeight: 600, color: '#111827' },
+  customerSub:  { fontSize: 11.5, color: '#9ca3af' },
 }

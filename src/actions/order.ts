@@ -514,7 +514,7 @@ export async function getCustomersForOrder(): Promise<ActionResult<CustomerForOr
   const ctx = await getAuthCtx(supabase)
   if (!ctx) return { success: false, error: '로그인 필요' }
   const { data, error } = await supabase
-    .from('customers').select('id, name, payment_terms_days')
+    .from('customers').select('id, name, phone, representative_name, payment_terms_days')
     .eq('tenant_id', ctx.tenant_id)
     .eq('is_buyer', true).is('deleted_at', null).order('name')
   if (error) return { success: false, error: error.message }
