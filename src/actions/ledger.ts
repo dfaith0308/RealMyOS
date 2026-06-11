@@ -24,6 +24,8 @@ import { fetchInboundSupersededOriginalPaymentIds } from '@/lib/inbound-payment-
 export interface LedgerCustomerOption {
   id:   string
   name: string
+  phone: string | null
+  representative_name: string | null
 }
 
 export async function getLedgerCustomers(): Promise<ActionResult<LedgerCustomerOption[]>> {
@@ -33,7 +35,7 @@ export async function getLedgerCustomers(): Promise<ActionResult<LedgerCustomerO
 
   const { data, error } = await supabase
     .from('customers')
-    .select('id, name')
+    .select('id, name, phone, representative_name')
     .eq('tenant_id', ctx.tenant_id)
     .eq('is_buyer', true)
     .is('deleted_at', null)
@@ -41,7 +43,15 @@ export async function getLedgerCustomers(): Promise<ActionResult<LedgerCustomerO
     .limit(1000)
 
   if (error) return { success: false, error: error.message }
-  return { success: true, data: (data ?? []).map((c) => ({ id: c.id, name: c.name })) }
+  return {
+    success: true,
+    data: (data ?? []).map((c) => ({
+      id: c.id,
+      name: c.name,
+      phone: c.phone ?? null,
+      representative_name: c.representative_name ?? null,
+    })),
+  }
 }
 
 export async function getLedgerSuppliers(): Promise<ActionResult<string[]>> {

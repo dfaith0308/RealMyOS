@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import type { LedgerCustomerOption } from '@/actions/ledger'
+import styles from './LedgerHubClient.module.css'
 
 type LedgerKind = 'sales' | 'purchases'
 
@@ -26,9 +27,22 @@ export default function LedgerHubClient({
   const [from, setFrom]         = useState(initialFrom)
   const [to, setTo]             = useState(initialTo)
   const [supplier, setSupplier] = useState(initialSupplier)
-  const [customerId, setCustomerId] = useState('')
+  const [search, setSearch]     = useState('')
+  const [open, setOpen]         = useState(false)
 
   const supplierOptions = useMemo(() => suppliers.filter((s) => s.trim().length > 0), [suppliers])
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return customers.filter((c) => {
+      if (!q) return true
+      return (
+        c.name.toLowerCase().includes(q) ||
+        (c.phone ?? '').replace(/-/g, '').includes(q.replace(/-/g, '')) ||
+        (c.representative_name ?? '').toLowerCase().includes(q)
+      )
+    }).slice(0, 8)
+  }, [customers, search])
 
   function pushQuery(next: { kind?: LedgerKind; supplier?: string }) {
     const params = new URLSearchParams()
@@ -47,7 +61,6 @@ export default function LedgerHubClient({
   }
 
   function selectCustomer(id: string) {
-    setCustomerId(id)
     if (id) router.push(`/customers/${id}/ledger`)
   }
 
@@ -87,13 +100,40 @@ export default function LedgerHubClient({
           <h2 style={s.h2}>매출원장 — 거래처 선택</h2>
           <p style={s.hint}>거래처를 선택하면 해당 거래처 원장 페이지로 이동합니다.</p>
 
-          <select style={s.select} value={customerId}
-            onChange={(e) => selectCustomer(e.target.value)}>
-            <option value="">거래처 선택…</option>
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
+          <div style={{ position: 'relative' }}>
+            <input
+              className={styles.searchInput}
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setOpen(true) }}
+              onFocus={() => setOpen(true)}
+              onBlur={() => setTimeout(() => setOpen(false), 150)}
+              placeholder="거래처명 · 대표자명 · 연락처로 검색"
+              autoComplete="off"
+            />
+            {open && filtered.length > 0 && (
+              <ul className={styles.dropdown}>
+                {filtered.map((c) => (
+                  <li
+                    key={c.id}
+                    className={styles.dropdownItem}
+                    onMouseDown={() => {
+                      setSearch(c.name)
+                      setOpen(false)
+                      selectCustomer(c.id)
+                    }}
+                  >
+                    <span className={styles.itemName}>{c.name}</span>
+                    {c.representative_name && (
+                      <span className={styles.itemSub}>{c.representative_name}</span>
+                    )}
+                    {c.phone && (
+                      <span className={styles.itemSub}>{c.phone}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
 
           {customers.length === 0 && (
             <p style={{ color: '#9ca3af', fontSize: 13, marginTop: 12 }}>등록된 거래처가 없습니다.</p>

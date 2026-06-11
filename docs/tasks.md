@@ -73,6 +73,7 @@
 - **작업 이력 (2026-05-28)**: 거래처 태그 UI 디자인 시스템 정상화 + `/customers/new`에서 태그 선택/저장 연결 — worklog: [`docs/worklogs/2026-05-28_feat_customer-tags-connect.md`](./worklogs/2026-05-28_feat_customer-tags-connect.md)
 - **작업 이력 (2026-05-29)**: 운영분류 관리 UI 정리(Surface·prompt/confirm 제거) + 거래처 등록 태그 드롭다운화 + DEFAULT_SEED 업종/운영관계 분리 — worklog: [`docs/worklogs/2026-05-29_feat_ops-tag-system-cleanup.md`](./worklogs/2026-05-29_feat_ops-tag-system-cleanup.md)
 - **작업 이력 (2026-06-11)**: 숨겨진 페이지 5경로 네비게이션 추가(설정 하위 메뉴·허브 카드·원장 상세/수정·전체 목록) — worklog: [`docs/worklogs/2026-06-11_feat_hidden-page-nav-links.md`](./worklogs/2026-06-11_feat_hidden-page-nav-links.md)
+- **작업 이력 (2026-06-11)**: 거래처 검색 통일(상호·대표자·연락처) + `/ledger` combobox 교체 — worklog: [`docs/worklogs/2026-06-11_feat_customer-search-unified.md`](./worklogs/2026-06-11_feat_customer-search-unified.md)
 - **작업 이력 (2026-05-07)**: Ledger 돈 흐름 콘솔 재설계(테이블 제거 + 날짜 그룹 sticky/subtotal + 즉시 필터 + KPI hierarchy) — worklog: [`docs/worklogs/2026-05-07_ledger-money-flow-console.md`](./worklogs/2026-05-07_ledger-money-flow-console.md)
 - **작업 이력 (2026-05-07)**: Orders 운영 Queue 콘솔 재설계(테이블 제거 + Queue/sticky 날짜 그룹 + 즉시 필터 + CommandStrip/KPI 스트립) — worklog: [`docs/worklogs/2026-05-07_orders-ops-queue-console.md`](./worklogs/2026-05-07_orders-ops-queue-console.md)
 - **작업 이력 (2026-05-08)**: 관리자OS 성장/영업 엔진 + 수익/정산 통제(ADM-MISSING-005/006) — worklog: [`docs/worklogs/2026-05-07_adm-missing-005-006_growth-settlement.md`](./worklogs/2026-05-07_adm-missing-005-006_growth-settlement.md)
@@ -793,6 +794,7 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **작업 이력 (2026-05-07)**: SUP-TODO-004-A `/ledger` 진입점·매출/매입 탭·기간 필터·Sidebar 교체 — worklog: `docs/worklogs/2026-05-07_sup-todo-004a_ledger-hub.md`
 - **작업 이력 (2026-05-07)**: SUP-TODO-004-B(B-1) 컬럼 정합·기초잔액 항상 표시·기간/결제수단 필터; B-2 신규 분리 — worklog: `docs/worklogs/2026-05-07_sup-todo-004b_ledger-columns.md`
 - **작업 이력 (2026-05-07)**: 거래처 원장(`/customers/[id]/ledger`)을 돈 흐름 콘솔로 재설계(테이블 제거, 날짜 그룹 sticky/subtotal, URL 즉시 필터, KPI hierarchy) — worklog: `docs/worklogs/2026-05-07_ledger-money-flow-console.md`
+- **작업 이력 (2026-06-11)**: `/ledger` 거래처 `<select>` → combobox(상호·대표자·연락처 검색) + 주문·수금·견적 등록 폼 검색 필드 통일 — worklog: [`docs/worklogs/2026-06-11_feat_customer-search-unified.md`](./worklogs/2026-06-11_feat_customer-search-unified.md)
 - **작업 이력 (2026-05-07)**: SUP-TODO-004-C `/analytics` 4탭 신설(`order_lines` 스냅샷 SSOT, RULE-02·03 준수); 차트(C-2)·출력(C-3)·평균결제기간 정확 정의(C-4) 신규 분리 — worklog: `docs/worklogs/2026-05-07_sup-todo-004c_analytics.md`
 
 ### [CONVENTION] 반품(환불) 처리 규약 — **확정 (2026-05-07)**

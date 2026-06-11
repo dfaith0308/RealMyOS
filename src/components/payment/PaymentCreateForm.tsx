@@ -74,9 +74,15 @@ export default function PaymentCreateForm({ initialCustomerId = '', collectionSc
   const overAmount     = amountNum > currentBalance && currentBalance >= 0
     ? amountNum - currentBalance : 0
 
-  const filteredCustomers = customers.filter((c) =>
-    c.name.toLowerCase().includes(customerQuery.toLowerCase())
-  )
+  const filteredCustomers = customers.filter((c) => {
+    const q = customerQuery.trim().toLowerCase()
+    if (!q) return true
+    return (
+      c.name.toLowerCase().includes(q) ||
+      (c.phone ?? '').replace(/-/g, '').includes(q.replace(/-/g, '')) ||
+      (c.representative_name ?? '').toLowerCase().includes(q)
+    )
+  })
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -154,15 +160,21 @@ export default function PaymentCreateForm({ initialCustomerId = '', collectionSc
           <label style={s.label}>거래처 *</label>
           <input style={s.input}
             value={selectedCustomer ? selectedCustomer.name : customerQuery}
-            placeholder="거래처 검색"
+            placeholder="거래처명 · 대표자명 · 연락처 검색"
             onFocus={() => { setShowDd(true); if (selectedCustomer) setCustomerQuery('') }}
             onChange={(e) => { setCustomerQuery(e.target.value); setSelectedCustomer(null); setShowDd(true) }} />
           {showDd && filteredCustomers.length > 0 && (
             <div style={s.dd}>
-              {filteredCustomers.map((c) => (
+              {filteredCustomers.slice(0, 8).map((c) => (
                 <button key={c.id} type="button" style={s.ddItem}
                   onClick={() => { setSelectedCustomer(c); setCustomerQuery(''); setShowDd(false) }}>
-                  {c.name}
+                  <div style={s.customerName}>{c.name}</div>
+                  {c.representative_name && (
+                    <div style={s.customerSub}>{c.representative_name}</div>
+                  )}
+                  {c.phone && (
+                    <div style={s.customerSub}>{c.phone}</div>
+                  )}
                 </button>
               ))}
             </div>
@@ -298,6 +310,8 @@ const s: Record<string, React.CSSProperties> = {
   input:         { padding: '9px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, outline: 'none', width: '100%', boxSizing: 'border-box' },
   dd:            { position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', maxHeight: 200, overflowY: 'auto', marginTop: 4 },
   ddItem:        { display: 'block', width: '100%', padding: '9px 12px', border: 'none', borderBottom: '1px solid #f3f4f6', background: '#fff', fontSize: 14, textAlign: 'left', cursor: 'pointer' },
+  customerName:  { fontSize: 14, fontWeight: 600, color: '#111827' },
+  customerSub:   { fontSize: 11.5, color: '#9ca3af', marginTop: 2 },
   balanceBox:    { background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: '12px 16px' },
   balLabel:      { fontSize: 11, color: '#9ca3af', marginBottom: 4 },
   balVal:        { fontSize: 16, fontWeight: 600, fontVariantNumeric: 'tabular-nums' },
