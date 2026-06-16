@@ -1497,6 +1497,10 @@ export async function createListingFull(input: {
   admin_memo: string | null
   description?: string | null
   status: 'draft' | 'visible'
+  base_shipping_fee?: number
+  free_shipping_qty?: number | null
+  bulk_qty?: number | null
+  bulk_discount_rate?: number | null
 }): Promise<ActionResult<{ listing_id: string; product_id: string }>> {
   const supabase = await createSupabaseServer()
   const auth = await requireAdmin(supabase)
@@ -1653,6 +1657,10 @@ export async function createListingFull(input: {
       spec,
       admin_memo,
       shipping_group_id,
+      base_shipping_fee: input.base_shipping_fee ?? 3500,
+      free_shipping_qty: input.free_shipping_qty ?? null,
+      bulk_qty: input.bulk_qty ?? null,
+      bulk_discount_rate: input.bulk_discount_rate ?? null,
     })
     .select('id')
     .single()

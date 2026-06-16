@@ -877,6 +877,10 @@ export default function ListingNewClient() {
           admin_memo: adminMemo.trim() || null,
           description: listingDescription.trim() || null,
           status,
+          base_shipping_fee: shippingFeeNum || 3500,
+          free_shipping_qty: freeQtyNum || null,
+          bulk_qty: bulkQtyNum || null,
+          bulk_discount_rate: bulkRateNum || null,
         })
         if (!r.success) {
           const msg = r.error ?? '저장 실패'
