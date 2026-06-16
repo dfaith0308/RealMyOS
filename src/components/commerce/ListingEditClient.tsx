@@ -10,6 +10,8 @@ import {
   type ShippingGroupListItem,
 } from '@/actions/admin/commerce'
 import { LISTING_SHIPPING_TYPES, type ListingShippingType } from '@/lib/commerce-constants'
+import { formatDigitsForInput, formatKRW } from '@/lib/calc'
+import mod from './listing-new-client.module.css'
 import s from '@/app/(admin)/admin-shared.module.css'
 
 const MAX_THUMB_BADGES = 2
@@ -45,6 +47,20 @@ function shippingTypeLabel(t: string): string {
   }
 }
 
+function marginBadge(rate: number | null): {
+  label: string
+  bg: string
+  border: string
+  color: string
+} {
+  if (rate === null) return { label: '—', bg: '#f9fafb', border: '#e5e7eb', color: '#6b7280' }
+  if (rate <= 10)
+    return { label: `${rate.toFixed(1)}% 🔴 위험`, bg: '#fef2f2', border: '#fecaca', color: '#dc2626' }
+  if (rate <= 16)
+    return { label: `${rate.toFixed(1)}% 🟡 주의`, bg: '#fffbeb', border: '#fde68a', color: '#92400e' }
+  return { label: `${rate.toFixed(1)}% 🟢 정상`, bg: '#f0fdf4', border: '#bbf7d0', color: '#15803d' }
+}
+
 type FormModel = {
   product_name: string
   category_id: string
@@ -55,6 +71,10 @@ type FormModel = {
   shipping_group_id: string
   badge_labels: string[]
   admin_memo: string
+  base_shipping_fee: string
+  free_shipping_qty: string
+  bulk_qty: string
+  bulk_discount_rate: string
 }
 
 function toFormModel(initial: ListingForEditData): FormModel {
@@ -73,6 +93,19 @@ function toFormModel(initial: ListingForEditData): FormModel {
     shipping_group_id: initial.shipping_group_id ?? '',
     badge_labels: Array.isArray(initial.badge_labels) ? [...initial.badge_labels] : [],
     admin_memo: initial.admin_memo ?? '',
+    base_shipping_fee:
+      initial.base_shipping_fee != null && initial.base_shipping_fee > 0
+        ? String(initial.base_shipping_fee)
+        : '',
+    free_shipping_qty:
+      initial.free_shipping_qty != null && initial.free_shipping_qty > 0
+        ? String(initial.free_shipping_qty)
+        : '',
+    bulk_qty: initial.bulk_qty != null && initial.bulk_qty > 0 ? String(initial.bulk_qty) : '',
+    bulk_discount_rate:
+      initial.bulk_discount_rate != null && initial.bulk_discount_rate > 0
+        ? String(initial.bulk_discount_rate)
+        : '',
   }
 }
 
@@ -89,6 +122,10 @@ function serializeForm(f: FormModel): string {
     shipping_group_id: f.shipping_group_id.trim(),
     badge_labels: badges,
     admin_memo: f.admin_memo.trim(),
+    base_shipping_fee: f.base_shipping_fee.trim(),
+    free_shipping_qty: f.free_shipping_qty.trim(),
+    bulk_qty: f.bulk_qty.trim(),
+    bulk_discount_rate: f.bulk_discount_rate.trim(),
   })
 }
 
@@ -137,6 +174,45 @@ export default function ListingEditClient({
 
   const discontinued = initial.status === 'discontinued'
 
+  const PG_FEE_RATE = 0.033
+  const costNum = 0
+  const priceNum = parseInt(String(form.commerce_price).replace(/\D/g, ''), 10) || 0
+  const originalPriceNum = parseInt(String(form.original_price).replace(/\D/g, ''), 10) || 0
+  const shippingFeeNum = parseInt(form.base_shipping_fee.replace(/\D/g, ''), 10) || 0
+  const freeQtyNum = parseInt(form.free_shipping_qty.replace(/\D/g, ''), 10) || 0
+  const bulkQtyNum = parseInt(form.bulk_qty.replace(/\D/g, ''), 10) || 0
+  const bulkRateNum = parseFloat(form.bulk_discount_rate) || 0
+
+  const singleMargin =
+    costNum > 0 && priceNum > 0
+      ? ((priceNum * (1 - PG_FEE_RATE) - costNum) / (priceNum * (1 - PG_FEE_RATE))) * 100
+      : null
+
+  const freeShippingMargin =
+    costNum > 0 && priceNum > 0 && freeQtyNum > 0
+      ? ((priceNum * (1 - PG_FEE_RATE) * freeQtyNum - costNum * freeQtyNum - shippingFeeNum) /
+          (priceNum * (1 - PG_FEE_RATE) * freeQtyNum)) *
+        100
+      : null
+
+  const bulkPrice =
+    priceNum > 0 && bulkRateNum > 0 ? Math.round(priceNum * (1 - bulkRateNum / 100)) : priceNum
+  const bulkMargin =
+    costNum > 0 && bulkPrice > 0 && bulkQtyNum > 0
+      ? ((bulkPrice * (1 - PG_FEE_RATE) * bulkQtyNum - costNum * bulkQtyNum - shippingFeeNum) /
+          (bulkPrice * (1 - PG_FEE_RATE) * bulkQtyNum)) *
+        100
+      : null
+
+  const singleDiscountRate =
+    originalPriceNum > 0 && priceNum > 0 && originalPriceNum > priceNum
+      ? ((originalPriceNum - priceNum) / originalPriceNum) * 100
+      : null
+  const bulkDiscountDisplay =
+    originalPriceNum > 0 && bulkPrice > 0 && originalPriceNum > bulkPrice
+      ? ((originalPriceNum - bulkPrice) / originalPriceNum) * 100
+      : null
+
   function validate(): string | null {
     if (!form.product_name.trim()) return '상품명을 입력해 주세요'
     if (!form.category_id.trim()) return '카테고리를 선택해 주세요'
@@ -151,6 +227,7 @@ export default function ListingEditClient({
     if (discontinued && form.storefront_published) {
       return '판매중단 상품은 공개할 수 없습니다'
     }
+    if (!shippingFeeNum || shippingFeeNum <= 0) return '기본 배송비는 1원 이상의 정수여야 합니다'
     return null
   }
 
@@ -187,6 +264,10 @@ export default function ListingEditClient({
         shipping_group_id: form.shipping_group_id.trim() || null,
         badge_labels,
         admin_memo: form.admin_memo.trim() || null,
+        base_shipping_fee: shippingFeeNum,
+        free_shipping_qty: freeQtyNum > 0 ? freeQtyNum : null,
+        bulk_qty: bulkQtyNum > 0 ? bulkQtyNum : null,
+        bulk_discount_rate: bulkRateNum > 0 ? bulkRateNum : null,
       })
       if (!r.success) {
         const msg = r.error ?? '저장에 실패했습니다'
@@ -289,6 +370,229 @@ export default function ListingEditClient({
           </label>
           {discontinued ? <p className={s.cellMutedSm}>판매중단 상품은 공개 설정을 바꿀 수 없습니다.</p> : null}
         </fieldset>
+
+        <div className={mod.card}>
+          <p className={mod.sectionLabel}>배송 정책</p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+            <div>
+              <label className={mod.fieldLabel}>공급가 (원) — 자동</label>
+              <input
+                className={mod.input}
+                value="—"
+                readOnly
+                style={{ background: 'var(--ds-neutral-50)', color: 'var(--ds-text-muted)' }}
+              />
+            </div>
+            <div>
+              <label className={mod.fieldLabel}>기본 배송비 (원)</label>
+              <input
+                className={mod.input}
+                type="text"
+                inputMode="numeric"
+                value={formatDigitsForInput(form.base_shipping_fee)}
+                onChange={(e) => setForm((p) => ({ ...p, base_shipping_fee: e.target.value.replace(/\D/g, '') }))}
+                placeholder="예: 3,500"
+              />
+            </div>
+          </div>
+
+          <div style={{ borderTop: '1px solid var(--ds-border-subtle)', paddingTop: 14, marginBottom: 16 }}>
+            <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--ds-text-primary)', margin: '0 0 10px' }}>
+              낱개 구매
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+              <div>
+                <label className={mod.fieldLabel}>판매가 — 자동</label>
+                <input
+                  className={mod.input}
+                  value={priceNum > 0 ? formatKRW(priceNum) : '—'}
+                  readOnly
+                  style={{ background: 'var(--ds-neutral-50)', color: 'var(--ds-text-muted)' }}
+                />
+              </div>
+              <div>
+                <label className={mod.fieldLabel}>정상가 대비 할인율 — 자동</label>
+                <input
+                  className={mod.input}
+                  value={
+                    singleDiscountRate !== null
+                      ? `${singleDiscountRate.toFixed(1)}% 할인`
+                      : '정상가 미입력'
+                  }
+                  readOnly
+                  style={{ background: 'var(--ds-neutral-50)', color: 'var(--ds-text-muted)' }}
+                />
+              </div>
+              <div>
+                <label className={mod.fieldLabel}>배송비 고객 부담 시 마진</label>
+                <div
+                  style={{
+                    padding: '7px 10px',
+                    border: `1px solid ${marginBadge(singleMargin).border}`,
+                    borderRadius: 8,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    background: marginBadge(singleMargin).bg,
+                    color: marginBadge(singleMargin).color,
+                  }}
+                >
+                  {marginBadge(singleMargin).label}
+                </div>
+              </div>
+            </div>
+            <p style={{ fontSize: 11, color: 'var(--ds-text-muted)', margin: '6px 0 0' }}>
+              낱개 구매 시 배송비는 고객 부담 → 우리 마진에 영향 없음
+            </p>
+          </div>
+
+          <div style={{ borderTop: '1px solid var(--ds-border-subtle)', paddingTop: 14, marginBottom: 16 }}>
+            <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--ds-text-primary)', margin: '0 0 10px' }}>
+              무료배송 기준
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+              <div>
+                <label className={mod.fieldLabel}>기준 수량 (개)</label>
+                <input
+                  className={mod.input}
+                  type="text"
+                  inputMode="numeric"
+                  value={form.free_shipping_qty}
+                  onChange={(e) => setForm((p) => ({ ...p, free_shipping_qty: e.target.value.replace(/\D/g, '') }))}
+                  placeholder="예: 10"
+                />
+                {freeQtyNum > 1 && (
+                  <p className={mod.fieldHint}>
+                    1~{freeQtyNum - 1}개 → 배송비 {formatKRW(shippingFeeNum)} 자동 부과
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className={mod.fieldLabel}>최소 주문금액 — 자동</label>
+                <input
+                  className={mod.input}
+                  value={
+                    priceNum > 0 && freeQtyNum > 0 ? `${formatKRW(priceNum * freeQtyNum)} 이상` : '—'
+                  }
+                  readOnly
+                  style={{ background: 'var(--ds-neutral-50)', color: 'var(--ds-text-muted)' }}
+                />
+              </div>
+              <div>
+                <label className={mod.fieldLabel}>우리 마진 (PG 3.3% 포함) — 자동</label>
+                <div
+                  style={{
+                    padding: '7px 10px',
+                    border: `1px solid ${marginBadge(freeShippingMargin).border}`,
+                    borderRadius: 8,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    background: marginBadge(freeShippingMargin).bg,
+                    color: marginBadge(freeShippingMargin).color,
+                  }}
+                >
+                  {marginBadge(freeShippingMargin).label}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ borderTop: '1px solid var(--ds-border-subtle)', paddingTop: 14, marginBottom: 16 }}>
+            <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--ds-text-primary)', margin: '0 0 10px' }}>
+              대량구매 설정
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
+              <div>
+                <label className={mod.fieldLabel}>기준 수량 (개)</label>
+                <input
+                  className={mod.input}
+                  type="text"
+                  inputMode="numeric"
+                  value={form.bulk_qty}
+                  onChange={(e) => setForm((p) => ({ ...p, bulk_qty: e.target.value.replace(/\D/g, '') }))}
+                  placeholder="예: 30"
+                />
+              </div>
+              <div>
+                <label className={mod.fieldLabel}>추가 할인율 (%)</label>
+                <input
+                  className={mod.input}
+                  type="text"
+                  inputMode="numeric"
+                  value={form.bulk_discount_rate}
+                  onChange={(e) =>
+                    setForm((p) => ({ ...p, bulk_discount_rate: e.target.value.replace(/[^\d.]/g, '') }))
+                  }
+                  placeholder="예: 3"
+                />
+              </div>
+              <div>
+                <label className={mod.fieldLabel}>할인 적용가 — 자동</label>
+                <input
+                  className={mod.input}
+                  value={
+                    bulkPrice > 0 && bulkRateNum > 0
+                      ? `${formatKRW(bulkPrice)} (${bulkDiscountDisplay !== null ? bulkDiscountDisplay.toFixed(1) + '%↓' : ''})`
+                      : '—'
+                  }
+                  readOnly
+                  style={{ background: 'var(--ds-neutral-50)', color: 'var(--ds-text-muted)' }}
+                />
+                {bulkPrice > 0 && bulkQtyNum > 0 && (
+                  <p style={{ fontSize: 11, color: 'var(--ds-text-secondary)', margin: '4px 0 0' }}>
+                    총 {bulkQtyNum}개 = {formatKRW(bulkPrice * bulkQtyNum)}
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className={mod.fieldLabel}>우리 마진 (PG 3.3% 포함) — 자동</label>
+                <div
+                  style={{
+                    padding: '7px 10px',
+                    border: `1px solid ${marginBadge(bulkMargin).border}`,
+                    borderRadius: 8,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    background: marginBadge(bulkMargin).bg,
+                    color: marginBadge(bulkMargin).color,
+                  }}
+                >
+                  {marginBadge(bulkMargin).label}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              background: 'var(--ds-neutral-50)',
+              borderRadius: 8,
+              padding: '10px 14px',
+              display: 'flex',
+              gap: 20,
+              flexWrap: 'wrap',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div
+                style={{ width: 7, height: 7, borderRadius: '50%', background: '#dc2626', flexShrink: 0 }}
+              />
+              <span style={{ fontSize: 11, color: 'var(--ds-text-secondary)' }}>위험 (10% 이하)</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div
+                style={{ width: 7, height: 7, borderRadius: '50%', background: '#d97706', flexShrink: 0 }}
+              />
+              <span style={{ fontSize: 11, color: 'var(--ds-text-secondary)' }}>주의 (11~16%)</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div
+                style={{ width: 7, height: 7, borderRadius: '50%', background: '#15803d', flexShrink: 0 }}
+              />
+              <span style={{ fontSize: 11, color: 'var(--ds-text-secondary)' }}>정상 (17% 이상)</span>
+            </div>
+          </div>
+        </div>
 
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <span style={{ fontSize: 13, fontWeight: 600 }}>배송 유형</span>
