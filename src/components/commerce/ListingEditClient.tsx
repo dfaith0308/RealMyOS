@@ -317,12 +317,11 @@ export default function ListingEditClient({
         {/* 섹션 1: 기본 정보 */}
         <div style={{ background: 'var(--ds-surface-panel)', border: '1px solid var(--ds-border-default)', borderRadius: 12, padding: '18px 20px' }}>
           <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--ds-text-secondary)', margin: '0 0 14px', letterSpacing: '.06em', textTransform: 'uppercase' as const }}>기본 정보</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div>
-              <label style={{ fontSize: 11, color: 'var(--ds-text-secondary)', display: 'block', marginBottom: 4 }}>상품명 *</label>
-              <input className={s.input} value={form.product_name} onChange={(e) => setForm((p) => ({ ...p, product_name: e.target.value }))} autoComplete="off" style={{ width: '100%', boxSizing: 'border-box' as const }} />
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 10 }}>
+              <div>
+                <label style={{ fontSize: 11, color: 'var(--ds-text-secondary)', display: 'block', marginBottom: 4 }}>상품명 *</label>
+                <input className={s.input} value={form.product_name} onChange={(e) => setForm((p) => ({ ...p, product_name: e.target.value }))} autoComplete="off" style={{ width: '100%', boxSizing: 'border-box' as const }} />
+              </div>
               <div>
                 <label style={{ fontSize: 11, color: 'var(--ds-text-secondary)', display: 'block', marginBottom: 4 }}>대분류 *</label>
                 <select className={s.input} value={form.category_id} onChange={(e) => setForm((p) => ({ ...p, category_id: e.target.value }))} style={{ width: '100%', boxSizing: 'border-box' as const }}>
@@ -342,7 +341,6 @@ export default function ListingEditClient({
                 </select>
               </div>
             </div>
-          </div>
         </div>
 
         {/* 섹션 2: 가격 */}
@@ -364,7 +362,7 @@ export default function ListingEditClient({
         <div style={{ background: 'var(--ds-surface-panel)', border: '1px solid var(--ds-border-default)', borderRadius: 12, padding: '18px 20px' }}>
           <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--ds-text-secondary)', margin: '0 0 14px', letterSpacing: '.06em', textTransform: 'uppercase' as const }}>배송 정책</p>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 200px', gap: 10, marginBottom: 16 }}>
             <div>
               <label style={{ fontSize: 11, color: 'var(--ds-text-secondary)', display: 'block', marginBottom: 4 }}>공급가 (원) — 자동</label>
               <input className={s.input} value="—" readOnly style={{ width: '100%', boxSizing: 'border-box' as const, background: 'var(--ds-neutral-50)', color: 'var(--ds-text-muted)' }} />
