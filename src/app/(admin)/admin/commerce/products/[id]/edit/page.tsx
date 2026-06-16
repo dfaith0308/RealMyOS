@@ -51,7 +51,7 @@ export default async function AdminCommerceProductEditPage(props: { params: Prom
   }
 
   return (
-    <main className={s.main} style={{ maxWidth: 900, margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
+    <main style={{ maxWidth: 1600, margin: '0 auto', width: '100%', boxSizing: 'border-box', padding: '20px 32px 96px' }}>
       <ListingEditClient
         initial={lr.data}
         categories={cr.data.categories}
