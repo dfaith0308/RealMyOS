@@ -70,6 +70,9 @@ function roleLabel(role: string | null) {
   return role ?? '-'
 }
 
+const isAdminTenant = (tenant: TenantAdminRow) =>
+  tenant.role === 'admin' || tenant.id === '00000000-0000-0000-0000-000000000000'
+
 export default function TenantsClient({
   initial,
   initialError,
@@ -430,22 +433,26 @@ export default function TenantsClient({
                     </td>
                     <td className={s.td}>{fmtDate(row.created_at)}</td>
                     <td className={s.td}>
-                      <div className={s.actions}>
-                        <button
-                          type="button"
-                          className={s.btnSm}
-                          disabled={pending}
-                          onClick={() => handleToggleApproval(row)}
-                        >
-                          {approved ? '정지' : '승인'}
-                        </button>
-                        <button type="button" className={s.btnSm} disabled={pending} onClick={() => openEdit(row)}>
-                          수정
-                        </button>
-                        <button type="button" className={s.btnDangerSm} disabled={pending} onClick={() => openDelete(row)}>
-                          삭제
-                        </button>
-                      </div>
+                      {isAdminTenant(row) ? (
+                        <span style={{ fontSize: 11, color: '#9ca3af' }}>시스템 계정</span>
+                      ) : (
+                        <div className={s.actions}>
+                          <button
+                            type="button"
+                            className={s.btnSm}
+                            disabled={pending}
+                            onClick={() => handleToggleApproval(row)}
+                          >
+                            {approved ? '정지' : '승인'}
+                          </button>
+                          <button type="button" className={s.btnSm} disabled={pending} onClick={() => openEdit(row)}>
+                            수정
+                          </button>
+                          <button type="button" className={s.btnDangerSm} disabled={pending} onClick={() => openDelete(row)}>
+                            삭제
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 )
