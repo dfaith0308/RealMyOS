@@ -223,6 +223,7 @@ function PhBar({ width = '100%' }: { width?: string }) {
 export default function ListingNewClient() {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const empty = useMemo(() => createEmptyListingStudioForm(), [])
 
@@ -818,6 +819,8 @@ export default function ListingNewClient() {
   }
 
   function submitWithStatus(status: 'draft' | 'visible', andReset: boolean) {
+    if (isSubmitting) return
+    setIsSubmitting(true)
     setError(null)
     if (status === 'draft') {
       setThumbPublicWarning(false)
@@ -830,22 +833,26 @@ export default function ListingNewClient() {
     if (!pn) {
       setError('상품명을 입력해 주세요')
       showToast('상품명을 입력해 주세요', 'error')
+      setIsSubmitting(false)
       return
     }
     if (!rootCategoryId) {
       setError('대분류 카테고리를 선택해 주세요')
       showToast('대분류 카테고리를 선택해 주세요', 'error')
+      setIsSubmitting(false)
       return
     }
     if (!effectiveCategoryId) {
       setError('카테고리를 선택해 주세요')
       showToast('카테고리를 선택해 주세요', 'error')
+      setIsSubmitting(false)
       return
     }
     const price = parseInt(commercePrice.replace(/\D/g, ''), 10)
     if (!Number.isFinite(price) || price <= 0) {
       setError('식식이 판매가는 1원 이상 정수로 입력해 주세요')
       showToast('식식이 판매가는 1원 이상 정수로 입력해 주세요', 'error')
+      setIsSubmitting(false)
       return
     }
 
@@ -876,6 +883,7 @@ export default function ListingNewClient() {
           console.error('[ListingNew] createListingFull failed', msg)
           setError(msg)
           showToast(msg, 'error')
+          setIsSubmitting(false)
           return
         }
         const successToast =
@@ -885,16 +893,19 @@ export default function ListingNewClient() {
         if (andReset) {
           showToast(successToast)
           applyResetForm()
+          setIsSubmitting(false)
           router.refresh()
           return
         }
         showToast(successToast)
+        setIsSubmitting(false)
         router.push('/admin/commerce/products')
       } catch (e) {
         console.error('[ListingNew] createListingFull threw', e)
         const msg = e instanceof Error ? e.message : String(e)
         setError(msg)
         showToast('저장 중 오류가 발생했습니다. 콘솔을 확인해 주세요.', 'error')
+        setIsSubmitting(false)
       }
     })
   }
@@ -2218,7 +2229,7 @@ export default function ListingNewClient() {
             <button
               type="button"
               className={`${mod.btn} ${mod.btnDraft}`}
-              disabled={pending}
+              disabled={pending || isSubmitting}
               onClick={() => {
                 submitWithStatus('draft', false)
               }}
@@ -2228,7 +2239,7 @@ export default function ListingNewClient() {
             <button
               type="button"
               className={`${mod.btn} ${mod.btnNext}`}
-              disabled={pending}
+              disabled={pending || isSubmitting}
               onClick={() => {
                 submitWithStatus('visible', true)
               }}
@@ -2238,7 +2249,7 @@ export default function ListingNewClient() {
             <button
               type="button"
               className={`${mod.btn} ${mod.btnPrimary}`}
-              disabled={pending}
+              disabled={pending || isSubmitting}
               onClick={() => {
                 submitWithStatus('visible', false)
               }}
