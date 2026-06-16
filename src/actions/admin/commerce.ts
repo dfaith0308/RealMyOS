@@ -2615,3 +2615,17 @@ export async function reorderCategory(
   revalidatePath('/admin/commerce/categories')
   return { success: true, data: null }
 }
+
+export async function deleteListing(id: string): Promise<ActionResult<null>> {
+  const supabase = await createSupabaseServer()
+
+  const { error } = await supabase
+    .from('commerce_listings')
+    .delete()
+    .eq('id', id)
+
+  if (error) return { success: false, error: error.message }
+
+  revalidatePath('/admin/commerce/products')
+  return { success: true, data: null }
+}

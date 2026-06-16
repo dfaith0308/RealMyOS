@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState, useTransition } from 'react'
-import { updateListingStatus, type CommerceListingRow } from '@/actions/admin/commerce'
+import { deleteListing, updateListingStatus, type CommerceListingRow } from '@/actions/admin/commerce'
 import { formatKRW } from '@/lib/calc'
 import s from '@/app/(admin)/admin-shared.module.css'
 
@@ -43,6 +43,7 @@ export default function ListingsClient({
   const [error, setError] = useState<string | null>(null)
   const [buyPreviewRow, setBuyPreviewRow] = useState<CommerceListingRow | null>(null)
   const [storefrontTab, setStorefrontTab] = useState<StorefrontPreviewTab>('detail')
+  const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => {
     if (buyPreviewRow) setStorefrontTab('detail')
@@ -75,6 +76,16 @@ export default function ListingsClient({
     },
     [refresh],
   )
+
+  const filtered = searchQuery.trim()
+    ? listings.filter((row) => {
+        const q = searchQuery.trim().toLowerCase()
+        return (
+          (row.products?.name ?? '').toLowerCase().includes(q) ||
+          (row.brand_name ?? '').toLowerCase().includes(q)
+        )
+      })
+    : listings
 
   return (
     <>
@@ -225,13 +236,26 @@ export default function ListingsClient({
         </div>
       ) : null}
 
-      <div className={s.actionsRow} style={{ justifyContent: 'space-between', width: '100%' }}>
-        <span className={s.inlineMuted}>
-          필터: {statusFilter} · {listings.length}건
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', marginBottom: 4 }}>
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="상품명 · 브랜드 검색"
+          style={{
+            flex: 1,
+            padding: '8px 12px',
+            border: '1px solid var(--ds-border-default)',
+            borderRadius: 8,
+            fontSize: 13,
+            background: 'var(--ds-surface-panel)',
+            color: 'var(--ds-text-primary)',
+            outline: 'none',
+          }}
+        />
+        <span style={{ fontSize: 12, color: 'var(--ds-text-muted)', whiteSpace: 'nowrap' }}>
+          {filtered.length}건
         </span>
-        <Link href="/admin/commerce/products/new" className={s.primaryBtn}>
-          + 상품 등록
-        </Link>
       </div>
 
       {error ? (
@@ -243,8 +267,10 @@ export default function ListingsClient({
         </div>
       ) : null}
 
-      {listings.length === 0 ? (
-        <div className={s.empty}>등록된 상품이 없습니다. 상품을 추가해 주세요.</div>
+      {filtered.length === 0 ? (
+        <div className={s.empty}>
+          {searchQuery.trim() ? '검색 결과가 없습니다.' : '등록된 상품이 없습니다. 상품을 추가해 주세요.'}
+        </div>
       ) : (
         <div className={s.tableWrap}>
           <table className={s.table}>
@@ -258,7 +284,7 @@ export default function ListingsClient({
               </tr>
             </thead>
             <tbody>
-              {listings.map((row) => (
+              {filtered.map((row) => (
                 <tr key={row.id}>
                   <td className={s.tdNowrap}>
                     {row.thumbnail_url?.trim() ? (
@@ -367,6 +393,26 @@ export default function ListingsClient({
                           재공개
                         </button>
                       ) : null}
+                      <button
+                        type="button"
+                        style={{
+                          padding: '4px 10px',
+                          border: '1px solid #fecaca',
+                          borderRadius: 6,
+                          background: '#fef2f2',
+                          fontSize: 12,
+                          color: '#dc2626',
+                          cursor: 'pointer',
+                          fontFamily: 'inherit',
+                        }}
+                        disabled={pending}
+                        onClick={() => {
+                          if (!window.confirm(`「${row.products?.name ?? '이 상품'}」을 삭제할까요?\n되돌릴 수 없습니다.`)) return
+                          run(() => deleteListing(row.id))
+                        }}
+                      >
+                        삭제
+                      </button>
                     </div>
                   </td>
                 </tr>
