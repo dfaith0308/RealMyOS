@@ -10,9 +10,9 @@ export default async function AdminTenantsPage() {
         <h1 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>계정 관리</h1>
         <div
           style={{
-            background: '#FEF2F2',
-            color: '#DC2626',
-            border: '1px solid #FECACA',
+            background: 'var(--ds-status-danger-bg, #FEF2F2)',
+            color: 'var(--ds-status-danger)',
+            border: '1px solid var(--ds-status-danger-border, #FECACA)',
             borderRadius: 10,
             padding: '10px 12px',
             fontSize: 13,
