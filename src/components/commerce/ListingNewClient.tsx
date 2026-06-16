@@ -378,6 +378,7 @@ export default function ListingNewClient() {
   })()
 
   // 배송 정책 마진 계산
+  const PG_FEE_RATE = 0.033 // 토스페이먼츠 기준 PG 수수료 3.3%
   const costNum = parseInt(supplyPrice.replace(/\D/g, ''), 10) || 0
   const priceNum = parseInt(commercePrice.replace(/\D/g, ''), 10) || 0
   const originalPriceNum = parseInt(originalPrice.replace(/\D/g, ''), 10) || 0
@@ -388,12 +389,16 @@ export default function ListingNewClient() {
 
   // 낱개: 배송비 고객 부담 → 우리 마진 = (판매가 - 공급가) / 판매가
   const singleMargin =
-    costNum > 0 && priceNum > 0 ? ((priceNum - costNum) / priceNum) * 100 : null
+    costNum > 0 && priceNum > 0
+      ? ((priceNum * (1 - PG_FEE_RATE) - costNum) / (priceNum * (1 - PG_FEE_RATE))) * 100
+      : null
 
   // 무료배송: 배송비 우리 부담 → 우리 마진 = (판매가*수량 - 공급가*수량 - 배송비) / (판매가*수량)
   const freeShippingMargin =
     costNum > 0 && priceNum > 0 && freeQtyNum > 0
-      ? ((priceNum * freeQtyNum - costNum * freeQtyNum - shippingFeeNum) / (priceNum * freeQtyNum)) * 100
+      ? ((priceNum * (1 - PG_FEE_RATE) * freeQtyNum - costNum * freeQtyNum - shippingFeeNum) /
+          (priceNum * (1 - PG_FEE_RATE) * freeQtyNum)) *
+        100
       : null
 
   // 대량구매: 할인 적용가 기준 마진 (배송비 우리 부담)
@@ -401,7 +406,9 @@ export default function ListingNewClient() {
     priceNum > 0 && bulkRateNum > 0 ? Math.round(priceNum * (1 - bulkRateNum / 100)) : priceNum
   const bulkMargin =
     costNum > 0 && bulkPrice > 0 && bulkQtyNum > 0
-      ? ((bulkPrice * bulkQtyNum - costNum * bulkQtyNum - shippingFeeNum) / (bulkPrice * bulkQtyNum)) * 100
+      ? ((bulkPrice * (1 - PG_FEE_RATE) * bulkQtyNum - costNum * bulkQtyNum - shippingFeeNum) /
+          (bulkPrice * (1 - PG_FEE_RATE) * bulkQtyNum)) *
+        100
       : null
 
   // 정상가 대비 할인율
@@ -1426,7 +1433,7 @@ export default function ListingNewClient() {
                     />
                   </div>
                   <div>
-                    <label className={mod.fieldLabel}>우리 마진 — 자동</label>
+                    <label className={mod.fieldLabel}>우리 마진 (PG 3.3% 포함) — 자동</label>
                     <div
                       style={{
                         padding: '7px 10px',
@@ -1491,7 +1498,7 @@ export default function ListingNewClient() {
                     )}
                   </div>
                   <div>
-                    <label className={mod.fieldLabel}>우리 마진 — 자동</label>
+                    <label className={mod.fieldLabel}>우리 마진 (PG 3.3% 포함) — 자동</label>
                     <div
                       style={{
                         padding: '7px 10px',
