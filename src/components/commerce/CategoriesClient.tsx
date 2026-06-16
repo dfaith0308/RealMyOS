@@ -5,6 +5,7 @@ import { useCallback, useRef, useState, useTransition } from 'react'
 import {
   createCategory,
   deleteCategory,
+  reorderCategory,
   toggleCategoryActive,
   updateCategory,
   type AdminCategoryNode,
@@ -111,6 +112,19 @@ export default function CategoriesClient({ tree }: { tree: AdminCategoryNode[] }
       if (!r.success) { setError(r.error ?? '삭제 실패'); return }
       if (editingId === id) setEditingId(null)
       showToast('삭제됐습니다')
+      refresh()
+    })
+  }
+
+  function onReorder(id: string, direction: 'up' | 'down', siblings: AdminCategoryNode[]) {
+    setError(null)
+    startTransition(async () => {
+      const r = await reorderCategory(
+        id,
+        direction,
+        siblings.map((s) => ({ id: s.id, sort_order: s.sort_order ?? 0 })),
+      )
+      if (!r.success) { setError(r.error ?? '순서 변경 실패'); return }
       refresh()
     })
   }
@@ -305,6 +319,8 @@ export default function CategoriesClient({ tree }: { tree: AdminCategoryNode[] }
               </div>
               {editingId !== parent.id && (
                 <div style={{ display: 'flex', gap: 6 }}>
+                  <button type="button" style={actionBtn} disabled={pending || tree.indexOf(parent) === 0} onClick={() => onReorder(parent.id, 'up', tree)}>▲</button>
+                  <button type="button" style={actionBtn} disabled={pending || tree.indexOf(parent) === tree.length - 1} onClick={() => onReorder(parent.id, 'down', tree)}>▼</button>
                   <button type="button" style={actionBtn} disabled={pending} onClick={() => { setEditingId(parent.id); setEditName(parent.name); setError(null) }}>수정</button>
                   <button type="button" style={actionBtn} disabled={pending} onClick={() => onToggleActive(parent.id)}>
                     {parent.is_active ? '비활성화' : '활성화'}
@@ -336,7 +352,21 @@ export default function CategoriesClient({ tree }: { tree: AdminCategoryNode[] }
                     onDoubleClick={() => { setEditingId(ch.id); setEditName(ch.name); setError(null) }}
                     title="더블클릭으로 수정"
                   >
+                    <button
+                      type="button"
+                      style={{ ...xBtn, fontSize: 10 }}
+                      disabled={pending || parent.children.indexOf(ch) === 0}
+                      onClick={() => onReorder(ch.id, 'up', parent.children)}
+                      title="위로"
+                    >▲</button>
                     {ch.name}
+                    <button
+                      type="button"
+                      style={{ ...xBtn, fontSize: 10 }}
+                      disabled={pending || parent.children.indexOf(ch) === parent.children.length - 1}
+                      onClick={() => onReorder(ch.id, 'down', parent.children)}
+                      title="아래로"
+                    >▼</button>
                     <button
                       type="button"
                       style={xBtn}
