@@ -36,6 +36,13 @@ export async function middleware(request: NextRequest) {
   // admin.siksiki.com 접속 시 /admin/* 경로로 rewrite
   if (isAdminDomain) {
     if (!pathname.startsWith('/admin') && !isPublic) {
+      // rewrite 전에 세션 확인 — 비로그인이면 /login으로 보내고 rewrite 안 함
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        const url = request.nextUrl.clone()
+        url.pathname = '/login'
+        return NextResponse.redirect(url)
+      }
       const url = request.nextUrl.clone()
       url.pathname = pathname === '/' ? '/admin/dashboard' : `/admin${pathname}`
       return NextResponse.rewrite(url)

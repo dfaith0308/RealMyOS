@@ -6,7 +6,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const supabase = await createSupabaseServer()
   const ctx = await getAuthCtx(supabase)
 
-  if (!ctx || ctx.role !== 'admin') redirect('/dashboard')
+  if (!ctx || ctx.role !== 'admin') redirect('/login')
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--color-bg)' }}>
