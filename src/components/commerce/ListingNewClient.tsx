@@ -1068,6 +1068,15 @@ export default function ListingNewClient() {
       ) : null}
 
       <div className={mod.shell}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div>
+            <h1 style={{ fontSize: 17, fontWeight: 500, color: 'var(--ds-text-primary)', margin: '0 0 3px' }}>상품 등록</h1>
+            <p style={{ fontSize: 12, color: 'var(--ds-text-secondary)', margin: 0 }}>등록 후 공개 설정에서 스토어 노출 여부를 결정합니다</p>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Link href="/admin/commerce/products" style={{ padding: '7px 13px', border: '1px solid var(--ds-border-default)', borderRadius: 8, background: 'transparent', fontSize: 12, color: 'var(--ds-text-primary)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>취소</Link>
+          </div>
+        </div>
         <div className={mod.layout}>
           <div className={mod.formColumn}>
             {error ? <div className={mod.errorCard}>{error}</div> : null}
@@ -1079,12 +1088,12 @@ export default function ListingNewClient() {
 
             <div className={mod.card}>
               <div className={mod.sectionHeaderRow}>
-                <h2 className={mod.sectionTitle}>카테고리</h2>
+                <p className={mod.sectionLabel}>카테고리</p>
                 <Link href="/admin/commerce/categories" className={mod.linkMuted}>
                   카테고리 관리
                 </Link>
               </div>
-              <div className={mod.fieldStack}>
+              <div className={mod.grid2}>
                 <div>
                   <div className={mod.label}>대분류 · 필수</div>
                   <div className={mod.categorySelectRow}>
@@ -1131,8 +1140,8 @@ export default function ListingNewClient() {
             </div>
 
             <div className={mod.card}>
-              <h2 className={mod.sectionTitle}>기본 정보</h2>
-              <div className={mod.fieldStack}>
+              <p className={mod.sectionLabel}>기본 정보</p>
+              <div className={mod.grid2}>
                 <div>
                   <div className={mod.label}>브랜드명</div>
                   <input
@@ -1140,15 +1149,6 @@ export default function ListingNewClient() {
                     value={brandName}
                     onChange={(e) => setBrandName(e.target.value)}
                     placeholder="예: 해표, 청정원, 오뚜기"
-                  />
-                </div>
-                <div>
-                  <div className={mod.label}>상품명 · 필수</div>
-                  <input
-                    className={mod.input}
-                    value={productName}
-                    onChange={(e) => setProductName(e.target.value)}
-                    placeholder="예: 업소용 식용유, 진간장, 냉동 삼겹살"
                   />
                 </div>
                 <div>
@@ -1161,11 +1161,37 @@ export default function ListingNewClient() {
                   />
                 </div>
               </div>
+              <div style={{ marginTop: 10 }}>
+                <div className={mod.label}>상품명 · 필수</div>
+                <input
+                  className={mod.input}
+                  value={productName}
+                  onChange={(e) => setProductName(e.target.value)}
+                  placeholder="예: 업소용 식용유, 진간장, 냉동 삼겹살"
+                />
+              </div>
             </div>
 
             <div className={mod.card}>
-              <h2 className={mod.sectionTitle}>가격 · 마진 계산</h2>
-              <div className={mod.fieldStack}>
+              <p className={mod.sectionLabel}>가격</p>
+              <div className={mod.modeBtnRow} style={{ marginBottom: 10 }}>
+                <button
+                  type="button"
+                  className={`${mod.modeBtn} ${marginMode === 'price' ? mod.modeBtnActive : ''}`}
+                  onClick={() => setMarginMode('price')}
+                >
+                  판매가 직접 입력
+                </button>
+                <button
+                  type="button"
+                  className={`${mod.modeBtn} ${marginMode === 'margin' ? mod.modeBtnActive : ''}`}
+                  onClick={() => setMarginMode('margin')}
+                  disabled={marginModeDisabled}
+                >
+                  마진율로 판매가 계산
+                </button>
+              </div>
+              <div className={mod.grid3}>
                 <div>
                   <div className={mod.label}>공급가 (원)</div>
                   <input
@@ -1176,28 +1202,11 @@ export default function ListingNewClient() {
                     onChange={(e) => setSupplyPrice(e.target.value.replace(/\D/g, ''))}
                     placeholder="예: 18,000"
                   />
-                  <p className={mod.hint}>내부 운영용. 구매자에게 노출 안 됨</p>
+                  <p className={mod.fieldHint}>내부 운영용. 구매자에게 노출 안 됨</p>
                 </div>
                 <div>
-                  <div className={mod.modeBtnRow}>
-                    <button
-                      type="button"
-                      className={`${mod.modeBtn} ${marginMode === 'price' ? mod.modeBtnActive : ''}`}
-                      onClick={() => setMarginMode('price')}
-                    >
-                      판매가 직접 입력
-                    </button>
-                    <button
-                      type="button"
-                      className={`${mod.modeBtn} ${marginMode === 'margin' ? mod.modeBtnActive : ''}`}
-                      onClick={() => setMarginMode('margin')}
-                      disabled={marginModeDisabled}
-                    >
-                      마진율로 판매가 계산
-                    </button>
-                  </div>
                   {marginMode === 'price' ? (
-                    <div>
+                    <>
                       <div className={mod.label}>식식이 판매가 (원) · 필수</div>
                       <input
                         className={mod.input}
@@ -1207,29 +1216,30 @@ export default function ListingNewClient() {
                         onChange={(e) => setCommercePrice(e.target.value.replace(/\D/g, ''))}
                         placeholder="예: 22,900"
                       />
-                    </div>
+                      {marginRateDisplay != null ? (
+                        <p className={mod.fieldHintGreen}>마진율: {marginRateDisplay.toFixed(1)}%</p>
+                      ) : null}
+                    </>
                   ) : (
-                    <div>
+                    <>
                       <div className={mod.label}>마진율 (%)</div>
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <input
-                          className={mod.input}
-                          style={{ flex: 1, minWidth: 120 }}
-                          type="number"
-                          value={marginInput}
-                          onChange={(e) => handleMarginInput(e.target.value)}
-                          placeholder="마진율 %"
-                          min={0}
-                          max={99}
-                        />
-                        {commercePrice ? (
-                          <span style={{ fontSize: 13, color: '#6b7280' }}>
-                            → {formatKRW(Number(commercePrice.replace(/\D/g, '') || 0))}
-                          </span>
-                        ) : null}
-                      </div>
-                      <p className={mod.hint}>공급가를 먼저 입력한 뒤 사용할 수 있습니다.</p>
-                    </div>
+                      <input
+                        className={mod.input}
+                        type="number"
+                        value={marginInput}
+                        onChange={(e) => handleMarginInput(e.target.value)}
+                        placeholder="마진율 %"
+                        min={0}
+                        max={99}
+                      />
+                      {commercePrice ? (
+                        <p className={mod.fieldHintGreen}>
+                          → {formatKRW(Number(commercePrice.replace(/\D/g, '') || 0))}
+                        </p>
+                      ) : (
+                        <p className={mod.fieldHint}>공급가를 먼저 입력한 뒤 사용</p>
+                      )}
+                    </>
                   )}
                 </div>
                 <div>
@@ -1242,22 +1252,17 @@ export default function ListingNewClient() {
                     onChange={(e) => setOriginalPrice(e.target.value.replace(/\D/g, ''))}
                     placeholder="예: 26,000"
                   />
-                  <p className={mod.hint}>판매가보다 클 때만 절감액 표시</p>
+                  <p className={mod.fieldHint}>판매가보다 클 때만 절감액 표시</p>
                 </div>
-                {marginRateDisplay != null ? (
-                  <p style={{ margin: 0, fontSize: 13, color: '#1f5d3a' }}>
-                    마진율: {marginRateDisplay.toFixed(1)}%
-                  </p>
-                ) : null}
-                {savingsAmount != null && savingsAmount > 0 ? (
-                  <p style={{ margin: 0, fontSize: 13, color: '#1f5d3a' }}>절감액: {formatKRW(savingsAmount)}</p>
-                ) : null}
               </div>
+              {savingsAmount != null && savingsAmount > 0 ? (
+                <p style={{ margin: '10px 0 0', fontSize: 13, color: '#1f5d3a' }}>절감액: {formatKRW(savingsAmount)}</p>
+              ) : null}
             </div>
 
             <div className={mod.card}>
-              <h2 className={mod.sectionTitle}>배송 정책</h2>
-              <div className={mod.fieldStack}>
+              <p className={mod.sectionLabel}>배송</p>
+              <div className={mod.grid2}>
                 <div>
                   <div className={mod.label}>배송 유형 · 필수</div>
                   <select
@@ -1270,58 +1275,6 @@ export default function ListingNewClient() {
                     <option value="conditional_free">조건부 무료배송</option>
                   </select>
                 </div>
-
-                {shippingType === 'paid' ? (
-                  <>
-                    <div>
-                      <div className={mod.label}>1박스 기준 수량</div>
-                      <input
-                        className={mod.input}
-                        type="number"
-                        inputMode="numeric"
-                        min={1}
-                        value={shippingBoxQty}
-                        onChange={(e) => setShippingBoxQty(e.target.value.replace(/\D/g, ''))}
-                        placeholder="예: 10 (10개까지 1박스)"
-                      />
-                    </div>
-                    <div>
-                      <div className={mod.label}>박스당 배송비 (원)</div>
-                      <input
-                        className={mod.input}
-                        type="text"
-                        inputMode="numeric"
-                        value={formatDigitsForInput(shippingBoxFee)}
-                        onChange={(e) => setShippingBoxFee(e.target.value.replace(/\D/g, ''))}
-                        placeholder="예: 3,000"
-                      />
-                      {/* TODO: 향후 shipping_fee, shipping_box_qty 컬럼 추가 후 DB 연결 예정 */}
-                      {boxTierPreview ? (
-                        <p className={mod.hint} style={{ color: '#1f5d3a' }}>
-                          {boxTierPreview}
-                        </p>
-                      ) : (
-                        <p className={mod.hint}>박스 수 = ⌈주문수량 ÷ 기준수량⌉ — 미리보기용 계산입니다.</p>
-                      )}
-                    </div>
-                  </>
-                ) : null}
-
-                {shippingType === 'conditional_free' ? (
-                  <div>
-                    <div className={mod.label}>무료배송 기준 금액 (원)</div>
-                    <input
-                      className={mod.input}
-                      type="text"
-                      inputMode="numeric"
-                      value={formatDigitsForInput(conditionalFreeThreshold)}
-                      onChange={(e) => setConditionalFreeThreshold(e.target.value.replace(/\D/g, ''))}
-                      placeholder="예: 50,000 (5만원 이상 무료배송)"
-                    />
-                    {/* TODO: 향후 free_shipping_threshold 컬럼 추가 후 DB 연결 예정 */}
-                  </div>
-                ) : null}
-
                 <div>
                   <div className={mod.label}>묶음배송 그룹 (선택)</div>
                   <p className={mod.hint}>같은 그룹 상품끼리 묶음배송 가능합니다</p>
@@ -1387,6 +1340,58 @@ export default function ListingNewClient() {
                     </div>
                   ) : null}
                 </div>
+              </div>
+              <div className={mod.fieldStack} style={{ marginTop: 10 }}>
+                {shippingType === 'paid' ? (
+                  <>
+                    <div>
+                      <div className={mod.label}>1박스 기준 수량</div>
+                      <input
+                        className={mod.input}
+                        type="number"
+                        inputMode="numeric"
+                        min={1}
+                        value={shippingBoxQty}
+                        onChange={(e) => setShippingBoxQty(e.target.value.replace(/\D/g, ''))}
+                        placeholder="예: 10 (10개까지 1박스)"
+                      />
+                    </div>
+                    <div>
+                      <div className={mod.label}>박스당 배송비 (원)</div>
+                      <input
+                        className={mod.input}
+                        type="text"
+                        inputMode="numeric"
+                        value={formatDigitsForInput(shippingBoxFee)}
+                        onChange={(e) => setShippingBoxFee(e.target.value.replace(/\D/g, ''))}
+                        placeholder="예: 3,000"
+                      />
+                      {/* TODO: 향후 shipping_fee, shipping_box_qty 컬럼 추가 후 DB 연결 예정 */}
+                      {boxTierPreview ? (
+                        <p className={mod.hint} style={{ color: '#1f5d3a' }}>
+                          {boxTierPreview}
+                        </p>
+                      ) : (
+                        <p className={mod.hint}>박스 수 = ⌈주문수량 ÷ 기준수량⌉ — 미리보기용 계산입니다.</p>
+                      )}
+                    </div>
+                  </>
+                ) : null}
+
+                {shippingType === 'conditional_free' ? (
+                  <div>
+                    <div className={mod.label}>무료배송 기준 금액 (원)</div>
+                    <input
+                      className={mod.input}
+                      type="text"
+                      inputMode="numeric"
+                      value={formatDigitsForInput(conditionalFreeThreshold)}
+                      onChange={(e) => setConditionalFreeThreshold(e.target.value.replace(/\D/g, ''))}
+                      placeholder="예: 50,000 (5만원 이상 무료배송)"
+                    />
+                    {/* TODO: 향후 free_shipping_threshold 컬럼 추가 후 DB 연결 예정 */}
+                  </div>
+                ) : null}
               </div>
             </div>
 
