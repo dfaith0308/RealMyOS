@@ -41,12 +41,12 @@ export default async function AdminCommerceProductsPage(props: {
         <div>
           <h1 className={s.title}>상품 관리</h1>
           <p className={s.subtitle}>
-            플랫폼 Listing 노출·상태·가격·썸네일 관리 (COMMERCE-FLOW 준수). 목록 테이블은 아래에서 확인합니다.
+            상품을 등록하고 노출 상태·가격·이미지를 관리합니다
           </p>
         </div>
         <div className={s.actionsRow}>
-          <Link href="/admin/dashboard" className={s.ghostBtn}>
-            대시보드
+          <Link href="/admin/commerce/products/new" className={s.primaryBtn}>
+            + 상품 등록
           </Link>
         </div>
       </header>
