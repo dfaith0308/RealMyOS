@@ -889,7 +889,7 @@ export default function ListingNewClient() {
           return
         }
         showToast(successToast)
-        router.refresh()
+        router.push('/admin/commerce/products')
       } catch (e) {
         console.error('[ListingNew] createListingFull threw', e)
         const msg = e instanceof Error ? e.message : String(e)
