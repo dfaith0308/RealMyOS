@@ -12,12 +12,47 @@ import {
   updateTenant,
   type TenantAdminRow,
 } from '@/actions/admin'
+import { updateTenantSubscription, type SubscriptionPlan } from '@/actions/admin/subscription'
 import s from './tenants.module.css'
 
 type RoleTab = 'all' | 'supplier' | 'restaurant'
 type CreateRole = 'supplier' | 'restaurant'
 
 type ModalKind = 'create' | 'edit' | 'delete' | null
+
+const PLAN_LABELS: Record<SubscriptionPlan, string> = {
+  free: '무료',
+  earlybird: '얼리버드 (9,900원/월)',
+  pro: '정식 (29,000원/월)',
+  annual: '연간 (19,900원/월)',
+}
+
+const PLAN_OPTIONS: SubscriptionPlan[] = ['free', 'earlybird', 'pro', 'annual']
+
+function normalizePlan(plan: string | null | undefined): SubscriptionPlan {
+  if (plan === 'earlybird' || plan === 'pro' || plan === 'annual') return plan
+  return 'free'
+}
+
+function planBadgeStyle(plan: SubscriptionPlan): React.CSSProperties {
+  const map: Record<SubscriptionPlan, React.CSSProperties> = {
+    free: { background: '#f3f4f6', color: '#6b7280' },
+    earlybird: { background: '#fff7ed', color: '#ea580c' },
+    pro: { background: '#E8F5EF', color: '#1f5d3a' },
+    annual: { background: '#eff6ff', color: '#2563eb' },
+  }
+  return {
+    display: 'inline-flex',
+    alignItems: 'center',
+    height: 22,
+    padding: '0 9px',
+    borderRadius: 4,
+    fontSize: 11,
+    fontWeight: 700,
+    whiteSpace: 'nowrap',
+    ...map[plan],
+  }
+}
 
 function fmtDate(iso: string | null) {
   if (!iso) return '-'
@@ -63,6 +98,7 @@ export default function TenantsClient({
   const [editPasswordConfirm, setEditPasswordConfirm] = useState('')
 
   const [deleteTarget, setDeleteTarget] = useState<TenantAdminRow | null>(null)
+  const [planDraft, setPlanDraft] = useState<Record<string, SubscriptionPlan>>({})
 
   const counts = useMemo(() => {
     const supplier = rows.filter((r) => r.role === 'supplier').length
@@ -233,6 +269,42 @@ export default function TenantsClient({
     })
   }
 
+  function handleApplyPlan(row: TenantAdminRow) {
+    const plan = planDraft[row.id] ?? normalizePlan(row.subscription_plan)
+    setPageError(null)
+    startTransition(async () => {
+      const res = await updateTenantSubscription({ tenant_id: row.id, plan })
+      if (!res.success) {
+        setPageError(res.error ?? '구독 플랜 변경 실패')
+        return
+      }
+      setPlanDraft((prev) => {
+        const next = { ...prev }
+        delete next[row.id]
+        return next
+      })
+      refreshList()
+    })
+  }
+
+  function handleTwoMonthFree(row: TenantAdminRow) {
+    const expires = new Date()
+    expires.setMonth(expires.getMonth() + 2)
+    setPageError(null)
+    startTransition(async () => {
+      const res = await updateTenantSubscription({
+        tenant_id: row.id,
+        plan: 'earlybird',
+        custom_expires_at: expires.toISOString(),
+      })
+      if (!res.success) {
+        setPageError(res.error ?? '2개월 무료 적용 실패')
+        return
+      }
+      refreshList()
+    })
+  }
+
   return (
     <main className={s.page}>
       <header className={s.pageHead}>
@@ -278,6 +350,7 @@ export default function TenantsClient({
                 <th className={s.th}>역할</th>
                 <th className={s.th}>이메일</th>
                 <th className={s.th}>승인상태</th>
+                <th className={s.th}>구독</th>
                 <th className={s.th}>가입일</th>
                 <th className={s.th}>액션</th>
               </tr>
@@ -285,6 +358,8 @@ export default function TenantsClient({
             <tbody>
               {filtered.map((row) => {
                 const approved = row.is_approved === true
+                const currentPlan = normalizePlan(row.subscription_plan)
+                const selectedPlan = planDraft[row.id] ?? currentPlan
                 return (
                   <tr key={row.id} className={s.tr}>
                     <td className={s.td}>{row.name ?? '-'}</td>
@@ -296,6 +371,62 @@ export default function TenantsClient({
                       <span className={approved ? s.approved : s.pending}>
                         {approved ? '승인됨' : '대기/정지'}
                       </span>
+                    </td>
+                    <td className={s.td}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 200 }}>
+                        <span style={planBadgeStyle(currentPlan)}>{PLAN_LABELS[currentPlan]}</span>
+                        {row.plan_expires_at && (
+                          <span style={{ fontSize: 11, color: '#6b7280' }}>
+                            만료: {fmtDate(row.plan_expires_at)}
+                          </span>
+                        )}
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                          <select
+                            value={selectedPlan}
+                            disabled={pending}
+                            onChange={(e) =>
+                              setPlanDraft((prev) => ({
+                                ...prev,
+                                [row.id]: e.target.value as SubscriptionPlan,
+                              }))
+                            }
+                            style={{
+                              flex: 1,
+                              minWidth: 120,
+                              height: 28,
+                              padding: '0 8px',
+                              borderRadius: 6,
+                              border: '1px solid var(--ds-border-default)',
+                              fontSize: 11.5,
+                              fontFamily: 'inherit',
+                              background: '#fff',
+                            }}
+                          >
+                            {PLAN_OPTIONS.map((p) => (
+                              <option key={p} value={p}>
+                                {PLAN_LABELS[p]}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            className={s.btnSm}
+                            disabled={pending}
+                            onClick={() => handleApplyPlan(row)}
+                          >
+                            적용
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          className={s.btnSm}
+                          disabled={pending}
+                          onClick={() => handleTwoMonthFree(row)}
+                          style={{ alignSelf: 'flex-start' }}
+                        >
+                          2개월 무료
+                        </button>
+                      </div>
                     </td>
                     <td className={s.td}>{fmtDate(row.created_at)}</td>
                     <td className={s.td}>
@@ -321,7 +452,7 @@ export default function TenantsClient({
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td className={s.empty} colSpan={6}>
+                  <td className={s.empty} colSpan={7}>
                     데이터가 없습니다.
                   </td>
                 </tr>
