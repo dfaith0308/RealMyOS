@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
+import { createSupabaseBrowser } from '@/lib/supabase-browser'
 
 type MenuItem = {
   label: string
@@ -32,6 +33,13 @@ const MENU: MenuItem[] = [
 
 export default function AdminSidebar() {
   const pathname = usePathname()
+  const router = useRouter()
+
+  async function handleSignOut() {
+    const supabase = createSupabaseBrowser()
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
 
   return (
     <nav style={s.nav}>
@@ -69,6 +77,12 @@ export default function AdminSidebar() {
             </Link>
           )
         })}
+      </div>
+      <div style={s.bottom}>
+        <button onClick={handleSignOut} style={s.signOutBtn}>
+          <span style={s.icon}>🚪</span>
+          <span>로그아웃</span>
+        </button>
       </div>
     </nav>
   )
@@ -121,6 +135,25 @@ const s: Record<string, React.CSSProperties> = {
     color: '#9ca3af',
     borderRadius: 4,
     marginLeft: 4,
+  },
+  bottom: {
+    padding: '12px 8px',
+    borderTop: '1px solid #f3f4f6',
+  },
+  signOutBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    width: '100%',
+    padding: '10px 12px',
+    borderRadius: 10,
+    border: 'none',
+    background: 'transparent',
+    fontSize: 13,
+    color: '#ef4444',
+    fontWeight: 500,
+    cursor: 'pointer',
+    textAlign: 'left' as const,
   },
 }
 
