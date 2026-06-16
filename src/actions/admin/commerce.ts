@@ -737,6 +737,10 @@ export type ListingForEditData = {
   admin_memo: string | null
   thumbnail_url: string | null
   image_urls: string[] | null
+  base_shipping_fee: number | null
+  free_shipping_qty: number | null
+  bulk_qty: number | null
+  bulk_discount_rate: number | null
 }
 
 export type UpdateListingFullInput = {
@@ -751,6 +755,10 @@ export type UpdateListingFullInput = {
   shipping_group_id: string | null
   badge_labels: string[] | null
   admin_memo: string | null
+  base_shipping_fee: number
+  free_shipping_qty: number | null
+  bulk_qty: number | null
+  bulk_discount_rate: number | null
 }
 
 function listingStorefrontPublished(status: ListingStatus, is_visible: boolean): boolean {
@@ -827,6 +835,10 @@ export async function getListingForEdit(listingId: string): Promise<ActionResult
       admin_memo,
       thumbnail_url,
       image_urls,
+      base_shipping_fee,
+      free_shipping_qty,
+      bulk_qty,
+      bulk_discount_rate,
       products ( id, name )
     `,
     )
@@ -876,6 +888,22 @@ export async function getListingForEdit(listingId: string): Promise<ActionResult
       admin_memo: (row.admin_memo as string | null) ?? null,
       thumbnail_url: (row.thumbnail_url as string | null) ?? null,
       image_urls: (row.image_urls as string[] | null) ?? null,
+      base_shipping_fee:
+        typeof row.base_shipping_fee === 'number' && Number.isFinite(row.base_shipping_fee)
+          ? Math.round(row.base_shipping_fee)
+          : null,
+      free_shipping_qty:
+        typeof row.free_shipping_qty === 'number' && Number.isFinite(row.free_shipping_qty)
+          ? Math.round(row.free_shipping_qty)
+          : null,
+      bulk_qty:
+        typeof row.bulk_qty === 'number' && Number.isFinite(row.bulk_qty)
+          ? Math.round(row.bulk_qty)
+          : null,
+      bulk_discount_rate:
+        typeof row.bulk_discount_rate === 'number' && Number.isFinite(row.bulk_discount_rate)
+          ? row.bulk_discount_rate
+          : null,
     },
   }
 }
@@ -948,6 +976,32 @@ export async function updateListingFull(
     if (opIn > price) original_price = opIn
   }
 
+  const base_shipping_fee = input.base_shipping_fee
+  if (!Number.isFinite(base_shipping_fee) || !Number.isInteger(base_shipping_fee) || base_shipping_fee <= 0) {
+    return { success: false, error: '기본 배송비는 1원 이상의 정수여야 합니다' }
+  }
+
+  const free_shipping_qty = (() => {
+    const v = input.free_shipping_qty
+    if (v == null) return null
+    if (!Number.isFinite(v) || !Number.isInteger(v) || v <= 0) return null
+    return v
+  })()
+
+  const bulk_qty = (() => {
+    const v = input.bulk_qty
+    if (v == null) return null
+    if (!Number.isFinite(v) || !Number.isInteger(v) || v <= 0) return null
+    return v
+  })()
+
+  const bulk_discount_rate = (() => {
+    const v = input.bulk_discount_rate
+    if (v == null) return null
+    if (!Number.isFinite(v) || v <= 0) return null
+    return v
+  })()
+
   const { data: listingRow, error: lFetchErr } = await supabase
     .from('commerce_product_listings')
     .select(
@@ -964,6 +1018,10 @@ export async function updateListingFull(
       shipping_group_id,
       badge_labels,
       admin_memo,
+      base_shipping_fee,
+      free_shipping_qty,
+      bulk_qty,
+      bulk_discount_rate,
       products ( id, name )
     `,
     )
@@ -1024,6 +1082,22 @@ export async function updateListingFull(
     shipping_type: (L.shipping_type as string) || 'free',
     badge_labels: (L.badge_labels as string[] | null) ?? null,
     admin_memo: (L.admin_memo as string | null) ?? null,
+    base_shipping_fee:
+      typeof L.base_shipping_fee === 'number' && Number.isFinite(L.base_shipping_fee)
+        ? Math.round(L.base_shipping_fee)
+        : null,
+    free_shipping_qty:
+      typeof L.free_shipping_qty === 'number' && Number.isFinite(L.free_shipping_qty)
+        ? Math.round(L.free_shipping_qty)
+        : null,
+    bulk_qty:
+      typeof L.bulk_qty === 'number' && Number.isFinite(L.bulk_qty)
+        ? Math.round(L.bulk_qty)
+        : null,
+    bulk_discount_rate:
+      typeof L.bulk_discount_rate === 'number' && Number.isFinite(L.bulk_discount_rate)
+        ? L.bulk_discount_rate
+        : null,
   }
 
   const afterSnapshot = {
@@ -1037,6 +1111,10 @@ export async function updateListingFull(
     shipping_type: st,
     badge_labels: badge_labels_db,
     admin_memo,
+    base_shipping_fee,
+    free_shipping_qty,
+    bulk_qty,
+    bulk_discount_rate,
   }
 
   const normBadges = (v: string[] | null | undefined) => {
@@ -1079,6 +1157,10 @@ export async function updateListingFull(
       shipping_group_id,
       badge_labels: badge_labels_db,
       admin_memo,
+      base_shipping_fee,
+      free_shipping_qty,
+      bulk_qty,
+      bulk_discount_rate,
       status: vis.nextStatus,
       is_visible: vis.nextIsVisible,
       updated_at: new Date().toISOString(),
