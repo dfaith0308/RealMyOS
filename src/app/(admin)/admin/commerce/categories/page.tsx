@@ -20,15 +20,6 @@ export default async function AdminCommerceCategoriesPage() {
 
   return (
     <main className={s.main}>
-      <header className={s.headerBetween}>
-        <div>
-          <h1 className={s.title}>카테고리 관리</h1>
-          <p className={s.subtitle}>
-            검색·추천·발주 흐름의 기준이 되는 플랫폼 카테고리입니다. 최대 2-depth(대분류 → 소분류)만 허용됩니다.
-          </p>
-        </div>
-      </header>
-
       <CategoriesClient tree={tree} />
     </main>
   )
