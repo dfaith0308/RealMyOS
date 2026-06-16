@@ -1484,6 +1484,11 @@ export default function ListingNewClient() {
                       readOnly
                       style={{ background: 'var(--ds-neutral-50)', color: 'var(--ds-text-muted)' }}
                     />
+                    {bulkPrice > 0 && bulkQtyNum > 0 && (
+                      <p style={{ fontSize: 11, color: 'var(--ds-text-secondary)', margin: '4px 0 0' }}>
+                        총 {bulkQtyNum}개 = {formatKRW(bulkPrice * bulkQtyNum)}
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className={mod.fieldLabel}>우리 마진 — 자동</label>
