@@ -248,6 +248,10 @@ export default function ListingNewClient() {
   const [shippingBoxQty, setShippingBoxQty] = useState(empty.shippingBoxQty)
   const [shippingBoxFee, setShippingBoxFee] = useState(empty.shippingBoxFee)
   const [conditionalFreeThreshold, setConditionalFreeThreshold] = useState(empty.conditionalFreeThreshold)
+  const [freeShippingQty, setFreeShippingQty] = useState('')
+  const [bulkQty, setBulkQty] = useState('')
+  const [bulkDiscountRate, setBulkDiscountRate] = useState('')
+  const [baseShippingFee, setBaseShippingFee] = useState('3500')
   const [shippingGroupId, setShippingGroupId] = useState(empty.shippingGroupId)
 
   const [shippingGroups, setShippingGroups] = useState<ShippingGroupListItem[]>([])
@@ -372,6 +376,57 @@ export default function ListingNewClient() {
     if (!isFinite(rate) || isNaN(rate)) return null
     return rate
   })()
+
+  // 배송 정책 마진 계산
+  const costNum = parseInt(supplyPrice.replace(/\D/g, ''), 10) || 0
+  const priceNum = parseInt(commercePrice.replace(/\D/g, ''), 10) || 0
+  const originalPriceNum = parseInt(originalPrice.replace(/\D/g, ''), 10) || 0
+  const shippingFeeNum = parseInt(baseShippingFee.replace(/\D/g, ''), 10) || 0
+  const freeQtyNum = parseInt(freeShippingQty.replace(/\D/g, ''), 10) || 0
+  const bulkQtyNum = parseInt(bulkQty.replace(/\D/g, ''), 10) || 0
+  const bulkRateNum = parseFloat(bulkDiscountRate) || 0
+
+  // 낱개: 배송비 고객 부담 → 우리 마진 = (판매가 - 공급가) / 판매가
+  const singleMargin =
+    costNum > 0 && priceNum > 0 ? ((priceNum - costNum) / priceNum) * 100 : null
+
+  // 무료배송: 배송비 우리 부담 → 우리 마진 = (판매가*수량 - 공급가*수량 - 배송비) / (판매가*수량)
+  const freeShippingMargin =
+    costNum > 0 && priceNum > 0 && freeQtyNum > 0
+      ? ((priceNum * freeQtyNum - costNum * freeQtyNum - shippingFeeNum) / (priceNum * freeQtyNum)) * 100
+      : null
+
+  // 대량구매: 할인 적용가 기준 마진 (배송비 우리 부담)
+  const bulkPrice =
+    priceNum > 0 && bulkRateNum > 0 ? Math.round(priceNum * (1 - bulkRateNum / 100)) : priceNum
+  const bulkMargin =
+    costNum > 0 && bulkPrice > 0 && bulkQtyNum > 0
+      ? ((bulkPrice * bulkQtyNum - costNum * bulkQtyNum - shippingFeeNum) / (bulkPrice * bulkQtyNum)) * 100
+      : null
+
+  // 정상가 대비 할인율
+  const singleDiscountRate =
+    originalPriceNum > 0 && priceNum > 0 && originalPriceNum > priceNum
+      ? ((originalPriceNum - priceNum) / originalPriceNum) * 100
+      : null
+  const bulkDiscountDisplay =
+    originalPriceNum > 0 && bulkPrice > 0 && originalPriceNum > bulkPrice
+      ? ((originalPriceNum - bulkPrice) / originalPriceNum) * 100
+      : null
+
+  function marginBadge(rate: number | null): {
+    label: string
+    bg: string
+    border: string
+    color: string
+  } {
+    if (rate === null) return { label: '—', bg: '#f9fafb', border: '#e5e7eb', color: '#6b7280' }
+    if (rate <= 10)
+      return { label: `${rate.toFixed(1)}% 🔴 위험`, bg: '#fef2f2', border: '#fecaca', color: '#dc2626' }
+    if (rate <= 16)
+      return { label: `${rate.toFixed(1)}% 🟡 주의`, bg: '#fffbeb', border: '#fde68a', color: '#92400e' }
+    return { label: `${rate.toFixed(1)}% 🟢 정상`, bg: '#f0fdf4', border: '#bbf7d0', color: '#15803d' }
+  }
 
   function handleMarginInput(v: string) {
     setMarginInput(v)
@@ -1261,135 +1316,288 @@ export default function ListingNewClient() {
             </div>
 
             <div className={mod.card}>
-              <p className={mod.sectionLabel}>배송</p>
-              <div className={mod.grid2}>
+              <p className={mod.sectionLabel}>배송 정책</p>
+
+              {/* 기준값 */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
                 <div>
-                  <div className={mod.label}>배송 유형 · 필수</div>
-                  <select
-                    className={mod.select}
-                    value={shippingType}
-                    onChange={(e) => setShippingType(e.target.value as ListingShippingType)}
-                  >
-                    <option value="free">무료배송</option>
-                    <option value="paid">유료배송</option>
-                    <option value="conditional_free">조건부 무료배송</option>
-                  </select>
+                  <label className={mod.fieldLabel}>공급가 (원) — 자동</label>
+                  <input
+                    className={mod.input}
+                    value={supplyPrice ? formatDigitsForInput(supplyPrice) + '원' : '—'}
+                    readOnly
+                    style={{ background: 'var(--ds-neutral-50)', color: 'var(--ds-text-muted)' }}
+                  />
                 </div>
                 <div>
-                  <div className={mod.label}>묶음배송 그룹 (선택)</div>
-                  <p className={mod.hint}>같은 그룹 상품끼리 묶음배송 가능합니다</p>
-                  <div className={mod.shippingGroupToolbar}>
-                    <select
-                      className={`${mod.select} ${mod.shippingGroupSelect}`}
-                      value={shippingGroupId}
-                      onChange={(e) => setShippingGroupId(e.target.value)}
-                      disabled={pending || shippingGroupActionBusy}
-                    >
-                      <option value="">선택 안 함</option>
-                      {shippingGroups.map((g) => (
-                        <option key={g.id} value={g.id}>
-                          {g.name}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      className={mod.btnGhost}
-                      onClick={() => setShowAddShippingGroup((v) => !v)}
-                      disabled={pending || shippingGroupActionBusy}
-                    >
-                      + 그룹 추가
-                    </button>
-                    <button
-                      type="button"
-                      className={mod.btnGhost}
-                      onClick={openManageShippingModal}
-                      disabled={pending || shippingGroupActionBusy}
-                    >
-                      관리
-                    </button>
-                  </div>
-                  {showAddShippingGroup ? (
-                    <div className={mod.shippingGroupInlineAdd}>
-                      <input
-                        className={mod.input}
-                        value={newShippingGroupName}
-                        onChange={(e) => setNewShippingGroupName(e.target.value)}
-                        placeholder="그룹명"
-                        disabled={shippingGroupActionBusy}
-                      />
-                      <button
-                        type="button"
-                        className={mod.btnGhost}
-                        onClick={() => void submitNewShippingGroup()}
-                        disabled={shippingGroupActionBusy}
-                      >
-                        추가
-                      </button>
-                      <button
-                        type="button"
-                        className={mod.btnGhost}
-                        onClick={() => {
-                          setShowAddShippingGroup(false)
-                          setNewShippingGroupName('')
-                        }}
-                        disabled={shippingGroupActionBusy}
-                      >
-                        취소
-                      </button>
-                    </div>
-                  ) : null}
+                  <label className={mod.fieldLabel}>기본 배송비 (원)</label>
+                  <input
+                    className={mod.input}
+                    type="text"
+                    inputMode="numeric"
+                    value={formatDigitsForInput(baseShippingFee)}
+                    onChange={(e) => setBaseShippingFee(e.target.value.replace(/\D/g, ''))}
+                    placeholder="예: 3,500"
+                  />
                 </div>
               </div>
-              <div className={mod.fieldStack} style={{ marginTop: 10 }}>
-                {shippingType === 'paid' ? (
-                  <>
-                    <div>
-                      <div className={mod.label}>1박스 기준 수량</div>
-                      <input
-                        className={mod.input}
-                        type="number"
-                        inputMode="numeric"
-                        min={1}
-                        value={shippingBoxQty}
-                        onChange={(e) => setShippingBoxQty(e.target.value.replace(/\D/g, ''))}
-                        placeholder="예: 10 (10개까지 1박스)"
-                      />
-                    </div>
-                    <div>
-                      <div className={mod.label}>박스당 배송비 (원)</div>
-                      <input
-                        className={mod.input}
-                        type="text"
-                        inputMode="numeric"
-                        value={formatDigitsForInput(shippingBoxFee)}
-                        onChange={(e) => setShippingBoxFee(e.target.value.replace(/\D/g, ''))}
-                        placeholder="예: 3,000"
-                      />
-                      {/* TODO: 향후 shipping_fee, shipping_box_qty 컬럼 추가 후 DB 연결 예정 */}
-                      {boxTierPreview ? (
-                        <p className={mod.hint} style={{ color: '#1f5d3a' }}>
-                          {boxTierPreview}
-                        </p>
-                      ) : (
-                        <p className={mod.hint}>박스 수 = ⌈주문수량 ÷ 기준수량⌉ — 미리보기용 계산입니다.</p>
-                      )}
-                    </div>
-                  </>
-                ) : null}
 
-                {shippingType === 'conditional_free' ? (
+              {/* 낱개 구매 */}
+              <div style={{ borderTop: '1px solid var(--ds-border-subtle)', paddingTop: 14, marginBottom: 16 }}>
+                <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--ds-text-primary)', margin: '0 0 10px' }}>
+                  낱개 구매
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
                   <div>
-                    <div className={mod.label}>무료배송 기준 금액 (원)</div>
+                    <label className={mod.fieldLabel}>판매가 — 자동</label>
+                    <input
+                      className={mod.input}
+                      value={priceNum > 0 ? formatKRW(priceNum) : '—'}
+                      readOnly
+                      style={{ background: 'var(--ds-neutral-50)', color: 'var(--ds-text-muted)' }}
+                    />
+                  </div>
+                  <div>
+                    <label className={mod.fieldLabel}>정상가 대비 할인율 — 자동</label>
+                    <input
+                      className={mod.input}
+                      value={
+                        singleDiscountRate !== null
+                          ? `${singleDiscountRate.toFixed(1)}% 할인`
+                          : '정상가 미입력'
+                      }
+                      readOnly
+                      style={{ background: 'var(--ds-neutral-50)', color: 'var(--ds-text-muted)' }}
+                    />
+                  </div>
+                  <div>
+                    <label className={mod.fieldLabel}>배송비 고객 부담 시 마진</label>
+                    <div
+                      style={{
+                        padding: '7px 10px',
+                        border: `1px solid ${marginBadge(singleMargin).border}`,
+                        borderRadius: 8,
+                        fontSize: 13,
+                        fontWeight: 600,
+                        background: marginBadge(singleMargin).bg,
+                        color: marginBadge(singleMargin).color,
+                      }}
+                    >
+                      {marginBadge(singleMargin).label}
+                    </div>
+                  </div>
+                </div>
+                <p style={{ fontSize: 11, color: 'var(--ds-text-muted)', margin: '6px 0 0' }}>
+                  낱개 구매 시 배송비는 고객 부담 → 우리 마진에 영향 없음
+                </p>
+              </div>
+
+              {/* 무료배송 기준 */}
+              <div style={{ borderTop: '1px solid var(--ds-border-subtle)', paddingTop: 14, marginBottom: 16 }}>
+                <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--ds-text-primary)', margin: '0 0 10px' }}>
+                  무료배송 기준
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                  <div>
+                    <label className={mod.fieldLabel}>기준 수량 (개)</label>
                     <input
                       className={mod.input}
                       type="text"
                       inputMode="numeric"
-                      value={formatDigitsForInput(conditionalFreeThreshold)}
-                      onChange={(e) => setConditionalFreeThreshold(e.target.value.replace(/\D/g, ''))}
-                      placeholder="예: 50,000 (5만원 이상 무료배송)"
+                      value={freeShippingQty}
+                      onChange={(e) => setFreeShippingQty(e.target.value.replace(/\D/g, ''))}
+                      placeholder="예: 10"
                     />
-                    {/* TODO: 향후 free_shipping_threshold 컬럼 추가 후 DB 연결 예정 */}
+                    {freeQtyNum > 1 && (
+                      <p className={mod.fieldHint}>
+                        1~{freeQtyNum - 1}개 → 배송비 {formatKRW(shippingFeeNum)} 자동 부과
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <label className={mod.fieldLabel}>최소 주문금액 — 자동</label>
+                    <input
+                      className={mod.input}
+                      value={
+                        priceNum > 0 && freeQtyNum > 0 ? `${formatKRW(priceNum * freeQtyNum)} 이상` : '—'
+                      }
+                      readOnly
+                      style={{ background: 'var(--ds-neutral-50)', color: 'var(--ds-text-muted)' }}
+                    />
+                  </div>
+                  <div>
+                    <label className={mod.fieldLabel}>우리 마진 — 자동</label>
+                    <div
+                      style={{
+                        padding: '7px 10px',
+                        border: `1px solid ${marginBadge(freeShippingMargin).border}`,
+                        borderRadius: 8,
+                        fontSize: 13,
+                        fontWeight: 600,
+                        background: marginBadge(freeShippingMargin).bg,
+                        color: marginBadge(freeShippingMargin).color,
+                      }}
+                    >
+                      {marginBadge(freeShippingMargin).label}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 대량구매 */}
+              <div style={{ borderTop: '1px solid var(--ds-border-subtle)', paddingTop: 14, marginBottom: 16 }}>
+                <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--ds-text-primary)', margin: '0 0 10px' }}>
+                  대량구매 설정
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
+                  <div>
+                    <label className={mod.fieldLabel}>기준 수량 (개)</label>
+                    <input
+                      className={mod.input}
+                      type="text"
+                      inputMode="numeric"
+                      value={bulkQty}
+                      onChange={(e) => setBulkQty(e.target.value.replace(/\D/g, ''))}
+                      placeholder="예: 30"
+                    />
+                  </div>
+                  <div>
+                    <label className={mod.fieldLabel}>추가 할인율 (%)</label>
+                    <input
+                      className={mod.input}
+                      type="text"
+                      inputMode="numeric"
+                      value={bulkDiscountRate}
+                      onChange={(e) => setBulkDiscountRate(e.target.value.replace(/[^\d.]/g, ''))}
+                      placeholder="예: 3"
+                    />
+                  </div>
+                  <div>
+                    <label className={mod.fieldLabel}>할인 적용가 — 자동</label>
+                    <input
+                      className={mod.input}
+                      value={
+                        bulkPrice > 0 && bulkRateNum > 0
+                          ? `${formatKRW(bulkPrice)} (${bulkDiscountDisplay !== null ? bulkDiscountDisplay.toFixed(1) + '%↓' : ''})`
+                          : '—'
+                      }
+                      readOnly
+                      style={{ background: 'var(--ds-neutral-50)', color: 'var(--ds-text-muted)' }}
+                    />
+                  </div>
+                  <div>
+                    <label className={mod.fieldLabel}>우리 마진 — 자동</label>
+                    <div
+                      style={{
+                        padding: '7px 10px',
+                        border: `1px solid ${marginBadge(bulkMargin).border}`,
+                        borderRadius: 8,
+                        fontSize: 13,
+                        fontWeight: 600,
+                        background: marginBadge(bulkMargin).bg,
+                        color: marginBadge(bulkMargin).color,
+                      }}
+                    >
+                      {marginBadge(bulkMargin).label}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 마진 기준 범례 */}
+              <div
+                style={{
+                  background: 'var(--ds-neutral-50)',
+                  borderRadius: 8,
+                  padding: '10px 14px',
+                  display: 'flex',
+                  gap: 20,
+                  flexWrap: 'wrap',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div
+                    style={{ width: 7, height: 7, borderRadius: '50%', background: '#dc2626', flexShrink: 0 }}
+                  />
+                  <span style={{ fontSize: 11, color: 'var(--ds-text-secondary)' }}>위험 (10% 이하)</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div
+                    style={{ width: 7, height: 7, borderRadius: '50%', background: '#d97706', flexShrink: 0 }}
+                  />
+                  <span style={{ fontSize: 11, color: 'var(--ds-text-secondary)' }}>주의 (11~16%)</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div
+                    style={{ width: 7, height: 7, borderRadius: '50%', background: '#15803d', flexShrink: 0 }}
+                  />
+                  <span style={{ fontSize: 11, color: 'var(--ds-text-secondary)' }}>정상 (17% 이상)</span>
+                </div>
+              </div>
+
+              {/* 묶음배송 그룹 */}
+              <div style={{ borderTop: '1px solid var(--ds-border-subtle)', paddingTop: 14, marginTop: 14 }}>
+                <label className={mod.fieldLabel}>묶음배송 그룹 (선택)</label>
+                <p className={mod.fieldHint}>같은 그룹 상품끼리 묶음배송 가능합니다</p>
+                <div className={mod.shippingGroupToolbar}>
+                  <select
+                    className={`${mod.select} ${mod.shippingGroupSelect}`}
+                    value={shippingGroupId}
+                    onChange={(e) => setShippingGroupId(e.target.value)}
+                    disabled={pending || shippingGroupActionBusy}
+                  >
+                    <option value="">선택 안 함</option>
+                    {shippingGroups.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className={mod.btnGhost}
+                    onClick={() => setShowAddShippingGroup((v) => !v)}
+                    disabled={pending || shippingGroupActionBusy}
+                  >
+                    + 그룹 추가
+                  </button>
+                  <button
+                    type="button"
+                    className={mod.btnGhost}
+                    onClick={openManageShippingModal}
+                    disabled={pending || shippingGroupActionBusy}
+                  >
+                    관리
+                  </button>
+                </div>
+                {showAddShippingGroup ? (
+                  <div className={mod.shippingGroupInlineAdd}>
+                    <input
+                      className={mod.input}
+                      value={newShippingGroupName}
+                      onChange={(e) => setNewShippingGroupName(e.target.value)}
+                      placeholder="그룹명"
+                      disabled={shippingGroupActionBusy}
+                    />
+                    <button
+                      type="button"
+                      className={mod.btnGhost}
+                      onClick={() => void submitNewShippingGroup()}
+                      disabled={shippingGroupActionBusy}
+                    >
+                      추가
+                    </button>
+                    <button
+                      type="button"
+                      className={mod.btnGhost}
+                      onClick={() => {
+                        setShowAddShippingGroup(false)
+                        setNewShippingGroupName('')
+                      }}
+                      disabled={shippingGroupActionBusy}
+                    >
+                      취소
+                    </button>
                   </div>
                 ) : null}
               </div>
