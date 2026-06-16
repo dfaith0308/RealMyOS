@@ -15,10 +15,11 @@ import {
 import { updateTenantSubscription, type SubscriptionPlan } from '@/actions/admin/subscription'
 import s from './tenants.module.css'
 
-type RoleTab = 'all' | 'supplier' | 'restaurant'
 type CreateRole = 'supplier' | 'restaurant'
-
 type ModalKind = 'create' | 'edit' | 'delete' | null
+type RoleFilter = 'all' | 'supplier' | 'restaurant'
+type ApprovalFilter = 'all' | 'approved' | 'pending'
+type PlanFilter = 'all' | SubscriptionPlan
 
 const PLAN_LABELS: Record<SubscriptionPlan, string> = {
   free: '무료',
@@ -36,10 +37,10 @@ function normalizePlan(plan: string | null | undefined): SubscriptionPlan {
 
 function planBadgeStyle(plan: SubscriptionPlan): React.CSSProperties {
   const map: Record<SubscriptionPlan, React.CSSProperties> = {
-    free: { background: '#f3f4f6', color: '#6b7280' },
-    earlybird: { background: '#fff7ed', color: '#ea580c' },
-    pro: { background: '#E8F5EF', color: '#1f5d3a' },
-    annual: { background: '#eff6ff', color: '#2563eb' },
+    free: { background: '#F3F4F6', color: '#6b7280' },
+    earlybird: { background: '#FFF7ED', color: '#c2410c' },
+    pro: { background: '#F0FDF4', color: '#15803d' },
+    annual: { background: '#EFF6FF', color: '#1d4ed8' },
   }
   return {
     display: 'inline-flex',
@@ -59,14 +60,21 @@ function fmtDate(iso: string | null) {
   return new Date(iso).toLocaleString('ko-KR')
 }
 
+function fmtDateShort(iso: string | null) {
+  if (!iso) return '-'
+  return new Date(iso).toLocaleDateString('ko-KR')
+}
+
 function roleBadgeClass(role: string | null) {
   if (role === 'restaurant') return `${s.badge} ${s.badgeRestaurant}`
+  if (role === 'admin') return `${s.badge} ${s.badgeSupplier}`
   return `${s.badge} ${s.badgeSupplier}`
 }
 
 function roleLabel(role: string | null) {
   if (role === 'restaurant') return '식당'
   if (role === 'supplier') return '공급자'
+  if (role === 'admin') return '관리자'
   return role ?? '-'
 }
 
@@ -83,10 +91,14 @@ export default function TenantsClient({
   const router = useRouter()
   const [rows, setRows] = useState<TenantAdminRow[]>(initial)
   const [pageError, setPageError] = useState<string | null>(initialError)
-  const [tab, setTab] = useState<RoleTab>('all')
   const [modal, setModal] = useState<ModalKind>(null)
   const [modalError, setModalError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+
+  const [search, setSearch] = useState('')
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>('all')
+  const [approvalFilter, setApprovalFilter] = useState<ApprovalFilter>('all')
+  const [planFilter, setPlanFilter] = useState<PlanFilter>('all')
 
   const [createRole, setCreateRole] = useState<CreateRole>('supplier')
   const [createName, setCreateName] = useState('')
@@ -103,16 +115,31 @@ export default function TenantsClient({
   const [deleteTarget, setDeleteTarget] = useState<TenantAdminRow | null>(null)
   const [planDraft, setPlanDraft] = useState<Record<string, SubscriptionPlan>>({})
 
-  const counts = useMemo(() => {
+  const kpi = useMemo(() => {
     const supplier = rows.filter((r) => r.role === 'supplier').length
     const restaurant = rows.filter((r) => r.role === 'restaurant').length
-    return { all: rows.length, supplier, restaurant }
+    const approved = rows.filter((r) => r.is_approved === true).length
+    const pendingCount = rows.filter((r) => r.is_approved !== true).length
+    return { all: rows.length, supplier, restaurant, approved, pending: pendingCount }
   }, [rows])
 
   const filtered = useMemo(() => {
-    if (tab === 'all') return rows
-    return rows.filter((r) => r.role === tab)
-  }, [rows, tab])
+    const q = search.trim().toLowerCase()
+    return rows.filter((row) => {
+      if (roleFilter !== 'all' && row.role !== roleFilter) return false
+      if (approvalFilter === 'approved' && row.is_approved !== true) return false
+      if (approvalFilter === 'pending' && row.is_approved === true) return false
+      if (planFilter !== 'all' && normalizePlan(row.subscription_plan) !== planFilter) return false
+      if (q) {
+        const hay = [row.name, row.representative_name, row.contact_phone, row.email]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+        if (!hay.includes(q)) return false
+      }
+      return true
+    })
+  }, [rows, search, roleFilter, approvalFilter, planFilter])
 
   function refreshList() {
     setPageError(null)
@@ -324,36 +351,70 @@ export default function TenantsClient({
 
       {pageError && <div className={s.pageErr}>{pageError}</div>}
 
-      <nav className={s.tabs}>
-        <button type="button" className={tab === 'all' ? `${s.tab} ${s.tabOn}` : s.tab} onClick={() => setTab('all')}>
-          전체 ({counts.all})
-        </button>
-        <button
-          type="button"
-          className={tab === 'supplier' ? `${s.tab} ${s.tabOn}` : s.tab}
-          onClick={() => setTab('supplier')}
+      <div className={s.kpiRow}>
+        {[
+          { label: '전체', value: kpi.all },
+          { label: '공급자', value: kpi.supplier },
+          { label: '식당', value: kpi.restaurant },
+          { label: '승인됨', value: kpi.approved },
+          { label: '대기', value: kpi.pending },
+        ].map((item) => (
+          <div key={item.label} className={s.kpiCard}>
+            <div className={s.kpiNum}>{item.value}</div>
+            <div className={s.kpiLabel}>{item.label}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className={s.filterBar}>
+        <input
+          type="search"
+          className={s.searchInput}
+          placeholder="상호명·대표자·연락처 검색"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <select
+          className={s.filterSelect}
+          value={roleFilter}
+          onChange={(e) => setRoleFilter(e.target.value as RoleFilter)}
         >
-          공급자 ({counts.supplier})
-        </button>
-        <button
-          type="button"
-          className={tab === 'restaurant' ? `${s.tab} ${s.tabOn}` : s.tab}
-          onClick={() => setTab('restaurant')}
+          <option value="all">역할: 전체</option>
+          <option value="supplier">공급자</option>
+          <option value="restaurant">식당</option>
+        </select>
+        <select
+          className={s.filterSelect}
+          value={approvalFilter}
+          onChange={(e) => setApprovalFilter(e.target.value as ApprovalFilter)}
         >
-          식당 ({counts.restaurant})
-        </button>
-      </nav>
+          <option value="all">승인상태: 전체</option>
+          <option value="approved">승인됨</option>
+          <option value="pending">대기/정지</option>
+        </select>
+        <select
+          className={s.filterSelect}
+          value={planFilter}
+          onChange={(e) => setPlanFilter(e.target.value as PlanFilter)}
+        >
+          <option value="all">구독플랜: 전체</option>
+          <option value="free">무료</option>
+          <option value="earlybird">얼리버드</option>
+          <option value="pro">정식</option>
+          <option value="annual">연간</option>
+        </select>
+      </div>
 
       <section className={s.tableWrap}>
         <div style={{ overflowX: 'auto' }}>
           <table className={s.table}>
             <thead>
               <tr>
-                <th className={s.th}>상호명</th>
+                <th className={s.th}>상호명 / 이메일</th>
                 <th className={s.th}>역할</th>
-                <th className={s.th}>이메일</th>
-                <th className={s.th}>승인상태</th>
+                <th className={s.th}>대표자 / 연락처</th>
                 <th className={s.th}>구독</th>
+                <th className={s.th}>승인상태</th>
                 <th className={s.th}>가입일</th>
                 <th className={s.th}>액션</th>
               </tr>
@@ -365,15 +426,16 @@ export default function TenantsClient({
                 const selectedPlan = planDraft[row.id] ?? currentPlan
                 return (
                   <tr key={row.id} className={s.tr}>
-                    <td className={s.td}>{row.name ?? '-'}</td>
+                    <td className={s.td}>
+                      <div style={{ fontWeight: 600, lineHeight: 1.4 }}>{row.name ?? '-'}</div>
+                      <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{row.email ?? '-'}</div>
+                    </td>
                     <td className={s.td}>
                       <span className={roleBadgeClass(row.role)}>{roleLabel(row.role)}</span>
                     </td>
-                    <td className={s.td}>{row.email ?? '-'}</td>
                     <td className={s.td}>
-                      <span className={approved ? s.approved : s.pending}>
-                        {approved ? '승인됨' : '대기/정지'}
-                      </span>
+                      <div style={{ lineHeight: 1.4 }}>{row.representative_name ?? '-'}</div>
+                      <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{row.contact_phone ?? '-'}</div>
                     </td>
                     <td className={s.td}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 200 }}>
@@ -383,7 +445,7 @@ export default function TenantsClient({
                             만료: {fmtDate(row.plan_expires_at)}
                           </span>
                         )}
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                        <div className={s.actions}>
                           <select
                             value={selectedPlan}
                             disabled={pending}
@@ -395,7 +457,7 @@ export default function TenantsClient({
                             }
                             style={{
                               flex: 1,
-                              minWidth: 120,
+                              minWidth: 100,
                               height: 28,
                               padding: '0 8px',
                               borderRadius: 6,
@@ -419,22 +481,39 @@ export default function TenantsClient({
                           >
                             적용
                           </button>
+                          <button
+                            type="button"
+                            className={s.btnSm}
+                            disabled={pending}
+                            onClick={() => handleTwoMonthFree(row)}
+                          >
+                            2개월 무료
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          className={s.btnSm}
-                          disabled={pending}
-                          onClick={() => handleTwoMonthFree(row)}
-                          style={{ alignSelf: 'flex-start' }}
-                        >
-                          2개월 무료
-                        </button>
                       </div>
                     </td>
-                    <td className={s.td}>{fmtDate(row.created_at)}</td>
+                    <td className={s.td}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+                        <span
+                          style={{
+                            width: 6,
+                            height: 6,
+                            borderRadius: '50%',
+                            background: approved ? '#15803d' : '#ea580c',
+                            flexShrink: 0,
+                          }}
+                        />
+                        <span style={{ fontSize: 12, fontWeight: 600, color: approved ? '#15803d' : '#c2410c' }}>
+                          {approved ? '승인됨' : '대기/정지'}
+                        </span>
+                      </div>
+                    </td>
+                    <td className={s.td} style={{ whiteSpace: 'nowrap' }}>
+                      {fmtDateShort(row.created_at)}
+                    </td>
                     <td className={s.td}>
                       {isAdminTenant(row) ? (
-                        <span style={{ fontSize: 11, color: '#9ca3af' }}>시스템 계정</span>
+                        <span style={{ fontSize: 11, color: '#9ca3af', whiteSpace: 'nowrap' }}>시스템 계정</span>
                       ) : (
                         <div className={s.actions}>
                           <button

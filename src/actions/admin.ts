@@ -32,6 +32,8 @@ type TenantRow = {
   role: string | null
   is_approved: boolean | null
   created_at: string | null
+  representative_name: string | null
+  contact_phone: string | null
   subscription_plan: string | null
   subscribed_at: string | null
   plan_expires_at: string | null
@@ -236,7 +238,7 @@ export async function getTenantAdminList(): Promise<
 
   const { data: tenants, error: tenantsErr } = await admin
     .from('tenants')
-    .select('id, name, role, is_approved, created_at, subscription_plan, subscribed_at, plan_expires_at')
+    .select('id, name, role, is_approved, created_at, representative_name, contact_phone, subscription_plan, subscribed_at, plan_expires_at')
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
 
