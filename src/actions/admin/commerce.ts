@@ -2620,7 +2620,7 @@ export async function deleteListing(id: string): Promise<ActionResult<null>> {
   const supabase = await createSupabaseServer()
 
   const { error } = await supabase
-    .from('commerce_listings')
+    .from('commerce_product_listings')
     .delete()
     .eq('id', id)
 
