@@ -2,6 +2,11 @@ import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
 import AdminSidebar from '@/components/layout/AdminSidebar'
 
+export const metadata = {
+  title: '식식이 관리자',
+  description: '식식이OS 관리자 콘솔',
+}
+
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createSupabaseServer()
   const ctx = await getAuthCtx(supabase)
