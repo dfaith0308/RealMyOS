@@ -1,7 +1,23 @@
 'use client'
 
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { useRouter } from 'next/navigation'
-import { useCallback, useRef, useState, useTransition } from 'react'
+import { useCallback, useRef, useState, useTransition, type CSSProperties, type RefObject } from 'react'
 import {
   createCategory,
   deleteCategory,
@@ -129,7 +145,44 @@ export default function CategoriesClient({ tree }: { tree: AdminCategoryNode[] }
     })
   }
 
-  const card: React.CSSProperties = {
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
+
+  async function handleDragEnd(event: DragEndEvent, items: AdminCategoryNode[]) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+
+    const oldIndex = items.findIndex((i) => i.id === active.id)
+    const newIndex = items.findIndex((i) => i.id === over.id)
+    if (oldIndex < 0 || newIndex < 0) return
+
+    const direction = newIndex > oldIndex ? 'down' : 'up'
+    const steps = Math.abs(newIndex - oldIndex)
+
+    setError(null)
+    startTransition(async () => {
+      let current = [...items]
+      const movingId = items[oldIndex].id
+      for (let i = 0; i < steps; i++) {
+        const curIdx = current.findIndex((c) => c.id === movingId)
+        const r = await reorderCategory(
+          movingId,
+          direction,
+          current.map((c) => ({ id: c.id, sort_order: c.sort_order ?? 0 })),
+        )
+        if (!r.success) { setError(r.error ?? '순서 변경 실패'); return }
+        const swapIdx = direction === 'down' ? curIdx + 1 : curIdx - 1
+        const tmp = current[curIdx]
+        current[curIdx] = current[swapIdx]
+        current[swapIdx] = tmp
+      }
+      refresh()
+    })
+  }
+
+  const card: CSSProperties = {
     background: 'var(--ds-surface-panel)',
     border: '1px solid var(--ds-border-default)',
     borderRadius: 12,
@@ -137,7 +190,7 @@ export default function CategoriesClient({ tree }: { tree: AdminCategoryNode[] }
     marginBottom: 10,
   }
 
-  const tagStyle: React.CSSProperties = {
+  const tagStyle: CSSProperties = {
     display: 'inline-flex',
     alignItems: 'center',
     gap: 6,
@@ -149,7 +202,7 @@ export default function CategoriesClient({ tree }: { tree: AdminCategoryNode[] }
     color: 'var(--ds-text-primary)',
   }
 
-  const xBtn: React.CSSProperties = {
+  const xBtn: CSSProperties = {
     border: 'none',
     background: 'none',
     color: 'var(--ds-text-muted)',
@@ -161,7 +214,7 @@ export default function CategoriesClient({ tree }: { tree: AdminCategoryNode[] }
     alignItems: 'center',
   }
 
-  const addTagBtn: React.CSSProperties = {
+  const addTagBtn: CSSProperties = {
     display: 'inline-flex',
     alignItems: 'center',
     gap: 4,
@@ -175,7 +228,7 @@ export default function CategoriesClient({ tree }: { tree: AdminCategoryNode[] }
     fontFamily: 'inherit',
   }
 
-  const actionBtn: React.CSSProperties = {
+  const actionBtn: CSSProperties = {
     padding: '5px 10px',
     border: '1px solid var(--ds-border-default)',
     borderRadius: 6,
@@ -186,7 +239,7 @@ export default function CategoriesClient({ tree }: { tree: AdminCategoryNode[] }
     fontFamily: 'inherit',
   }
 
-  const dangerBtn: React.CSSProperties = {
+  const dangerBtn: CSSProperties = {
     padding: '5px 10px',
     border: '1px solid #fecaca',
     borderRadius: 6,
@@ -197,7 +250,7 @@ export default function CategoriesClient({ tree }: { tree: AdminCategoryNode[] }
     fontFamily: 'inherit',
   }
 
-  const inlineInput: React.CSSProperties = {
+  const inlineInput: CSSProperties = {
     padding: '5px 10px',
     border: '1px solid var(--ds-brand-primary)',
     borderRadius: 8,
@@ -209,7 +262,7 @@ export default function CategoriesClient({ tree }: { tree: AdminCategoryNode[] }
     fontFamily: 'inherit',
   }
 
-  const saveBtn: React.CSSProperties = {
+  const saveBtn: CSSProperties = {
     padding: '5px 12px',
     border: 'none',
     borderRadius: 6,
@@ -221,7 +274,7 @@ export default function CategoriesClient({ tree }: { tree: AdminCategoryNode[] }
     fontFamily: 'inherit',
   }
 
-  const cancelBtn: React.CSSProperties = {
+  const cancelBtn: CSSProperties = {
     padding: '5px 10px',
     border: '1px solid var(--ds-border-default)',
     borderRadius: 6,
@@ -287,123 +340,250 @@ export default function CategoriesClient({ tree }: { tree: AdminCategoryNode[] }
           등록된 카테고리가 없습니다. 대분류를 추가해주세요.
         </div>
       ) : (
-        tree.map(parent => (
-          <div key={parent.id} style={{ ...card, opacity: parent.is_active ? 1 : 0.6 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid var(--ds-border-default)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                {editingId === parent.id ? (
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                    <input
-                      style={inlineInput}
-                      value={editName}
-                      onChange={e => setEditName(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && submitEdit(parent.id)}
-                      maxLength={24}
-                      autoFocus
-                    />
-                    <button type="button" style={saveBtn} disabled={pending} onClick={() => submitEdit(parent.id)}>저장</button>
-                    <button type="button" style={cancelBtn} disabled={pending} onClick={() => { setEditingId(null); setError(null) }}>취소</button>
-                  </div>
-                ) : (
-                  <>
-                    <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--ds-text-primary)' }}>{parent.name}</span>
-                    {!parent.is_active && (
-                      <span style={{ padding: '2px 8px', background: '#f3f4f6', color: '#6b7280', borderRadius: 20, fontSize: 11, fontWeight: 500 }}>비활성</span>
-                    )}
-                    {parent.is_active && (
-                      <span style={{ padding: '2px 8px', background: '#f0fdf4', color: '#15803d', borderRadius: 20, fontSize: 11, fontWeight: 500 }}>활성</span>
-                    )}
-                    <span style={{ fontSize: 12, color: 'var(--ds-text-secondary)' }}>소분류 {parent.children.length}개</span>
-                  </>
-                )}
-              </div>
-              {editingId !== parent.id && (
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button type="button" style={actionBtn} disabled={pending || tree.indexOf(parent) === 0} onClick={() => onReorder(parent.id, 'up', tree)}>▲</button>
-                  <button type="button" style={actionBtn} disabled={pending || tree.indexOf(parent) === tree.length - 1} onClick={() => onReorder(parent.id, 'down', tree)}>▼</button>
-                  <button type="button" style={actionBtn} disabled={pending} onClick={() => { setEditingId(parent.id); setEditName(parent.name); setError(null) }}>수정</button>
-                  <button type="button" style={actionBtn} disabled={pending} onClick={() => onToggleActive(parent.id)}>
-                    {parent.is_active ? '비활성화' : '활성화'}
-                  </button>
-                  <button type="button" style={dangerBtn} disabled={pending} onClick={() => onDelete(parent.id, parent.name)}>삭제</button>
-                </div>
-              )}
-            </div>
-
-            <div style={{ padding: '12px 18px', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-              {parent.children.map(ch => (
-                editingId === ch.id ? (
-                  <div key={ch.id} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                    <input
-                      style={inlineInput}
-                      value={editName}
-                      onChange={e => setEditName(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && submitEdit(ch.id)}
-                      maxLength={24}
-                      autoFocus
-                    />
-                    <button type="button" style={saveBtn} disabled={pending} onClick={() => submitEdit(ch.id)}>저장</button>
-                    <button type="button" style={cancelBtn} disabled={pending} onClick={() => { setEditingId(null); setError(null) }}>취소</button>
-                  </div>
-                ) : (
-                  <span
-                    key={ch.id}
-                    style={{ ...tagStyle, opacity: ch.is_active ? 1 : 0.5 }}
-                    onDoubleClick={() => { setEditingId(ch.id); setEditName(ch.name); setError(null) }}
-                    title="더블클릭으로 수정"
-                  >
-                    <button
-                      type="button"
-                      style={{ ...xBtn, fontSize: 10 }}
-                      disabled={pending || parent.children.indexOf(ch) === 0}
-                      onClick={() => onReorder(ch.id, 'up', parent.children)}
-                      title="위로"
-                    >▲</button>
-                    {ch.name}
-                    <button
-                      type="button"
-                      style={{ ...xBtn, fontSize: 10 }}
-                      disabled={pending || parent.children.indexOf(ch) === parent.children.length - 1}
-                      onClick={() => onReorder(ch.id, 'down', parent.children)}
-                      title="아래로"
-                    >▼</button>
-                    <button
-                      type="button"
-                      style={xBtn}
-                      disabled={pending}
-                      onClick={() => onDelete(ch.id, ch.name)}
-                      title="삭제"
-                    >✕</button>
-                  </span>
-                )
-              ))}
-
-              {addChildFor === parent.id ? (
-                <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                  <input
-                    ref={childInputRef}
-                    style={inlineInput}
-                    value={childName}
-                    onChange={e => setChildName(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') submitAddChild(parent.id)
-                      if (e.key === 'Escape') { setAddChildFor(null); setChildName(''); setError(null) }
-                    }}
-                    placeholder="소분류 이름"
-                    maxLength={24}
-                  />
-                  <button type="button" style={saveBtn} disabled={pending} onClick={() => submitAddChild(parent.id)}>저장</button>
-                  <button type="button" style={cancelBtn} disabled={pending} onClick={() => { setAddChildFor(null); setChildName(''); setError(null) }}>취소</button>
-                </div>
-              ) : (
-                <button type="button" style={addTagBtn} disabled={pending} onClick={() => openAddChild(parent.id)}>
-                  + 소분류 추가
-                </button>
-              )}
-            </div>
-          </div>
-        ))
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={(e) => handleDragEnd(e, tree)}
+        >
+          <SortableContext items={tree.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+            {tree.map((parent) => (
+              <SortableParentCard
+                key={parent.id}
+                parent={parent}
+                tree={tree}
+                pending={pending}
+                editingId={editingId}
+                editName={editName}
+                addChildFor={addChildFor}
+                childName={childName}
+                childInputRef={childInputRef}
+                card={card}
+                tagStyle={tagStyle}
+                xBtn={xBtn}
+                addTagBtn={addTagBtn}
+                actionBtn={actionBtn}
+                dangerBtn={dangerBtn}
+                inlineInput={inlineInput}
+                saveBtn={saveBtn}
+                cancelBtn={cancelBtn}
+                sensors={sensors}
+                onEdit={(id, name) => { setEditingId(id); setEditName(name); setError(null) }}
+                onEditName={setEditName}
+                onEditCancel={() => { setEditingId(null); setError(null) }}
+                onSubmitEdit={submitEdit}
+                onToggleActive={onToggleActive}
+                onDelete={onDelete}
+                onReorder={onReorder}
+                onAddChild={openAddChild}
+                onChildNameChange={setChildName}
+                onSubmitChild={submitAddChild}
+                onCancelChild={() => { setAddChildFor(null); setChildName(''); setError(null) }}
+                onChildDragEnd={(e, children) => handleDragEnd(e, children)}
+              />
+            ))}
+          </SortableContext>
+        </DndContext>
       )}
     </div>
+  )
+}
+
+type SortableParentCardProps = {
+  parent: AdminCategoryNode
+  tree: AdminCategoryNode[]
+  pending: boolean
+  editingId: string | null
+  editName: string
+  addChildFor: string | null
+  childName: string
+  childInputRef: RefObject<HTMLInputElement>
+  card: CSSProperties
+  tagStyle: CSSProperties
+  xBtn: CSSProperties
+  addTagBtn: CSSProperties
+  actionBtn: CSSProperties
+  dangerBtn: CSSProperties
+  inlineInput: CSSProperties
+  saveBtn: CSSProperties
+  cancelBtn: CSSProperties
+  sensors: ReturnType<typeof useSensors>
+  onEdit: (id: string, name: string) => void
+  onEditName: (name: string) => void
+  onEditCancel: () => void
+  onSubmitEdit: (id: string) => void
+  onToggleActive: (id: string) => void
+  onDelete: (id: string, label: string) => void
+  onReorder: (id: string, direction: 'up' | 'down', siblings: AdminCategoryNode[]) => void
+  onAddChild: (parentId: string) => void
+  onChildNameChange: (name: string) => void
+  onSubmitChild: (parentId: string) => void
+  onCancelChild: () => void
+  onChildDragEnd: (event: DragEndEvent, children: AdminCategoryNode[]) => void
+}
+
+function SortableParentCard({
+  parent,
+  tree,
+  pending,
+  editingId,
+  editName,
+  addChildFor,
+  childName,
+  childInputRef,
+  card,
+  tagStyle,
+  xBtn,
+  addTagBtn,
+  actionBtn,
+  dangerBtn,
+  inlineInput,
+  saveBtn,
+  cancelBtn,
+  sensors,
+  onEdit,
+  onEditName,
+  onEditCancel,
+  onSubmitEdit,
+  onToggleActive,
+  onDelete,
+  onReorder,
+  onAddChild,
+  onChildNameChange,
+  onSubmitChild,
+  onCancelChild,
+  onChildDragEnd,
+}: SortableParentCardProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: parent.id })
+
+  const style: CSSProperties = {
+    ...card,
+    opacity: isDragging ? 0.5 : parent.is_active ? 1 : 0.6,
+    transform: CSS.Transform.toString(transform),
+    transition,
+    marginBottom: 10,
+  }
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid var(--ds-border-default)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span
+            {...attributes}
+            {...listeners}
+            style={{ cursor: isDragging ? 'grabbing' : 'grab', color: 'var(--ds-text-muted)', fontSize: 16, userSelect: 'none', padding: '0 4px' }}
+            title="드래그로 순서 변경"
+          >
+            ⠿
+          </span>
+          {editingId === parent.id ? (
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input style={inlineInput} value={editName} onChange={(e) => onEditName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && onSubmitEdit(parent.id)} maxLength={24} autoFocus />
+              <button type="button" style={saveBtn} disabled={pending} onClick={() => onSubmitEdit(parent.id)}>저장</button>
+              <button type="button" style={cancelBtn} disabled={pending} onClick={onEditCancel}>취소</button>
+            </div>
+          ) : (
+            <>
+              <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--ds-text-primary)' }}>{parent.name}</span>
+              {!parent.is_active && <span style={{ padding: '2px 8px', background: '#f3f4f6', color: '#6b7280', borderRadius: 20, fontSize: 11, fontWeight: 500 }}>비활성</span>}
+              {parent.is_active && <span style={{ padding: '2px 8px', background: '#f0fdf4', color: '#15803d', borderRadius: 20, fontSize: 11, fontWeight: 500 }}>활성</span>}
+              <span style={{ fontSize: 12, color: 'var(--ds-text-secondary)' }}>소분류 {parent.children.length}개</span>
+            </>
+          )}
+        </div>
+        {editingId !== parent.id && (
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button type="button" style={actionBtn} disabled={pending || tree.indexOf(parent) === 0} onClick={() => onReorder(parent.id, 'up', tree)}>▲</button>
+            <button type="button" style={actionBtn} disabled={pending || tree.indexOf(parent) === tree.length - 1} onClick={() => onReorder(parent.id, 'down', tree)}>▼</button>
+            <button type="button" style={actionBtn} disabled={pending} onClick={() => onEdit(parent.id, parent.name)}>수정</button>
+            <button type="button" style={actionBtn} disabled={pending} onClick={() => onToggleActive(parent.id)}>{parent.is_active ? '비활성화' : '활성화'}</button>
+            <button type="button" style={dangerBtn} disabled={pending} onClick={() => onDelete(parent.id, parent.name)}>삭제</button>
+          </div>
+        )}
+      </div>
+
+      <div style={{ padding: '12px 18px', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => onChildDragEnd(e, parent.children)}>
+          <SortableContext items={parent.children.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+            {parent.children.map((ch) => (
+              editingId === ch.id ? (
+                <div key={ch.id} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                  <input style={inlineInput} value={editName} onChange={(e) => onEditName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && onSubmitEdit(ch.id)} maxLength={24} autoFocus />
+                  <button type="button" style={saveBtn} disabled={pending} onClick={() => onSubmitEdit(ch.id)}>저장</button>
+                  <button type="button" style={cancelBtn} disabled={pending} onClick={onEditCancel}>취소</button>
+                </div>
+              ) : (
+                <SortableChildTag
+                  key={ch.id}
+                  ch={ch}
+                  parent={parent}
+                  pending={pending}
+                  tagStyle={tagStyle}
+                  xBtn={xBtn}
+                  onEdit={onEdit}
+                  onDelete={onDelete}
+                  onReorder={onReorder}
+                />
+              )
+            ))}
+          </SortableContext>
+        </DndContext>
+
+        {addChildFor === parent.id ? (
+          <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+            <input
+              ref={childInputRef}
+              style={inlineInput}
+              value={childName}
+              onChange={(e) => onChildNameChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') onSubmitChild(parent.id)
+                if (e.key === 'Escape') onCancelChild()
+              }}
+              placeholder="소분류 이름"
+              maxLength={24}
+            />
+            <button type="button" style={saveBtn} disabled={pending} onClick={() => onSubmitChild(parent.id)}>저장</button>
+            <button type="button" style={cancelBtn} disabled={pending} onClick={onCancelChild}>취소</button>
+          </div>
+        ) : (
+          <button type="button" style={addTagBtn} disabled={pending} onClick={() => onAddChild(parent.id)}>+ 소분류 추가</button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+type SortableChildTagProps = {
+  ch: AdminCategoryNode
+  parent: AdminCategoryNode
+  pending: boolean
+  tagStyle: CSSProperties
+  xBtn: CSSProperties
+  onEdit: (id: string, name: string) => void
+  onDelete: (id: string, label: string) => void
+  onReorder: (id: string, direction: 'up' | 'down', siblings: AdminCategoryNode[]) => void
+}
+
+function SortableChildTag({ ch, parent, pending, tagStyle, xBtn, onEdit, onDelete, onReorder }: SortableChildTagProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: ch.id })
+  return (
+    <span
+      ref={setNodeRef}
+      style={{
+        ...tagStyle,
+        opacity: isDragging ? 0.4 : ch.is_active ? 1 : 0.5,
+        transform: CSS.Transform.toString(transform),
+        transition,
+        cursor: 'default',
+      }}
+      onDoubleClick={() => onEdit(ch.id, ch.name)}
+      title="더블클릭으로 수정"
+    >
+      <span {...attributes} {...listeners} style={{ cursor: isDragging ? 'grabbing' : 'grab', fontSize: 12, color: 'var(--ds-text-muted)', marginRight: 2 }} title="드래그">⠿</span>
+      <button type="button" style={{ ...xBtn, fontSize: 10 }} disabled={pending || parent.children.indexOf(ch) === 0} onClick={() => onReorder(ch.id, 'up', parent.children)} title="위로">▲</button>
+      {ch.name}
+      <button type="button" style={{ ...xBtn, fontSize: 10 }} disabled={pending || parent.children.indexOf(ch) === parent.children.length - 1} onClick={() => onReorder(ch.id, 'down', parent.children)} title="아래로">▼</button>
+      <button type="button" style={xBtn} disabled={pending} onClick={() => onDelete(ch.id, ch.name)} title="삭제">✕</button>
+    </span>
   )
 }

@@ -2592,25 +2592,24 @@ export async function reorderCategory(
   const a = siblings[idx]
   const b = siblings[swapIdx]
 
-  const { error } = await supabase.rpc('swap_category_sort_order', {
-    id_a: a.id,
-    order_a: b.sort_order,
-    id_b: b.id,
-    order_b: a.sort_order,
-  })
+  // a의 sort_order를 b값으로, b의 sort_order를 a값으로 교체
+  // 같은 값이면 인덱스로 강제 부여
+  const orderA = a.sort_order === b.sort_order ? idx : a.sort_order
+  const orderB = a.sort_order === b.sort_order ? swapIdx : b.sort_order
 
-  if (error) {
-    // RPC 없으면 직접 UPDATE 2번
-    const r1 = await supabase
-      .from('product_categories')
-      .update({ sort_order: b.sort_order })
-      .eq('id', a.id)
-    const r2 = await supabase
-      .from('product_categories')
-      .update({ sort_order: a.sort_order })
-      .eq('id', b.id)
-    if (r1.error || r2.error) return { success: false, error: '순서 변경 실패' }
-  }
+  const r1 = await supabase
+    .from('product_categories')
+    .update({ sort_order: orderB })
+    .eq('id', a.id)
+
+  if (r1.error) return { success: false, error: r1.error.message }
+
+  const r2 = await supabase
+    .from('product_categories')
+    .update({ sort_order: orderA })
+    .eq('id', b.id)
+
+  if (r2.error) return { success: false, error: r2.error.message }
 
   revalidatePath('/admin/commerce/categories')
   return { success: true, data: null }
