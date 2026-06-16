@@ -71,7 +71,9 @@ export default function ListingsClient({
           setError(r.error ?? '처리 실패')
           return
         }
+        // refresh 2번 호출로 RSC 캐시 강제 무효화
         refresh()
+        window.setTimeout(() => refresh(), 300)
       })
     },
     [refresh],
