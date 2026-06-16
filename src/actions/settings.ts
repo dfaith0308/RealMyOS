@@ -5,6 +5,65 @@ import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import { DEFAULT_SETTINGS, type TenantSettings } from '@/constants/settings'
 import type { ActionResult } from '@/types/order'
 
+export type CompanyProfile = {
+  name: string
+  representative_name: string
+  contact_phone: string
+}
+
+export async function getCompanyProfile(): Promise<ActionResult<CompanyProfile>> {
+  const supabase = await createSupabaseServer()
+
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const { data, error } = await supabase
+    .from('tenants')
+    .select('name, representative_name, contact_phone')
+    .eq('id', ctx.tenant_id)
+    .maybeSingle()
+
+  if (error) return { success: false, error: error.message }
+  if (!data) return { success: false, error: '회사 정보를 찾을 수 없습니다' }
+
+  return {
+    success: true,
+    data: {
+      name: data.name ?? '',
+      representative_name: data.representative_name ?? '',
+      contact_phone: data.contact_phone ?? '',
+    },
+  }
+}
+
+export async function updateCompanyProfile(input: {
+  name: string
+  representative_name?: string
+  contact_phone?: string
+}): Promise<ActionResult> {
+  const supabase = await createSupabaseServer()
+
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const name = input.name.trim()
+  if (!name) return { success: false, error: '회사명을 입력해 주세요' }
+
+  const { error } = await supabase
+    .from('tenants')
+    .update({
+      name,
+      representative_name: input.representative_name?.trim() || null,
+      contact_phone: input.contact_phone?.trim() || null,
+    })
+    .eq('id', ctx.tenant_id)
+
+  if (error) return { success: false, error: error.message }
+
+  revalidatePath('/settings')
+  return { success: true }
+}
+
 export async function getSettings(): Promise<ActionResult<TenantSettings>> {
   const supabase = await createSupabaseServer()
 

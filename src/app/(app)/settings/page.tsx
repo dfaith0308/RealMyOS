@@ -1,7 +1,8 @@
 import Link from 'next/link'
-import { getSettings } from '@/actions/settings'
+import { getCompanyProfile, getSettings } from '@/actions/settings'
 import { DEFAULT_SETTINGS } from '@/constants/settings'
 import SettingsForm from '@/components/settings/SettingsForm'
+import CompanyProfileForm from '@/components/settings/CompanyProfileForm'
 import { getAligoSettings } from '@/actions/message'
 import AligoSettingsForm from '@/components/settings/AligoSettingsForm'
 import hubStyles from './settings-hub.module.css'
@@ -9,9 +10,16 @@ import hubStyles from './settings-hub.module.css'
 export const metadata = { title: '설정 — RealMyOS' }
 
 export default async function SettingsPage() {
-  const result = await getSettings()
+  const [result, profileRes, aligo] = await Promise.all([
+    getSettings(),
+    getCompanyProfile(),
+    getAligoSettings(),
+  ])
   const settings = result.success && result.data ? result.data : DEFAULT_SETTINGS
-  const aligo = await getAligoSettings()
+  const profile =
+    profileRes.success && profileRes.data
+      ? profileRes.data
+      : { name: '', representative_name: '', contact_phone: '' }
 
   return (
     <main style={{ minHeight: '100vh', background: '#f8f9fa', paddingTop: 40 }}>
@@ -22,6 +30,9 @@ export default async function SettingsPage() {
             모든 기준값은 여기서 관리합니다. 코드 수정 없이 변경 가능합니다.
           </p>
         </div>
+
+        <CompanyProfileForm initial={profile} />
+        <div style={{ height: 24 }} />
 
         <section className={hubStyles.hubSection} aria-label="설정 하위 메뉴">
           <div className={hubStyles.hubGrid}>
