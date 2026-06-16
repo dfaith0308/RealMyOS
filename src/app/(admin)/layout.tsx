@@ -14,7 +14,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (!ctx || ctx.role !== 'admin') redirect('/login')
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--color-bg)' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--ds-surface-canvas)' }}>
       <AdminSidebar />
       <div style={{ flex: 1, minWidth: 0, overflowX: 'hidden' }}>
         {children}

@@ -220,3 +220,39 @@ tr[data-status="cancelled"] {
     transform: rotate(360deg);
   }
 }
+
+/* ── 관리자OS 다크모드 토큰 ─────────────────────────────── */
+[data-admin-theme="dark"] {
+  --color-bg:             #0f1117;
+  --color-bg-card:        #1a1d27;
+  --color-text:           #e8e8e8;
+  --color-text-secondary: #9ca3af;
+  --color-border:         #2a2d3a;
+  --color-primary-light:  rgba(31,93,58,0.25);
+
+  --ds-brand-background: #0f1117;
+  --ds-neutral-0:        #1a1d27;
+  --ds-neutral-50:       #1f2235;
+  --ds-neutral-100:      #252840;
+  --ds-neutral-200:      #2a2d3a;
+  --ds-neutral-300:      #3a3d4a;
+  --ds-neutral-600:      #9ca3af;
+  --ds-neutral-900:      #e8e8e8;
+
+  --ds-surface-canvas:   #0f1117;
+  --ds-surface-panel:    #1a1d27;
+  --ds-surface-card:     #1a1d27;
+  --ds-surface-raised:   #1f2235;
+
+  --ds-text-primary:     #e8e8e8;
+  --ds-text-secondary:   #9ca3af;
+  --ds-text-muted:       #6b7280;
+  --ds-text-inverse:     #0f1117;
+
+  --ds-border-default:   #2a2d3a;
+  --ds-border-subtle:    #232635;
+  --ds-border-strong:    #3a3d4a;
+
+  --ds-status-warning:   #f59e0b;
+  --ds-status-danger:    #ef4444;
+}
