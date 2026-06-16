@@ -2577,3 +2577,41 @@ export async function updateCommerceOrderStatus(
   revalidatePath('/admin/commerce/orders')
   return { success: true }
 }
+
+export async function reorderCategory(
+  id: string,
+  direction: 'up' | 'down',
+  siblings: { id: string; sort_order: number }[],
+): Promise<ActionResult<null>> {
+  const supabase = await createSupabaseServer()
+  const idx = siblings.findIndex((s) => s.id === id)
+  if (idx < 0) return { success: false, error: '항목을 찾을 수 없습니다' }
+  const swapIdx = direction === 'up' ? idx - 1 : idx + 1
+  if (swapIdx < 0 || swapIdx >= siblings.length) return { success: false, error: '이미 끝입니다' }
+
+  const a = siblings[idx]
+  const b = siblings[swapIdx]
+
+  const { error } = await supabase.rpc('swap_category_sort_order', {
+    id_a: a.id,
+    order_a: b.sort_order,
+    id_b: b.id,
+    order_b: a.sort_order,
+  })
+
+  if (error) {
+    // RPC 없으면 직접 UPDATE 2번
+    const r1 = await supabase
+      .from('product_categories')
+      .update({ sort_order: b.sort_order })
+      .eq('id', a.id)
+    const r2 = await supabase
+      .from('product_categories')
+      .update({ sort_order: a.sort_order })
+      .eq('id', b.id)
+    if (r1.error || r2.error) return { success: false, error: '순서 변경 실패' }
+  }
+
+  revalidatePath('/admin/commerce/categories')
+  return { success: true, data: null }
+}
