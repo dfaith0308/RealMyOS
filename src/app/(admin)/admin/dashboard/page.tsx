@@ -16,8 +16,8 @@ export default async function AdminDashboardPage() {
       <main style={{ padding: 24 }}>
         <h1 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>관리자 대시보드</h1>
         <div style={{
-          background: '#FEF2F2', color: '#DC2626',
-          border: '1px solid #FECACA', borderRadius: 10,
+          background: 'var(--ds-status-danger-bg, #FEF2F2)', color: 'var(--ds-status-danger)',
+          border: '1px solid var(--ds-status-danger-border, #FECACA)', borderRadius: 10,
           padding: '10px 12px', fontSize: 13,
         }}>
           {d.error}
@@ -34,7 +34,7 @@ export default async function AdminDashboardPage() {
     <main style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
       <header>
         <h1 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>중앙 대시보드</h1>
-        <p style={{ fontSize: 13, color: '#6b7280', margin: 0 }}>
+        <p style={{ fontSize: 13, color: 'var(--ds-text-secondary)', margin: 0 }}>
           상태(What) + 행동(Action) + 우선순위(Priority) + 실행 큐(Queue)
         </p>
       </header>
@@ -143,7 +143,7 @@ function QueuePanel({ title, items }: { title: string; items: any[] }) {
         <Link href="/admin/trades" style={linkBtnStyle}>관제</Link>
       </div>
       {items.length === 0 ? (
-        <div style={{ padding: 14, color: '#9ca3af', fontSize: 13 }}>
+        <div style={{ padding: 14, color: 'var(--ds-text-muted)', fontSize: 13 }}>
           항목이 없습니다.
         </div>
       ) : (
@@ -151,16 +151,16 @@ function QueuePanel({ title, items }: { title: string; items: any[] }) {
           {items.map((it) => (
             <div key={it.id} style={{
               padding: '12px 14px',
-              borderTop: '1px solid #f3f4f6',
+              borderTop: '1px solid var(--ds-border-subtle)',
               display: 'flex',
               alignItems: 'center',
               gap: 12,
             }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--ds-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {it.title}
                 </div>
-                <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div style={{ fontSize: 12, color: 'var(--ds-text-secondary)', marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {it.description ?? ''}
                 </div>
               </div>
@@ -179,23 +179,23 @@ function QueuePanel({ title, items }: { title: string; items: any[] }) {
 }
 
 const cardStyle: React.CSSProperties = {
-  background: '#fff',
-  border: '1px solid #e5e7eb',
+  background: 'var(--ds-surface-card)',
+  border: '1px solid var(--ds-border-default)',
   borderRadius: 12,
   padding: 16,
 }
-const cardTitle: React.CSSProperties = { fontSize: 12, color: '#6b7280', marginBottom: 8 }
-const cardValue: React.CSSProperties = { fontSize: 28, fontWeight: 800, color: '#111827' }
+const cardTitle: React.CSSProperties = { fontSize: 12, color: 'var(--ds-text-secondary)', marginBottom: 8 }
+const cardValue: React.CSSProperties = { fontSize: 28, fontWeight: 800, color: 'var(--ds-text-primary)' }
 
 const panelStyle: React.CSSProperties = {
-  background: '#fff',
-  border: '1px solid #e5e7eb',
+  background: 'var(--ds-surface-card)',
+  border: '1px solid var(--ds-border-default)',
   borderRadius: 12,
   overflow: 'hidden',
 }
 const panelHeaderStyle: React.CSSProperties = {
   padding: '12px 14px',
-  borderBottom: '1px solid #f3f4f6',
+  borderBottom: '1px solid var(--ds-border-subtle)',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'space-between',
@@ -207,16 +207,16 @@ const tableStyle: React.CSSProperties = { width: '100%', borderCollapse: 'collap
 const thStyle: React.CSSProperties = {
   textAlign: 'left',
   fontSize: 12,
-  color: '#6b7280',
+  color: 'var(--ds-text-secondary)',
   padding: '10px 12px',
-  borderBottom: '1px solid #f3f4f6',
+  borderBottom: '1px solid var(--ds-border-subtle)',
   whiteSpace: 'nowrap',
 }
 const tdStyle: React.CSSProperties = {
   fontSize: 13,
-  color: '#111827',
+  color: 'var(--ds-text-primary)',
   padding: '10px 12px',
-  borderBottom: '1px solid #f9fafb',
+  borderBottom: '1px solid var(--ds-border-subtle)',
   whiteSpace: 'nowrap',
 }
 
@@ -224,7 +224,7 @@ const primaryBtnStyle: React.CSSProperties = {
   padding: '7px 12px',
   border: 'none',
   borderRadius: 8,
-  background: '#111827',
+  background: 'var(--ds-brand-primary)',
   color: '#fff',
   fontSize: 12,
   fontWeight: 800,
@@ -232,10 +232,10 @@ const primaryBtnStyle: React.CSSProperties = {
 }
 const ghostBtnStyle: React.CSSProperties = {
   padding: '7px 12px',
-  border: '1px solid #e5e7eb',
+  border: '1px solid var(--ds-border-default)',
   borderRadius: 8,
-  background: '#fff',
-  color: '#111827',
+  background: 'var(--ds-surface-card)',
+  color: 'var(--ds-text-primary)',
   fontSize: 12,
   fontWeight: 800,
   textDecoration: 'none',
@@ -243,11 +243,11 @@ const ghostBtnStyle: React.CSSProperties = {
 const linkBtnStyle: React.CSSProperties = {
   fontSize: 12,
   fontWeight: 800,
-  color: '#111827',
+  color: 'var(--ds-text-primary)',
   textDecoration: 'none',
-  border: '1px solid #e5e7eb',
+  border: '1px solid var(--ds-border-default)',
   padding: '6px 10px',
   borderRadius: 8,
-  background: '#fff',
+  background: 'var(--ds-surface-card)',
 }
 
