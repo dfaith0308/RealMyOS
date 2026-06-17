@@ -1962,7 +1962,10 @@ export default function ListingNewClient() {
                 productName={productName}
                 brandName={brandName}
                 spec={spec}
-                salePrice={Number(commercePrice.replace(/\D/g, ''))}
+                salePrice={(() => {
+                  const fromDigits = Number(commercePrice.replace(/\D/g, ''))
+                  return fromDigits || parseInt(commercePrice, 10) || 0
+                })()}
                 origin={origin}
                 storageMethod={storageMethod}
                 minOrderQty={Number(minOrderQty) || 1}

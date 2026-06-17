@@ -91,9 +91,9 @@ export default function ProductDetailImageGenerator(props: Props) {
           width: 800,
           background: '#ffffff',
           fontFamily: 'Apple SD Gothic Neo, Noto Sans KR, sans-serif',
-          position: preview ? 'absolute' : 'relative',
-          left: preview ? '-9999px' : undefined,
-          top: preview ? '-9999px' : undefined,
+          position: 'absolute',
+          left: '-9999px',
+          top: '-9999px',
         }}
       >
         <div
