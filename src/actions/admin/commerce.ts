@@ -741,6 +741,12 @@ export type ListingForEditData = {
   free_shipping_qty: number | null
   bulk_qty: number | null
   bulk_discount_rate: number | null
+  origin?: string | null
+  storage_method?: string | null
+  min_order_qty?: number | null
+  package_unit?: string | null
+  usage_desc?: string | null
+  allergen?: string | null
 }
 
 export type UpdateListingFullInput = {
@@ -759,6 +765,12 @@ export type UpdateListingFullInput = {
   free_shipping_qty: number | null
   bulk_qty: number | null
   bulk_discount_rate: number | null
+  origin?: string | null
+  storage_method?: string | null
+  min_order_qty?: number | null
+  package_unit?: string | null
+  usage_desc?: string | null
+  allergen?: string | null
 }
 
 function listingStorefrontPublished(status: ListingStatus, is_visible: boolean): boolean {
@@ -839,6 +851,12 @@ export async function getListingForEdit(listingId: string): Promise<ActionResult
       free_shipping_qty,
       bulk_qty,
       bulk_discount_rate,
+      origin,
+      storage_method,
+      min_order_qty,
+      package_unit,
+      usage_desc,
+      allergen,
       products ( id, name )
     `,
     )
@@ -904,6 +922,15 @@ export async function getListingForEdit(listingId: string): Promise<ActionResult
         typeof row.bulk_discount_rate === 'number' && Number.isFinite(row.bulk_discount_rate)
           ? row.bulk_discount_rate
           : null,
+      origin: (row.origin as string | null) ?? null,
+      storage_method: (row.storage_method as string | null) ?? null,
+      min_order_qty:
+        typeof row.min_order_qty === 'number' && Number.isFinite(row.min_order_qty)
+          ? Math.round(row.min_order_qty)
+          : null,
+      package_unit: (row.package_unit as string | null) ?? null,
+      usage_desc: (row.usage_desc as string | null) ?? null,
+      allergen: (row.allergen as string | null) ?? null,
     },
   }
 }
@@ -1002,6 +1029,17 @@ export async function updateListingFull(
     return v
   })()
 
+  const origin = String(input.origin ?? '').trim() || null
+  const storage_method = String(input.storage_method ?? '').trim() || null
+  const min_order_qty = (() => {
+    const v = input.min_order_qty
+    if (v == null || !Number.isFinite(v) || !Number.isInteger(v) || v <= 0) return 1
+    return v
+  })()
+  const package_unit = String(input.package_unit ?? '').trim() || null
+  const usage_desc = String(input.usage_desc ?? '').trim() || null
+  const allergen = String(input.allergen ?? '').trim() || null
+
   const { data: listingRow, error: lFetchErr } = await supabase
     .from('commerce_product_listings')
     .select(
@@ -1022,6 +1060,12 @@ export async function updateListingFull(
       free_shipping_qty,
       bulk_qty,
       bulk_discount_rate,
+      origin,
+      storage_method,
+      min_order_qty,
+      package_unit,
+      usage_desc,
+      allergen,
       products ( id, name )
     `,
     )
@@ -1098,6 +1142,15 @@ export async function updateListingFull(
       typeof L.bulk_discount_rate === 'number' && Number.isFinite(L.bulk_discount_rate)
         ? L.bulk_discount_rate
         : null,
+    origin: (L.origin as string | null) ?? null,
+    storage_method: (L.storage_method as string | null) ?? null,
+    min_order_qty:
+      typeof L.min_order_qty === 'number' && Number.isFinite(L.min_order_qty)
+        ? Math.round(L.min_order_qty)
+        : null,
+    package_unit: (L.package_unit as string | null) ?? null,
+    usage_desc: (L.usage_desc as string | null) ?? null,
+    allergen: (L.allergen as string | null) ?? null,
   }
 
   const afterSnapshot = {
@@ -1115,6 +1168,12 @@ export async function updateListingFull(
     free_shipping_qty,
     bulk_qty,
     bulk_discount_rate,
+    origin,
+    storage_method,
+    min_order_qty,
+    package_unit,
+    usage_desc,
+    allergen,
   }
 
   const normBadges = (v: string[] | null | undefined) => {
@@ -1161,6 +1220,12 @@ export async function updateListingFull(
       free_shipping_qty,
       bulk_qty,
       bulk_discount_rate,
+      origin,
+      storage_method,
+      min_order_qty,
+      package_unit,
+      usage_desc,
+      allergen,
       status: vis.nextStatus,
       is_visible: vis.nextIsVisible,
       updated_at: new Date().toISOString(),
@@ -1583,6 +1648,12 @@ export async function createListingFull(input: {
   free_shipping_qty?: number | null
   bulk_qty?: number | null
   bulk_discount_rate?: number | null
+  origin?: string | null
+  storage_method?: string | null
+  min_order_qty?: number | null
+  package_unit?: string | null
+  usage_desc?: string | null
+  allergen?: string | null
 }): Promise<ActionResult<{ listing_id: string; product_id: string }>> {
   const supabase = await createSupabaseServer()
   const auth = await requireAdmin(supabase)
@@ -1743,6 +1814,12 @@ export async function createListingFull(input: {
       free_shipping_qty: input.free_shipping_qty ?? null,
       bulk_qty: input.bulk_qty ?? null,
       bulk_discount_rate: input.bulk_discount_rate ?? null,
+      origin: String(input.origin ?? '').trim() || null,
+      storage_method: String(input.storage_method ?? '').trim() || null,
+      min_order_qty: input.min_order_qty ?? 1,
+      package_unit: String(input.package_unit ?? '').trim() || null,
+      usage_desc: String(input.usage_desc ?? '').trim() || null,
+      allergen: String(input.allergen ?? '').trim() || null,
     })
     .select('id')
     .single()

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { type MouseEventHandler, useCallback, useEffect, useMemo, useState, useTransition } from 'react'
 import {
   updateListingFull,
+  uploadListingImage,
   type ListingForEditData,
   type PlatformCommerceCategory,
   type ShippingGroupListItem,
@@ -12,6 +13,7 @@ import {
 import { LISTING_SHIPPING_TYPES, type ListingShippingType } from '@/lib/commerce-constants'
 import { formatDigitsForInput, formatKRW } from '@/lib/calc'
 import mod from './listing-new-client.module.css'
+import ProductDetailImageGenerator from './ProductDetailImageGenerator'
 import s from '@/app/(admin)/admin-shared.module.css'
 
 const MAX_THUMB_BADGES = 2
@@ -145,7 +147,41 @@ export default function ListingEditClient({
   const [toast, setToast] = useState<{ text: string; variant: 'success' | 'error' } | null>(null)
   const [fieldError, setFieldError] = useState<string | null>(null)
 
-  const isDirty = useMemo(() => serializeForm(form) !== baseline, [form, baseline])
+  const [origin, setOrigin] = useState(initial.origin ?? '')
+  const [storageMethod, setStorageMethod] = useState(initial.storage_method ?? '')
+  const [minOrderQty, setMinOrderQty] = useState(String(initial.min_order_qty ?? 1))
+  const [packageUnit, setPackageUnit] = useState(initial.package_unit ?? '')
+  const [usageDesc, setUsageDesc] = useState(initial.usage_desc ?? '')
+  const [allergen, setAllergen] = useState(initial.allergen ?? '')
+  const [generatedDetailUrls, setGeneratedDetailUrls] = useState<string[]>([])
+
+  const detailSnapshot = useMemo(
+    () =>
+      JSON.stringify({
+        origin: origin.trim(),
+        storage_method: storageMethod.trim(),
+        min_order_qty: minOrderQty.trim(),
+        package_unit: packageUnit.trim(),
+        usage_desc: usageDesc.trim(),
+        allergen: allergen.trim(),
+      }),
+    [origin, storageMethod, minOrderQty, packageUnit, usageDesc, allergen],
+  )
+  const [detailBaseline, setDetailBaseline] = useState(() =>
+    JSON.stringify({
+      origin: String(initial.origin ?? '').trim(),
+      storage_method: String(initial.storage_method ?? '').trim(),
+      min_order_qty: String(initial.min_order_qty ?? 1).trim(),
+      package_unit: String(initial.package_unit ?? '').trim(),
+      usage_desc: String(initial.usage_desc ?? '').trim(),
+      allergen: String(initial.allergen ?? '').trim(),
+    }),
+  )
+
+  const isDirty = useMemo(
+    () => serializeForm(form) !== baseline || detailSnapshot !== detailBaseline,
+    [form, baseline, detailSnapshot, detailBaseline],
+  )
 
   useEffect(() => {
     if (!isDirty) return
@@ -268,6 +304,12 @@ export default function ListingEditClient({
         free_shipping_qty: freeQtyNum > 0 ? freeQtyNum : null,
         bulk_qty: bulkQtyNum > 0 ? bulkQtyNum : null,
         bulk_discount_rate: bulkRateNum > 0 ? bulkRateNum : null,
+        origin: origin.trim() || null,
+        storage_method: storageMethod.trim() || null,
+        min_order_qty: minOrderQty ? Number(minOrderQty) : 1,
+        package_unit: packageUnit.trim() || null,
+        usage_desc: usageDesc.trim() || null,
+        allergen: allergen.trim() || null,
       })
       if (!r.success) {
         const msg = r.error ?? '저장에 실패했습니다'
@@ -277,6 +319,7 @@ export default function ListingEditClient({
       }
       setToast({ text: '저장되었습니다', variant: 'success' })
       setBaseline(serializeForm(form))
+      setDetailBaseline(detailSnapshot)
       router.push('/admin/commerce/products')
     })
   }
@@ -355,6 +398,39 @@ export default function ListingEditClient({
               <label style={{ fontSize: 11, color: 'var(--ds-text-secondary)', display: 'block', marginBottom: 4 }}>시중 정상가 (원)</label>
               <input className={s.input} inputMode="numeric" placeholder="비워 두면 미사용" value={form.original_price} onChange={(e) => setForm((p) => ({ ...p, original_price: e.target.value }))} style={{ width: '100%', boxSizing: 'border-box' as const }} />
             </div>
+          </div>
+        </div>
+
+        <div style={{ background: 'var(--ds-surface-panel)', border: '1px solid var(--ds-border-default)', borderRadius: 12, padding: '18px 20px' }}>
+          <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--ds-text-secondary)', margin: '0 0 14px', letterSpacing: '.06em', textTransform: 'uppercase' as const }}>상품 상세 정보</p>
+          <div className={mod.grid3}>
+            <div>
+              <label className={mod.fieldLabel}>원산지</label>
+              <input className={mod.input} value={origin} onChange={(e) => setOrigin(e.target.value)} placeholder="예: 국산 대두 95%" />
+            </div>
+            <div>
+              <label className={mod.fieldLabel}>보관방법</label>
+              <input className={mod.input} value={storageMethod} onChange={(e) => setStorageMethod(e.target.value)} placeholder="예: 냉장 보관" />
+            </div>
+            <div>
+              <label className={mod.fieldLabel}>최소주문수량</label>
+              <input className={mod.input} inputMode="numeric" value={minOrderQty} onChange={(e) => setMinOrderQty(e.target.value.replace(/\D/g, ''))} placeholder="예: 1" />
+            </div>
+          </div>
+          <div className={mod.grid2} style={{ marginTop: 10 }}>
+            <div>
+              <label className={mod.fieldLabel}>포장단위</label>
+              <input className={mod.input} value={packageUnit} onChange={(e) => setPackageUnit(e.target.value)} placeholder="예: 낱개, 박스(10개입)" />
+            </div>
+            <div>
+              <label className={mod.fieldLabel}>알레르기</label>
+              <input className={mod.input} value={allergen} onChange={(e) => setAllergen(e.target.value)} placeholder="예: 대두 함유" />
+            </div>
+          </div>
+          <div style={{ marginTop: 10 }}>
+            <label className={mod.fieldLabel}>용도 (메뉴 기준)</label>
+            <input className={mod.input} value={usageDesc} onChange={(e) => setUsageDesc(e.target.value)} placeholder="예: 한식당 된장찌개, 청국장 전용" style={{ width: '100%', boxSizing: 'border-box' }} />
+            <p className={mod.fieldHint}>메뉴를 등록한 고객에게는 AI가 맞춤 용도로 표시합니다</p>
           </div>
         </div>
 
@@ -503,11 +579,35 @@ export default function ListingEditClient({
                 <span style={{ fontSize: 12, color: 'var(--ds-text-muted)' }}>없음</span>
               ) : (
                 <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 8 }}>
-                  {imgs.map((u) => (<img key={u} src={u} alt="" width={80} height={80} style={{ objectFit: 'contain', borderRadius: 8, border: '1px solid var(--ds-border-default)' }} />))}
+                  {[...generatedDetailUrls, ...imgs].map((u) => (<img key={u} src={u} alt="" width={80} height={80} style={{ objectFit: 'contain', borderRadius: 8, border: '1px solid var(--ds-border-default)' }} />))}
                 </div>
               )}
             </div>
           </div>
+          <ProductDetailImageGenerator
+            productName={form.product_name}
+            brandName=""
+            spec=""
+            salePrice={priceNum}
+            origin={origin}
+            storageMethod={storageMethod}
+            minOrderQty={Number(minOrderQty) || 1}
+            packageUnit={packageUnit}
+            usageDesc={usageDesc}
+            allergen={allergen}
+            thumbnailUrl={initial.thumbnail_url?.trim() || undefined}
+            onGenerated={async (file) => {
+              const fd = new FormData()
+              fd.set('file', file)
+              const res = await uploadListingImage(fd)
+              if (!res.success || !res.data?.url) {
+                setToast({ text: res.error ?? '상세이미지 업로드 실패', variant: 'error' })
+                return
+              }
+              setGeneratedDetailUrls((prev) => [res.data!.url, ...prev])
+              setToast({ text: '상세이미지가 생성·업로드되었습니다', variant: 'success' })
+            }}
+          />
         </div>
 
         {/* 에러 */}
