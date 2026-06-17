@@ -2103,60 +2103,6 @@ export default function ListingNewClient() {
                   </div>
                 ))}
               </div>
-
-              <div className={mod.descBlockCard}>
-                <div className={mod.label}>상세 설명 (하단 텍스트 블록)</div>
-                <p className={mod.hint}>
-                  상세 이미지 아래에 노출되는 안내 문구입니다. 원산지, 보관, 배송, 유통기한 등을 적어 주세요.
-                </p>
-                <textarea
-                  className={`${mod.textarea} ${mod.textareaNoResize}`}
-                  value={listingDescription}
-                  onChange={(e) => setListingDescription(e.target.value)}
-                  placeholder={
-                    '예시)\n원산지: 국내산\n보관법: 냉장 보관 (0~10℃)\n유통기한: 제조일로부터 12개월\n배송: 평일 영업일 기준 순차 출고\n조리 팁: 해동 후 바로 조리하면 육즙이 살아 있습니다'
-                  }
-                  rows={7}
-                />
-              </div>
-
-              <div>
-                <div className={mod.label}>내부 메모 (선택)</div>
-                <textarea
-                  className={`${mod.textarea} ${mod.textareaNoResize}`}
-                  value={adminMemo}
-                  onChange={(e) => setAdminMemo(e.target.value)}
-                  placeholder="구매자에게 보이지 않습니다"
-                  rows={2}
-                />
-              </div>
-            </div>
-
-            <div className={mod.card}>
-              {/* TODO: private / hidden / sold_out 상태 구조는
-                  다음 단계에서 별도 작업 예정 */}
-              <h2 className={mod.sectionTitle}>공개 설정</h2>
-              <div className={mod.fieldStack}>
-                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, color: '#2b2b2b' }}>
-                  <input type="radio" name="vis" checked={visibility === 'draft'} onChange={() => setVisibility('draft')} />
-                  <span>
-                    <strong>비공개</strong>
-                    <span className={mod.hint} style={{ display: 'block', marginTop: 4 }}>
-                      등록 후 직접 공개 처리합니다
-                    </span>
-                  </span>
-                </label>
-                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, color: '#2b2b2b' }}>
-                  <input type="radio" name="vis" checked={visibility === 'visible'} onChange={() => setVisibility('visible')} />
-                  <span>
-                    <strong>공개</strong>
-                    <span className={mod.hint} style={{ display: 'block', marginTop: 4 }}>
-                      등록 즉시 구매 화면에 표시됩니다
-                    </span>
-                  </span>
-                </label>
-                <p className={mod.hint}>하단 버튼이 실제 저장 방식을 결정합니다.</p>
-              </div>
             </div>
           </div>
 
@@ -2335,6 +2281,33 @@ export default function ListingNewClient() {
                   </p>
                 </>
               )}
+
+              <div className={mod.card} style={{ marginTop: 12 }}>
+                {/* TODO: private / hidden / sold_out 상태 구조는
+                    다음 단계에서 별도 작업 예정 */}
+                <h2 className={mod.sectionTitle}>공개 설정</h2>
+                <div className={mod.fieldStack}>
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, color: '#2b2b2b' }}>
+                    <input type="radio" name="vis" checked={visibility === 'draft'} onChange={() => setVisibility('draft')} />
+                    <span>
+                      <strong>비공개</strong>
+                      <span className={mod.hint} style={{ display: 'block', marginTop: 4 }}>
+                        등록 후 직접 공개 처리합니다
+                      </span>
+                    </span>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, color: '#2b2b2b' }}>
+                    <input type="radio" name="vis" checked={visibility === 'visible'} onChange={() => setVisibility('visible')} />
+                    <span>
+                      <strong>공개</strong>
+                      <span className={mod.hint} style={{ display: 'block', marginTop: 4 }}>
+                        등록 즉시 구매 화면에 표시됩니다
+                      </span>
+                    </span>
+                  </label>
+                  <p className={mod.hint}>하단 버튼이 실제 저장 방식을 결정합니다.</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
