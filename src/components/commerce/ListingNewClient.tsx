@@ -19,6 +19,7 @@ import {
 } from '@/actions/admin/commerce'
 import { calcMarginRate, formatDigitsForInput, formatKRW } from '@/lib/calc'
 import mod from './listing-new-client.module.css'
+import ProductDetailImageGenerator from './ProductDetailImageGenerator'
 
 const MAX_DETAIL_IMAGES = 20
 const MAX_IMAGE_FILE_BYTES = 8 * 1024 * 1024
@@ -254,6 +255,13 @@ export default function ListingNewClient() {
   const [bulkDiscountRate, setBulkDiscountRate] = useState('')
   const [baseShippingFee, setBaseShippingFee] = useState('3500')
   const [shippingGroupId, setShippingGroupId] = useState(empty.shippingGroupId)
+
+  const [origin, setOrigin] = useState('')
+  const [storageMethod, setStorageMethod] = useState('')
+  const [minOrderQty, setMinOrderQty] = useState('1')
+  const [packageUnit, setPackageUnit] = useState('')
+  const [usageDesc, setUsageDesc] = useState('')
+  const [allergen, setAllergen] = useState('')
 
   const [shippingGroups, setShippingGroups] = useState<ShippingGroupListItem[]>([])
   const [showAddShippingGroup, setShowAddShippingGroup] = useState(false)
@@ -701,6 +709,52 @@ export default function ListingNewClient() {
     }
   }
 
+  function prependIncomingDetailFiles(fileArr: File[]) {
+    try {
+      const pairs: { file: File; block: DetailImageBlock }[] = []
+      for (const file of fileArr) {
+        const err = validateImageFile(file)
+        if (err) {
+          showToast(`${file.name} | ${err}`, 'error')
+          continue
+        }
+        const block = newBlock({
+          url: '',
+          blockKind: 'file',
+          uploadStatus: 'uploading',
+          fileName: file.name,
+        })
+        pairs.push({ file, block })
+      }
+      if (pairs.length === 0) return
+
+      let uploadJobs: { file: File; id: string }[] = []
+      const prependReducer = (prev: DetailImageBlock[]) => {
+        const room = Math.max(0, MAX_DETAIL_IMAGES - prev.length)
+        const slice = pairs.slice(0, room)
+        uploadJobs = slice.map((p) => ({ file: p.file, id: p.block.id }))
+        return slice.length === 0 ? prev : [...slice.map((p) => p.block), ...prev]
+      }
+
+      flushSync(() => {
+        setDetailBlocks(prependReducer)
+      })
+
+      if (uploadJobs.length < pairs.length) {
+        showToast(`상세 이미지는 최대 ${MAX_DETAIL_IMAGES}장까지입니다`, 'error')
+      }
+
+      for (const j of uploadJobs) {
+        void uploadDetailBlockFile(j.id, j.file).catch((upErr) => {
+          console.error('[ListingNew] prepend uploadDetailBlockFile rejection', upErr)
+        })
+      }
+    } catch (outer) {
+      console.error('[ListingNew] prependIncomingDetailFiles error', outer)
+      showToast('상세 이미지 추가 중 오류가 발생했습니다.', 'error')
+    }
+  }
+
   function addDetailFilesFromPicker(e: React.ChangeEvent<HTMLInputElement>) {
     /** FileList는 input과 라이브 연결됨 — value 초기화 후에는 같은 참조가 비어 보임. 반드시 먼저 배열 스냅샷. */
     const filesArr = Array.from(e.currentTarget.files ?? [])
@@ -881,6 +935,12 @@ export default function ListingNewClient() {
           free_shipping_qty: freeQtyNum || null,
           bulk_qty: bulkQtyNum || null,
           bulk_discount_rate: bulkRateNum || null,
+          origin: origin.trim() || null,
+          storage_method: storageMethod.trim() || null,
+          min_order_qty: minOrderQty ? Number(minOrderQty) : 1,
+          package_unit: packageUnit.trim() || null,
+          usage_desc: usageDesc.trim() || null,
+          allergen: allergen.trim() || null,
         })
         if (!r.success) {
           const msg = r.error ?? '저장 실패'
@@ -1335,6 +1395,39 @@ export default function ListingNewClient() {
               {savingsAmount != null && savingsAmount > 0 ? (
                 <p style={{ margin: '10px 0 0', fontSize: 13, color: '#1f5d3a' }}>절감액: {formatKRW(savingsAmount)}</p>
               ) : null}
+            </div>
+
+            <div className={mod.card}>
+              <p className={mod.sectionLabel}>상품 상세 정보</p>
+              <div className={mod.grid3}>
+                <div>
+                  <label className={mod.fieldLabel}>원산지</label>
+                  <input className={mod.input} value={origin} onChange={(e) => setOrigin(e.target.value)} placeholder="예: 국산 대두 95%" />
+                </div>
+                <div>
+                  <label className={mod.fieldLabel}>보관방법</label>
+                  <input className={mod.input} value={storageMethod} onChange={(e) => setStorageMethod(e.target.value)} placeholder="예: 냉장 보관" />
+                </div>
+                <div>
+                  <label className={mod.fieldLabel}>최소주문수량</label>
+                  <input className={mod.input} inputMode="numeric" value={minOrderQty} onChange={(e) => setMinOrderQty(e.target.value.replace(/\D/g, ''))} placeholder="예: 1" />
+                </div>
+              </div>
+              <div className={mod.grid2} style={{ marginTop: 10 }}>
+                <div>
+                  <label className={mod.fieldLabel}>포장단위</label>
+                  <input className={mod.input} value={packageUnit} onChange={(e) => setPackageUnit(e.target.value)} placeholder="예: 낱개, 박스(10개입)" />
+                </div>
+                <div>
+                  <label className={mod.fieldLabel}>알레르기</label>
+                  <input className={mod.input} value={allergen} onChange={(e) => setAllergen(e.target.value)} placeholder="예: 대두 함유" />
+                </div>
+              </div>
+              <div style={{ marginTop: 10 }}>
+                <label className={mod.fieldLabel}>용도 (메뉴 기준)</label>
+                <input className={mod.input} value={usageDesc} onChange={(e) => setUsageDesc(e.target.value)} placeholder="예: 한식당 된장찌개, 청국장 전용" style={{ width: '100%', boxSizing: 'border-box' }} />
+                <p className={mod.fieldHint}>메뉴를 등록한 고객에게는 AI가 맞춤 용도로 표시합니다</p>
+              </div>
             </div>
 
             <div className={mod.card}>
@@ -1864,6 +1957,24 @@ export default function ListingNewClient() {
                   전체 삭제
                 </button>
               </div>
+
+              <ProductDetailImageGenerator
+                productName={productName}
+                brandName={brandName}
+                spec={spec}
+                salePrice={Number(commercePrice.replace(/\D/g, ''))}
+                origin={origin}
+                storageMethod={storageMethod}
+                minOrderQty={Number(minOrderQty) || 1}
+                packageUnit={packageUnit}
+                usageDesc={usageDesc}
+                allergen={allergen}
+                thumbnailUrl={thumb || undefined}
+                onGenerated={(file) => {
+                  prependIncomingDetailFiles([file])
+                }}
+              />
+
               <div className={mod.detailBlockList}>
                 {detailBlocks.length === 0 ? (
                   <p className={mod.hint} style={{ margin: 0 }}>
