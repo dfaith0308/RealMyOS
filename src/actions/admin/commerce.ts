@@ -747,6 +747,7 @@ export type ListingForEditData = {
   package_unit?: string | null
   usage_desc?: string | null
   allergen?: string | null
+  ingredients?: string | null
 }
 
 export type UpdateListingFullInput = {
@@ -771,6 +772,7 @@ export type UpdateListingFullInput = {
   package_unit?: string | null
   usage_desc?: string | null
   allergen?: string | null
+  ingredients?: string | null
 }
 
 function listingStorefrontPublished(status: ListingStatus, is_visible: boolean): boolean {
@@ -857,6 +859,7 @@ export async function getListingForEdit(listingId: string): Promise<ActionResult
       package_unit,
       usage_desc,
       allergen,
+      ingredients,
       products ( id, name )
     `,
     )
@@ -931,6 +934,7 @@ export async function getListingForEdit(listingId: string): Promise<ActionResult
       package_unit: (row.package_unit as string | null) ?? null,
       usage_desc: (row.usage_desc as string | null) ?? null,
       allergen: (row.allergen as string | null) ?? null,
+      ingredients: (row.ingredients as string | null) ?? null,
     },
   }
 }
@@ -1039,6 +1043,7 @@ export async function updateListingFull(
   const package_unit = String(input.package_unit ?? '').trim() || null
   const usage_desc = String(input.usage_desc ?? '').trim() || null
   const allergen = String(input.allergen ?? '').trim() || null
+  const ingredients = String(input.ingredients ?? '').trim() || null
 
   const { data: listingRow, error: lFetchErr } = await supabase
     .from('commerce_product_listings')
@@ -1066,6 +1071,7 @@ export async function updateListingFull(
       package_unit,
       usage_desc,
       allergen,
+      ingredients,
       products ( id, name )
     `,
     )
@@ -1151,6 +1157,7 @@ export async function updateListingFull(
     package_unit: (L.package_unit as string | null) ?? null,
     usage_desc: (L.usage_desc as string | null) ?? null,
     allergen: (L.allergen as string | null) ?? null,
+    ingredients: (L.ingredients as string | null) ?? null,
   }
 
   const afterSnapshot = {
@@ -1174,6 +1181,7 @@ export async function updateListingFull(
     package_unit,
     usage_desc,
     allergen,
+    ingredients,
   }
 
   const normBadges = (v: string[] | null | undefined) => {
@@ -1226,6 +1234,7 @@ export async function updateListingFull(
       package_unit,
       usage_desc,
       allergen,
+      ingredients,
       status: vis.nextStatus,
       is_visible: vis.nextIsVisible,
       updated_at: new Date().toISOString(),
@@ -1654,6 +1663,7 @@ export async function createListingFull(input: {
   package_unit?: string | null
   usage_desc?: string | null
   allergen?: string | null
+  ingredients?: string | null
 }): Promise<ActionResult<{ listing_id: string; product_id: string }>> {
   const supabase = await createSupabaseServer()
   const auth = await requireAdmin(supabase)
@@ -1820,6 +1830,7 @@ export async function createListingFull(input: {
       package_unit: String(input.package_unit ?? '').trim() || null,
       usage_desc: String(input.usage_desc ?? '').trim() || null,
       allergen: String(input.allergen ?? '').trim() || null,
+      ingredients: input.ingredients || null,
     })
     .select('id')
     .single()
