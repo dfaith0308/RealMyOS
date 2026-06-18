@@ -14,6 +14,8 @@ import { LISTING_SHIPPING_TYPES, type ListingShippingType } from '@/lib/commerce
 import { formatDigitsForInput, formatKRW } from '@/lib/calc'
 import mod from './listing-new-client.module.css'
 import ProductDetailImageGenerator from './ProductDetailImageGenerator'
+import BarcodeLookupSection from '@/components/product/BarcodeLookupSection'
+import type { ProductBarcodeApplyHints } from '@/components/product/BarcodeLookupSection'
 import s from '@/app/(admin)/admin-shared.module.css'
 
 const MAX_THUMB_BADGES = 2
@@ -77,6 +79,8 @@ type FormModel = {
   free_shipping_qty: string
   bulk_qty: string
   bulk_discount_rate: string
+  barcode?: string
+  item_report_number?: string
 }
 
 function toFormModel(initial: ListingForEditData): FormModel {
@@ -108,6 +112,8 @@ function toFormModel(initial: ListingForEditData): FormModel {
       initial.bulk_discount_rate != null && initial.bulk_discount_rate > 0
         ? String(initial.bulk_discount_rate)
         : '',
+    barcode: initial.barcode ?? '',
+    item_report_number: initial.item_report_number ?? '',
   }
 }
 
@@ -128,6 +134,8 @@ function serializeForm(f: FormModel): string {
     free_shipping_qty: f.free_shipping_qty.trim(),
     bulk_qty: f.bulk_qty.trim(),
     bulk_discount_rate: f.bulk_discount_rate.trim(),
+    barcode: f.barcode?.trim() ?? '',
+    item_report_number: f.item_report_number?.trim() ?? '',
   })
 }
 
@@ -143,7 +151,13 @@ export default function ListingEditClient({
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [form, setForm] = useState<FormModel>(() => toFormModel(initial))
-  const [baseline, setBaseline] = useState<string>(() => serializeForm(toFormModel(initial)))
+  const [baseline, setBaseline] = useState<string>(() =>
+    serializeForm({
+      ...toFormModel(initial),
+      barcode: initial.barcode ?? '',
+      item_report_number: initial.item_report_number ?? '',
+    }),
+  )
   const [toast, setToast] = useState<{ text: string; variant: 'success' | 'error' } | null>(null)
   const [fieldError, setFieldError] = useState<string | null>(null)
 
@@ -154,6 +168,8 @@ export default function ListingEditClient({
   const [usageDesc, setUsageDesc] = useState(initial.usage_desc ?? '')
   const [allergen, setAllergen] = useState(initial.allergen ?? '')
   const [ingredients, setIngredients] = useState(initial.ingredients ?? '')
+  const [barcode, setBarcode] = useState(initial.barcode ?? '')
+  const [itemReportNumber, setItemReportNumber] = useState(initial.item_report_number ?? '')
   const [generatedDetailUrls, setGeneratedDetailUrls] = useState<string[]>([])
 
   const detailSnapshot = useMemo(
@@ -182,8 +198,10 @@ export default function ListingEditClient({
   )
 
   const isDirty = useMemo(
-    () => serializeForm(form) !== baseline || detailSnapshot !== detailBaseline,
-    [form, baseline, detailSnapshot, detailBaseline],
+    () =>
+      serializeForm({ ...form, barcode, item_report_number: itemReportNumber }) !== baseline ||
+      detailSnapshot !== detailBaseline,
+    [form, baseline, detailSnapshot, detailBaseline, barcode, itemReportNumber],
   )
 
   useEffect(() => {
@@ -270,6 +288,13 @@ export default function ListingEditClient({
     return null
   }
 
+  function applyBarcodeHints(h: ProductBarcodeApplyHints) {
+    if (h.name) setForm((p) => ({ ...p, product_name: h.name! }))
+    if (h.ingredients) setIngredients(h.ingredients)
+    if (h.barcode) setBarcode(h.barcode)
+    if (h.item_report_number) setItemReportNumber(h.item_report_number)
+  }
+
   function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     setFieldError(null)
@@ -314,6 +339,8 @@ export default function ListingEditClient({
         usage_desc: usageDesc.trim() || null,
         allergen: allergen.trim() || null,
         ingredients: ingredients.trim() || null,
+        barcode: barcode.trim() || null,
+        item_report_number: itemReportNumber.trim() || null,
       })
       if (!r.success) {
         const msg = r.error ?? '저장에 실패했습니다'
@@ -322,7 +349,7 @@ export default function ListingEditClient({
         return
       }
       setToast({ text: '저장되었습니다', variant: 'success' })
-      setBaseline(serializeForm(form))
+      setBaseline(serializeForm({ ...form, barcode, item_report_number: itemReportNumber }))
       setDetailBaseline(detailSnapshot)
       router.push('/admin/commerce/products')
     })
@@ -360,6 +387,35 @@ export default function ListingEditClient({
       </div>
 
       <form id="listing-edit-form" onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+        <div className={mod.card}>
+          <p className={mod.sectionLabel}>바코드 · 자동 입력</p>
+          <BarcodeLookupSection
+            categories={categories.map((c) => ({ id: c.id, name: c.name }))}
+            onApply={applyBarcodeHints}
+          />
+          <div className={mod.grid2} style={{ marginTop: 12 }}>
+            <div>
+              <label className={mod.fieldLabel}>바코드</label>
+              <input
+                className={mod.input}
+                value={barcode}
+                onChange={(e) => setBarcode(e.target.value.replace(/\D/g, ''))}
+                placeholder="예: 8801234567890"
+                inputMode="numeric"
+              />
+            </div>
+            <div>
+              <label className={mod.fieldLabel}>품목보고번호</label>
+              <input
+                className={mod.input}
+                value={itemReportNumber}
+                onChange={(e) => setItemReportNumber(e.target.value.trim())}
+                placeholder="예: 20220123456789"
+              />
+            </div>
+          </div>
+        </div>
 
         {/* 섹션 1: 기본 정보 */}
         <div style={{ background: 'var(--ds-surface-panel)', border: '1px solid var(--ds-border-default)', borderRadius: 12, padding: '18px 20px' }}>

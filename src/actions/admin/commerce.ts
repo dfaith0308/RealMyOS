@@ -748,6 +748,8 @@ export type ListingForEditData = {
   usage_desc?: string | null
   allergen?: string | null
   ingredients?: string | null
+  barcode?: string | null
+  item_report_number?: string | null
 }
 
 export type UpdateListingFullInput = {
@@ -773,6 +775,8 @@ export type UpdateListingFullInput = {
   usage_desc?: string | null
   allergen?: string | null
   ingredients?: string | null
+  barcode?: string | null
+  item_report_number?: string | null
 }
 
 function listingStorefrontPublished(status: ListingStatus, is_visible: boolean): boolean {
@@ -860,6 +864,8 @@ export async function getListingForEdit(listingId: string): Promise<ActionResult
       usage_desc,
       allergen,
       ingredients,
+      barcode,
+      item_report_number,
       products ( id, name )
     `,
     )
@@ -935,6 +941,8 @@ export async function getListingForEdit(listingId: string): Promise<ActionResult
       usage_desc: (row.usage_desc as string | null) ?? null,
       allergen: (row.allergen as string | null) ?? null,
       ingredients: (row.ingredients as string | null) ?? null,
+      barcode: (row.barcode as string | null) ?? null,
+      item_report_number: (row.item_report_number as string | null) ?? null,
     },
   }
 }
@@ -1044,6 +1052,8 @@ export async function updateListingFull(
   const usage_desc = String(input.usage_desc ?? '').trim() || null
   const allergen = String(input.allergen ?? '').trim() || null
   const ingredients = String(input.ingredients ?? '').trim() || null
+  const barcode = String(input.barcode ?? '').replace(/\D/g, '') || null
+  const item_report_number = String(input.item_report_number ?? '').trim() || null
 
   const { data: listingRow, error: lFetchErr } = await supabase
     .from('commerce_product_listings')
@@ -1072,6 +1082,8 @@ export async function updateListingFull(
       usage_desc,
       allergen,
       ingredients,
+      barcode,
+      item_report_number,
       products ( id, name )
     `,
     )
@@ -1158,6 +1170,8 @@ export async function updateListingFull(
     usage_desc: (L.usage_desc as string | null) ?? null,
     allergen: (L.allergen as string | null) ?? null,
     ingredients: (L.ingredients as string | null) ?? null,
+    barcode: (L.barcode as string | null) ?? null,
+    item_report_number: (L.item_report_number as string | null) ?? null,
   }
 
   const afterSnapshot = {
@@ -1182,6 +1196,8 @@ export async function updateListingFull(
     usage_desc,
     allergen,
     ingredients,
+    barcode,
+    item_report_number,
   }
 
   const normBadges = (v: string[] | null | undefined) => {
@@ -1207,7 +1223,11 @@ export async function updateListingFull(
 
   const { error: pUpErr } = await supabase
     .from('products')
-    .update({ name: product_name })
+    .update({
+      name: product_name,
+      barcode,
+      item_report_number,
+    })
     .eq('id', product_id)
     .eq('tenant_id', PLATFORM_OWNER_TENANT)
     .is('deleted_at', null)
@@ -1235,6 +1255,8 @@ export async function updateListingFull(
       usage_desc,
       allergen,
       ingredients,
+      barcode,
+      item_report_number,
       status: vis.nextStatus,
       is_visible: vis.nextIsVisible,
       updated_at: new Date().toISOString(),
@@ -1664,6 +1686,8 @@ export async function createListingFull(input: {
   usage_desc?: string | null
   allergen?: string | null
   ingredients?: string | null
+  barcode?: string | null
+  item_report_number?: string | null
 }): Promise<ActionResult<{ listing_id: string; product_id: string }>> {
   const supabase = await createSupabaseServer()
   const auth = await requireAdmin(supabase)
@@ -1760,9 +1784,9 @@ export async function createListingFull(input: {
       tax_type: 'taxable',
       category_id,
       supplier_id: null,
-      barcode: null,
+      barcode: input.barcode?.replace(/\D/g, '') || null,
       ingredients: null,
-      item_report_number: null,
+      item_report_number: input.item_report_number?.trim() || null,
       min_margin_rate: null,
       procurement_type: 'consignment',
     })
@@ -1831,6 +1855,8 @@ export async function createListingFull(input: {
       usage_desc: String(input.usage_desc ?? '').trim() || null,
       allergen: String(input.allergen ?? '').trim() || null,
       ingredients: input.ingredients || null,
+      barcode: input.barcode?.replace(/\D/g, '') || null,
+      item_report_number: input.item_report_number?.trim() || null,
     })
     .select('id')
     .single()
