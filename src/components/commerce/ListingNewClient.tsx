@@ -21,6 +21,8 @@ import { calcMarginRate, formatDigitsForInput, formatKRW } from '@/lib/calc'
 import mod from './listing-new-client.module.css'
 import ProductDetailImageGenerator from './ProductDetailImageGenerator'
 import { analyzeProductStrengths } from '@/actions/admin/ai-product-analysis'
+import BarcodeLookupSection from '@/components/product/BarcodeLookupSection'
+import type { ProductBarcodeApplyHints } from '@/components/product/BarcodeLookupSection'
 
 const MAX_DETAIL_IMAGES = 20
 const MAX_IMAGE_FILE_BYTES = 8 * 1024 * 1024
@@ -264,6 +266,8 @@ export default function ListingNewClient() {
   const [usageDesc, setUsageDesc] = useState('')
   const [allergen, setAllergen] = useState('')
   const [ingredients, setIngredients] = useState('')
+  const [barcode, setBarcode] = useState('')
+  const [itemReportNumber, setItemReportNumber] = useState('')
   const [aiStrengths, setAiStrengths] = useState('')
   const [analyzing, setAnalyzing] = useState(false)
 
@@ -857,6 +861,14 @@ export default function ListingNewClient() {
     void uploadDetailBlockFile(id, file)
   }
 
+  function applyBarcodeHints(h: ProductBarcodeApplyHints) {
+    if (h.name) setProductName(h.name)
+    if (h.ingredients) setIngredients(h.ingredients)
+    if (h.barcode) setBarcode(h.barcode)
+    if (h.item_report_number) setItemReportNumber(h.item_report_number)
+    if (h.costPrice) setSupplyPrice(String(h.costPrice))
+  }
+
   function applyResetForm() {
     const base = createEmptyListingStudioForm()
     setRootCategoryId(base.rootCategoryId)
@@ -963,6 +975,8 @@ export default function ListingNewClient() {
           usage_desc: usageDesc.trim() || null,
           allergen: allergen.trim() || null,
           ingredients: ingredients.trim() || null,
+          barcode: barcode.trim() || null,
+          item_report_number: itemReportNumber.trim() || null,
         })
         if (!r.success) {
           const msg = r.error ?? '저장 실패'
@@ -1244,6 +1258,35 @@ export default function ListingNewClient() {
                 공개 저장 시 대표 썸네일이 없습니다. 카드·목록 노출이 약해질 수 있습니다. 저장은 계속됩니다.
               </div>
             ) : null}
+
+            <div className={mod.card}>
+              <p className={mod.sectionLabel}>바코드 · 자동 입력</p>
+              <BarcodeLookupSection
+                categories={categoryFlat.map((c) => ({ id: c.id, name: c.name, parent_id: c.parent_id ?? null }))}
+                onApply={applyBarcodeHints}
+              />
+              <div className={mod.grid2} style={{ marginTop: 12 }}>
+                <div>
+                  <label className={mod.fieldLabel}>바코드</label>
+                  <input
+                    className={mod.input}
+                    value={barcode}
+                    onChange={(e) => setBarcode(e.target.value.replace(/\D/g, ''))}
+                    placeholder="예: 8801234567890"
+                    inputMode="numeric"
+                  />
+                </div>
+                <div>
+                  <label className={mod.fieldLabel}>품목보고번호</label>
+                  <input
+                    className={mod.input}
+                    value={itemReportNumber}
+                    onChange={(e) => setItemReportNumber(e.target.value.trim())}
+                    placeholder="예: 20220123456789"
+                  />
+                </div>
+              </div>
+            </div>
 
             <div className={mod.card}>
               <div className={mod.sectionHeaderRow}>
