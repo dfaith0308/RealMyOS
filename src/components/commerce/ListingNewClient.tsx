@@ -20,6 +20,7 @@ import {
 import { calcMarginRate, formatDigitsForInput, formatKRW } from '@/lib/calc'
 import mod from './listing-new-client.module.css'
 import ProductDetailImageGenerator from './ProductDetailImageGenerator'
+import { analyzeProductStrengths } from '@/actions/admin/ai-product-analysis'
 
 const MAX_DETAIL_IMAGES = 20
 const MAX_IMAGE_FILE_BYTES = 8 * 1024 * 1024
@@ -262,6 +263,9 @@ export default function ListingNewClient() {
   const [packageUnit, setPackageUnit] = useState('')
   const [usageDesc, setUsageDesc] = useState('')
   const [allergen, setAllergen] = useState('')
+  const [ingredients, setIngredients] = useState('')
+  const [aiStrengths, setAiStrengths] = useState('')
+  const [analyzing, setAnalyzing] = useState(false)
 
   const [shippingGroups, setShippingGroups] = useState<ShippingGroupListItem[]>([])
   const [showAddShippingGroup, setShowAddShippingGroup] = useState(false)
@@ -781,6 +785,23 @@ export default function ListingNewClient() {
     return n
   }
 
+  async function handleAnalyze() {
+    setAnalyzing(true)
+    try {
+      const r = await analyzeProductStrengths({
+        productName,
+        brandName,
+        spec,
+        ingredients: ingredients.trim(),
+        origin,
+        usageDesc,
+      })
+      if (r.success && r.strengths) setAiStrengths(r.strengths)
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
   const [retryDetailId, setRetryDetailId] = useState<string | null>(null)
   const retryDetailFileRef = useRef<HTMLInputElement>(null)
 
@@ -941,6 +962,7 @@ export default function ListingNewClient() {
           package_unit: packageUnit.trim() || null,
           usage_desc: usageDesc.trim() || null,
           allergen: allergen.trim() || null,
+          ingredients: ingredients.trim() || null,
         })
         if (!r.success) {
           const msg = r.error ?? '저장 실패'
@@ -1422,6 +1444,45 @@ export default function ListingNewClient() {
                   <label className={mod.fieldLabel}>알레르기</label>
                   <input className={mod.input} value={allergen} onChange={(e) => setAllergen(e.target.value)} placeholder="예: 대두 함유" />
                 </div>
+              </div>
+              <div style={{ marginTop: 10 }}>
+                <label className={mod.fieldLabel}>원재료명 및 함량 (선택)</label>
+                <textarea
+                  className={mod.input}
+                  value={ingredients}
+                  onChange={(e) => setIngredients(e.target.value)}
+                  placeholder="예: 개량메주 40%(중국산,대두99.5%,황곡0.5%), 천일염 13.8%, 정제수 46.2%"
+                  rows={3}
+                  style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical' }}
+                />
+                <p className={mod.fieldHint}>입력 시 AI가 제품 강점을 자동으로 분석합니다</p>
+                <button
+                  type="button"
+                  onClick={() => void handleAnalyze()}
+                  disabled={analyzing}
+                  style={{
+                    marginTop: 8,
+                    padding: '7px 14px',
+                    background: analyzing ? '#9ca3af' : '#1f5d3a',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 8,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: analyzing ? 'not-allowed' : 'pointer',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  {analyzing ? '분석 중...' : '🤖 AI 강점 분석'}
+                </button>
+                {aiStrengths && (
+                  <div style={{ marginTop: 10, padding: '10px 14px', background: '#f0f7f3', borderRadius: 8, border: '1px solid #bbf7d0' }}>
+                    <p style={{ fontSize: 11, fontWeight: 600, color: '#1f5d3a', margin: '0 0 6px' }}>AI 분석 결과</p>
+                    {aiStrengths.split('\n').filter(Boolean).map((s, i) => (
+                      <p key={i} style={{ fontSize: 13, color: '#374151', margin: '0 0 4px' }}>✓ {s}</p>
+                    ))}
+                  </div>
+                )}
               </div>
               <div style={{ marginTop: 10 }}>
                 <label className={mod.fieldLabel}>용도 (메뉴 기준)</label>
@@ -1972,6 +2033,8 @@ export default function ListingNewClient() {
                 packageUnit={packageUnit}
                 usageDesc={usageDesc}
                 allergen={allergen}
+                ingredients={ingredients}
+                aiStrengths={aiStrengths}
                 thumbnailUrl={thumb || undefined}
                 onGenerated={(file) => {
                   prependIncomingDetailFiles([file])

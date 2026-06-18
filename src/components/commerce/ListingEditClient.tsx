@@ -153,6 +153,7 @@ export default function ListingEditClient({
   const [packageUnit, setPackageUnit] = useState(initial.package_unit ?? '')
   const [usageDesc, setUsageDesc] = useState(initial.usage_desc ?? '')
   const [allergen, setAllergen] = useState(initial.allergen ?? '')
+  const [ingredients, setIngredients] = useState(initial.ingredients ?? '')
   const [generatedDetailUrls, setGeneratedDetailUrls] = useState<string[]>([])
 
   const detailSnapshot = useMemo(
@@ -164,8 +165,9 @@ export default function ListingEditClient({
         package_unit: packageUnit.trim(),
         usage_desc: usageDesc.trim(),
         allergen: allergen.trim(),
+        ingredients: ingredients.trim(),
       }),
-    [origin, storageMethod, minOrderQty, packageUnit, usageDesc, allergen],
+    [origin, storageMethod, minOrderQty, packageUnit, usageDesc, allergen, ingredients],
   )
   const [detailBaseline, setDetailBaseline] = useState(() =>
     JSON.stringify({
@@ -175,6 +177,7 @@ export default function ListingEditClient({
       package_unit: String(initial.package_unit ?? '').trim(),
       usage_desc: String(initial.usage_desc ?? '').trim(),
       allergen: String(initial.allergen ?? '').trim(),
+      ingredients: String(initial.ingredients ?? '').trim(),
     }),
   )
 
@@ -310,6 +313,7 @@ export default function ListingEditClient({
         package_unit: packageUnit.trim() || null,
         usage_desc: usageDesc.trim() || null,
         allergen: allergen.trim() || null,
+        ingredients: ingredients.trim() || null,
       })
       if (!r.success) {
         const msg = r.error ?? '저장에 실패했습니다'
@@ -426,6 +430,18 @@ export default function ListingEditClient({
               <label className={mod.fieldLabel}>알레르기</label>
               <input className={mod.input} value={allergen} onChange={(e) => setAllergen(e.target.value)} placeholder="예: 대두 함유" />
             </div>
+          </div>
+          <div style={{ marginTop: 10 }}>
+            <label className={mod.fieldLabel}>원재료명 및 함량 (선택)</label>
+            <textarea
+              className={mod.input}
+              value={ingredients}
+              onChange={(e) => setIngredients(e.target.value)}
+              placeholder="예: 개량메주 40%(중국산,대두99.5%,황곡0.5%), 천일염 13.8%, 정제수 46.2%"
+              rows={3}
+              style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical' }}
+            />
+            <p className={mod.fieldHint}>입력 시 AI가 제품 강점을 자동으로 분석합니다</p>
           </div>
           <div style={{ marginTop: 10 }}>
             <label className={mod.fieldLabel}>용도 (메뉴 기준)</label>

@@ -15,6 +15,8 @@ interface Props {
   packageUnit: string
   usageDesc: string
   allergen: string
+  ingredients?: string
+  aiStrengths?: string
   thumbnailUrl?: string
   onGenerated: (file: File) => void
 }
@@ -223,6 +225,17 @@ export default function ProductDetailImageGenerator(props: Props) {
             </div>
           )}
         </div>
+
+        {props.aiStrengths && (
+          <div style={{ background: '#f0f7f3', padding: '16px 40px', borderTop: '1px solid #e5e7eb' }}>
+            <p style={{ fontSize: 13, fontWeight: 800, color: '#1f5d3a', margin: '0 0 10px' }}>✓ 이 제품의 강점</p>
+            {props.aiStrengths.split('\n').filter(Boolean).map((s, i) => (
+              <p key={i} style={{ fontSize: 14, color: '#2b2b2b', margin: '0 0 6px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ color: '#1f5d3a', fontWeight: 700 }}>✓</span> {s}
+              </p>
+            ))}
+          </div>
+        )}
 
         {props.usageDesc && (
           <div
