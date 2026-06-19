@@ -615,11 +615,18 @@ export async function setCreditLineOverride(tenant_id: string, value: string): P
   )
   if (error) return { success: false, error: error.message }
 
+  const { data: settingRow } = await supabase
+    .from('admin_settings')
+    .select('id')
+    .eq('key', key)
+    .maybeSingle()
+
   const logRes = await insertAdminLog(supabase, {
     admin_id: auth.ctx.user_id,
     action_type: 'credit_line_override_set',
     target_table: 'admin_settings',
-    target_id: key,
+    target_id: settingRow?.id ?? null,
+    reason: key,
     old_value: { key, before_value: beforeVal },
     new_value: { key, after_value: String(n) },
   })

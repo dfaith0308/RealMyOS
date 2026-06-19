@@ -102,11 +102,18 @@ export async function updateStorefrontBankTransferSettings(input: {
 
   if (error) return { success: false, error: error.message }
 
+  const { data: settingRow } = await supabase
+    .from('admin_settings')
+    .select('id')
+    .eq('key', STOREFRONT_BANK_TRANSFER_SETTINGS_KEY)
+    .maybeSingle()
+
   const logRes = await insertAdminLog(supabase, {
     admin_id: auth.ctx.user_id,
     action_type: 'storefront_bank_transfer_updated',
     target_table: 'admin_settings',
-    target_id: STOREFRONT_BANK_TRANSFER_SETTINGS_KEY,
+    target_id: settingRow?.id ?? null,
+    reason: STOREFRONT_BANK_TRANSFER_SETTINGS_KEY,
     old_value: beforeRow ? { value: (beforeRow as { value?: string }).value } : null,
     new_value: { key: STOREFRONT_BANK_TRANSFER_SETTINGS_KEY, value },
   })

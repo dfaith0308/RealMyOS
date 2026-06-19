@@ -256,12 +256,18 @@ export async function updateAdminSetting(key: string, value: string, _updated_by
 
   if (upErr) return { success: false, error: upErr.message }
 
+  const { data: settingRow } = await supabase
+    .from('admin_settings')
+    .select('id')
+    .eq('key', key)
+    .maybeSingle()
+
   const logRes = await insertAdminLog(supabase, {
     admin_id: auth.ctx.user_id,
     action_type: 'admin_setting_update',
     reason: policySettingReasonKey(key),
     target_table: 'admin_settings',
-    target_id: key,
+    target_id: settingRow?.id ?? null,
     old_value: { key, before_value: beforeVal },
     new_value: { key, after_value: nextVal, updated_by: auth.ctx.user_id },
   })
@@ -572,11 +578,18 @@ export async function checkPolicyConflict(
     }
   }
 
+  const { data: conflictSettingRow } = await supabase
+    .from('admin_settings')
+    .select('id')
+    .eq('key', key)
+    .maybeSingle()
+
   const logRes = await insertAdminLog(supabase, {
     admin_id: auth.ctx.user_id,
     action_type: 'policy_conflict_check',
     target_table: 'admin_settings',
-    target_id: key,
+    target_id: conflictSettingRow?.id ?? null,
+    reason: key,
     new_value: { key, new_value: nextVal, hasConflict, message },
   })
   if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
@@ -642,11 +655,17 @@ export async function getPolicyImpactPreview(
     message = '영향 범위 미리보기 대상이 아닙니다'
   }
 
+  const { data: previewSettingRow } = await supabase
+    .from('admin_settings')
+    .select('id')
+    .eq('key', key)
+    .maybeSingle()
+
   const logRes = await insertAdminLog(supabase, {
     admin_id: auth.ctx.user_id,
     action_type: 'policy_impact_preview',
     target_table: 'admin_settings',
-    target_id: key,
+    target_id: previewSettingRow?.id ?? null,
     reason: 'policy preview',
     new_value: { key, new_value: nextVal, count, message },
   })
