@@ -1,5 +1,6 @@
 'use server'
 
+import OpenAI from 'openai'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import { lookupBarcodeChain } from '@/lib/barcode-lookup'
 import type { BarcodeLookupParsed } from '@/lib/barcode-lookup'
@@ -86,8 +87,88 @@ function emptyResult(barcode: string): BarcodeLookupParsed {
 }
 
 /**
- * 제품 라벨 사진 → Claude Vision (ANTHROPIC_API_KEY)
+ * 제품 라벨 사진 → Claude Vision (ANTHROPIC_API_KEY), 실패 시 GPT-4o-mini Vision fallback
  */
+function parseVisionHintsFromResponseText(text: string): VisionProductHints | null {
+  const jsonMatch = text.match(/\{[\s\S]*\}/)
+  if (!jsonMatch) return null
+
+  let parsed: Record<string, unknown>
+  try {
+    parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>
+  } catch {
+    return null
+  }
+
+  const name = parsed.name != null ? String(parsed.name).trim() || null : null
+  const unit = parsed.unit != null ? String(parsed.unit).trim() || null : null
+  const priceRaw = parsed.price_won
+  const price_won =
+    typeof priceRaw === 'number' && Number.isFinite(priceRaw)
+      ? Math.round(priceRaw)
+      : typeof priceRaw === 'string' && /^\d+$/.test(priceRaw.trim())
+        ? parseInt(priceRaw.trim(), 10)
+        : null
+
+  const barcodeVision =
+    parsed.barcode != null ? String(parsed.barcode).replace(/\D/g, '') || null : null
+  const manufacturer = parsed.manufacturer != null ? String(parsed.manufacturer).trim() || null : null
+  const ingredients_text =
+    parsed.ingredients_text != null ? String(parsed.ingredients_text).trim() || null : null
+
+  const raw_notes = [
+    manufacturer ? `제조사: ${manufacturer}` : null,
+    ingredients_text,
+    barcodeVision ? `바코드: ${barcodeVision}` : null,
+  ]
+    .filter(Boolean)
+    .join('\n') || null
+
+  return { name, unit, price_won, barcode: barcodeVision, manufacturer, ingredients_text, raw_notes }
+}
+
+async function recognizeProductFromImageWithOpenAI(
+  base64: string,
+  mime: string,
+): Promise<{ ok: boolean; data?: VisionProductHints; error?: string }> {
+  const openaiKey = process.env.OPENAI_API_KEY?.trim()
+  if (!openaiKey) {
+    return { ok: false, error: 'Vision 인식에 실패했습니다. API 키를 확인해 주세요.' }
+  }
+
+  try {
+    const openai = new OpenAI({ apiKey: openaiKey })
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      max_tokens: 1024,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:${mime};base64,${base64}`,
+              },
+            },
+            {
+              type: 'text',
+              text: '이 식품 이미지에서 정보를 추출해서 JSON 하나만 반환하세요. 다른 텍스트 없이 JSON만:\n{"name":"제품명","unit":"용량/규격","price_won":null,"barcode":"바코드숫자만","manufacturer":"제조사","ingredients_text":"원재료명및함량전체"}',
+            },
+          ],
+        },
+      ],
+    })
+
+    const text = completion.choices[0]?.message?.content ?? ''
+    const data = parseVisionHintsFromResponseText(text)
+    if (!data) return { ok: false, error: '이미지에서 정보를 읽지 못했습니다.' }
+    return { ok: true, data }
+  } catch {
+    return { ok: false, error: '이미지에서 정보를 읽지 못했습니다.' }
+  }
+}
+
 export async function recognizeProductFromImage(formData: FormData): Promise<{ ok: boolean; data?: VisionProductHints; error?: string }> {
   const supabase = await createSupabaseServer()
   const ctx = await getAuthCtx(supabase)
@@ -137,49 +218,12 @@ export async function recognizeProductFromImage(formData: FormData): Promise<{ o
     }),
   })
 
-  if (!res.ok) {
-    const t = await res.text().catch(() => '')
-    return { ok: false, error: `Vision API 오류: ${res.status} ${t.slice(0, 200)}` }
+  if (res.ok) {
+    const body = (await res.json()) as { content?: Array<{ type: string; text?: string }> }
+    const text = body.content?.find((c) => c.type === 'text')?.text ?? ''
+    const data = parseVisionHintsFromResponseText(text)
+    if (data) return { ok: true, data }
   }
 
-  const body = (await res.json()) as { content?: Array<{ type: string; text?: string }> }
-  const text = body.content?.find((c) => c.type === 'text')?.text ?? ''
-  const jsonMatch = text.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) return { ok: false, error: '이미지에서 JSON을 읽지 못했습니다.' }
-
-  let parsed: Record<string, unknown>
-  try {
-    parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>
-  } catch {
-    return { ok: false, error: 'Vision 응답 파싱 실패' }
-  }
-
-  const name = parsed.name != null ? String(parsed.name).trim() || null : null
-  const unit = parsed.unit != null ? String(parsed.unit).trim() || null : null
-  const priceRaw = parsed.price_won
-  const price_won =
-    typeof priceRaw === 'number' && Number.isFinite(priceRaw)
-      ? Math.round(priceRaw)
-      : typeof priceRaw === 'string' && /^\d+$/.test(priceRaw.trim())
-        ? parseInt(priceRaw.trim(), 10)
-        : null
-
-  const barcodeVision =
-    parsed.barcode != null ? String(parsed.barcode).replace(/\D/g, '') || null : null
-  const manufacturer = parsed.manufacturer != null ? String(parsed.manufacturer).trim() || null : null
-  const ingredients_text =
-    parsed.ingredients_text != null ? String(parsed.ingredients_text).trim() || null : null
-
-  const raw_notes = [
-    manufacturer ? `제조사: ${manufacturer}` : null,
-    ingredients_text,
-    barcodeVision ? `바코드: ${barcodeVision}` : null,
-  ]
-    .filter(Boolean)
-    .join('\n') || null
-
-  return {
-    ok: true,
-    data: { name, unit, price_won, barcode: barcodeVision, manufacturer, ingredients_text, raw_notes },
-  }
+  return recognizeProductFromImageWithOpenAI(base64, mime)
 }
