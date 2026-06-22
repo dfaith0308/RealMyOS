@@ -12,6 +12,9 @@ export type ProductBarcodeApplyHints = {
   ingredients?: string
   categoryId?: string
   costPrice?: string
+  storage_method?: string
+  allergen?: string
+  origin?: string
 }
 
 function matchCategoryId(categories: Category[], hint: string | null | undefined): string | undefined {
@@ -97,18 +100,16 @@ export default function BarcodeLookupSection({
         return
       }
       const d = r.data
-      const name =
-        d.name && d.unit ? `${d.name} (${d.unit})` : d.name ?? undefined
-      const ingParts = [
-        d.manufacturer ? `제조사: ${d.manufacturer}` : null,
-        d.ingredients_text,
-        d.raw_notes,
-      ].filter(Boolean)
+      const name = d.name && d.unit ? `${d.name} (${d.unit})` : d.name ?? undefined
       onApply({
         name,
         barcode: d.barcode ?? undefined,
-        ingredients: ingParts.length ? ingParts.join('\n\n') : undefined,
+        item_report_number: d.item_report_number ?? undefined,
+        ingredients: d.ingredients_text ?? undefined,
         costPrice: d.price_won != null ? String(d.price_won) : undefined,
+        storage_method: d.storage_method ?? undefined,
+        allergen: d.allergen ?? undefined,
+        origin: d.origin ?? undefined,
       })
       setMsg('사진에서 추출했습니다. 확인 후 저장하세요.')
       setScanOpen(false)
