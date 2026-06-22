@@ -1,4 +1,6 @@
 import { getLearningStatus } from '@/actions/admin/learning-center'
+import { getConfirmedMasters, getUnconfirmedMasters } from '@/actions/admin/ingredient-master'
+import UnconfirmedMasterList from '@/components/admin/UnconfirmedMasterList'
 import s from '../../admin-shared.module.css'
 
 function Progress({ value }: { value: number }) {
@@ -24,19 +26,32 @@ function Check({ ok }: { ok: boolean }) {
 }
 
 export default async function AdminLearningCenterPage() {
-  const res = await getLearningStatus()
+  const [learningRes, confirmedRes, unconfirmedRes] = await Promise.all([
+    getLearningStatus(),
+    getConfirmedMasters(),
+    getUnconfirmedMasters(),
+  ])
 
-  if (!res.success || !res.data) {
+  if (!learningRes.success || !learningRes.data) {
     return (
       <main className={s.mainSimple}>
         <h1 className={s.title}>데이터 학습 센터</h1>
-        <div className={s.alert}>{res.error ?? '조회 실패'}</div>
+        <div className={s.alert}>{learningRes.error ?? '조회 실패'}</div>
       </main>
     )
   }
 
-  const d = res.data
+  const d = learningRes.data
   const st = d.stats
+  const confirmed = (confirmedRes.data ?? []) as Array<{
+    id: string
+    name: string
+    spec?: string | null
+    brand?: string | null
+    barcode?: string | null
+    ingredient_mappings?: Array<{ source_type: string }>
+  }>
+  const unconfirmed = (unconfirmedRes.data ?? []) as unknown[]
 
   return (
     <main className={s.main}>
@@ -108,6 +123,79 @@ export default async function AdminLearningCenterPage() {
           <Row label="Action Queue 완료" value={st.action_queue_completed} />
           <Row label="Action Queue 만료" value={st.action_queue_expired} />
           <Row label="자동 판단 정확도(Proxy)" value={`${st.auto_judgement_accuracy.toFixed(1)}%`} />
+        </div>
+      </section>
+
+      <section className={s.panel}>
+        <div className={s.panelHeader}>
+          <h2 className={s.panelTitle}>식자재 마스터 DB</h2>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <span style={{ fontSize: 13, color: '#1f5d3a', fontWeight: 600 }}>
+              확정 {confirmed.length}개
+            </span>
+            {unconfirmed.length > 0 && (
+              <span style={{ fontSize: 13, color: '#92400e', fontWeight: 600 }}>
+                미확정 {unconfirmed.length}개 검토 필요
+              </span>
+            )}
+          </div>
+        </div>
+        <div className={s.panelBody}>
+          {unconfirmed.length > 0 && (
+            <div style={{ marginBottom: 20 }}>
+              <p style={{ fontSize: 12, fontWeight: 700, color: '#92400e', margin: '0 0 10px' }}>
+                ⚠️ 미확정 — 바코드/품목보고번호 없이 등록된 상품
+              </p>
+              <UnconfirmedMasterList items={unconfirmed} />
+            </div>
+          )}
+
+          <p style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', margin: '0 0 10px' }}>
+            ✅ 확정 마스터 상품
+          </p>
+          {confirmed.length === 0 ? (
+            <p style={{ fontSize: 13, color: '#9ca3af' }}>상품을 등록하면 여기에 나타납니다</p>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
+                  <th style={{ textAlign: 'left', padding: '8px 12px', color: '#6b7280', fontWeight: 600 }}>상품명</th>
+                  <th style={{ textAlign: 'left', padding: '8px 12px', color: '#6b7280', fontWeight: 600 }}>브랜드</th>
+                  <th style={{ textAlign: 'left', padding: '8px 12px', color: '#6b7280', fontWeight: 600 }}>바코드</th>
+                  <th style={{ textAlign: 'left', padding: '8px 12px', color: '#6b7280', fontWeight: 600 }}>소스</th>
+                </tr>
+              </thead>
+              <tbody>
+                {confirmed.map((m) => (
+                  <tr key={m.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                    <td style={{ padding: '8px 12px', color: '#1a1a1a' }}>
+                      {m.name}
+                      {m.spec ? ` ${m.spec}` : ''}
+                    </td>
+                    <td style={{ padding: '8px 12px', color: '#6b7280' }}>{m.brand ?? '-'}</td>
+                    <td style={{ padding: '8px 12px', color: '#6b7280', fontFamily: 'monospace' }}>{m.barcode ?? '-'}</td>
+                    <td style={{ padding: '8px 12px' }}>
+                      {(m.ingredient_mappings ?? []).map((mp) => (
+                        <span
+                          key={mp.source_type}
+                          style={{
+                            fontSize: 11,
+                            padding: '2px 6px',
+                            borderRadius: 4,
+                            background: mp.source_type === 'admin' ? '#f0f7f3' : '#f0f4ff',
+                            color: mp.source_type === 'admin' ? '#1f5d3a' : '#4f46e5',
+                            marginRight: 4,
+                          }}
+                        >
+                          {mp.source_type}
+                        </span>
+                      ))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </section>
     </main>

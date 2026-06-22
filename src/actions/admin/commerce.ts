@@ -13,6 +13,7 @@ import {
 import type { ActionResult } from '@/types/order'
 import type { SupplierExportRow } from '@/lib/commerce-order-supplier-export'
 import { cancelPendingCommerceOrderAllocationsForOrder, createCommerceOrderAllocations } from '@/actions/admin/commerce-allocation'
+import { upsertIngredientMaster } from '@/actions/admin/ingredient-master'
 import { processCommerceOrderCancelledAccountingP0 } from '@/actions/admin/commerce-reversal'
 
 export type { ListingShippingType } from '@/lib/commerce-constants'
@@ -1900,6 +1901,24 @@ export async function createListingFull(input: {
   }
 
   const listing_id = insertedListing.id as string
+
+  try {
+    await upsertIngredientMaster({
+      source_type: 'admin',
+      source_id: listing_id,
+      name: product_name,
+      barcode: input.barcode || null,
+      item_report_number: input.item_report_number || null,
+      brand: input.brand_name || null,
+      spec: input.spec || null,
+      manufacturer: input.manufacturer || null,
+      ingredients_text: input.ingredients || null,
+      price: input.commerce_price || null,
+      tenant_id: PLATFORM_OWNER_TENANT,
+    })
+  } catch (e) {
+    console.error('ingredient_master 등록 실패 (비치명적):', e)
+  }
 
   const logRes = await insertAdminLog(supabase, {
     admin_id: auth.ctx.user_id,
