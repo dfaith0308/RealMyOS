@@ -9,6 +9,7 @@ export type ProductBarcodeApplyHints = {
   name?: string
   barcode?: string
   item_report_number?: string
+  manufacturer?: string
   ingredients?: string
   categoryId?: string
   costPrice?: string
@@ -105,6 +106,7 @@ export default function BarcodeLookupSection({
         name,
         barcode: d.barcode ?? undefined,
         item_report_number: d.item_report_number ?? undefined,
+        manufacturer: d.manufacturer ?? undefined,
         ingredients: d.ingredients_text ?? undefined,
         costPrice: d.price_won != null ? String(d.price_won) : undefined,
         storage_method: d.storage_method ?? undefined,

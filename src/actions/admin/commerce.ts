@@ -748,6 +748,7 @@ export type ListingForEditData = {
   usage_desc?: string | null
   allergen?: string | null
   ingredients?: string | null
+  manufacturer?: string | null
   barcode?: string | null
   item_report_number?: string | null
 }
@@ -775,6 +776,7 @@ export type UpdateListingFullInput = {
   usage_desc?: string | null
   allergen?: string | null
   ingredients?: string | null
+  manufacturer?: string | null
   barcode?: string | null
   item_report_number?: string | null
 }
@@ -864,6 +866,7 @@ export async function getListingForEdit(listingId: string): Promise<ActionResult
       usage_desc,
       allergen,
       ingredients,
+      manufacturer,
       barcode,
       item_report_number,
       products ( id, name )
@@ -941,6 +944,7 @@ export async function getListingForEdit(listingId: string): Promise<ActionResult
       usage_desc: (row.usage_desc as string | null) ?? null,
       allergen: (row.allergen as string | null) ?? null,
       ingredients: (row.ingredients as string | null) ?? null,
+      manufacturer: (row.manufacturer as string | null) ?? null,
       barcode: (row.barcode as string | null) ?? null,
       item_report_number: (row.item_report_number as string | null) ?? null,
     },
@@ -1052,6 +1056,7 @@ export async function updateListingFull(
   const usage_desc = String(input.usage_desc ?? '').trim() || null
   const allergen = String(input.allergen ?? '').trim() || null
   const ingredients = String(input.ingredients ?? '').trim() || null
+  const manufacturer = input.manufacturer || null
   const barcode = String(input.barcode ?? '').replace(/\D/g, '') || null
   const item_report_number = String(input.item_report_number ?? '').trim() || null
 
@@ -1082,6 +1087,7 @@ export async function updateListingFull(
       usage_desc,
       allergen,
       ingredients,
+      manufacturer,
       barcode,
       item_report_number,
       products ( id, name )
@@ -1170,6 +1176,7 @@ export async function updateListingFull(
     usage_desc: (L.usage_desc as string | null) ?? null,
     allergen: (L.allergen as string | null) ?? null,
     ingredients: (L.ingredients as string | null) ?? null,
+    manufacturer: (L.manufacturer as string | null) ?? null,
     barcode: (L.barcode as string | null) ?? null,
     item_report_number: (L.item_report_number as string | null) ?? null,
   }
@@ -1196,6 +1203,7 @@ export async function updateListingFull(
     usage_desc,
     allergen,
     ingredients,
+    manufacturer,
     barcode,
     item_report_number,
   }
@@ -1255,6 +1263,7 @@ export async function updateListingFull(
       usage_desc,
       allergen,
       ingredients,
+      manufacturer,
       barcode,
       item_report_number,
       status: vis.nextStatus,
@@ -1686,6 +1695,7 @@ export async function createListingFull(input: {
   usage_desc?: string | null
   allergen?: string | null
   ingredients?: string | null
+  manufacturer?: string | null
   barcode?: string | null
   item_report_number?: string | null
 }): Promise<ActionResult<{ listing_id: string; product_id: string }>> {
@@ -1855,6 +1865,7 @@ export async function createListingFull(input: {
       usage_desc: String(input.usage_desc ?? '').trim() || null,
       allergen: String(input.allergen ?? '').trim() || null,
       ingredients: input.ingredients || null,
+      manufacturer: input.manufacturer || null,
       barcode: input.barcode?.replace(/\D/g, '') || null,
       item_report_number: input.item_report_number?.trim() || null,
     })

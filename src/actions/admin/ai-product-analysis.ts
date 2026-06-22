@@ -11,6 +11,7 @@ export async function analyzeProductStrengths(input: {
   ingredients?: string
   origin?: string
   usageDesc?: string
+  manufacturer?: string
 }): Promise<{ success: boolean; strengths?: string; error?: string }> {
   if (!input.ingredients && !input.origin && !input.usageDesc) {
     return { success: false, error: '분석할 정보가 없습니다' }
@@ -22,6 +23,7 @@ export async function analyzeProductStrengths(input: {
 상품명: ${input.productName}
 ${input.brandName ? `브랜드: ${input.brandName}` : ''}
 ${input.spec ? `규격: ${input.spec}` : ''}
+${input.manufacturer ? `제조원: ${input.manufacturer}` : ''}
 ${input.origin ? `원산지: ${input.origin}` : ''}
 ${input.ingredients ? `원재료명/함량: ${input.ingredients}` : ''}
 ${input.usageDesc ? `용도: ${input.usageDesc}` : ''}

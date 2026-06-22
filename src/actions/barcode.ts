@@ -24,26 +24,31 @@ export type VisionProductHints = {
   raw_notes: string | null
 }
 
-const VISION_LABEL_PROMPT = `이 이미지는 식품 라벨 또는 상품정보고시입니다. 이미지에서 보이는 정보만 근거로 아래 JSON 형식 하나만 출력하세요. 다른 텍스트 없이 JSON만 출력합니다.
+const VISION_LABEL_PROMPT = `이 이미지는 식품 라벨 또는 상품정보고시입니다.
+이미지에서 보이는 텍스트만 근거로 아래 JSON 하나만 출력하세요.
+다른 텍스트 없이 JSON만 출력합니다.
 
 {
-  "name": "제품명 (예: 냉면비빔장)",
-  "unit": "용량 또는 규격 (예: 2kg, 500ml)",
+  "name": "제품명",
+  "unit": "용량 또는 규격 (예: 2kg, 500ml, 1L)",
   "barcode": "바코드 숫자만 (예: 8809558031038)",
   "item_report_number": "품목보고번호 숫자 (예: 20100020501027)",
-  "manufacturer": "제조원 회사명만 (예: ㈜해나음식품)",
-  "ingredients_text": "원재료명 및 함량 전체 텍스트 그대로",
-  "storage_method": "보관방법 텍스트 (예: 상온보관, 개봉 후 냉장보관)",
-  "allergen": "알레르기 유발 성분 (예: 밀, 대두, 소고기, 닭고기 함유)",
-  "origin": "원산지 정보 (예: 중국산, 국내산)",
+  "manufacturer": "제조원 또는 판매원 회사명만 (주소 제외, 예: ㈜해나음식품)",
+  "ingredients_text": "원재료명 및 함량 텍스트 전체 (요약하지 말고 이미지 원문 그대로)",
+  "storage_method": "보관방법 텍스트 전체 (예: 직사광선을 피해서 상온보관, 개봉 후 냉장보관)",
+  "allergen": "알레르기 유발성분 텍스트 (예: 밀, 대두, 소고기, 닭고기 함유)",
+  "origin": "원재료명에서 괄호 안 국가/지역 정보 또는 별도 원산지 표기 (예: 고추가루(중국산), 마늘(국내산))",
   "price_won": null
 }
 
 규칙:
 - 이미지에서 확인되지 않는 값은 반드시 null
-- ingredients_text는 요약하지 말고 이미지의 원재료명 텍스트 전체를 그대로 복사
-- manufacturer는 회사명만, 주소 제외
-- barcode와 item_report_number는 숫자만`
+- ingredients_text는 절대 요약하지 말고 원문 전체를 그대로 복사
+- manufacturer는 회사명만, 주소/전화번호 제외
+- barcode와 item_report_number는 숫자만
+- origin은 원재료 옆 괄호 표기 포함해서 최대한 추출
+- allergen은 "밀, 대두" 형태로 표기된 부분 전체 추출
+- storage_method는 보관방법 전체 문장 추출`
 
 async function resolveApiKeys(supabase: any, tenantId: string): Promise<{ foodSafety: string; nutrition: string }> {
   const { data: row } = await supabase

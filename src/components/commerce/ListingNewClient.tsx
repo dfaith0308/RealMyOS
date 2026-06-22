@@ -265,6 +265,7 @@ export default function ListingNewClient() {
   const [packageUnit, setPackageUnit] = useState('')
   const [usageDesc, setUsageDesc] = useState('')
   const [allergen, setAllergen] = useState('')
+  const [manufacturer, setManufacturer] = useState('')
   const [ingredients, setIngredients] = useState('')
   const [barcode, setBarcode] = useState('')
   const [itemReportNumber, setItemReportNumber] = useState('')
@@ -806,6 +807,7 @@ export default function ListingNewClient() {
         ingredients: ingredients.trim(),
         origin,
         usageDesc,
+        manufacturer: manufacturer.trim(),
       })
       if (r.success && r.strengths) setAiStrengths(r.strengths)
     } finally {
@@ -870,6 +872,7 @@ export default function ListingNewClient() {
 
   function applyBarcodeHints(h: ProductBarcodeApplyHints) {
     if (h.name) setProductName(h.name)
+    if (h.manufacturer) setManufacturer(h.manufacturer)
     if (h.ingredients) setIngredients(h.ingredients)
     if (h.barcode) setBarcode(h.barcode)
     if (h.item_report_number) setItemReportNumber(h.item_report_number)
@@ -985,6 +988,7 @@ export default function ListingNewClient() {
           usage_desc: usageDesc.trim() || null,
           allergen: allergen.trim() || null,
           ingredients: ingredients.trim() || null,
+          manufacturer: manufacturer.trim() || null,
           barcode: barcode.trim() || null,
           item_report_number: itemReportNumber.trim() || null,
         })
@@ -1516,6 +1520,16 @@ export default function ListingNewClient() {
                   <label className={mod.fieldLabel}>알레르기</label>
                   <input className={mod.input} value={allergen} onChange={(e) => setAllergen(e.target.value)} placeholder="예: 대두 함유" />
                 </div>
+              </div>
+              <div style={{ marginTop: 10 }}>
+                <label className={mod.fieldLabel}>제조원</label>
+                <input
+                  className={mod.input}
+                  value={manufacturer}
+                  onChange={e => setManufacturer(e.target.value)}
+                  placeholder="예: ㈜해나음식품"
+                  style={{ width: '100%', boxSizing: 'border-box' }}
+                />
               </div>
               <div style={{ marginTop: 10 }}>
                 <label className={mod.fieldLabel}>원재료명 및 함량 (선택)</label>

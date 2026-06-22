@@ -81,6 +81,7 @@ type FormModel = {
   bulk_discount_rate: string
   barcode?: string
   item_report_number?: string
+  manufacturer?: string
 }
 
 function toFormModel(initial: ListingForEditData): FormModel {
@@ -136,6 +137,7 @@ function serializeForm(f: FormModel): string {
     bulk_discount_rate: f.bulk_discount_rate.trim(),
     barcode: f.barcode?.trim() ?? '',
     item_report_number: f.item_report_number?.trim() ?? '',
+    manufacturer: f.manufacturer?.trim() ?? '',
   })
 }
 
@@ -156,6 +158,7 @@ export default function ListingEditClient({
       ...toFormModel(initial),
       barcode: initial.barcode ?? '',
       item_report_number: initial.item_report_number ?? '',
+      manufacturer: initial.manufacturer ?? '',
     }),
   )
   const [toast, setToast] = useState<{ text: string; variant: 'success' | 'error' } | null>(null)
@@ -167,6 +170,7 @@ export default function ListingEditClient({
   const [packageUnit, setPackageUnit] = useState(initial.package_unit ?? '')
   const [usageDesc, setUsageDesc] = useState(initial.usage_desc ?? '')
   const [allergen, setAllergen] = useState(initial.allergen ?? '')
+  const [manufacturer, setManufacturer] = useState(initial.manufacturer ?? '')
   const [ingredients, setIngredients] = useState(initial.ingredients ?? '')
   const [barcode, setBarcode] = useState(initial.barcode ?? '')
   const [itemReportNumber, setItemReportNumber] = useState(initial.item_report_number ?? '')
@@ -199,9 +203,9 @@ export default function ListingEditClient({
 
   const isDirty = useMemo(
     () =>
-      serializeForm({ ...form, barcode, item_report_number: itemReportNumber }) !== baseline ||
+      serializeForm({ ...form, barcode, item_report_number: itemReportNumber, manufacturer }) !== baseline ||
       detailSnapshot !== detailBaseline,
-    [form, baseline, detailSnapshot, detailBaseline, barcode, itemReportNumber],
+    [form, baseline, detailSnapshot, detailBaseline, barcode, itemReportNumber, manufacturer],
   )
 
   useEffect(() => {
@@ -290,6 +294,7 @@ export default function ListingEditClient({
 
   function applyBarcodeHints(h: ProductBarcodeApplyHints) {
     if (h.name) setForm((p) => ({ ...p, product_name: h.name! }))
+    if (h.manufacturer) setManufacturer(h.manufacturer)
     if (h.ingredients) setIngredients(h.ingredients)
     if (h.barcode) setBarcode(h.barcode)
     if (h.item_report_number) setItemReportNumber(h.item_report_number)
@@ -339,6 +344,7 @@ export default function ListingEditClient({
         usage_desc: usageDesc.trim() || null,
         allergen: allergen.trim() || null,
         ingredients: ingredients.trim() || null,
+        manufacturer: manufacturer.trim() || null,
         barcode: barcode.trim() || null,
         item_report_number: itemReportNumber.trim() || null,
       })
@@ -349,7 +355,7 @@ export default function ListingEditClient({
         return
       }
       setToast({ text: '저장되었습니다', variant: 'success' })
-      setBaseline(serializeForm({ ...form, barcode, item_report_number: itemReportNumber }))
+      setBaseline(serializeForm({ ...form, barcode, item_report_number: itemReportNumber, manufacturer }))
       setDetailBaseline(detailSnapshot)
       router.push('/admin/commerce/products')
     })
@@ -486,6 +492,16 @@ export default function ListingEditClient({
               <label className={mod.fieldLabel}>알레르기</label>
               <input className={mod.input} value={allergen} onChange={(e) => setAllergen(e.target.value)} placeholder="예: 대두 함유" />
             </div>
+          </div>
+          <div style={{ marginTop: 10 }}>
+            <label className={mod.fieldLabel}>제조원</label>
+            <input
+              className={mod.input}
+              value={manufacturer}
+              onChange={e => setManufacturer(e.target.value)}
+              placeholder="예: ㈜해나음식품"
+              style={{ width: '100%', boxSizing: 'border-box' }}
+            />
           </div>
           <div style={{ marginTop: 10 }}>
             <label className={mod.fieldLabel}>원재료명 및 함량 (선택)</label>
