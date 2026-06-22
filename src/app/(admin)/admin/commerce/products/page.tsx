@@ -48,6 +48,21 @@ export default async function AdminCommerceProductsPage(props: {
           <Link href="/admin/commerce/products/new" className={s.primaryBtn}>
             + 상품 등록
           </Link>
+          <Link
+            href="/admin/commerce/products/bulk"
+            style={{
+              padding: '8px 14px',
+              border: '1px solid #1f5d3a',
+              borderRadius: 8,
+              background: '#fff',
+              color: '#1f5d3a',
+              fontSize: 13,
+              fontWeight: 600,
+              textDecoration: 'none',
+            }}
+          >
+            📋 대량 등록
+          </Link>
         </div>
       </header>
 
