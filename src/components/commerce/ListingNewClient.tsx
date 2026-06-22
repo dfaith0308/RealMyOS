@@ -874,6 +874,9 @@ export default function ListingNewClient() {
     if (h.barcode) setBarcode(h.barcode)
     if (h.item_report_number) setItemReportNumber(h.item_report_number)
     if (h.costPrice) setSupplyPrice(String(h.costPrice))
+    if (h.storage_method) setStorageMethod(h.storage_method)
+    if (h.allergen) setAllergen(h.allergen)
+    if (h.origin) setOrigin(h.origin)
   }
 
   function applyResetForm() {

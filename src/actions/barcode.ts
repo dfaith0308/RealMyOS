@@ -15,10 +15,35 @@ export type VisionProductHints = {
   unit: string | null
   price_won: number | null
   barcode: string | null
+  item_report_number: string | null
   manufacturer: string | null
   ingredients_text: string | null
+  storage_method: string | null
+  allergen: string | null
+  origin: string | null
   raw_notes: string | null
 }
+
+const VISION_LABEL_PROMPT = `이 이미지는 식품 라벨 또는 상품정보고시입니다. 이미지에서 보이는 정보만 근거로 아래 JSON 형식 하나만 출력하세요. 다른 텍스트 없이 JSON만 출력합니다.
+
+{
+  "name": "제품명 (예: 냉면비빔장)",
+  "unit": "용량 또는 규격 (예: 2kg, 500ml)",
+  "barcode": "바코드 숫자만 (예: 8809558031038)",
+  "item_report_number": "품목보고번호 숫자 (예: 20100020501027)",
+  "manufacturer": "제조원 회사명만 (예: ㈜해나음식품)",
+  "ingredients_text": "원재료명 및 함량 전체 텍스트 그대로",
+  "storage_method": "보관방법 텍스트 (예: 상온보관, 개봉 후 냉장보관)",
+  "allergen": "알레르기 유발 성분 (예: 밀, 대두, 소고기, 닭고기 함유)",
+  "origin": "원산지 정보 (예: 중국산, 국내산)",
+  "price_won": null
+}
+
+규칙:
+- 이미지에서 확인되지 않는 값은 반드시 null
+- ingredients_text는 요약하지 말고 이미지의 원재료명 텍스트 전체를 그대로 복사
+- manufacturer는 회사명만, 주소 제외
+- barcode와 item_report_number는 숫자만`
 
 async function resolveApiKeys(supabase: any, tenantId: string): Promise<{ foodSafety: string; nutrition: string }> {
   const { data: row } = await supabase
@@ -112,19 +137,31 @@ function parseVisionHintsFromResponseText(text: string): VisionProductHints | nu
 
   const barcodeVision =
     parsed.barcode != null ? String(parsed.barcode).replace(/\D/g, '') || null : null
+  const item_report_number =
+    parsed.item_report_number != null
+      ? String(parsed.item_report_number).replace(/\D/g, '') || null
+      : null
   const manufacturer = parsed.manufacturer != null ? String(parsed.manufacturer).trim() || null : null
   const ingredients_text =
     parsed.ingredients_text != null ? String(parsed.ingredients_text).trim() || null : null
+  const storage_method =
+    parsed.storage_method != null ? String(parsed.storage_method).trim() || null : null
+  const allergen = parsed.allergen != null ? String(parsed.allergen).trim() || null : null
+  const origin = parsed.origin != null ? String(parsed.origin).trim() || null : null
 
-  const raw_notes = [
-    manufacturer ? `제조사: ${manufacturer}` : null,
+  return {
+    name,
+    unit,
+    price_won,
+    barcode: barcodeVision,
+    item_report_number,
+    manufacturer,
     ingredients_text,
-    barcodeVision ? `바코드: ${barcodeVision}` : null,
-  ]
-    .filter(Boolean)
-    .join('\n') || null
-
-  return { name, unit, price_won, barcode: barcodeVision, manufacturer, ingredients_text, raw_notes }
+    storage_method,
+    allergen,
+    origin,
+    raw_notes: null,
+  }
 }
 
 async function recognizeProductFromImageWithOpenAI(
@@ -153,7 +190,7 @@ async function recognizeProductFromImageWithOpenAI(
             },
             {
               type: 'text',
-              text: '이 식품 이미지에서 정보를 추출해서 JSON 하나만 반환하세요. 다른 텍스트 없이 JSON만:\n{"name":"제품명","unit":"용량/규격","price_won":null,"barcode":"바코드숫자만","manufacturer":"제조사","ingredients_text":"원재료명및함량전체"}',
+              text: VISION_LABEL_PROMPT,
             },
           ],
         },
@@ -209,8 +246,7 @@ export async function recognizeProductFromImage(formData: FormData): Promise<{ o
             },
             {
               type: 'text',
-              text:
-                '이 이미지는 식품 라벨/뒷면일 수 있습니다. 보이는 한글/숫자만 근거로 JSON 한 개만 출력하세요. 키: name(제품명), unit(용량·규격 문자열, 없으면 null), price_won(원 단위 가격 숫자, 없으면 null), barcode(바코드 숫자만, 없으면 null), manufacturer(제조사, 없으면 null), ingredients_text(원재료/성분 요약, 없으면 null). 확실하지 않으면 null.',
+              text: VISION_LABEL_PROMPT,
             },
           ],
         },
