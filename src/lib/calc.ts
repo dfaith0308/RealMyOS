@@ -34,9 +34,10 @@ export function calcOrderTotals(lines: LineCalculation[]): OrderTotals {
   )
 }
 
-export function calcMarginRate(unit_price: number, cost_price: number): number {
+export function calcMarginRate(unit_price: number, cost_price: number, pg_rate = 0.033): number {
   if (!unit_price || unit_price <= 0 || !cost_price || cost_price <= 0) return 0
-  const rate = ((unit_price - cost_price) / unit_price) * 100
+  const netPrice = unit_price * (1 - pg_rate)
+  const rate = ((netPrice - cost_price) / netPrice) * 100
   if (!isFinite(rate) || isNaN(rate)) return 0
   return rate
 }
