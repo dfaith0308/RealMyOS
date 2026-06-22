@@ -17,7 +17,7 @@ import {
   type ListingShippingType,
   type ShippingGroupListItem,
 } from '@/actions/admin/commerce'
-import { calcMarginRate, formatDigitsForInput, formatKRW } from '@/lib/calc'
+import { formatDigitsForInput, formatKRW } from '@/lib/calc'
 import mod from './listing-new-client.module.css'
 import ProductDetailImageGenerator from './ProductDetailImageGenerator'
 import { analyzeProductStrengths } from '@/actions/admin/ai-product-analysis'
@@ -387,9 +387,11 @@ export default function ListingNewClient() {
       ? previewOriginal - previewPrice
       : null
 
+  const PG_FEE_RATE_PRICE = 0.033
   const marginRateDisplay = (() => {
     if (previewPrice == null || cost <= 0) return null
-    const rate = calcMarginRate(previewPrice, cost)
+    const netPrice = previewPrice * (1 - PG_FEE_RATE_PRICE)
+    const rate = ((netPrice - cost) / netPrice) * 100
     if (!isFinite(rate) || isNaN(rate)) return null
     return rate
   })()
@@ -399,6 +401,10 @@ export default function ListingNewClient() {
   const costNum = parseInt(supplyPrice.replace(/\D/g, ''), 10) || 0
   const priceNum = parseInt(commercePrice.replace(/\D/g, ''), 10) || 0
   const originalPriceNum = parseInt(originalPrice.replace(/\D/g, ''), 10) || 0
+  const customerDiscountRate =
+    originalPriceNum > 0 && previewPrice != null && originalPriceNum > previewPrice
+      ? ((originalPriceNum - previewPrice) / originalPriceNum) * 100
+      : null
   const shippingFeeNum = parseInt(baseShippingFee.replace(/\D/g, ''), 10) || 0
   const freeQtyNum = parseInt(freeShippingQty.replace(/\D/g, ''), 10) || 0
   const bulkQtyNum = parseInt(bulkQty.replace(/\D/g, ''), 10) || 0
@@ -455,8 +461,9 @@ export default function ListingNewClient() {
   function handleMarginInput(v: string) {
     setMarginInput(v)
     const m = Number(v) / 100
+    const PG = 0.033
     if (cost > 0 && m > 0 && m < 1) {
-      setCommercePrice(String(Math.round(cost / (1 - m))))
+      setCommercePrice(String(Math.round(cost / ((1 - m) * (1 - PG)))))
     }
   }
 
@@ -1419,7 +1426,20 @@ export default function ListingNewClient() {
                         placeholder="예: 22,900"
                       />
                       {marginRateDisplay != null ? (
-                        <p className={mod.fieldHintGreen}>마진율: {marginRateDisplay.toFixed(1)}%</p>
+                        <div
+                          style={{
+                            marginTop: 6,
+                            padding: '7px 10px',
+                            border: `1px solid ${marginBadge(marginRateDisplay).border}`,
+                            borderRadius: 8,
+                            fontSize: 13,
+                            fontWeight: 600,
+                            background: marginBadge(marginRateDisplay).bg,
+                            color: marginBadge(marginRateDisplay).color,
+                          }}
+                        >
+                          마진율 (PG 3.3%): {marginBadge(marginRateDisplay).label}
+                        </div>
                       ) : null}
                     </>
                   ) : (
@@ -1454,7 +1474,13 @@ export default function ListingNewClient() {
                     onChange={(e) => setOriginalPrice(e.target.value.replace(/\D/g, ''))}
                     placeholder="예: 26,000"
                   />
-                  <p className={mod.fieldHint}>판매가보다 클 때만 절감액 표시</p>
+                  {customerDiscountRate != null ? (
+                    <p style={{ margin: '6px 0 0', fontSize: 12, color: '#1f5d3a', fontWeight: 600 }}>
+                      고객 할인율 {customerDiscountRate.toFixed(1)}% — {formatKRW(originalPriceNum - previewPrice!)} 절감
+                    </p>
+                  ) : (
+                    <p className={mod.fieldHint}>판매가보다 클 때만 표시</p>
+                  )}
                 </div>
               </div>
               {savingsAmount != null && savingsAmount > 0 ? (
