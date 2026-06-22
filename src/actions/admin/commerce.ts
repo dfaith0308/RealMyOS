@@ -741,6 +741,7 @@ export type ListingForEditData = {
   free_shipping_qty: number | null
   bulk_qty: number | null
   bulk_discount_rate: number | null
+  box_qty?: number | null
   origin?: string | null
   storage_method?: string | null
   min_order_qty?: number | null
@@ -769,6 +770,7 @@ export type UpdateListingFullInput = {
   free_shipping_qty: number | null
   bulk_qty: number | null
   bulk_discount_rate: number | null
+  box_qty?: number | null
   origin?: string | null
   storage_method?: string | null
   min_order_qty?: number | null
@@ -859,6 +861,7 @@ export async function getListingForEdit(listingId: string): Promise<ActionResult
       free_shipping_qty,
       bulk_qty,
       bulk_discount_rate,
+      box_qty,
       origin,
       storage_method,
       min_order_qty,
@@ -933,6 +936,10 @@ export async function getListingForEdit(listingId: string): Promise<ActionResult
       bulk_discount_rate:
         typeof row.bulk_discount_rate === 'number' && Number.isFinite(row.bulk_discount_rate)
           ? row.bulk_discount_rate
+          : null,
+      box_qty:
+        typeof row.box_qty === 'number' && Number.isFinite(row.box_qty)
+          ? Math.round(row.box_qty)
           : null,
       origin: (row.origin as string | null) ?? null,
       storage_method: (row.storage_method as string | null) ?? null,
@@ -1059,6 +1066,11 @@ export async function updateListingFull(
   const manufacturer = input.manufacturer || null
   const barcode = String(input.barcode ?? '').replace(/\D/g, '') || null
   const item_report_number = String(input.item_report_number ?? '').trim() || null
+  const box_qty = (() => {
+    const v = input.box_qty
+    if (v == null || !Number.isFinite(v) || !Number.isInteger(v) || v <= 0) return 1
+    return v
+  })()
 
   const { data: listingRow, error: lFetchErr } = await supabase
     .from('commerce_product_listings')
@@ -1080,6 +1092,7 @@ export async function updateListingFull(
       free_shipping_qty,
       bulk_qty,
       bulk_discount_rate,
+      box_qty,
       origin,
       storage_method,
       min_order_qty,
@@ -1166,6 +1179,10 @@ export async function updateListingFull(
       typeof L.bulk_discount_rate === 'number' && Number.isFinite(L.bulk_discount_rate)
         ? L.bulk_discount_rate
         : null,
+    box_qty:
+      typeof L.box_qty === 'number' && Number.isFinite(L.box_qty)
+        ? Math.round(L.box_qty)
+        : null,
     origin: (L.origin as string | null) ?? null,
     storage_method: (L.storage_method as string | null) ?? null,
     min_order_qty:
@@ -1196,6 +1213,7 @@ export async function updateListingFull(
     free_shipping_qty,
     bulk_qty,
     bulk_discount_rate,
+    box_qty,
     origin,
     storage_method,
     min_order_qty,
@@ -1256,6 +1274,7 @@ export async function updateListingFull(
       free_shipping_qty,
       bulk_qty,
       bulk_discount_rate,
+      box_qty,
       origin,
       storage_method,
       min_order_qty,
@@ -1688,6 +1707,7 @@ export async function createListingFull(input: {
   free_shipping_qty?: number | null
   bulk_qty?: number | null
   bulk_discount_rate?: number | null
+  box_qty?: number | null
   origin?: string | null
   storage_method?: string | null
   min_order_qty?: number | null
@@ -1858,6 +1878,7 @@ export async function createListingFull(input: {
       free_shipping_qty: input.free_shipping_qty ?? null,
       bulk_qty: input.bulk_qty ?? null,
       bulk_discount_rate: input.bulk_discount_rate ?? null,
+      box_qty: input.box_qty ?? 1,
       origin: String(input.origin ?? '').trim() || null,
       storage_method: String(input.storage_method ?? '').trim() || null,
       min_order_qty: input.min_order_qty ?? 1,

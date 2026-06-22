@@ -79,6 +79,7 @@ type FormModel = {
   free_shipping_qty: string
   bulk_qty: string
   bulk_discount_rate: string
+  box_qty?: string
   barcode?: string
   item_report_number?: string
   manufacturer?: string
@@ -135,6 +136,7 @@ function serializeForm(f: FormModel): string {
     free_shipping_qty: f.free_shipping_qty.trim(),
     bulk_qty: f.bulk_qty.trim(),
     bulk_discount_rate: f.bulk_discount_rate.trim(),
+    box_qty: f.box_qty ?? '1',
     barcode: f.barcode?.trim() ?? '',
     item_report_number: f.item_report_number?.trim() ?? '',
     manufacturer: f.manufacturer?.trim() ?? '',
@@ -159,6 +161,7 @@ export default function ListingEditClient({
       barcode: initial.barcode ?? '',
       item_report_number: initial.item_report_number ?? '',
       manufacturer: initial.manufacturer ?? '',
+      box_qty: String(initial.box_qty ?? 1),
     }),
   )
   const [toast, setToast] = useState<{ text: string; variant: 'success' | 'error' } | null>(null)
@@ -171,6 +174,7 @@ export default function ListingEditClient({
   const [usageDesc, setUsageDesc] = useState(initial.usage_desc ?? '')
   const [allergen, setAllergen] = useState(initial.allergen ?? '')
   const [manufacturer, setManufacturer] = useState(initial.manufacturer ?? '')
+  const [boxQty, setBoxQty] = useState(String(initial.box_qty ?? 1))
   const [ingredients, setIngredients] = useState(initial.ingredients ?? '')
   const [barcode, setBarcode] = useState(initial.barcode ?? '')
   const [itemReportNumber, setItemReportNumber] = useState(initial.item_report_number ?? '')
@@ -203,9 +207,9 @@ export default function ListingEditClient({
 
   const isDirty = useMemo(
     () =>
-      serializeForm({ ...form, barcode, item_report_number: itemReportNumber, manufacturer }) !== baseline ||
+      serializeForm({ ...form, barcode, item_report_number: itemReportNumber, manufacturer, box_qty: boxQty }) !== baseline ||
       detailSnapshot !== detailBaseline,
-    [form, baseline, detailSnapshot, detailBaseline, barcode, itemReportNumber, manufacturer],
+    [form, baseline, detailSnapshot, detailBaseline, barcode, itemReportNumber, manufacturer, boxQty],
   )
 
   useEffect(() => {
@@ -242,25 +246,35 @@ export default function ListingEditClient({
   const shippingFeeNum = parseInt(form.base_shipping_fee.replace(/\D/g, ''), 10) || 0
   const freeQtyNum = parseInt(form.free_shipping_qty.replace(/\D/g, ''), 10) || 0
   const bulkQtyNum = parseInt(form.bulk_qty.replace(/\D/g, ''), 10) || 0
+  const boxQtyNum = parseInt(boxQty.replace(/\D/g, ''), 10) || 1
   const bulkRateNum = parseFloat(form.bulk_discount_rate) || 0
 
+  function calcShippingCost(qty: number): number {
+    if (freeQtyNum > 0 && qty >= freeQtyNum) return 0
+    const boxes = Math.ceil(qty / boxQtyNum)
+    return boxes * shippingFeeNum
+  }
+
+  const singleShippingCost = calcShippingCost(1)
   const singleMargin =
     costNum > 0 && priceNum > 0
       ? ((priceNum * (1 - PG_FEE_RATE) - costNum) / (priceNum * (1 - PG_FEE_RATE))) * 100
       : null
 
+  const freeShippingCost = freeQtyNum > 0 ? calcShippingCost(freeQtyNum) : 0
   const freeShippingMargin =
     costNum > 0 && priceNum > 0 && freeQtyNum > 0
-      ? ((priceNum * (1 - PG_FEE_RATE) * freeQtyNum - costNum * freeQtyNum - shippingFeeNum) /
+      ? ((priceNum * (1 - PG_FEE_RATE) * freeQtyNum - costNum * freeQtyNum - freeShippingCost) /
           (priceNum * (1 - PG_FEE_RATE) * freeQtyNum)) *
         100
       : null
 
   const bulkPrice =
     priceNum > 0 && bulkRateNum > 0 ? Math.round(priceNum * (1 - bulkRateNum / 100)) : priceNum
+  const bulkShippingCost = bulkQtyNum > 0 ? calcShippingCost(bulkQtyNum) : 0
   const bulkMargin =
     costNum > 0 && bulkPrice > 0 && bulkQtyNum > 0
-      ? ((bulkPrice * (1 - PG_FEE_RATE) * bulkQtyNum - costNum * bulkQtyNum - shippingFeeNum) /
+      ? ((bulkPrice * (1 - PG_FEE_RATE) * bulkQtyNum - costNum * bulkQtyNum - bulkShippingCost) /
           (bulkPrice * (1 - PG_FEE_RATE) * bulkQtyNum)) *
         100
       : null
@@ -337,6 +351,7 @@ export default function ListingEditClient({
         free_shipping_qty: freeQtyNum > 0 ? freeQtyNum : null,
         bulk_qty: bulkQtyNum > 0 ? bulkQtyNum : null,
         bulk_discount_rate: bulkRateNum > 0 ? bulkRateNum : null,
+        box_qty: parseInt(boxQty) || 1,
         origin: origin.trim() || null,
         storage_method: storageMethod.trim() || null,
         min_order_qty: minOrderQty ? Number(minOrderQty) : 1,
@@ -355,7 +370,7 @@ export default function ListingEditClient({
         return
       }
       setToast({ text: '저장되었습니다', variant: 'success' })
-      setBaseline(serializeForm({ ...form, barcode, item_report_number: itemReportNumber, manufacturer }))
+      setBaseline(serializeForm({ ...form, barcode, item_report_number: itemReportNumber, manufacturer, box_qty: boxQty }))
       setDetailBaseline(detailSnapshot)
       router.push('/admin/commerce/products')
     })
@@ -526,7 +541,7 @@ export default function ListingEditClient({
         <div style={{ background: 'var(--ds-surface-panel)', border: '1px solid var(--ds-border-default)', borderRadius: 12, padding: '18px 20px' }}>
           <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--ds-text-secondary)', margin: '0 0 14px', letterSpacing: '.06em', textTransform: 'uppercase' as const }}>배송 정책</p>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 200px', gap: 10, marginBottom: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 16 }}>
             <div>
               <label style={{ fontSize: 11, color: 'var(--ds-text-secondary)', display: 'block', marginBottom: 4 }}>공급가 (원) — 자동</label>
               <input className={s.input} value="—" readOnly style={{ width: '100%', boxSizing: 'border-box' as const, background: 'var(--ds-neutral-50)', color: 'var(--ds-text-muted)' }} />
@@ -534,6 +549,19 @@ export default function ListingEditClient({
             <div>
               <label style={{ fontSize: 11, color: 'var(--ds-text-secondary)', display: 'block', marginBottom: 4 }}>기본 배송비 (원)</label>
               <input className={s.input} inputMode="numeric" value={form.base_shipping_fee ?? ''} onChange={(e) => setForm((p) => ({ ...p, base_shipping_fee: e.target.value }))} placeholder="예: 3500" style={{ width: '100%', boxSizing: 'border-box' as const }} />
+            </div>
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--ds-text-secondary)', display: 'block', marginBottom: 4 }}>박스당 수량 (개)</label>
+              <input
+                className={s.input}
+                type="text"
+                inputMode="numeric"
+                value={boxQty}
+                onChange={e => setBoxQty(e.target.value.replace(/\D/g, '') || '1')}
+                placeholder="예: 10"
+                style={{ width: '100%', boxSizing: 'border-box' as const }}
+              />
+              <p style={{ fontSize: 10, color: 'var(--ds-text-muted)', margin: '3px 0 0' }}>박스 단위 배송비 계산 기준</p>
             </div>
           </div>
 

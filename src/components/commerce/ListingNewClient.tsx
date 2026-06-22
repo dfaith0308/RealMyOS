@@ -257,6 +257,7 @@ export default function ListingNewClient() {
   const [bulkQty, setBulkQty] = useState('')
   const [bulkDiscountRate, setBulkDiscountRate] = useState('')
   const [baseShippingFee, setBaseShippingFee] = useState('3500')
+  const [boxQty, setBoxQty] = useState('1')
   const [shippingGroupId, setShippingGroupId] = useState(empty.shippingGroupId)
 
   const [origin, setOrigin] = useState('')
@@ -409,18 +410,28 @@ export default function ListingNewClient() {
   const shippingFeeNum = parseInt(baseShippingFee.replace(/\D/g, ''), 10) || 0
   const freeQtyNum = parseInt(freeShippingQty.replace(/\D/g, ''), 10) || 0
   const bulkQtyNum = parseInt(bulkQty.replace(/\D/g, ''), 10) || 0
+  const boxQtyNum = parseInt(boxQty.replace(/\D/g, ''), 10) || 1
   const bulkRateNum = parseFloat(bulkDiscountRate) || 0
 
-  // 낱개: 배송비 고객 부담 → 우리 마진 = (판매가 - 공급가) / 판매가
+  // 수량에 따른 실제 배송비 계산
+  function calcShippingCost(qty: number): number {
+    if (freeQtyNum > 0 && qty >= freeQtyNum) return 0
+    const boxes = Math.ceil(qty / boxQtyNum)
+    return boxes * shippingFeeNum
+  }
+
+  const singleShippingCost = calcShippingCost(1)
+  // 낱개: 배송비 고객 부담 → 우리 마진에 배송비 미반영
   const singleMargin =
     costNum > 0 && priceNum > 0
       ? ((priceNum * (1 - PG_FEE_RATE) - costNum) / (priceNum * (1 - PG_FEE_RATE))) * 100
       : null
 
+  const freeShippingCost = freeQtyNum > 0 ? calcShippingCost(freeQtyNum) : 0
   // 무료배송: 배송비 우리 부담 → 우리 마진 = (판매가*수량 - 공급가*수량 - 배송비) / (판매가*수량)
   const freeShippingMargin =
     costNum > 0 && priceNum > 0 && freeQtyNum > 0
-      ? ((priceNum * (1 - PG_FEE_RATE) * freeQtyNum - costNum * freeQtyNum - shippingFeeNum) /
+      ? ((priceNum * (1 - PG_FEE_RATE) * freeQtyNum - costNum * freeQtyNum - freeShippingCost) /
           (priceNum * (1 - PG_FEE_RATE) * freeQtyNum)) *
         100
       : null
@@ -428,9 +439,10 @@ export default function ListingNewClient() {
   // 대량구매: 할인 적용가 기준 마진 (배송비 우리 부담)
   const bulkPrice =
     priceNum > 0 && bulkRateNum > 0 ? Math.round(priceNum * (1 - bulkRateNum / 100)) : priceNum
+  const bulkShippingCost = bulkQtyNum > 0 ? calcShippingCost(bulkQtyNum) : 0
   const bulkMargin =
     costNum > 0 && bulkPrice > 0 && bulkQtyNum > 0
-      ? ((bulkPrice * (1 - PG_FEE_RATE) * bulkQtyNum - costNum * bulkQtyNum - shippingFeeNum) /
+      ? ((bulkPrice * (1 - PG_FEE_RATE) * bulkQtyNum - costNum * bulkQtyNum - bulkShippingCost) /
           (bulkPrice * (1 - PG_FEE_RATE) * bulkQtyNum)) *
         100
       : null
@@ -981,6 +993,7 @@ export default function ListingNewClient() {
           free_shipping_qty: freeQtyNum || null,
           bulk_qty: bulkQtyNum || null,
           bulk_discount_rate: bulkRateNum || null,
+          box_qty: boxQtyNum > 0 ? boxQtyNum : 1,
           origin: origin.trim() || null,
           storage_method: storageMethod.trim() || null,
           min_order_qty: minOrderQty ? Number(minOrderQty) : 1,
@@ -1581,7 +1594,7 @@ export default function ListingNewClient() {
               <p className={mod.sectionLabel}>배송 정책</p>
 
               {/* 기준값 */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 16 }}>
                 <div>
                   <label className={mod.fieldLabel}>공급가 (원) — 자동</label>
                   <input
@@ -1601,6 +1614,18 @@ export default function ListingNewClient() {
                     onChange={(e) => setBaseShippingFee(e.target.value.replace(/\D/g, ''))}
                     placeholder="예: 3,500"
                   />
+                </div>
+                <div>
+                  <label className={mod.fieldLabel}>박스당 수량 (개)</label>
+                  <input
+                    className={mod.input}
+                    type="text"
+                    inputMode="numeric"
+                    value={boxQty}
+                    onChange={e => setBoxQty(e.target.value.replace(/\D/g, '') || '1')}
+                    placeholder="예: 10"
+                  />
+                  <p className={mod.fieldHint}>박스 단위 배송비 계산 기준</p>
                 </div>
               </div>
 
@@ -1650,7 +1675,9 @@ export default function ListingNewClient() {
                   </div>
                 </div>
                 <p style={{ fontSize: 11, color: 'var(--ds-text-muted)', margin: '6px 0 0' }}>
-                  낱개 구매 시 배송비는 고객 부담 → 우리 마진에 영향 없음
+                  {singleShippingCost > 0
+                    ? `배송비 ${formatKRW(singleShippingCost)} 고객 부담 → 우리 마진에 영향 없음`
+                    : '무료배송 적용'}
                 </p>
               </div>
 
