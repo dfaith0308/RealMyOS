@@ -29,16 +29,24 @@ export default async function OrderDetailPage({ params }: { params: { id: string
     .select(`
       id, order_number, order_date, customer_id, total_amount, status, order_status, memo,
       customers(name),
-      order_lines(product_name, quantity, unit_price, line_total),
-      order_logs(action, before_data, after_data, created_at)
+      order_lines(product_name, quantity, unit_price, line_total)
     `)
     .eq('id', params.id)
     .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
     .is('deleted_at', null)
     .single()
 
-  if (error || !orderRaw) notFound()
+  if (error || !orderRaw) {
+    console.error('[order detail error]', error?.message)
+    notFound()
+  }
   const order: any = orderRaw
+
+  const { data: orderLogs } = await supabase
+    .from('order_logs')
+    .select('action, before_data, after_data, created_at')
+    .eq('order_id', params.id)
+    .order('created_at', { ascending: false })
 
   const tradeStatusKey =
     order.status === 'draft'
@@ -50,15 +58,14 @@ export default async function OrderDetailPage({ params }: { params: { id: string
   const opStatus = (order.order_status ?? '접수') as OrderOperationStatus
   const next = nextStatus(opStatus)
 
-  async function step() {
+  async function step(orderId: string, nextStatus: OrderOperationStatus) {
     'use server'
-    if (!next) return
-    await updateOrderStatus(order.id, next)
+    await updateOrderStatus(orderId, nextStatus)
   }
 
-  async function setTo(s: OrderOperationStatus) {
+  async function setTo(orderId: string, status: OrderOperationStatus) {
     'use server'
-    await updateOrderStatus(order.id, s)
+    await updateOrderStatus(orderId, status)
   }
 
   return (
@@ -110,7 +117,7 @@ export default async function OrderDetailPage({ params }: { params: { id: string
           </span>
 
           {FLOW.map((s) => (
-            <form key={s} action={async () => setTo(s)}>
+            <form key={s} action={setTo.bind(null, order.id, s)}>
               <button
                 type="submit"
                 style={{
@@ -131,7 +138,7 @@ export default async function OrderDetailPage({ params }: { params: { id: string
           ))}
 
           {next ? (
-            <form action={step} style={{ marginLeft: 'auto' }}>
+            <form action={step.bind(null, order.id, next)} style={{ marginLeft: 'auto' }}>
               <button
                 type="submit"
                 style={{
@@ -179,7 +186,7 @@ export default async function OrderDetailPage({ params }: { params: { id: string
       <Surface variant="panel" density="comfortable" style={{ marginTop: 12 }}>
         <div style={{ fontSize: 12, fontWeight: 900, color: 'var(--ds-text-secondary)', marginBottom: 8 }}>변경 이력</div>
         <div style={{ borderTop: '1px solid var(--ds-border-subtle)' }}>
-          {(order.order_logs ?? []).slice(0, 20).map((lg: any, idx: number) => (
+          {(orderLogs ?? []).slice(0, 20).map((lg: any, idx: number) => (
             <DataTableRow key={`${lg.created_at}-${idx}`} density="compact">
               <DataCell>
                 <div style={{ fontSize: 12, fontWeight: 900 }}>{lg.action}</div>
