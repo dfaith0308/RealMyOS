@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState, useTransition } from 'react'
-import { deleteListing, updateListingStatus, type CommerceListingRow } from '@/actions/admin/commerce'
+import { bulkPublishListings, deleteListing, updateListingStatus, type CommerceListingRow } from '@/actions/admin/commerce'
 import { formatKRW } from '@/lib/calc'
 import s from '@/app/(admin)/admin-shared.module.css'
 
@@ -103,6 +103,24 @@ export default function ListingsClient({
     if (next.has(id)) next.delete(id)
     else next.add(id)
     setSelected(next)
+  }
+
+  function handleBulkPublish() {
+    if (selected.size === 0) return
+    if (!window.confirm(`선택한 ${selected.size}개 상품을 공개하시겠습니까?`)) return
+
+    setError(null)
+    const ids = [...selected]
+    startTransition(async () => {
+      const r = await bulkPublishListings(ids)
+      if (!r.success) {
+        setError(r.error ?? '공개 실패')
+        return
+      }
+      setSelected(new Set())
+      refresh()
+      window.setTimeout(() => refresh(), 300)
+    })
   }
 
   function handleBulkDelete() {
@@ -295,24 +313,44 @@ export default function ListingsClient({
           {filtered.length}건
         </span>
         {selected.size > 0 ? (
-          <button
-            type="button"
-            onClick={handleBulkDelete}
-            disabled={pending}
-            style={{
-              padding: '8px 16px',
-              background: '#dc2626',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 8,
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: pending ? 'not-allowed' : 'pointer',
-              fontFamily: 'inherit',
-            }}
-          >
-            선택 삭제 ({selected.size}개)
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={handleBulkPublish}
+              disabled={pending}
+              style={{
+                padding: '8px 16px',
+                background: '#1f5d3a',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: pending ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              선택 공개 ({selected.size}개)
+            </button>
+            <button
+              type="button"
+              onClick={handleBulkDelete}
+              disabled={pending}
+              style={{
+                padding: '8px 16px',
+                background: '#dc2626',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: pending ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              선택 삭제 ({selected.size}개)
+            </button>
+          </>
         ) : null}
       </div>
 

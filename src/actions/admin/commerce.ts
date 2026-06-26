@@ -1,6 +1,8 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { requireAdmin as requireAdminAuth } from '@/lib/auth'
+import { createSupabaseAdmin } from '@/lib/supabase-admin'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import {
   COMMERCE_ORDER_STATUSES,
@@ -2882,4 +2884,23 @@ export async function deleteListing(id: string): Promise<ActionResult<null>> {
 
   revalidatePath('/admin/commerce/products')
   return { success: true, data: null }
+}
+
+export async function bulkPublishListings(
+  ids: string[],
+): Promise<{ success: boolean; error?: string }> {
+  await requireAdminAuth()
+  const supabase = await createSupabaseAdmin()
+
+  if (ids.length === 0) return { success: true }
+
+  const { error } = await supabase
+    .from('commerce_product_listings')
+    .update({ status: 'visible', is_visible: true })
+    .in('id', ids)
+
+  if (error) return { success: false, error: error.message }
+
+  revalidatePath('/admin/commerce/products')
+  return { success: true }
 }
