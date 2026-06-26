@@ -29,6 +29,17 @@ export async function sendPushToTenant(input: {
 
   const data = await res.json()
   if (!res.ok) return { success: false, error: data.error }
+
+  const supabase = await createSupabaseAdmin()
+  await supabase.from('push_logs').insert({
+    title: input.title,
+    body: input.body,
+    url: input.url ?? '/',
+    target_type: 'single',
+    target_tenant_id: input.tenant_id,
+    sent_count: data.sent ?? 0,
+  })
+
   return { success: true, sent: data.sent }
 }
 
@@ -68,6 +79,14 @@ export async function sendPushToAll(input: {
     const data = await res.json()
     if (data.success) total += data.sent ?? 0
   }
+
+  await supabase.from('push_logs').insert({
+    title: input.title,
+    body: input.body,
+    url: input.url ?? '/',
+    target_type: 'all',
+    sent_count: total,
+  })
 
   return { success: true, total }
 }

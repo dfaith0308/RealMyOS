@@ -31,6 +31,28 @@ export default async function PushPage() {
     count: (subs ?? []).filter((s) => s.tenant_id === id).length,
   }))
 
+  const { data: logs } = await supabase
+    .from('push_logs')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(20)
+
+  const logTenantIds = [
+    ...new Set((logs ?? []).map((l) => l.target_tenant_id).filter((id): id is string => Boolean(id))),
+  ]
+
+  const { data: logTenants } = await supabase
+    .from('tenants')
+    .select('id, name')
+    .in('id', logTenantIds.length > 0 ? logTenantIds : ['00000000-0000-0000-0000-000000000000'])
+
+  const logTenantNameMap = new Map((logTenants ?? []).map((t) => [t.id, t.name]))
+
+  const logsWithTenants = (logs ?? []).map((log) => ({
+    ...log,
+    tenants: log.target_tenant_id ? { name: logTenantNameMap.get(log.target_tenant_id) } : null,
+  }))
+
   return (
     <main style={{ maxWidth: 800, margin: '0 auto', padding: '24px 32px' }}>
       <div style={{ marginBottom: 24 }}>
@@ -120,6 +142,51 @@ export default async function PushPage() {
       </div>
 
       <PushSendClient />
+
+      <div
+        style={{
+          background: '#fff',
+          borderRadius: 12,
+          border: '1px solid #e5e7eb',
+          padding: '20px 24px',
+          marginTop: 20,
+        }}
+      >
+        <p style={{ fontSize: 13, fontWeight: 600, color: '#374151', margin: '0 0 16px' }}>발송 이력</p>
+        {logsWithTenants.length === 0 ? (
+          <p style={{ fontSize: 13, color: '#9ca3af', margin: 0 }}>발송 이력이 없습니다</p>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
+                <th style={{ textAlign: 'left', padding: '8px 12px', color: '#6b7280', fontWeight: 600 }}>발송일시</th>
+                <th style={{ textAlign: 'left', padding: '8px 12px', color: '#6b7280', fontWeight: 600 }}>제목</th>
+                <th style={{ textAlign: 'left', padding: '8px 12px', color: '#6b7280', fontWeight: 600 }}>대상</th>
+                <th style={{ textAlign: 'center', padding: '8px 12px', color: '#6b7280', fontWeight: 600 }}>발송수</th>
+              </tr>
+            </thead>
+            <tbody>
+              {logsWithTenants.map((log) => (
+                <tr key={log.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                  <td style={{ padding: '10px 12px', color: '#6b7280', fontSize: 12 }}>
+                    {new Date(log.created_at).toLocaleString('ko-KR')}
+                  </td>
+                  <td style={{ padding: '10px 12px', color: '#1a1a1a', fontWeight: 500 }}>
+                    <p style={{ margin: '0 0 2px' }}>{log.title}</p>
+                    <p style={{ margin: 0, fontSize: 11, color: '#9ca3af' }}>{log.body}</p>
+                  </td>
+                  <td style={{ padding: '10px 12px', color: '#374151' }}>
+                    {log.target_type === 'all' ? '전체' : log.tenants?.name ?? '특정 식당'}
+                  </td>
+                  <td style={{ padding: '10px 12px', color: '#1f5d3a', fontWeight: 700, textAlign: 'center' }}>
+                    {log.sent_count}개
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </main>
   )
 }
