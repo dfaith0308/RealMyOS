@@ -44,6 +44,7 @@ export default function ListingsClient({
   const [buyPreviewRow, setBuyPreviewRow] = useState<CommerceListingRow | null>(null)
   const [storefrontTab, setStorefrontTab] = useState<StorefrontPreviewTab>('detail')
   const [searchQuery, setSearchQuery] = useState('')
+  const [selected, setSelected] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     if (buyPreviewRow) setStorefrontTab('detail')
@@ -88,6 +89,41 @@ export default function ListingsClient({
         )
       })
     : listings
+
+  function toggleAll() {
+    if (filtered.length > 0 && filtered.every((l) => selected.has(l.id))) {
+      setSelected(new Set())
+    } else {
+      setSelected(new Set(filtered.map((l) => l.id)))
+    }
+  }
+
+  function toggleOne(id: string) {
+    const next = new Set(selected)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setSelected(next)
+  }
+
+  function handleBulkDelete() {
+    if (selected.size === 0) return
+    if (!window.confirm(`선택한 ${selected.size}개 상품을 삭제하시겠습니까?`)) return
+
+    setError(null)
+    const ids = [...selected]
+    startTransition(async () => {
+      for (const id of ids) {
+        const r = await deleteListing(id)
+        if (!r.success) {
+          setError(r.error ?? '삭제 실패')
+          return
+        }
+      }
+      setSelected(new Set())
+      refresh()
+      window.setTimeout(() => refresh(), 300)
+    })
+  }
 
   return (
     <>
@@ -238,7 +274,7 @@ export default function ListingsClient({
         </div>
       ) : null}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', marginBottom: 4 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', marginBottom: 4, flexWrap: 'wrap' }}>
         <input
           type="text"
           value={searchQuery}
@@ -258,6 +294,26 @@ export default function ListingsClient({
         <span style={{ fontSize: 12, color: 'var(--ds-text-muted)', whiteSpace: 'nowrap' }}>
           {filtered.length}건
         </span>
+        {selected.size > 0 ? (
+          <button
+            type="button"
+            onClick={handleBulkDelete}
+            disabled={pending}
+            style={{
+              padding: '8px 16px',
+              background: '#dc2626',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: pending ? 'not-allowed' : 'pointer',
+              fontFamily: 'inherit',
+            }}
+          >
+            선택 삭제 ({selected.size}개)
+          </button>
+        ) : null}
       </div>
 
       {error ? (
@@ -278,6 +334,14 @@ export default function ListingsClient({
           <table className={s.table}>
             <thead>
               <tr className={s.theadRow}>
+                <th style={{ width: 40, padding: '8px 12px' }}>
+                  <input
+                    type="checkbox"
+                    checked={filtered.length > 0 && filtered.every((l) => selected.has(l.id))}
+                    onChange={toggleAll}
+                    disabled={pending || filtered.length === 0}
+                  />
+                </th>
                 {['썸네일', '상품명', '브랜드', '배송', '정상가', '가격', '상태', '등록일', '스토어 미리보기', '액션'].map((h) => (
                   <th key={h} className={s.th}>
                     {h}
@@ -288,6 +352,14 @@ export default function ListingsClient({
             <tbody>
               {filtered.map((row) => (
                 <tr key={row.id}>
+                  <td style={{ padding: '8px 12px' }}>
+                    <input
+                      type="checkbox"
+                      checked={selected.has(row.id)}
+                      onChange={() => toggleOne(row.id)}
+                      disabled={pending}
+                    />
+                  </td>
                   <td className={s.tdNowrap}>
                     {row.thumbnail_url?.trim() ? (
                       <img
