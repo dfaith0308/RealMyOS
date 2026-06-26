@@ -10,20 +10,26 @@ export default async function PushPage() {
     .from('push_subscriptions')
     .select('*', { count: 'exact', head: true })
 
-  const { data: subsByTenant } = await supabase
+  const { data: subs } = await supabase
     .from('push_subscriptions')
-    .select('tenant_id, tenants(name)')
+    .select('tenant_id, created_at')
     .order('created_at', { ascending: false })
-    .limit(20)
+    .limit(100)
 
-  const tenantMap = new Map<string, { name: string; count: number }>()
-  for (const sub of subsByTenant ?? []) {
-    const tid = sub.tenant_id
-    const name = (sub.tenants as { name?: string } | null)?.name ?? tid.slice(0, 8)
-    if (!tenantMap.has(tid)) tenantMap.set(tid, { name, count: 0 })
-    tenantMap.get(tid)!.count++
-  }
-  const tenantList = [...tenantMap.entries()].map(([id, v]) => ({ id, ...v }))
+  const tenantIds = [...new Set((subs ?? []).map((s) => s.tenant_id))]
+
+  const { data: tenants } = await supabase
+    .from('tenants')
+    .select('id, name')
+    .in('id', tenantIds.length > 0 ? tenantIds : ['00000000-0000-0000-0000-000000000000'])
+
+  const tenantNameMap = new Map((tenants ?? []).map((t) => [t.id, t.name]))
+
+  const tenantList = tenantIds.map((id) => ({
+    id,
+    name: tenantNameMap.get(id) ?? id.slice(0, 8),
+    count: (subs ?? []).filter((s) => s.tenant_id === id).length,
+  }))
 
   return (
     <main style={{ maxWidth: 800, margin: '0 auto', padding: '24px 32px' }}>
