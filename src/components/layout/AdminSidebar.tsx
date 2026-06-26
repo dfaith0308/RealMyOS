@@ -33,6 +33,7 @@ const MENU: MenuEntry[] = [
       { label: '가격 정책', href: '/admin/commerce/pricing' },
       { label: '무통장 입금', href: '/admin/commerce/storefront-bank' },
       { label: '쿠폰 관리', href: '/admin/coupons' },
+      { label: '푸시 알림', href: '/admin/push' },
     ],
   },
   {
