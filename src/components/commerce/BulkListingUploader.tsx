@@ -67,9 +67,30 @@ function parseWorkbook(buffer: ArrayBuffer): BulkListingRow[] {
 
   const sheet = workbook.Sheets[sheetName]
   const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '' })
-  if (matrix.length < 5) return []
+  if (matrix.length < 3) return []
 
-  const headerRow = matrix[2]
+  let headerRowIndex = -1
+  for (let i = 0; i < Math.min(matrix.length, 10); i++) {
+    const row = matrix[i]
+    if (
+      row &&
+      Array.isArray(row) &&
+      row.some((cell: unknown) => {
+        const key = cellStr(cell).toLowerCase()
+        return key === 'product_name' || key === 'brand_name' || key === 'commerce_price'
+      })
+    ) {
+      headerRowIndex = i
+      break
+    }
+  }
+
+  if (headerRowIndex === -1) {
+    throw new Error('엑셀 형식이 올바르지 않습니다. 영문 키 헤더(product_name 등)가 없습니다.')
+  }
+
+  const dataStartIndex = headerRowIndex + 2
+  const headerRow = matrix[headerRowIndex]
   if (!Array.isArray(headerRow)) return []
 
   const colIndex: Partial<Record<keyof Omit<BulkListingRow, 'row_number'>, number>> = {}
@@ -81,7 +102,7 @@ function parseWorkbook(buffer: ArrayBuffer): BulkListingRow[] {
 
   const rows: BulkListingRow[] = []
 
-  for (let i = 4; i < matrix.length; i++) {
+  for (let i = dataStartIndex; i < matrix.length; i++) {
     const line = matrix[i]
     if (!Array.isArray(line)) continue
 
@@ -184,11 +205,11 @@ export default function BulkListingUploader() {
         }
         const parsed = parseWorkbook(buffer)
         if (!parsed.length) {
-          setParseError('등록할 데이터 행이 없습니다. 3행 영문키·5행부터 데이터인지 확인해 주세요.')
+          setParseError('등록할 데이터 행이 없습니다. 영문키 헤더 아래 설명행 1개 후 데이터가 시작되는지 확인해 주세요.')
         }
         setRows(parsed)
-      } catch {
-        setParseError('엑셀 파싱에 실패했습니다')
+      } catch (err) {
+        setParseError(err instanceof Error ? err.message : '엑셀 파싱에 실패했습니다')
         setRows([])
       }
     }
@@ -273,7 +294,7 @@ export default function BulkListingUploader() {
           엑셀 파일을 드래그하거나 클릭해서 업로드
         </p>
         <p style={{ margin: 0, fontSize: 13, color: '#6b7280' }}>
-          .xlsx / .xls · 3행 영문키 · 5행부터 데이터
+          .xlsx / .xls · 영문키 헤더 자동 감지 · 헤더 다음다음 행부터 데이터
         </p>
         {fileName ? (
           <p style={{ margin: '12px 0 0', fontSize: 12, color: '#1f5d3a', fontWeight: 600 }}>{fileName}</p>
