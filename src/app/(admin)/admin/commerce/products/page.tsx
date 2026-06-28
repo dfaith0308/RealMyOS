@@ -63,6 +63,22 @@ export default async function AdminCommerceProductsPage(props: {
           >
             📋 대량 등록
           </Link>
+          <a
+            href="/api/admin/export-listings"
+            download
+            style={{
+              padding: '8px 14px',
+              border: '1px solid #e5e7eb',
+              borderRadius: 8,
+              background: '#fff',
+              color: '#374151',
+              fontSize: 13,
+              fontWeight: 600,
+              textDecoration: 'none',
+            }}
+          >
+            📥 엑셀 다운로드
+          </a>
         </div>
       </header>
 

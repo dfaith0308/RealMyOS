@@ -261,6 +261,33 @@ export async function getListings(filters?: {
   return { success: true, data: { listings } }
 }
 
+export async function getListingsForExport(): Promise<ActionResult<{ rows: any[] }>> {
+  try {
+    await requireAdminAuth()
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : '권한 없음' }
+  }
+  const supabase = await createSupabaseAdmin()
+
+  const { data, error } = await supabase
+    .from('commerce_product_listings')
+    .select(`
+      id, brand_name, spec, commerce_price, original_price,
+      base_shipping_fee, free_shipping_qty, bulk_qty, bulk_discount_rate,
+      box_qty, storage_method, ingredients, manufacturer, usage_desc,
+      barcode, item_report_number, thumbnail_url, category_id,
+      ai_strengths, ai_usage, ai_summary,
+      products(name, category_id),
+      product_categories:category_id(name, parent_id,
+        parent:parent_id(name))
+    `)
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false })
+
+  if (error) return { success: false, error: error.message }
+  return { success: true, data: { rows: data ?? [] } }
+}
+
 export async function getCategories(): Promise<ActionResult<{ categories: PlatformCommerceCategory[] }>> {
   const supabase = await createSupabaseServer()
   const auth = await requireAdmin(supabase)
