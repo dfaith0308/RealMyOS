@@ -333,7 +333,9 @@ export default function ListingEditClient({
   const [ingredients, setIngredients] = useState(initial.ingredients ?? '')
   const [barcode, setBarcode] = useState(initial.barcode ?? '')
   const [itemReportNumber, setItemReportNumber] = useState(initial.item_report_number ?? '')
-  const [aiStrengths, setAiStrengths] = useState(initial.description ?? '')
+  const [aiStrengths, setAiStrengths] = useState(initial.ai_strengths ?? '')
+  const [aiUsage, setAiUsage] = useState(initial.ai_usage ?? '')
+  const [aiSummary, setAiSummary] = useState(initial.ai_summary ?? '')
   const [analyzing, setAnalyzing] = useState(false)
 
   const [shippingGroups, setShippingGroups] = useState<ShippingGroupListItem[]>(initialShippingGroups)
@@ -902,9 +904,10 @@ export default function ListingEditClient({
         usageDesc,
         manufacturer: manufacturer.trim(),
       })
-      if (r.success && r.strengths) {
-        setAiStrengths(r.strengths)
-        setListingDescription(r.strengths)
+      if (r.success) {
+        setAiStrengths(r.strengths ?? '')
+        setAiUsage(r.usage ?? '')
+        setAiSummary(r.summary ?? '')
       }
     } finally {
       setAnalyzing(false)
@@ -1023,7 +1026,7 @@ export default function ListingEditClient({
     const op = parseOriginal()
     const image_urls = blocksToSavedUrls(detailBlocks)
     const badge_labels = thumbnailBadges.length > 0 ? thumbnailBadges : null
-    const description = (listingDescription.trim() || aiStrengths.trim()) || null
+    const description = listingDescription.trim() || null
 
     startTransition(async () => {
       try {
@@ -1041,6 +1044,9 @@ export default function ListingEditClient({
           badge_labels,
           admin_memo: adminMemo.trim() || null,
           description,
+          ai_strengths: aiStrengths.trim() || null,
+          ai_usage: aiUsage.trim() || null,
+          ai_summary: aiSummary.trim() || null,
           thumbnail_url: thumbnailUrl.trim() || null,
           image_urls: image_urls.length > 0 ? image_urls : null,
           base_shipping_fee: shippingFeeNum || 3500,
@@ -1615,12 +1621,22 @@ export default function ListingEditClient({
                 >
                   {analyzing ? '분석 중...' : '🤖 AI 강점 분석'}
                 </button>
+                {aiSummary && (
+                  <div style={{ padding: '12px 16px', background: '#1f5d3a', borderRadius: 8, marginBottom: 8 }}>
+                    <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)', margin: '0 0 4px' }}>식식이 한줄평</p>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: '#fff', margin: 0 }}>{aiSummary}</p>
+                  </div>
+                )}
                 {aiStrengths && (
-                  <div style={{ marginTop: 10, padding: '10px 14px', background: '#f0f7f3', borderRadius: 8, border: '1px solid #bbf7d0' }}>
-                    <p style={{ fontSize: 11, fontWeight: 600, color: '#1f5d3a', margin: '0 0 6px' }}>AI 분석 결과</p>
-                    {aiStrengths.split('\n').filter(Boolean).map((s, i) => (
-                      <p key={i} style={{ fontSize: 13, color: '#374151', margin: '0 0 4px' }}>✓ {s}</p>
-                    ))}
+                  <div style={{ padding: '12px 16px', background: '#f0f7f3', borderRadius: 8, marginBottom: 8 }}>
+                    <p style={{ fontSize: 11, color: '#1f5d3a', fontWeight: 600, margin: '0 0 4px' }}>특징 및 강점</p>
+                    <p style={{ fontSize: 13, color: '#374151', margin: 0, lineHeight: 1.6 }}>{aiStrengths}</p>
+                  </div>
+                )}
+                {aiUsage && (
+                  <div style={{ padding: '12px 16px', background: '#f7f6f2', borderRadius: 8 }}>
+                    <p style={{ fontSize: 11, color: '#6b7280', fontWeight: 600, margin: '0 0 4px' }}>활용 메뉴</p>
+                    <p style={{ fontSize: 13, color: '#374151', margin: 0 }}>{aiUsage}</p>
                   </div>
                 )}
               </div>
@@ -2200,6 +2216,8 @@ export default function ListingEditClient({
                 allergen={allergen}
                 ingredients={ingredients}
                 aiStrengths={aiStrengths}
+                aiUsage={aiUsage}
+                aiSummary={aiSummary}
                 thumbnailUrl={thumb || undefined}
                 onGenerated={(file) => {
                   prependIncomingDetailFiles([file])

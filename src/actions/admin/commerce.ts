@@ -758,6 +758,9 @@ export type ListingForEditData = {
   brand_name?: string | null
   spec?: string | null
   description?: string | null
+  ai_strengths?: string | null
+  ai_usage?: string | null
+  ai_summary?: string | null
   sub_category_id?: string | null
 }
 
@@ -793,6 +796,9 @@ export type UpdateListingFullInput = {
   thumbnail_url?: string | null
   image_urls?: string[] | null
   description?: string | null
+  ai_strengths?: string | null
+  ai_usage?: string | null
+  ai_summary?: string | null
 }
 
 function listingStorefrontPublished(status: ListingStatus, is_visible: boolean): boolean {
@@ -887,6 +893,9 @@ export async function getListingForEdit(listingId: string): Promise<ActionResult
       brand_name,
       spec,
       description,
+      ai_strengths,
+      ai_usage,
+      ai_summary,
       products ( id, name )
     `,
     )
@@ -988,6 +997,9 @@ export async function getListingForEdit(listingId: string): Promise<ActionResult
       brand_name: (row.brand_name as string | null) ?? null,
       spec: (row.spec as string | null) ?? null,
       description: (row.description as string | null) ?? null,
+      ai_strengths: (row.ai_strengths as string | null) ?? null,
+      ai_usage: (row.ai_usage as string | null) ?? null,
+      ai_summary: (row.ai_summary as string | null) ?? null,
     },
   }
 }
@@ -1110,6 +1122,9 @@ export async function updateListingFull(
   const spec = String(input.spec ?? '').trim() || null
   const thumbnail_url = String(input.thumbnail_url ?? '').trim() || null
   const description = String(input.description ?? '').trim() || null
+  const ai_strengths = String(input.ai_strengths ?? '').trim() || null
+  const ai_usage = String(input.ai_usage ?? '').trim() || null
+  const ai_summary = String(input.ai_summary ?? '').trim() || null
   const rawUrls = input.image_urls
   const image_urls =
     Array.isArray(rawUrls) && rawUrls.length > 0
@@ -1154,6 +1169,9 @@ export async function updateListingFull(
       thumbnail_url,
       image_urls,
       description,
+      ai_strengths,
+      ai_usage,
+      ai_summary,
       products ( id, name )
     `,
     )
@@ -1252,6 +1270,9 @@ export async function updateListingFull(
     thumbnail_url: (L.thumbnail_url as string | null) ?? null,
     image_urls: (L.image_urls as string[] | null) ?? null,
     description: (L.description as string | null) ?? null,
+    ai_strengths: (L.ai_strengths as string | null) ?? null,
+    ai_usage: (L.ai_usage as string | null) ?? null,
+    ai_summary: (L.ai_summary as string | null) ?? null,
   }
 
   const afterSnapshot = {
@@ -1285,6 +1306,9 @@ export async function updateListingFull(
     thumbnail_url,
     image_urls: image_urls_db,
     description,
+    ai_strengths,
+    ai_usage,
+    ai_summary,
   }
 
   const normBadges = (v: string[] | null | undefined) => {
@@ -1358,6 +1382,9 @@ export async function updateListingFull(
       thumbnail_url,
       image_urls: image_urls_db,
       description,
+      ai_strengths,
+      ai_usage,
+      ai_summary,
       status: vis.nextStatus,
       is_visible: vis.nextIsVisible,
       updated_at: new Date().toISOString(),
@@ -1791,6 +1818,9 @@ export async function createListingFull(input: {
   manufacturer?: string | null
   barcode?: string | null
   item_report_number?: string | null
+  ai_strengths?: string | null
+  ai_usage?: string | null
+  ai_summary?: string | null
 }): Promise<ActionResult<{ listing_id: string; product_id: string }>> {
   const supabase = await createSupabaseServer()
   const auth = await requireAdmin(supabase)
@@ -1849,6 +1879,9 @@ export async function createListingFull(input: {
   const admin_memo = String(input.admin_memo ?? '').trim() || null
   const thumbnail_url = String(input.thumbnail_url ?? '').trim() || null
   const listing_description = String(input.description ?? '').trim() || null
+  const ai_strengths = String(input.ai_strengths ?? '').trim() || null
+  const ai_usage = String(input.ai_usage ?? '').trim() || null
+  const ai_summary = String(input.ai_summary ?? '').trim() || null
 
   const rawUrls = input.image_urls
   const image_urls =
@@ -1944,6 +1977,9 @@ export async function createListingFull(input: {
       image_urls: image_urls_db,
       badge_labels: badge_labels_db,
       description: listing_description,
+      ai_strengths,
+      ai_usage,
+      ai_summary,
       spec,
       admin_memo,
       shipping_group_id,

@@ -223,9 +223,16 @@ async function applySupplyPrice(
   if (insErr) throw new Error(insErr.message)
 }
 
-async function resolveDescription(row: BulkListingRow): Promise<string | null> {
+async function resolveAiAnalysis(row: BulkListingRow): Promise<{
+  ai_strengths: string | null
+  ai_usage: string | null
+  ai_summary: string | null
+  description: string | null
+}> {
   const ingredients = normStr(row.ingredients)
-  if (!ingredients) return null
+  if (!ingredients) {
+    return { ai_strengths: null, ai_usage: null, ai_summary: null, description: null }
+  }
 
   const analysis = await analyzeProductStrengths({
     productName: row.product_name,
@@ -236,8 +243,19 @@ async function resolveDescription(row: BulkListingRow): Promise<string | null> {
     manufacturer: row.manufacturer,
   })
 
-  if (analysis.success && analysis.strengths) return analysis.strengths
-  return null
+  if (!analysis.success) {
+    return { ai_strengths: null, ai_usage: null, ai_summary: null, description: null }
+  }
+
+  const ai_strengths = analysis.strengths?.trim() || null
+  const ai_usage = analysis.usage?.trim() || null
+  const ai_summary = analysis.summary?.trim() || null
+  return {
+    ai_strengths,
+    ai_usage,
+    ai_summary,
+    description: ai_strengths,
+  }
 }
 
 async function patchListingExtras(
@@ -248,6 +266,9 @@ async function patchListingExtras(
     spec?: string | null
     thumbnail_url?: string | null
     description?: string | null
+    ai_strengths?: string | null
+    ai_usage?: string | null
+    ai_summary?: string | null
   },
 ): Promise<void> {
   const payload: Record<string, string | null> = {}
@@ -255,6 +276,9 @@ async function patchListingExtras(
   if (patch.spec !== undefined) payload.spec = patch.spec
   if (patch.thumbnail_url !== undefined) payload.thumbnail_url = patch.thumbnail_url
   if (patch.description !== undefined) payload.description = patch.description
+  if (patch.ai_strengths !== undefined) payload.ai_strengths = patch.ai_strengths
+  if (patch.ai_usage !== undefined) payload.ai_usage = patch.ai_usage
+  if (patch.ai_summary !== undefined) payload.ai_summary = patch.ai_summary
   if (Object.keys(payload).length === 0) return
 
   const { error } = await supabase.from('commerce_product_listings').update(payload).eq('id', listingId)
@@ -337,8 +361,15 @@ export async function bulkCreateListings(
     }
 
     let description: string | null = null
+    let ai_strengths: string | null = null
+    let ai_usage: string | null = null
+    let ai_summary: string | null = null
     try {
-      description = await resolveDescription(row)
+      const ai = await resolveAiAnalysis(row)
+      description = ai.description
+      ai_strengths = ai.ai_strengths
+      ai_usage = ai.ai_usage
+      ai_summary = ai.ai_summary
     } catch {
       description = null
     }
@@ -412,6 +443,9 @@ export async function bulkCreateListings(
           spec,
           thumbnail_url: row.thumbnail_url?.trim() || null,
           description,
+          ai_strengths,
+          ai_usage,
+          ai_summary,
         })
         await applySupplyPrice(supabase, ctx.product_id, row.supply_price)
         updated += 1
@@ -430,6 +464,9 @@ export async function bulkCreateListings(
           shipping_group_id: null,
           admin_memo: null,
           description,
+          ai_strengths,
+          ai_usage,
+          ai_summary,
           status: 'draft',
           base_shipping_fee: row.base_shipping_fee,
           free_shipping_qty: toOptionalInt(row.free_shipping_qty),

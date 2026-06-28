@@ -17,6 +17,8 @@ interface Props {
   allergen: string
   ingredients?: string
   aiStrengths?: string
+  aiUsage?: string
+  aiSummary?: string
   thumbnailUrl?: string
   onGenerated: (file: File) => void
 }
@@ -226,14 +228,26 @@ export default function ProductDetailImageGenerator(props: Props) {
           )}
         </div>
 
-        {props.aiStrengths && (
-          <div style={{ background: '#f0f7f3', padding: '16px 40px', borderTop: '1px solid #e5e7eb' }}>
-            <p style={{ fontSize: 13, fontWeight: 800, color: '#1f5d3a', margin: '0 0 10px' }}>✓ 이 제품의 강점</p>
-            {props.aiStrengths.split('\n').filter(Boolean).map((s, i) => (
-              <p key={i} style={{ fontSize: 14, color: '#2b2b2b', margin: '0 0 6px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ color: '#1f5d3a', fontWeight: 700 }}>✓</span> {s}
-              </p>
-            ))}
+        {(props.aiSummary || props.aiStrengths || props.aiUsage) && (
+          <div style={{ padding: '20px 40px', borderTop: '1px solid #e5e7eb' }}>
+            {props.aiSummary && (
+              <div style={{ padding: '14px 18px', background: '#1f5d3a', borderRadius: 8, marginBottom: 10 }}>
+                <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)', margin: '0 0 4px' }}>식식이 한줄평</p>
+                <p style={{ fontSize: 15, fontWeight: 700, color: '#fff', margin: 0 }}>{props.aiSummary}</p>
+              </div>
+            )}
+            {props.aiStrengths && (
+              <div style={{ padding: '14px 18px', background: '#f0f7f3', borderRadius: 8, marginBottom: 10 }}>
+                <p style={{ fontSize: 12, fontWeight: 800, color: '#1f5d3a', margin: '0 0 6px' }}>특징 및 강점</p>
+                <p style={{ fontSize: 14, color: '#374151', margin: 0, lineHeight: 1.6 }}>{props.aiStrengths}</p>
+              </div>
+            )}
+            {props.aiUsage && (
+              <div style={{ padding: '14px 18px', background: '#f7f6f2', borderRadius: 8 }}>
+                <p style={{ fontSize: 12, fontWeight: 800, color: '#6b7280', margin: '0 0 6px' }}>활용 메뉴</p>
+                <p style={{ fontSize: 14, color: '#374151', margin: 0 }}>{props.aiUsage}</p>
+              </div>
+            )}
           </div>
         )}
 
