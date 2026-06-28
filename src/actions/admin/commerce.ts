@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { requireAdmin as requireAdminAuth } from '@/lib/auth'
 import { createSupabaseAdmin } from '@/lib/supabase-admin'
+import { buildPlatformProductDisplayName } from '@/lib/commerce-utils'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import {
   COMMERCE_ORDER_STATUSES,
@@ -1535,22 +1536,6 @@ export async function createListing(input: {
 
 /** createProduct()와 같이 product_costs 행이 필요해 최소값으로 둠(실제 판매가는 listing). */
 const PLATFORM_COMMERCE_PLACEHOLDER_COST = 1
-
-export function buildPlatformProductDisplayName(
-  brand_name: string | null,
-  product_name: string,
-  spec: string | null,
-): string {
-  const parts: string[] = []
-  const b = brand_name?.trim()
-  const n = product_name.trim()
-  const sp = spec?.trim()
-  const nLower = n.toLowerCase()
-  if (b && !nLower.includes(b.toLowerCase())) parts.push(b)
-  parts.push(n)
-  if (sp && !nLower.includes(sp.toLowerCase())) parts.push(sp)
-  return parts.join(' ')
-}
 
 async function allocateProductCodeForPlatform(supabase: any): Promise<{ ok: true; code: string } | { ok: false; error: string }> {
   try {
