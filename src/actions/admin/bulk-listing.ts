@@ -66,6 +66,30 @@ function normStr(v: string | null | undefined): string {
   return (v ?? '').trim()
 }
 
+function cleanProductName(
+  productName: string,
+  brandName?: string | null,
+  spec?: string | null,
+): string {
+  let name = productName.trim()
+
+  if (brandName) {
+    const brand = brandName.trim()
+    if (name.toLowerCase().startsWith(brand.toLowerCase())) {
+      name = name.slice(brand.length).trim()
+    }
+  }
+
+  if (spec) {
+    const sp = spec.trim()
+    if (name.toLowerCase().endsWith(sp.toLowerCase())) {
+      name = name.slice(0, name.length - sp.length).trim()
+    }
+  }
+
+  return name || productName.trim()
+}
+
 async function loadPlatformCategories(supabase: SupabaseClient): Promise<CategoryRow[]> {
   const { data, error } = await supabase
     .from('product_categories')
@@ -362,7 +386,7 @@ export async function bulkCreateListings(
 
     const brand_name = normStr(row.brand_name) || null
     const spec = normStr(row.spec) || null
-    const product_name = normStr(row.product_name)
+    const product_name = cleanProductName(normStr(row.product_name), brand_name, spec)
     const shippingType: ListingShippingType = 'free'
 
     let existingListingId: string | null = null
