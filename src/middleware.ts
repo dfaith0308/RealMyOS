@@ -33,9 +33,13 @@ export async function middleware(request: NextRequest) {
   const isAdminDomain = hostname.startsWith('admin.')
   const isAppDomain = hostname.startsWith('app.')
 
-  // admin.siksiki.com 접속 시 /admin/* 경로로 rewrite
+  // admin.siksiki.com 접속 시 /admin/* 경로로 rewrite (/api·정적 리소스 제외)
   if (isAdminDomain) {
-    if (!pathname.startsWith('/admin') && !isPublic) {
+    if (
+      !pathname.startsWith('/admin') &&
+      !pathname.startsWith('/api') &&
+      !isPublic
+    ) {
       // rewrite 전에 세션 확인 — 비로그인이면 /login으로 보내고 rewrite 안 함
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
