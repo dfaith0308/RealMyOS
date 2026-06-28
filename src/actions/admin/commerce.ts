@@ -755,6 +755,10 @@ export type ListingForEditData = {
   manufacturer?: string | null
   barcode?: string | null
   item_report_number?: string | null
+  brand_name?: string | null
+  spec?: string | null
+  description?: string | null
+  sub_category_id?: string | null
 }
 
 export type UpdateListingFullInput = {
@@ -784,6 +788,11 @@ export type UpdateListingFullInput = {
   manufacturer?: string | null
   barcode?: string | null
   item_report_number?: string | null
+  brand_name?: string | null
+  spec?: string | null
+  thumbnail_url?: string | null
+  image_urls?: string[] | null
+  description?: string | null
 }
 
 function listingStorefrontPublished(status: ListingStatus, is_visible: boolean): boolean {
@@ -875,6 +884,9 @@ export async function getListingForEdit(listingId: string): Promise<ActionResult
       manufacturer,
       barcode,
       item_report_number,
+      brand_name,
+      spec,
+      description,
       products ( id, name )
     `,
     )
@@ -901,13 +913,29 @@ export async function getListingForEdit(listingId: string): Promise<ActionResult
     return { success: false, error: 'Listing 상태값이 올바르지 않습니다' }
   }
 
+  const category_id = (row.category_id as string | null) ?? null
+  let sub_category_id: string | null = null
+  if (category_id) {
+    const { data: catRow, error: catErr } = await supabase
+      .from('product_categories')
+      .select('id, parent_id')
+      .eq('id', category_id)
+      .eq('tenant_id', PLATFORM_OWNER_TENANT)
+      .maybeSingle()
+    if (catErr) return { success: false, error: catErr.message }
+    if (catRow?.parent_id) {
+      sub_category_id = catRow.id as string
+    }
+  }
+
   return {
     success: true,
     data: {
       id: row.id as string,
       product_id,
       product_name: String(p?.name ?? '').trim(),
-      category_id: (row.category_id as string | null) ?? null,
+      category_id,
+      sub_category_id,
       commerce_price:
         typeof row.commerce_price === 'number' && Number.isFinite(row.commerce_price)
           ? Math.round(row.commerce_price)
@@ -957,6 +985,9 @@ export async function getListingForEdit(listingId: string): Promise<ActionResult
       manufacturer: (row.manufacturer as string | null) ?? null,
       barcode: (row.barcode as string | null) ?? null,
       item_report_number: (row.item_report_number as string | null) ?? null,
+      brand_name: (row.brand_name as string | null) ?? null,
+      spec: (row.spec as string | null) ?? null,
+      description: (row.description as string | null) ?? null,
     },
   }
 }
@@ -1075,6 +1106,18 @@ export async function updateListingFull(
     return v
   })()
 
+  const brand_name = String(input.brand_name ?? '').trim() || null
+  const spec = String(input.spec ?? '').trim() || null
+  const thumbnail_url = String(input.thumbnail_url ?? '').trim() || null
+  const description = String(input.description ?? '').trim() || null
+  const rawUrls = input.image_urls
+  const image_urls =
+    Array.isArray(rawUrls) && rawUrls.length > 0
+      ? rawUrls.map((u) => String(u ?? '').trim()).filter(Boolean).slice(0, 20)
+      : []
+  const image_urls_db = image_urls.length > 0 ? image_urls : null
+  const dbProductName = buildPlatformProductDisplayName(brand_name, product_name, spec)
+
   const { data: listingRow, error: lFetchErr } = await supabase
     .from('commerce_product_listings')
     .select(
@@ -1106,6 +1149,11 @@ export async function updateListingFull(
       manufacturer,
       barcode,
       item_report_number,
+      brand_name,
+      spec,
+      thumbnail_url,
+      image_urls,
+      description,
       products ( id, name )
     `,
     )
@@ -1199,10 +1247,15 @@ export async function updateListingFull(
     manufacturer: (L.manufacturer as string | null) ?? null,
     barcode: (L.barcode as string | null) ?? null,
     item_report_number: (L.item_report_number as string | null) ?? null,
+    brand_name: (L.brand_name as string | null) ?? null,
+    spec: (L.spec as string | null) ?? null,
+    thumbnail_url: (L.thumbnail_url as string | null) ?? null,
+    image_urls: (L.image_urls as string[] | null) ?? null,
+    description: (L.description as string | null) ?? null,
   }
 
   const afterSnapshot = {
-    product_name,
+    product_name: dbProductName,
     category_id,
     commerce_price: price,
     original_price,
@@ -1227,11 +1280,21 @@ export async function updateListingFull(
     manufacturer,
     barcode,
     item_report_number,
+    brand_name,
+    spec,
+    thumbnail_url,
+    image_urls: image_urls_db,
+    description,
   }
 
   const normBadges = (v: string[] | null | undefined) => {
     if (!v || !Array.isArray(v) || v.length === 0) return ''
     return [...v].map(String).sort().join('\u0001')
+  }
+
+  const normUrls = (v: string[] | null | undefined) => {
+    if (!v || !Array.isArray(v) || v.length === 0) return ''
+    return [...v].map(String).join('\u0001')
   }
 
   const changed_fields: string[] = []
@@ -1242,7 +1305,9 @@ export async function updateListingFull(
     const same =
       k === 'badge_labels'
         ? normBadges(a as string[] | null) === normBadges(b as string[] | null)
-        : a === b
+        : k === 'image_urls'
+          ? normUrls(a as string[] | null) === normUrls(b as string[] | null)
+          : a === b
     if (!same) changed_fields.push(k)
   }
 
@@ -1253,7 +1318,7 @@ export async function updateListingFull(
   const { error: pUpErr } = await supabase
     .from('products')
     .update({
-      name: product_name,
+      name: dbProductName,
       barcode,
       item_report_number,
     })
@@ -1288,6 +1353,11 @@ export async function updateListingFull(
       manufacturer,
       barcode,
       item_report_number,
+      brand_name,
+      spec,
+      thumbnail_url,
+      image_urls: image_urls_db,
+      description,
       status: vis.nextStatus,
       is_visible: vis.nextIsVisible,
       updated_at: new Date().toISOString(),
