@@ -1,77 +1,82 @@
 import { NextResponse } from 'next/server'
-import * as XLSX from 'xlsx'
-import { getListingsForExport } from '@/actions/admin/commerce'
+import { getAdminCategories, getListingsForExport } from '@/actions/admin/commerce'
+import { extractRawProductNameFromDisplay } from '@/lib/commerce-utils'
+import {
+  buildBulkListingTemplateWorkbook,
+  writeBulkListingTemplateBuffer,
+  type BulkListingTemplateDataRow,
+} from '@/lib/bulk-listing-template-xlsx'
 
-export async function GET() {
-  const res = await getListingsForExport()
-  if (!res.success || !res.data) {
-    return NextResponse.json({ error: res.error }, { status: res.error === '권한 없음' || res.error === '로그인 필요' ? 401 : 500 })
+function cellVal(v: unknown): string | number {
+  if (v == null || v === '') return ''
+  if (typeof v === 'number' && Number.isFinite(v)) return v
+  return String(v)
+}
+
+export async function GET(req: Request) {
+  const url = new URL(req.url)
+  const ids = url.searchParams.get('ids')?.split(',').filter(Boolean) ?? []
+
+  const [listRes, catRes] = await Promise.all([
+    getListingsForExport(ids.length > 0 ? ids : undefined),
+    getAdminCategories(),
+  ])
+
+  if (!listRes.success || !listRes.data) {
+    return NextResponse.json(
+      { error: listRes.error },
+      {
+        status:
+          listRes.error === '권한 없음' || listRes.error === '로그인 필요' ? 401 : 500,
+      },
+    )
   }
 
-  const rows = res.data.rows.map((r: any) => {
-    const cat = r.product_categories
+  if (!catRes.success || !catRes.data) {
+    return NextResponse.json({ error: catRes.error ?? '카테고리 조회 실패' }, { status: 500 })
+  }
+
+  const dataRows: BulkListingTemplateDataRow[] = listRes.data.rows.map((r: Record<string, unknown>) => {
+    const cat = r.product_categories as
+      | { name?: string; parent_id?: string | null; parent?: { name?: string } }
+      | null
+      | undefined
     const parentCat = cat?.parent?.name ?? cat?.name ?? ''
-    const subCat = cat?.parent_id ? cat?.name : ''
+    const subCat = cat?.parent_id ? cat?.name ?? '' : ''
+    const products = r.products as { name?: string | null } | { name?: string | null }[] | null | undefined
+    const productRecord = Array.isArray(products) ? products[0] : products
+    const displayName = productRecord?.name ?? ''
+    const brand = (r.brand_name as string | null) ?? null
+    const spec = (r.spec as string | null) ?? null
 
     return {
-      brand_name: r.brand_name ?? '',
-      product_name: r.products?.name ?? '',
-      spec: r.spec ?? '',
-      category: parentCat,
-      sub_category: subCat,
+      brand_name: cellVal(brand),
+      product_name: cellVal(extractRawProductNameFromDisplay(displayName, brand, spec)),
+      spec: cellVal(spec),
+      category: cellVal(parentCat),
+      sub_category: cellVal(subCat),
       supply_price: '',
-      commerce_price: r.commerce_price ?? '',
-      base_shipping_fee: r.base_shipping_fee ?? '',
-      original_price: r.original_price ?? '',
-      free_shipping_qty: r.free_shipping_qty ?? '',
-      bulk_qty: r.bulk_qty ?? '',
-      bulk_discount_rate: r.bulk_discount_rate ?? '',
-      box_qty: r.box_qty ?? '',
-      storage_method: r.storage_method ?? '',
-      ingredients: r.ingredients ?? '',
-      manufacturer: r.manufacturer ?? '',
-      usage_desc: r.usage_desc ?? '',
-      barcode: r.barcode ?? '',
-      item_report_number: r.item_report_number ?? '',
-      thumbnail_url: r.thumbnail_url ?? '',
+      commerce_price: cellVal(r.commerce_price),
+      base_shipping_fee: cellVal(r.base_shipping_fee),
+      original_price: cellVal(r.original_price),
+      free_shipping_qty: cellVal(r.free_shipping_qty),
+      bulk_qty: cellVal(r.bulk_qty),
+      bulk_discount_rate: cellVal(r.bulk_discount_rate),
+      box_qty: cellVal(r.box_qty),
+      storage_method: cellVal(r.storage_method),
+      ingredients: cellVal(r.ingredients),
+      manufacturer: cellVal(r.manufacturer),
+      usage_desc: cellVal(r.usage_desc),
+      barcode: cellVal(r.barcode),
+      item_report_number: cellVal(r.item_report_number),
+      thumbnail_url: cellVal(r.thumbnail_url),
     }
   })
 
-  const headerKorean = [
-    '브랜드명', '상품명', '규격·용량', '대분류', '소분류',
-    '공급가', '식식이 판매가', '기본배송비', '시중판매가',
-    '무료배송기준수량', '대량구매기준수량', '대량할인율(%)', '박스당수량',
-    '보관방법', '원재료명및함량', '제조원', '용도',
-    '바코드', '품목보고번호', '썸네일URL',
-  ]
-  const headerEnglish = [
-    'brand_name', 'product_name', 'spec', 'category', 'sub_category',
-    'supply_price', 'commerce_price', 'base_shipping_fee', 'original_price',
-    'free_shipping_qty', 'bulk_qty', 'bulk_discount_rate', 'box_qty',
-    'storage_method', 'ingredients', 'manufacturer', 'usage_desc',
-    'barcode', 'item_report_number', 'thumbnail_url',
-  ]
+  const wb = buildBulkListingTemplateWorkbook(dataRows, catRes.data.tree)
+  const buf = writeBulkListingTemplateBuffer(wb)
 
-  const wb = XLSX.utils.book_new()
-  const ws = XLSX.utils.aoa_to_sheet([
-    headerKorean,
-    headerEnglish,
-    ...rows.map((r: Record<string, unknown>) => Object.values(r)),
-  ])
-
-  ws['!cols'] = [
-    { wch: 15 }, { wch: 30 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
-    { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 10 },
-    { wch: 16 }, { wch: 16 }, { wch: 12 }, { wch: 10 },
-    { wch: 18 }, { wch: 40 }, { wch: 18 }, { wch: 25 },
-    { wch: 16 }, { wch: 18 }, { wch: 40 },
-  ]
-
-  XLSX.utils.book_append_sheet(wb, ws, '상품목록')
-
-  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
-
-  return new NextResponse(buf, {
+  return new NextResponse(new Uint8Array(buf), {
     headers: {
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'Content-Disposition': `attachment; filename="siksiki_listings_${new Date().toISOString().slice(0, 10)}.xlsx"`,

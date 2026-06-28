@@ -13,3 +13,22 @@ export function buildPlatformProductDisplayName(
   if (sp && !nLower.includes(sp.toLowerCase())) parts.push(sp)
   return parts.join(' ')
 }
+
+/** products.name(조합 표시명)에서 brand/spec를 제거해 순수 상품명 추출 */
+export function extractRawProductNameFromDisplay(
+  displayName: string,
+  brand_name: string | null,
+  spec: string | null,
+): string {
+  let n = displayName.trim()
+  if (!n) return ''
+  const b = brand_name?.trim()
+  const sp = spec?.trim()
+  if (b && n.toLowerCase().startsWith(b.toLowerCase())) {
+    n = n.slice(b.length).trim()
+  }
+  if (sp && n.toLowerCase().endsWith(sp.toLowerCase())) {
+    n = n.slice(0, -sp.length).trim()
+  }
+  return n || displayName.trim()
+}

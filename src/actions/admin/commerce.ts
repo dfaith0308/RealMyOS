@@ -261,7 +261,7 @@ export async function getListings(filters?: {
   return { success: true, data: { listings } }
 }
 
-export async function getListingsForExport(): Promise<ActionResult<{ rows: any[] }>> {
+export async function getListingsForExport(ids?: string[]): Promise<ActionResult<{ rows: any[] }>> {
   try {
     await requireAdminAuth()
   } catch (e) {
@@ -269,7 +269,7 @@ export async function getListingsForExport(): Promise<ActionResult<{ rows: any[]
   }
   const supabase = await createSupabaseAdmin()
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('commerce_product_listings')
     .select(`
       id, brand_name, spec, commerce_price, original_price,
@@ -283,6 +283,13 @@ export async function getListingsForExport(): Promise<ActionResult<{ rows: any[]
     `)
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
+
+  const filteredIds = (ids ?? []).map((x) => String(x ?? '').trim()).filter(Boolean)
+  if (filteredIds.length > 0) {
+    query = query.in('id', filteredIds)
+  }
+
+  const { data, error } = await query
 
   if (error) return { success: false, error: error.message }
   return { success: true, data: { rows: data ?? [] } }

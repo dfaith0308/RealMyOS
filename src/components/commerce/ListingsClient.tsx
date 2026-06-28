@@ -312,6 +312,23 @@ export default function ListingsClient({
         <span style={{ fontSize: 12, color: 'var(--ds-text-muted)', whiteSpace: 'nowrap' }}>
           {filtered.length}건
         </span>
+        <a
+          href={`/api/admin/export-listings${selected.size > 0 ? `?ids=${[...selected].join(',')}` : ''}`}
+          download
+          style={{
+            padding: '8px 14px',
+            border: '1px solid #e5e7eb',
+            borderRadius: 8,
+            background: '#fff',
+            color: '#374151',
+            fontSize: 13,
+            fontWeight: 600,
+            textDecoration: 'none',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          📥 엑셀 다운로드{selected.size > 0 ? ` (${selected.size}개)` : ''}
+        </a>
         {selected.size > 0 ? (
           <>
             <button
