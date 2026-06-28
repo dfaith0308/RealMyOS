@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { analyzeProductStrengths } from '@/actions/admin/ai-product-analysis'
-import { createListingFull, updateListingFull } from '@/actions/admin/commerce'
+import { createListingFull, updateListingFull, buildPlatformProductDisplayName } from '@/actions/admin/commerce'
 import type { ListingShippingType } from '@/lib/commerce-constants'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import type { ActionResult } from '@/types/order'
@@ -59,21 +59,6 @@ type ListingContext = {
   origin: string | null
   package_unit: string | null
   min_order_qty: number | null
-}
-
-function buildPlatformProductDisplayName(
-  brand_name: string | null | undefined,
-  product_name: string,
-  spec: string | null | undefined,
-): string {
-  const parts: string[] = []
-  const b = brand_name?.trim()
-  const n = product_name.trim()
-  const sp = spec?.trim()
-  if (b) parts.push(b)
-  parts.push(n)
-  if (sp) parts.push(sp)
-  return parts.join(' ')
 }
 
 function normStr(v: string | null | undefined): string {
@@ -143,7 +128,7 @@ async function findExistingListing(
   const pn = normStr(productName)
   if (!pn) return null
 
-  const displayName = buildPlatformProductDisplayName(brandName, pn, spec)
+  const displayName = buildPlatformProductDisplayName(normStr(brandName) || null, pn, normStr(spec) || null)
   const b = normStr(brandName)
   const sp = normStr(spec)
 
@@ -376,7 +361,7 @@ export async function bulkCreateListings(
 
     const brand_name = normStr(row.brand_name) || null
     const spec = normStr(row.spec) || null
-    const displayProductName = buildPlatformProductDisplayName(brand_name, row.product_name, spec)
+    const product_name = normStr(row.product_name)
     const shippingType: ListingShippingType = 'free'
 
     let existingListingId: string | null = null
@@ -386,7 +371,7 @@ export async function bulkCreateListings(
         row.barcode,
         row.item_report_number,
         brand_name ?? undefined,
-        row.product_name,
+        product_name,
         spec ?? undefined,
       )
     } catch (e) {
@@ -407,7 +392,9 @@ export async function bulkCreateListings(
 
         const updateRes = await updateListingFull({
           listing_id: existingListingId,
-          product_name: displayProductName,
+          product_name,
+          brand_name,
+          spec,
           category_id: categoryId,
           commerce_price: row.commerce_price,
           original_price: toOptionalInt(row.original_price),
@@ -452,7 +439,7 @@ export async function bulkCreateListings(
       } else {
         const createRes = await createListingFull({
           brand_name,
-          product_name: row.product_name.trim(),
+          product_name,
           spec,
           thumbnail_url: row.thumbnail_url?.trim() || null,
           image_urls: null,
