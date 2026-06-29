@@ -32,3 +32,6 @@ export function extractRawProductNameFromDisplay(
   }
   return n || displayName.trim()
 }
+
+/** 미리보기·상세이미지용 순수 상품명 (brand/spec 제거) */
+export const extractPureProductName = extractRawProductNameFromDisplay

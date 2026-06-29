@@ -20,6 +20,7 @@ import {
 } from '@/actions/admin/commerce'
 import { LISTING_SHIPPING_TYPES } from '@/lib/commerce-constants'
 import { formatDigitsForInput, formatKRW } from '@/lib/calc'
+import { extractPureProductName } from '@/lib/commerce-utils'
 import mod from './listing-new-client.module.css'
 import ProductDetailImageGenerator from './ProductDetailImageGenerator'
 import { analyzeProductStrengths } from '@/actions/admin/ai-product-analysis'
@@ -287,6 +288,11 @@ export default function ListingEditClient({
   const [brandName, setBrandName] = useState(initial.brand_name ?? '')
   const [productName, setProductName] = useState(initial.product_name)
   const [spec, setSpec] = useState(initial.spec ?? '')
+
+  const previewProductName = useMemo(
+    () => extractPureProductName(productName, brandName.trim() || null, spec.trim() || null),
+    [productName, brandName, spec],
+  )
 
   const [supplyPrice, setSupplyPrice] = useState('')
   const [commercePrice, setCommercePrice] = useState(String(initial.commerce_price))
@@ -2201,7 +2207,7 @@ export default function ListingEditClient({
               </div>
 
               <ProductDetailImageGenerator
-                productName={productName}
+                productName={previewProductName}
                 brandName={brandName}
                 spec={spec}
                 salePrice={(() => {
@@ -2406,7 +2412,7 @@ export default function ListingEditClient({
                           }}
                           aria-hidden
                         >
-                          {productNameInitial(productName)}
+                          {productNameInitial(previewProductName)}
                         </div>
                       )}
                     </div>
@@ -2416,9 +2422,9 @@ export default function ListingEditClient({
                       ) : (
                         <PhBar width="40%" />
                       )}
-                      {productName.trim() ? (
+                      {previewProductName.trim() ? (
                         <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.35, color: '#111' }}>
-                          {productName.trim()}
+                          {previewProductName.trim()}
                         </div>
                       ) : (
                         <PhBar width="90%" />
@@ -2459,7 +2465,7 @@ export default function ListingEditClient({
                           <img src={thumb} alt="" className={mod.phoneDetailHero} key={thumb} />
                         ) : (
                           <div className={mod.phoneDetailHeroPlaceholder} aria-hidden>
-                            {productNameInitial(productName)}
+                            {productNameInitial(previewProductName)}
                           </div>
                         )}
                       </div>
@@ -2469,8 +2475,8 @@ export default function ListingEditClient({
                         ) : (
                           <PhBar width="36%" />
                         )}
-                        {productName.trim() ? (
-                          <h3 className={mod.phoneDetailTitle}>{productName.trim()}</h3>
+                        {previewProductName.trim() ? (
+                          <h3 className={mod.phoneDetailTitle}>{previewProductName.trim()}</h3>
                         ) : (
                           <PhBar width="92%" />
                         )}

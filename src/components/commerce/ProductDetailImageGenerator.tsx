@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react'
 import html2canvas from 'html2canvas'
+import { extractPureProductName } from '@/lib/commerce-utils'
 
 interface Props {
   productName: string
@@ -32,6 +33,12 @@ export default function ProductDetailImageGenerator(props: Props) {
     props.weightGrams && props.weightGrams > 0
       ? Math.round((props.salePrice / props.weightGrams) * 100)
       : null
+
+  const pureProductName = extractPureProductName(
+    props.productName,
+    props.brandName || null,
+    props.spec || null,
+  )
 
   async function handleGenerate() {
     if (!templateRef.current) return
@@ -130,7 +137,7 @@ export default function ProductDetailImageGenerator(props: Props) {
         <div style={{ background: '#1f5d3a', padding: '12px 40px' }}>
           <p style={{ fontSize: 22, fontWeight: 800, color: '#ffffff', margin: 0 }}>
             {props.brandName ? `${props.brandName} ` : ''}
-            {props.productName}
+            {pureProductName}
           </p>
         </div>
 

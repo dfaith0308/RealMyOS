@@ -18,6 +18,7 @@ import {
   type ShippingGroupListItem,
 } from '@/actions/admin/commerce'
 import { formatDigitsForInput, formatKRW } from '@/lib/calc'
+import { extractPureProductName } from '@/lib/commerce-utils'
 import mod from './listing-new-client.module.css'
 import ProductDetailImageGenerator from './ProductDetailImageGenerator'
 import { analyzeProductStrengths } from '@/actions/admin/ai-product-analysis'
@@ -242,6 +243,11 @@ export default function ListingNewClient() {
   const [brandName, setBrandName] = useState(empty.brandName)
   const [productName, setProductName] = useState(empty.productName)
   const [spec, setSpec] = useState(empty.spec)
+
+  const previewProductName = useMemo(
+    () => extractPureProductName(productName, brandName.trim() || null, spec.trim() || null),
+    [productName, brandName, spec],
+  )
 
   const [supplyPrice, setSupplyPrice] = useState(empty.supplyPrice)
   const [commercePrice, setCommercePrice] = useState(empty.commercePrice)
@@ -2152,7 +2158,7 @@ export default function ListingNewClient() {
               </div>
 
               <ProductDetailImageGenerator
-                productName={productName}
+                productName={previewProductName}
                 brandName={brandName}
                 spec={spec}
                 salePrice={(() => {
@@ -2357,7 +2363,7 @@ export default function ListingNewClient() {
                           }}
                           aria-hidden
                         >
-                          {productNameInitial(productName)}
+                          {productNameInitial(previewProductName)}
                         </div>
                       )}
                     </div>
@@ -2367,9 +2373,9 @@ export default function ListingNewClient() {
                       ) : (
                         <PhBar width="40%" />
                       )}
-                      {productName.trim() ? (
+                      {previewProductName.trim() ? (
                         <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.35, color: '#111' }}>
-                          {productName.trim()}
+                          {previewProductName.trim()}
                         </div>
                       ) : (
                         <PhBar width="90%" />
@@ -2410,7 +2416,7 @@ export default function ListingNewClient() {
                           <img src={thumb} alt="" className={mod.phoneDetailHero} key={thumb} />
                         ) : (
                           <div className={mod.phoneDetailHeroPlaceholder} aria-hidden>
-                            {productNameInitial(productName)}
+                            {productNameInitial(previewProductName)}
                           </div>
                         )}
                       </div>
@@ -2420,8 +2426,8 @@ export default function ListingNewClient() {
                         ) : (
                           <PhBar width="36%" />
                         )}
-                        {productName.trim() ? (
-                          <h3 className={mod.phoneDetailTitle}>{productName.trim()}</h3>
+                        {previewProductName.trim() ? (
+                          <h3 className={mod.phoneDetailTitle}>{previewProductName.trim()}</h3>
                         ) : (
                           <PhBar width="92%" />
                         )}
