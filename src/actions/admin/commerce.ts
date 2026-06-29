@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { requireAdmin as requireAdminAuth } from '@/lib/auth'
 import { createSupabaseAdmin } from '@/lib/supabase-admin'
-import { buildPlatformProductDisplayName } from '@/lib/commerce-utils'
+import { buildPlatformProductDisplayName, extractPureProductName } from '@/lib/commerce-utils'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import {
   COMMERCE_ORDER_STATUSES,
@@ -977,7 +977,11 @@ export async function getListingForEdit(listingId: string): Promise<ActionResult
     data: {
       id: row.id as string,
       product_id,
-      product_name: String(p?.name ?? '').trim(),
+      product_name: extractPureProductName(
+        String(p?.name ?? '').trim(),
+        (row.brand_name as string | null) ?? null,
+        (row.spec as string | null) ?? null,
+      ),
       category_id,
       sub_category_id,
       commerce_price:
