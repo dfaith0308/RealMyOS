@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
-import type { ActionResult } from '@/types/order'
+import type { ActionResult, ProductForOrder } from '@/types/order'
 import { effectiveOrderAmount } from '@/lib/ledger-calc'
 import { getSettings } from '@/actions/settings'
 import { DEFAULT_SETTINGS } from '@/constants/settings'
@@ -161,6 +161,120 @@ export async function createProduct(
 
   revalidatePath('/products')
   return { success: true, data: { id: product.id, product_code: product.product_code } }
+}
+
+export async function createProductQuick(input: {
+  name: string
+  cost_price: number
+  sale_price?: number | null
+  unit?: string | null
+}): Promise<{ success: boolean; product?: ProductForOrder; error?: string }> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const name = input.name.trim()
+  if (!name) return { success: false, error: '상품명을 입력해주세요.' }
+  if (!input.cost_price || input.cost_price <= 0) {
+    return { success: false, error: '매입가를 입력해주세요.' }
+  }
+
+  const salePrice =
+    input.sale_price != null && Number.isFinite(input.sale_price) && input.sale_price > 0
+      ? Math.floor(input.sale_price)
+      : null
+
+  let seqNum: number | null = null
+  try {
+    const { data: seqData } = await supabase.rpc('nextval_product_code')
+    seqNum = seqData ?? null
+  } catch {
+    // sequence RPC 없으면 fallback
+  }
+  if (seqNum === null) {
+    const { data: lastProduct } = await supabase
+      .from('products')
+      .select('product_code')
+      .eq('tenant_id', ctx.tenant_id)
+      .like('product_code', 'P%')
+      .order('product_code', { ascending: false })
+      .limit(1)
+      .single()
+    seqNum = lastProduct?.product_code
+      ? (parseInt(lastProduct.product_code.replace(/[^0-9]/g, ''), 10) || 0) + 1
+      : 1
+  }
+  const product_code = `P${String(seqNum).padStart(4, '0')}`
+
+  const { data: product, error: pErr } = await supabase
+    .from('products')
+    .insert({
+      tenant_id: ctx.tenant_id,
+      product_code,
+      name,
+      tax_type: 'taxable',
+      unit: input.unit?.trim() || null,
+      procurement_type: 'consignment',
+    })
+    .select('id, product_code, name, tax_type, procurement_type')
+    .single()
+
+  if (pErr || !product) {
+    return { success: false, error: `상품 저장 실패: ${pErr?.message ?? '알 수 없는 오류'}` }
+  }
+
+  const today = new Date().toISOString().slice(0, 10)
+
+  const { error: costErr } = await supabase.from('product_costs').insert({
+    product_id: product.id,
+    cost_price: input.cost_price,
+    start_date: today,
+    end_date: null,
+  })
+  if (costErr) {
+    await supabase.from('products').update({ deleted_at: new Date().toISOString() }).eq('id', product.id)
+    return { success: false, error: `매입가 저장 실패: ${costErr.message}` }
+  }
+
+  if (salePrice != null) {
+    await supabase.from('product_prices').insert({
+      product_id: product.id,
+      price_type: 'normal',
+      price: salePrice,
+    })
+  }
+
+  await supabase.from('product_stats').upsert(
+    { product_id: product.id, used_by_count: 0, avg_unit_price: salePrice },
+    { onConflict: 'product_id' },
+  )
+
+  await logProduct(supabase, {
+    product_id: product.id,
+    user_id: ctx.user_id,
+    user_type: ctx.user_type,
+    action: 'create',
+    after_data: { name, cost_price: input.cost_price, sale_price: salePrice, unit: input.unit ?? null, product_code, quick: true },
+  })
+
+  revalidatePath('/products')
+
+  const productForOrder: ProductForOrder = {
+    id: product.id,
+    product_code: product.product_code,
+    name: product.name,
+    tax_type: product.tax_type as 'taxable' | 'exempt',
+    procurement_type: product.procurement_type,
+    fulfillment_type: 'consignment',
+    current_cost_price: input.cost_price,
+    last_unit_price: salePrice ?? 0,
+    has_purchase_history: false,
+    last_pricing_mode: null,
+    last_line_total: null,
+    last_qty: null,
+  }
+
+  return { success: true, product: productForOrder }
 }
 
 // ── 매입가 변경 (이력 유지) ───────────────────────────────────

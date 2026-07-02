@@ -7,6 +7,7 @@ import { createPayment } from '@/actions/payment'
 import type { PaymentMethod } from '@/actions/payment'
 import { calcMarginRate, formatKRW, todayStr } from '@/lib/calc'
 import type { CustomerForOrder, ProductForOrder, OrderLineInput } from '@/types/order'
+import QuickProductAddModal from '@/components/order/QuickProductAddModal'
 
 // ============================================================
 // 타입
@@ -167,6 +168,7 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines, quote
 
   const [productQuery,  setProductQuery]  = useState('')
   const [showProductDd, setShowProductDd] = useState(false)
+  const [showQuickAdd,  setShowQuickAdd]  = useState(false)
 
   const [lines,        setLines]        = useState<LineItem[]>([])
   const [orderDate,    setOrderDate]    = useState(todayStr())
@@ -726,6 +728,18 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines, quote
                 })}
               </ul>
             )}
+            {showProductDd && productQuery.trim() && filteredProducts.length === 0 && !loadingProducts && (
+              <div style={s.ddEmpty}>
+                <p style={s.ddEmptyText}>&apos;{productQuery.trim()}&apos; 검색 결과가 없습니다</p>
+                <button
+                  type="button"
+                  style={s.ddEmptyBtn}
+                  onMouseDown={(e) => { e.preventDefault(); setShowQuickAdd(true); setShowProductDd(false) }}
+                >
+                  + &apos;{productQuery.trim()}&apos; 상품 바로 등록
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -957,6 +971,19 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines, quote
           {isPending ? '저장 중...' : `주문 등록${lines.length ? ` (${formatKRW(finalAmount)})` : ''}`}
         </button>
       </div>
+
+      {showQuickAdd && (
+        <QuickProductAddModal
+          initialName={productQuery.trim()}
+          onClose={() => setShowQuickAdd(false)}
+          onCreated={(product) => {
+            setProducts((prev) => [...prev, product])
+            addProduct(product)
+            setShowQuickAdd(false)
+            setProductQuery('')
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -981,6 +1008,9 @@ const s: Record<string, React.CSSProperties> = {
   rel:              { position: 'relative' },
   input:            { width: '100%', padding: '9px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, outline: 'none', background: '#fff', boxSizing: 'border-box' },
   dd:               { position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.10)', zIndex: 50, maxHeight: 320, overflowY: 'auto', listStyle: 'none', margin: 0, padding: 0 },
+  ddEmpty:          { position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.10)', zIndex: 50, padding: '14px 16px' },
+  ddEmptyText:      { margin: '0 0 10px', fontSize: 13, color: '#6b7280' },
+  ddEmptyBtn:       { width: '100%', padding: '9px 12px', border: '1px dashed #86EFAC', borderRadius: 8, background: '#F0FDF4', color: '#15803D', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' },
   ddItem:           { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', cursor: 'pointer', fontSize: 14, borderBottom: '1px solid #f9fafb' },
   ddItemActive:     { background: 'var(--ds-neutral-100)' },
   customerInfo:     { display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 },

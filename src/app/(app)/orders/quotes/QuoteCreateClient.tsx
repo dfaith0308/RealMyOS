@@ -7,6 +7,7 @@ import { getProductsForOrder } from '@/actions/order'
 import { formatKRW, todayStr } from '@/lib/calc'
 import type { CustomerForOrder, ProductForOrder } from '@/types/order'
 import type { CreateQuoteItemInput } from '@/types/quote'
+import QuickProductAddModal from '@/components/order/QuickProductAddModal'
 
 interface QuoteLine {
   uid:              string
@@ -41,6 +42,7 @@ export default function QuoteCreateClient({ initialCustomers }: { initialCustome
 
   const [productQuery, setProductQuery]   = useState('')
   const [showProductDd, setShowProductDd] = useState(false)
+  const [showQuickAdd, setShowQuickAdd]   = useState(false)
 
   const [lines, setLines]           = useState<QuoteLine[]>([])
   const [expiresAt, setExpiresAt]   = useState('')
@@ -275,6 +277,18 @@ export default function QuoteCreateClient({ initialCustomers }: { initialCustome
                 ))}
               </ul>
             )}
+            {showProductDd && productQuery.trim() && filteredProducts.length === 0 && !loadingProducts && (
+              <div style={s.ddEmpty}>
+                <p style={s.ddEmptyText}>&apos;{productQuery.trim()}&apos; 검색 결과가 없습니다</p>
+                <button
+                  type="button"
+                  style={s.ddEmptyBtn}
+                  onMouseDown={(e) => { e.preventDefault(); setShowQuickAdd(true); setShowProductDd(false) }}
+                >
+                  + &apos;{productQuery.trim()}&apos; 상품 바로 등록
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -370,6 +384,19 @@ export default function QuoteCreateClient({ initialCustomers }: { initialCustome
           {submitting ? '저장 중...' : `견적 저장 (${formatKRW(totals.total)})`}
         </button>
       </div>
+
+      {showQuickAdd && (
+        <QuickProductAddModal
+          initialName={productQuery.trim()}
+          onClose={() => setShowQuickAdd(false)}
+          onCreated={(product) => {
+            setProducts((prev) => [...prev, product])
+            addProduct(product)
+            setShowQuickAdd(false)
+            setProductQuery('')
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -384,6 +411,9 @@ const styles: Record<string, React.CSSProperties> = {
   label:   { display: 'block', fontSize: 11, fontWeight: 500, color: '#6b7280', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.04em' },
   input:   { width: '100%', padding: '9px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, outline: 'none', background: '#fff', boxSizing: 'border-box' },
   dd:      { position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.1)', zIndex: 50, maxHeight: 280, overflowY: 'auto', listStyle: 'none', margin: 0, padding: 0 },
+  ddEmpty: { position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.1)', zIndex: 50, padding: '14px 16px' },
+  ddEmptyText: { margin: '0 0 10px', fontSize: 13, color: '#6b7280' },
+  ddEmptyBtn:  { width: '100%', padding: '9px 12px', border: '1px dashed #86EFAC', borderRadius: 8, background: '#F0FDF4', color: '#15803D', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' },
   ddItem:  { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', cursor: 'pointer', fontSize: 14, borderBottom: '1px solid #f9fafb' },
   ddItemActive: { background: 'var(--ds-neutral-100)' },
   customerInfo: { display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 },
