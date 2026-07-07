@@ -69,7 +69,7 @@ export default async function OrderNewPage({
   }
 
   return (
-    <main style={{ minHeight: '100vh', background: '#f8f9fa', paddingTop: 32 }}>
+    <main style={{ minHeight: '100vh', background: 'var(--surface-0)', paddingTop: 32 }}>
       <OrderCreateForm
         initialCustomerId={initialCustomerId}
         reorderLines={reorderLines}

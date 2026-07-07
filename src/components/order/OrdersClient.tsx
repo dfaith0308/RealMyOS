@@ -9,7 +9,6 @@ import { CommandStrip } from '@/components/dashboard/CommandStrip'
 import { Surface } from '@/components/ui/Surface'
 import { KPIBlock } from '@/components/ui/KPIBlock'
 import { StatusBadge } from '@/components/ui/StatusBadge'
-import { DataCell, DataTableRow } from '@/components/ui/DataTableRow'
 import styles from '@/app/(app)/orders/orders-ops.module.css'
 import { ORDER_OPERATION_STATUS_LIST, type OrderOperationStatus } from '@/types/order'
 
@@ -151,6 +150,13 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
     return [...map.values()]
   }, [opsFiltered])
 
+  function statusBadge(o: OrderListItem): { label: string; bg: string; fg: string } | null {
+    if (o.status === 'cancelled') return { label: '취소', bg: 'var(--bg-danger)', fg: 'var(--text-danger)' }
+    if (o.status === 'confirmed') return { label: '확정', bg: 'var(--bg-success)', fg: 'var(--text-success)' }
+    if (o.status === 'draft') return { label: '진행', bg: 'var(--bg-accent)', fg: 'var(--text-accent)' }
+    return null
+  }
+
   return (
     <>
       <CommandStrip
@@ -280,82 +286,194 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
           {baseOrders.length === 0 ? (
             <div className={styles.empty}>조건에 해당하는 주문이 없습니다</div>
           ) : (
-            groupedByDate.map((g) => (
-              <div key={`g-${g.date}`}>
-                <div className={styles.groupHead}>
-                  <div className={styles.groupLeft}>
-                    <div className={styles.groupTitle}>{g.date}</div>
-                    <div className={styles.groupMeta}>{g.cnt}건</div>
+            <div
+              style={{
+                background: 'var(--surface-2)',
+                borderRadius: 12,
+                border: '1px solid var(--border)',
+                overflow: 'hidden',
+              }}
+            >
+              {groupedByDate.map((g, gi) => (
+                <div key={`g-${g.date}`} style={{ borderTop: gi === 0 ? 'none' : '1px solid var(--border)' }}>
+                  {/* 날짜 그룹 헤더 */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '14px 20px',
+                      borderBottom: '1px solid var(--border)',
+                      background: 'var(--surface-2)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                      <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                        {g.date}
+                      </span>
+                      <span style={{ fontSize: 12, color: 'var(--text-hint)', whiteSpace: 'nowrap' }}>{g.cnt}건</span>
+                    </div>
+                    <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                      합계 {formatKRW(g.sum)}
+                    </span>
                   </div>
-                  <div className={styles.groupNums}>
-                    <span className={styles.gNum}>합계 {formatKRW(g.sum)}</span>
+
+                  {/* 컬럼 헤더 */}
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '2fr 1fr 1fr 80px',
+                      padding: '8px 20px',
+                      background: 'var(--surface-0)',
+                      borderBottom: '1px solid var(--border)',
+                      gap: 12,
+                      alignItems: 'center',
+                    }}
+                  >
+                    <span style={{ fontSize: 11, color: 'var(--text-hint)', fontWeight: 500, whiteSpace: 'nowrap' }}>거래처 · 상품</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-hint)', fontWeight: 500, textAlign: 'right', whiteSpace: 'nowrap' }}>금액</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-hint)', fontWeight: 500, textAlign: 'right', whiteSpace: 'nowrap' }}>미수금</span>
+                    <span />
                   </div>
-                </div>
 
-                {g.rows.map((o) => {
-                  const statusKey =
-                    o.status === 'draft'
-                      ? ('pending' as const)
-                      : o.status === 'confirmed'
-                        ? ('confirmed' as const)
-                        : ('cancelled' as const)
+                  {g.rows.map((o) => {
+                    const bal = o.current_balance ?? 0
+                    const dep = o.deposit_amount ?? 0
+                    const hasDep = dep >= 100
+                    const st = statusBadge(o)
+                    return (
+                      <div
+                        key={o.id}
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '2fr 1fr 1fr 80px',
+                          padding: '14px 20px',
+                          borderBottom: '0.5px solid var(--border)',
+                          alignItems: 'center',
+                          gap: 12,
+                        }}
+                      >
+                        {/* 거래처 + 상품 */}
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3, minWidth: 0 }}>
+                            <span
+                              style={{
+                                fontSize: 14,
+                                fontWeight: 500,
+                                color: 'var(--text-primary)',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                              }}
+                              title={o.customer_name}
+                            >
+                              {o.customer_name}
+                            </span>
 
-                  const statusLabel =
-                    o.status === 'draft'
-                      ? '처리 필요'
-                      : o.status === 'confirmed'
-                        ? '진행'
-                        : '종료'
+                            {st && (
+                              <span
+                                style={{
+                                  fontSize: 11,
+                                  background: st.bg,
+                                  color: st.fg,
+                                  padding: '2px 7px',
+                                  borderRadius: 20,
+                                  fontWeight: 500,
+                                  flexShrink: 0,
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {st.label}
+                              </span>
+                            )}
 
-                  const bal = o.current_balance ?? null
-                  const dep = o.deposit_amount ?? 0
-                  const hasDep = dep >= 100
-
-                  return (
-                    <DataTableRow key={o.id} density="compact">
-                      <DataCell>
-                        <div className={styles.rowMain}>
-                          <div className={styles.rowTitle}>
-                            {o.customer_name}{' '}
-                            <span className={styles.rowSub}>· #{o.order_number}</span>
+                            {hasDep ? (
+                              <span
+                                style={{
+                                  fontSize: 11,
+                                  background: 'var(--bg-warning)',
+                                  color: 'var(--text-warning)',
+                                  padding: '2px 7px',
+                                  borderRadius: 20,
+                                  fontWeight: 500,
+                                  flexShrink: 0,
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                예치 {formatKRW(dep)}
+                              </span>
+                            ) : null}
                           </div>
-                          <div className={styles.rowSub}>
+
+                          <span
+                            style={{
+                              fontSize: 12,
+                              color: 'var(--text-hint)',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              display: 'block',
+                            }}
+                            title={summarizeLines(o.order_lines)}
+                          >
                             {summarizeLines(o.order_lines)}
-                          </div>
+                          </span>
                         </div>
-                      </DataCell>
 
-                      <DataCell align="end" tone="secondary">
-                        <StatusBadge status={statusKey} size="sm" />{' '}
-                        <span className={styles.rowSub}>{statusLabel}</span>
-                        {' '}
-                        <span className={styles.tag}>{o.order_status}</span>
-                      </DataCell>
-
-                      <DataCell align="end">
-                        <span className={styles.num}>{formatKRW(o.total_amount)}</span>
-                      </DataCell>
-
-                      <DataCell align="end" tone="secondary">
-                        <span className={styles.numSecondary}>
-                          {bal === null ? '미수 -' : `미수 ${formatKRW(bal)}`}
+                        {/* 금액 */}
+                        <span
+                          style={{
+                            fontSize: 14,
+                            fontWeight: 500,
+                            color: 'var(--text-primary)',
+                            textAlign: 'right',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {formatKRW(o.total_amount)}
                         </span>
-                      </DataCell>
 
-                      <DataCell align="end" tone="muted">
-                        {hasDep ? <span className={styles.tag}>예치 {formatKRW(dep)}</span> : null}
-                      </DataCell>
+                        {/* 미수금 */}
+                        <span
+                          style={{
+                            fontSize: 13,
+                            color: bal > 0 ? 'var(--text-danger)' : 'var(--text-hint)',
+                            textAlign: 'right',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {formatKRW(bal)}
+                        </span>
 
-                      <DataCell align="end">
-                        <Link href={`/orders/${o.id}`} className={styles.btnOpen}>
-                          열기
-                        </Link>
-                      </DataCell>
-                    </DataTableRow>
-                  )
-                })}
-              </div>
-            ))
+                        {/* 열기 버튼 */}
+                        <div style={{ textAlign: 'right' }}>
+                          <Link
+                            href={`/orders/${o.id}`}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: 12,
+                              color: 'var(--text-muted)',
+                              background: 'var(--surface-0)',
+                              border: '1px solid var(--border)',
+                              borderRadius: 6,
+                              padding: '5px 12px',
+                              cursor: 'pointer',
+                              fontFamily: 'inherit',
+                              textDecoration: 'none',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            열기
+                          </Link>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </Surface>
