@@ -3,6 +3,7 @@
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import type { ActionResult } from '@/types/order'
 import type { PaymentTermsType } from '@/lib/payment-terms'
+import { isSafeNumber } from '@/lib/is-safe-number'
 
 export interface CustomerListItem {
   id: string
@@ -26,12 +27,14 @@ export interface CustomerListItem {
   created_at: string
 }
 
-export async function getCustomerList(): Promise<ActionResult<CustomerListItem[]>> {
+export async function getCustomerList(opts?: {
+  safe_number?: boolean
+}): Promise<ActionResult<CustomerListItem[]>> {
   const supabase = await createSupabaseServer()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { success: false, error: '로그인 필요' }
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('customers')
     .select(`
       id, name, phone, customer_type, trade_status,
@@ -42,14 +45,26 @@ export async function getCustomerList(): Promise<ActionResult<CustomerListItem[]
       created_at,
       acquisition_channels ( name )
     `)
+    .eq('tenant_id', ctx.tenant_id)
     .is('deleted_at', null)
     .order('name')
 
+  if (opts?.safe_number) {
+    query = query.ilike('phone', '050%')
+  }
+
+  const { data, error } = await query
+
   if (error) return { success: false, error: error.message }
+
+  let rows = data ?? []
+  if (opts?.safe_number) {
+    rows = rows.filter((c: { phone?: string | null }) => isSafeNumber(c.phone ?? ''))
+  }
 
   return {
     success: true,
-    data: (data ?? []).map((c: any) => ({
+    data: rows.map((c: any) => ({
       ...c,
       channel_name: c.acquisition_channels?.name ?? null,
     })),

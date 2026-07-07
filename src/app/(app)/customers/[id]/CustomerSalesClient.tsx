@@ -1,8 +1,10 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { deleteContactLog, updateContactLog } from '@/actions/sales'
 import QuickActionButton from '@/components/sales/QuickActionButton'
+import SmsModal from '@/components/sms/SmsModal'
 import type { SalesHistory, ConversionStats } from '@/actions/sales'
 
 // ============================================================
@@ -114,9 +116,11 @@ function EditModal({ log, onSave, onClose }: {
 // ============================================================
 
 export default function CustomerSalesClient({ customer, initialHistory, nextAction, conversionStats }: CustomerSalesClientProps) {
+  const router = useRouter()
   const [history,    setHistory]    = useState(initialHistory)
   const [editTarget, setEditTarget] = useState<SalesHistory | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [showSms, setShowSms] = useState(false)
 
   const lastLog     = history[0] ?? null
   const lastOutcome = lastLog?.outcome_type ? OUTCOME_LABEL[lastLog.outcome_type] : null
@@ -153,11 +157,31 @@ export default function CustomerSalesClient({ customer, initialHistory, nextActi
           </div>
 
           {/* 영업 실행 버튼 */}
-          <QuickActionButton
-            customerId={customer.id}
-            customerName={customer.name}
-            phone={customer.phone}
-          />
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {customer.phone && (
+              <button
+                type="button"
+                onClick={() => setShowSms(true)}
+                style={{
+                  padding: '8px 14px',
+                  background: '#0f766e',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 8,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                💬 문자
+              </button>
+            )}
+            <QuickActionButton
+              customerId={customer.id}
+              customerName={customer.name}
+              phone={customer.phone}
+            />
+          </div>
         </div>
 
         {/* 요약 지표 */}
@@ -283,6 +307,17 @@ export default function CustomerSalesClient({ customer, initialHistory, nextActi
           log={editTarget}
           onSave={updated => { handleEditSave(editTarget.id, updated); setEditTarget(null) }}
           onClose={() => setEditTarget(null)}
+        />
+      )}
+
+      {showSms && customer.phone && (
+        <SmsModal
+          customers={[{ id: customer.id, name: customer.name, phone: customer.phone }]}
+          onClose={() => setShowSms(false)}
+          onDone={() => {
+            setShowSms(false)
+            router.refresh()
+          }}
         />
       )}
     </>

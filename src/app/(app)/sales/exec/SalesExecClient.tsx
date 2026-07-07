@@ -5,8 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createContactLog } from '@/actions/contact'
 import { updateScheduleStatus, type ExecCenterTarget, type SalesScript } from '@/actions/sales'
-import { sendAligo } from '@/actions/message'
-import { smsByteLength } from '@/lib/sms-byte-length'
+import SmsModal, { type SmsCustomer } from '@/components/sms/SmsModal'
 
 function kstDateOnly(iso: string | null) {
   if (!iso) return '-'
@@ -17,6 +16,12 @@ const ACTION_LABEL: Record<string, string> = {
   call: '전화',
   message: '문자',
   visit: '방문',
+}
+
+interface SafeCustomer {
+  id: string
+  name: string
+  phone: string
 }
 
 function ScriptPickerModal(props: {
@@ -37,7 +42,7 @@ function ScriptPickerModal(props: {
 
         {props.scripts.length === 0 ? (
           <div style={{ padding: '18px 0', color: '#9ca3af', fontSize: 13 }}>
-            사용 가능한 스크립트가 없습니다. (sales_scripts)
+            사용 가능한 스크립트가 없습니다.
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
@@ -72,91 +77,58 @@ function ScriptPickerModal(props: {
   )
 }
 
-function SendConfirmModal(props: {
-  open: boolean
-  receiver: string
-  content: string
-  byteLen: number
-  smsType: 'SMS' | 'LMS'
-  safeOnlySms: boolean
-  onConfirm: () => void
-  onClose: () => void
-  isPending: boolean
+export default function SalesExecClient(props: {
+  top: ExecCenterTarget[]
+  scripts: SalesScript[]
+  safeCustomers: SafeCustomer[]
 }) {
-  if (!props.open) return null
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 260 }}>
-      <div style={{ background: '#fff', borderRadius: 14, padding: 18, width: 520, maxWidth: '95vw' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
-          <div style={{ fontSize: 15, fontWeight: 900 }}>발송 확인</div>
-          <button onClick={props.onClose} style={{ background: 'transparent', border: 'none', fontSize: 20, cursor: 'pointer', color: '#9ca3af' }}>✕</button>
-        </div>
-
-        <div style={{ marginTop: 12, fontSize: 13, color: '#111827', fontWeight: 800 }}>
-          수신번호: {props.receiver}
-        </div>
-        <div style={{ marginTop: 8, fontSize: 12, color: '#6b7280' }}>
-          길이: {props.byteLen} bytes · 분류: {props.smsType}{props.safeOnlySms ? ' (안심번호: SMS만 허용)' : ''}
-        </div>
-
-        <div style={{ marginTop: 12, background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12, whiteSpace: 'pre-wrap', fontSize: 13, lineHeight: 1.5 }}>
-          {props.content}
-        </div>
-
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 14 }}>
-          <button
-            onClick={props.onClose}
-            disabled={props.isPending}
-            style={{ padding: '10px 14px', background: '#fff', color: '#111827', border: '1px solid #e5e7eb', borderRadius: 10, fontSize: 13, fontWeight: 800, cursor: 'pointer' }}
-          >
-            취소
-          </button>
-          <button
-            onClick={props.onConfirm}
-            disabled={props.isPending}
-            style={{ padding: '10px 14px', background: '#111827', color: '#fff', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 900, cursor: 'pointer' }}
-          >
-            {props.isPending ? '발송 중…' : '발송'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export default function SalesExecClient(props: { top: ExecCenterTarget[]; scripts: SalesScript[] }) {
   const router = useRouter()
   const [isPending, startTr] = useTransition()
+  const [tab, setTab] = useState<'top' | 'safe'>('top')
 
   const [open, setOpen] = useState(false)
-  const [picked, setPicked] = useState<{ target: ExecCenterTarget; action: 'call' | 'message' | 'visit' } | null>(null)
-  const [confirm, setConfirm] = useState<{
-    target: ExecCenterTarget
-    script: SalesScript
-    receiver: string
-    content: string
-    byteLen: number
-    smsType: 'SMS' | 'LMS'
-    safeOnlySms: boolean
-  } | null>(null)
+  const [picked, setPicked] = useState<{ target: ExecCenterTarget; action: 'call' | 'visit' } | null>(null)
+  const [smsTargets, setSmsTargets] = useState<SmsCustomer[] | null>(null)
+  const [selectedSafe, setSelectedSafe] = useState<Set<string>>(new Set())
 
-  const scriptsByType = useMemo(() => {
-    const map = new Map<'call' | 'message' | 'visit', SalesScript[]>()
-    map.set('call', [])
-    map.set('message', [])
-    map.set('visit', [])
-    for (const s of props.scripts) {
-      map.get(s.type)?.push(s)
-    }
-    for (const [k, arr] of map.entries()) {
-      arr.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-    }
-    return map
+  const callScripts = useMemo(() => {
+    return props.scripts
+      .filter((s) => s.type === 'call')
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
   }, [props.scripts])
 
-  function openPicker(t: ExecCenterTarget, action: 'call' | 'message' | 'visit') {
+  const safeWithPhone = useMemo(
+    () => props.safeCustomers.filter((c) => c.phone.trim()),
+    [props.safeCustomers],
+  )
+
+  const allSafeSelected = safeWithPhone.length > 0 && safeWithPhone.every((c) => selectedSafe.has(c.id))
+
+  function openPicker(t: ExecCenterTarget, action: 'call' | 'visit') {
     setPicked({ target: t, action })
     setOpen(true)
+  }
+
+  function openSms(targets: SmsCustomer[]) {
+    if (targets.length === 0) {
+      alert('수신번호가 없습니다.')
+      return
+    }
+    setSmsTargets(targets)
+  }
+
+  function toggleSafeOne(id: string) {
+    setSelectedSafe((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleAllSafe() {
+    if (allSafeSelected) setSelectedSafe(new Set())
+    else setSelectedSafe(new Set(safeWithPhone.map((c) => c.id)))
   }
 
   async function executeWithScript(script: SalesScript) {
@@ -166,42 +138,22 @@ export default function SalesExecClient(props: { top: ExecCenterTarget[]; script
     const action = cur.action
 
     startTr(async () => {
-      try {
-        // 자동 발송 금지: message는 clipboard 기록만
-        if (action === 'message') {
-          const receiver = t.phone ?? ''
-          if (!receiver.trim()) {
-            alert('수신번호가 없습니다.')
-            return
-          }
-          const content = script.content.replace(/\{\{customer_name\}\}/g, t.customer_name)
-          const byteLen = smsByteLength(content)
-          const smsType: 'SMS' | 'LMS' = byteLen <= 90 ? 'SMS' : 'LMS'
-          const safeOnlySms = receiver.replace(/[^0-9]/g, '').startsWith('050')
-          setConfirm({ target: t, script, receiver, content, byteLen, smsType, safeOnlySms })
-          setOpen(false)
-          return
-        } else {
-          const logRes = await createContactLog({
-            customer_id: t.customer_id,
-            contact_method: action,
-            memo: `[실행센터] ${ACTION_LABEL[action]} · ${script.title}\n\n${script.content}`,
-            next_action_date: undefined,
-            next_action_type: undefined,
-          })
-          if (!logRes.success) {
-            alert(logRes.error ?? '이력 저장 실패')
-            return
-          }
-        }
-
-        // call/visit는 즉시 완료 처리
-        if (t.schedule_id) await updateScheduleStatus(t.schedule_id, 'done')
-        setOpen(false); setPicked(null)
-        router.refresh()
-      } finally {
-        // no-op
+      const logRes = await createContactLog({
+        customer_id: t.customer_id,
+        contact_method: action,
+        memo: `[실행센터] ${ACTION_LABEL[action]} · ${script.title}\n\n${script.content}`,
+        next_action_date: undefined,
+        next_action_type: undefined,
+      })
+      if (!logRes.success) {
+        alert(logRes.error ?? '이력 저장 실패')
+        return
       }
+
+      if (t.schedule_id) await updateScheduleStatus(t.schedule_id, 'done')
+      setOpen(false)
+      setPicked(null)
+      router.refresh()
     })
   }
 
@@ -213,7 +165,7 @@ export default function SalesExecClient(props: { top: ExecCenterTarget[]; script
         <div>
           <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: '#111827' }}>실행센터</h1>
           <div style={{ marginTop: 6, fontSize: 12, color: '#6b7280' }}>
-            지금 당장 해야 할 것을 즉시 실행합니다. (자동 발송 금지 · 수동 실행만)
+            지금 당장 해야 할 것을 즉시 실행합니다.
           </div>
         </div>
         <Link href="/sales/schedule" style={{ fontSize: 13, color: '#2563eb', textDecoration: 'none', fontWeight: 800 }}>
@@ -221,106 +173,196 @@ export default function SalesExecClient(props: { top: ExecCenterTarget[]; script
         </Link>
       </div>
 
-      <div style={{ marginTop: 16, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, overflow: 'hidden' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1.4fr .6fr .8fr .8fr 1.2fr', background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-          {['거래처', '점수', '추천 행동', '마지막 연락일', ''].map((h) => (
-            <div key={h} style={{ padding: '10px 12px', fontSize: 11, fontWeight: 900, color: '#6b7280' }}>{h}</div>
-          ))}
-        </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 16, marginBottom: 12 }}>
+        <button
+          type="button"
+          onClick={() => setTab('top')}
+          style={{
+            padding: '8px 16px',
+            borderRadius: 20,
+            border: '1px solid #e5e7eb',
+            background: tab === 'top' ? '#111827' : '#fff',
+            color: tab === 'top' ? '#fff' : '#374151',
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: 'pointer',
+          }}
+        >
+          우선 연락 TOP {top.length}
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab('safe')}
+          style={{
+            padding: '8px 16px',
+            borderRadius: 20,
+            border: '1px solid #e5e7eb',
+            background: tab === 'safe' ? '#0f766e' : '#fff',
+            color: tab === 'safe' ? '#fff' : '#374151',
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: 'pointer',
+          }}
+        >
+          안심번호 ({safeWithPhone.length})
+        </button>
+        {tab === 'safe' && selectedSafe.size > 0 && (
+          <button
+            type="button"
+            onClick={() => {
+              const targets = safeWithPhone
+                .filter((c) => selectedSafe.has(c.id))
+                .map((c) => ({ id: c.id, name: c.name, phone: c.phone }))
+              openSms(targets)
+            }}
+            style={{
+              padding: '8px 16px',
+              borderRadius: 8,
+              border: 'none',
+              background: '#0f766e',
+              color: '#fff',
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            일괄 발송 ({selectedSafe.size}명)
+          </button>
+        )}
+      </div>
 
-        {top.length === 0 ? (
-          <div style={{ padding: 18, textAlign: 'center' }}>
-            <div style={{ fontSize: 14, fontWeight: 900, color: '#111827' }}>아직 연락이 필요한 거래처가 없어요</div>
-            <div style={{ marginTop: 8 }}>
-              <Link href="/orders" style={{ fontSize: 13, color: '#2563eb', textDecoration: 'none', fontWeight: 800 }}>
-                발주 현황 보기 →
-              </Link>
-            </div>
+      {tab === 'top' && (
+        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, overflow: 'hidden' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr .6fr .8fr .8fr 1.2fr', background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+            {['거래처', '점수', '추천 행동', '마지막 연락일', ''].map((h) => (
+              <div key={h} style={{ padding: '10px 12px', fontSize: 11, fontWeight: 900, color: '#6b7280' }}>{h}</div>
+            ))}
           </div>
-        ) : (
-          top.map((t) => (
-            <div key={t.customer_id} style={{ display: 'grid', gridTemplateColumns: '1.4fr .6fr .8fr .8fr 1.2fr', borderBottom: '1px solid #f3f4f6', alignItems: 'center' }}>
-              <div style={{ padding: '12px' }}>
-                <div style={{ fontSize: 13, fontWeight: 900, color: '#111827' }}>{t.customer_name}</div>
-                <div style={{ marginTop: 3, fontSize: 12, color: '#9ca3af' }}>
-                  주문공백 {t.days_since_last_order}일 · 미연락 {t.days_since_last_contact ?? '-'}일
-                </div>
-              </div>
-              <div style={{ padding: '12px', fontSize: 13, fontWeight: 900, color: '#111827' }}>
-                {t.score}
-              </div>
-              <div style={{ padding: '12px', fontSize: 12, fontWeight: 900, color: '#111827' }}>
-                {ACTION_LABEL[t.recommended_action]}
-              </div>
-              <div style={{ padding: '12px', fontSize: 12, color: '#6b7280' }}>
-                {kstDateOnly(t.last_contacted_at)}
-              </div>
-              <div style={{ padding: '12px', display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                <button
-                  onClick={() => openPicker(t, 'call')}
-                  disabled={isPending}
-                  style={{ padding: '7px 10px', background: '#111827', color: '#fff', border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 900, cursor: 'pointer' }}
-                >
-                  📞 전화
-                </button>
-                <button
-                  onClick={() => openPicker(t, 'message')}
-                  disabled={isPending}
-                  style={{ padding: '7px 10px', background: '#0f766e', color: '#fff', border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 900, cursor: 'pointer' }}
-                >
-                  💬 문자
-                </button>
-                <Link
-                  href={`/orders/new?customer_id=${encodeURIComponent(t.customer_id)}`}
-                  style={{ padding: '7px 10px', background: '#fff', color: '#111827', border: '1px solid #e5e7eb', borderRadius: 10, fontSize: 12, fontWeight: 900, textDecoration: 'none' }}
-                >
-                  🧾 주문작성
+
+          {top.length === 0 ? (
+            <div style={{ padding: 18, textAlign: 'center' }}>
+              <div style={{ fontSize: 14, fontWeight: 900, color: '#111827' }}>아직 연락이 필요한 거래처가 없어요</div>
+              <div style={{ marginTop: 8 }}>
+                <Link href="/orders" style={{ fontSize: 13, color: '#2563eb', textDecoration: 'none', fontWeight: 800 }}>
+                  발주 현황 보기 →
                 </Link>
               </div>
             </div>
-          ))
-        )}
-      </div>
+          ) : (
+            top.map((t) => (
+              <div key={t.customer_id} style={{ display: 'grid', gridTemplateColumns: '1.4fr .6fr .8fr .8fr 1.2fr', borderBottom: '1px solid #f3f4f6', alignItems: 'center' }}>
+                <div style={{ padding: '12px' }}>
+                  <div style={{ fontSize: 13, fontWeight: 900, color: '#111827' }}>{t.customer_name}</div>
+                  <div style={{ marginTop: 3, fontSize: 12, color: '#9ca3af' }}>
+                    주문공백 {t.days_since_last_order}일 · 미연락 {t.days_since_last_contact ?? '-'}일
+                  </div>
+                </div>
+                <div style={{ padding: '12px', fontSize: 13, fontWeight: 900, color: '#111827' }}>
+                  {t.score}
+                </div>
+                <div style={{ padding: '12px', fontSize: 12, fontWeight: 900, color: '#111827' }}>
+                  {ACTION_LABEL[t.recommended_action]}
+                </div>
+                <div style={{ padding: '12px', fontSize: 12, color: '#6b7280' }}>
+                  {kstDateOnly(t.last_contacted_at)}
+                </div>
+                <div style={{ padding: '12px', display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => openPicker(t, 'call')}
+                    disabled={isPending}
+                    style={{ padding: '7px 10px', background: '#111827', color: '#fff', border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 900, cursor: 'pointer' }}
+                  >
+                    📞 전화
+                  </button>
+                  <button
+                    onClick={() => openSms([{ id: t.customer_id, name: t.customer_name, phone: t.phone ?? '' }])}
+                    disabled={isPending || !(t.phone ?? '').trim()}
+                    style={{ padding: '7px 10px', background: '#0f766e', color: '#fff', border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 900, cursor: 'pointer' }}
+                  >
+                    💬 문자
+                  </button>
+                  <Link
+                    href={`/orders/new?customer_id=${encodeURIComponent(t.customer_id)}`}
+                    style={{ padding: '7px 10px', background: '#fff', color: '#111827', border: '1px solid #e5e7eb', borderRadius: 10, fontSize: 12, fontWeight: 900, textDecoration: 'none' }}
+                  >
+                    🧾 주문작성
+                  </Link>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {tab === 'safe' && (
+        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, overflow: 'hidden' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '40px 1.4fr 1fr 1fr', background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+            <div style={{ padding: '10px 12px' }}>
+              <input
+                type="checkbox"
+                checked={allSafeSelected}
+                onChange={toggleAllSafe}
+                disabled={safeWithPhone.length === 0}
+                aria-label="전체 선택"
+              />
+            </div>
+            {['거래처', '연락처', ''].map((h) => (
+              <div key={h} style={{ padding: '10px 12px', fontSize: 11, fontWeight: 900, color: '#6b7280' }}>{h}</div>
+            ))}
+          </div>
+
+          {safeWithPhone.length === 0 ? (
+            <div style={{ padding: 18, textAlign: 'center', fontSize: 13, color: '#9ca3af' }}>
+              안심번호(050) 거래처가 없습니다.
+            </div>
+          ) : (
+            safeWithPhone.map((c) => (
+              <div key={c.id} style={{ display: 'grid', gridTemplateColumns: '40px 1.4fr 1fr 1fr', borderBottom: '1px solid #f3f4f6', alignItems: 'center' }}>
+                <div style={{ padding: '12px' }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedSafe.has(c.id)}
+                    onChange={() => toggleSafeOne(c.id)}
+                    aria-label={`${c.name} 선택`}
+                  />
+                </div>
+                <div style={{ padding: '12px', fontSize: 13, fontWeight: 700, color: '#111827' }}>{c.name}</div>
+                <div style={{ padding: '12px', fontSize: 12, color: '#6b7280' }}>{c.phone}</div>
+                <div style={{ padding: '12px', display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    type="button"
+                    onClick={() => openSms([{ id: c.id, name: c.name, phone: c.phone }])}
+                    style={{ padding: '7px 10px', background: '#0f766e', color: '#fff', border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 900, cursor: 'pointer' }}
+                  >
+                    💬 문자
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
 
       <ScriptPickerModal
         open={open}
         title={picked ? `스크립트 선택 — ${picked.target.customer_name} (${ACTION_LABEL[picked.action]})` : '스크립트 선택'}
-        scripts={picked ? (scriptsByType.get(picked.action) ?? []) : []}
+        scripts={callScripts}
         onPick={executeWithScript}
         onClose={() => { setOpen(false); setPicked(null) }}
       />
 
-      <SendConfirmModal
-        open={!!confirm}
-        receiver={confirm?.receiver ?? ''}
-        content={confirm?.content ?? ''}
-        byteLen={confirm?.byteLen ?? 0}
-        smsType={confirm?.smsType ?? 'SMS'}
-        safeOnlySms={confirm?.safeOnlySms ?? false}
-        isPending={isPending}
-        onClose={() => setConfirm(null)}
-        onConfirm={() => {
-          const c = confirm
-          if (!c) return
-          startTr(async () => {
-            const res = await sendAligo({
-              receiver: c.receiver,
-              msg: c.content,
-              customer_id: c.target.customer_id,
-            })
-            if (res.success) {
-              if (c.target.schedule_id) await updateScheduleStatus(c.target.schedule_id, 'done')
-              alert('문자 발송 완료')
-              setConfirm(null)
-              setPicked(null)
-              router.refresh()
-            } else {
-              alert(`발송 실패: ${res.error ?? 'UNKNOWN'}`)
-            }
-          })
-        }}
-      />
+      {smsTargets && (
+        <SmsModal
+          customers={smsTargets}
+          memoPrefix="실행센터"
+          onClose={() => setSmsTargets(null)}
+          onDone={() => {
+            setSmsTargets(null)
+            setSelectedSafe(new Set())
+            router.refresh()
+          }}
+        />
+      )}
     </main>
   )
 }
-

@@ -7,7 +7,7 @@ import { createCustomer, checkCustomerDuplicate } from '@/actions/customer'
 import { upsertCustomerTag } from '@/actions/customer-tags'
 import { formatPaymentTerms } from '@/lib/payment-terms'
 import { isSafeNumber } from '@/lib/is-safe-number'
-import SafeNumberSmsModal from '@/components/customer/SafeNumberSmsModal'
+import SmsModal from '@/components/sms/SmsModal'
 import type { PaymentTermsType } from '@/lib/payment-terms'
 import type { AcquisitionChannel } from '@/actions/acquisition-channel'
 import { addAcquisitionChannel } from '@/actions/acquisition-channel'
@@ -158,6 +158,11 @@ export default function CustomerCreateForm({
 
         const savedPhone = phone.trim()
         if (isSafeNumber(savedPhone)) {
+          await upsertCustomerTag({
+            customer_id: customerId,
+            category: '연락상태',
+            value: '안심번호',
+          })
           setSavedCustomer({ id: customerId, name: name.trim(), phone: savedPhone })
           setShowSafeModal(true)
           return
@@ -587,15 +592,13 @@ export default function CustomerCreateForm({
       </form>
 
       {showSafeModal && savedCustomer && (
-        <SafeNumberSmsModal
-          customerId={savedCustomer.id}
-          customerName={savedCustomer.name}
-          phone={savedCustomer.phone}
+        <SmsModal
+          customers={[savedCustomer]}
           onClose={() => {
             setShowSafeModal(false)
             router.push(`/customers/${savedCustomer.id}`)
           }}
-          onSent={() => {
+          onDone={() => {
             setShowSafeModal(false)
             router.push(`/customers/${savedCustomer.id}`)
           }}
