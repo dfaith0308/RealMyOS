@@ -571,7 +571,7 @@ const s: Record<string, React.CSSProperties> = {
     background: '#ffffff',
     borderRadius: 2,
   },
-  dim: { position: 'fixed' as const, inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 300 },
+  dim: { position: 'fixed' as const, inset: 0, background: 'rgba(0,0,0,0.15)', zIndex: 300 },
   mobileNav: {
     position: 'fixed' as const,
     top: 0,

@@ -132,3 +132,37 @@ export async function getLastOrder(
     },
   }
 }
+
+// ============================================================
+// 주문 단건 라인 조회 (재주문용)
+// - OrdersClient의 "재주문 원클릭"에서 order_id로 접근
+// - getOrderList는 수정 금지 → 별도 액션으로 분리
+// ============================================================
+
+export async function getOrderForReorder(
+  order_id: string,
+): Promise<ActionResult<LastOrderData>> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const { data: order, error } = await supabase
+    .from('orders')
+    .select('id, customer_id, order_lines(product_id, product_name, product_code, quantity, unit_price, tax_type)')
+    // 전환: seller_tenant_id 우선 (legacy tenant_id 병행)
+    .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
+    .eq('id', order_id)
+    .is('deleted_at', null)
+    .maybeSingle()
+
+  if (error) return { success: false, error: error.message }
+  if (!order) return { success: false, error: '주문을 찾을 수 없습니다.' }
+
+  return {
+    success: true,
+    data: {
+      customer_id: order.customer_id,
+      lines: (order.order_lines ?? []) as LastOrderData['lines'],
+    },
+  }
+}
