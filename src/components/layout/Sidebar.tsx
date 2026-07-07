@@ -22,6 +22,7 @@ interface MenuGroup {
 // 메뉴 구조는 이전 버전과 동일하게 유지 (그룹/서브메뉴 복원)
 const MENU: MenuGroup[] = [
   { label: '대시보드', href: '/dashboard' },
+  { label: '구독관리', href: '/subscribe' },
   {
     label: '거래처관리', href: '/customers',
     items: [
@@ -107,6 +108,7 @@ function SidebarInner({ onNavigate }: { onNavigate?: () => void }) {
 
   const [hoverKey, setHoverKey] = useState<string | null>(null)
   const [hoverSubKey, setHoverSubKey] = useState<string | null>(null)
+  const [subStatus, setSubStatus] = useState<{ plan: string; plan_expires_at: string | null } | null>(null)
 
   const [openGroups, setOpenGroups] = useState<Set<string>>(() => {
     const open = new Set<string>()
@@ -148,6 +150,41 @@ function SidebarInner({ onNavigate }: { onNavigate?: () => void }) {
     }
   }
 
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const supabase = createSupabaseBrowser()
+        const { data: { user } } = await supabase.auth.getUser()
+        const tenantId = (user?.user_metadata as any)?.tenant_id as string | undefined
+        if (!tenantId) return
+        const { data } = await supabase
+          .from('tenants')
+          .select('subscription_plan, plan_expires_at')
+          .eq('id', tenantId)
+          .maybeSingle()
+        if (cancelled) return
+        if (data) {
+          setSubStatus({
+            plan: String((data as any).subscription_plan ?? 'free'),
+            plan_expires_at: (data as any).plan_expires_at ?? null,
+          })
+        }
+      } catch {
+        // ignore
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
+  function subLabel(plan: string) {
+    if (plan === 'annual') return '연간'
+    if (plan === 'monthly') return '월간'
+    if (plan === 'earlybird') return '얼리버드'
+    if (plan === 'pro') return '정식'
+    return '무료'
+  }
+
   return (
     <div style={s.wrap}>
       <Link
@@ -156,7 +193,15 @@ function SidebarInner({ onNavigate }: { onNavigate?: () => void }) {
         onClick={() => onNavigate?.()}
       >
         <span style={s.brandAccent} />
-        <div style={s.brandText}>식식이OS</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <div style={s.brandText}>식식이OS</div>
+          {subStatus && (
+            <div style={{ fontSize: 11, color: 'rgba(247,246,242,0.72)', fontWeight: 700 }}>
+              구독: {subLabel(subStatus.plan)}
+              {subStatus.plan_expires_at ? ` · ~${new Date(subStatus.plan_expires_at).toLocaleDateString('ko-KR')}` : ''}
+            </div>
+          )}
+        </div>
       </Link>
 
       <div style={s.menuList}>

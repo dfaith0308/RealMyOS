@@ -30,6 +30,7 @@ function isAdminTenant(row: TenantAdminRow) {
 function PlanBadge({ plan }: { plan: string | null }) {
   const map: Record<string, { cls: string; label: string }> = {
     free:       { cls: s.planFree,      label: '무료' },
+    monthly:    { cls: s.planPro,       label: '월간' },
     earlybird:  { cls: s.planEarlybird, label: '얼리버드' },
     pro:        { cls: s.planPro,       label: '정식' },
     annual:     { cls: s.planAnnual,    label: '연간' },
@@ -231,6 +232,7 @@ export default function TenantsClient({
         <select className={s.filterSelect} value={filterPlan} onChange={e => setFilterPlan(e.target.value)}>
           <option value="all">구독플랜: 전체</option>
           <option value="free">무료</option>
+          <option value="monthly">월간</option>
           <option value="earlybird">얼리버드</option>
           <option value="pro">정식</option>
           <option value="annual">연간</option>
@@ -295,6 +297,7 @@ export default function TenantsClient({
                         disabled={isPending}
                       >
                         <option value="free">무료</option>
+                        <option value="monthly">월간</option>
                         <option value="earlybird">얼리버드</option>
                         <option value="pro">정식</option>
                         <option value="annual">연간</option>

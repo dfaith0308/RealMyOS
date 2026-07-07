@@ -21,6 +21,15 @@ NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 ```
 
+### 2-1. (Vercel) 구독 결제 환경변수
+구독 결제(토스페이먼츠)를 사용하려면 아래 환경변수가 추가로 필요합니다.
+
+```
+NEXT_PUBLIC_TOSS_CLIENT_KEY=
+TOSS_SECRET_KEY=
+NEXT_PUBLIC_APP_URL=https://app.siksiki.com
+```
+
 ### 3. Supabase DB 마이그레이션
 Supabase SQL Editor에서 순서대로 실행:
 1. `001_realmyos_initial_schema.sql` — 테이블 + 인덱스

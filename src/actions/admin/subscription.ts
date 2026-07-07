@@ -3,10 +3,11 @@
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import { revalidatePath } from 'next/cache'
 
-export type SubscriptionPlan = 'free' | 'earlybird' | 'pro' | 'annual'
+export type SubscriptionPlan = 'free' | 'monthly' | 'earlybird' | 'pro' | 'annual'
 
 const PLAN_MONTHS: Record<SubscriptionPlan, number | null> = {
   free: null,
+  monthly: 1,
   earlybird: 3,
   pro: 1,
   annual: 12,
