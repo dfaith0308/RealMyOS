@@ -2,7 +2,6 @@
 
 import { revalidatePath } from 'next/cache'
 import { smsByteLength } from '@/lib/sms-byte-length'
-import { isSafeNumber } from '@/lib/is-safe-number'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import type { ActionResult } from '@/types/order'
 import { getAdminSettingNumber } from '@/actions/admin/policy-console'
@@ -190,11 +189,6 @@ export async function sendAligo(input: {
 
   const byte_len = smsByteLength(msg)
   const sms_type: 'SMS' | 'LMS' = byte_len <= 90 ? 'SMS' : 'LMS'
-
-  // 안심번호 정책: 050 계열 → SMS만 허용
-  if (isSafeNumber(receiverDigits) && sms_type !== 'SMS') {
-    return { success: false, error: '안심번호 대상은 단문(SMS, 90바이트)만 발송 가능합니다.' }
-  }
 
   // aligo send
   const form = new FormData()

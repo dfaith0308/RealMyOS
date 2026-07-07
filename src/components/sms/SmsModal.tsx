@@ -73,16 +73,6 @@ export default function SmsModal({
 
   const previewByteLen = smsByteLength(previewContent)
   const previewSmsType: 'SMS' | 'LMS' = previewByteLen <= 90 ? 'SMS' : 'LMS'
-  const previewSafeOnly = primary ? isSafeNumber(primary.phone) : false
-  const previewLmsBlocked = !isBulk && previewSafeOnly && previewSmsType === 'LMS'
-
-  const bulkSafeLmsCount = useMemo(() => {
-    if (!isBulk || !selectedScript) return 0
-    return customers.filter((c) => {
-      const msg = substituteCustomerName(selectedScript.content, c.name)
-      return isSafeNumber(c.phone) && smsByteLength(msg) > 90
-    }).length
-  }, [isBulk, selectedScript, customers])
 
   async function sendOne(
     customer: SmsCustomer,
@@ -124,10 +114,6 @@ export default function SmsModal({
       setError('발송 대상이 없습니다.')
       return
     }
-    if (previewLmsBlocked) {
-      setError('안심번호는 단문(SMS, 90바이트 이하)만 발송할 수 있습니다.')
-      return
-    }
 
     setError(null)
     setSending(true)
@@ -142,12 +128,6 @@ export default function SmsModal({
         const customer = customers[i]
         const msg = substituteCustomerName(selectedScript.content, customer.name).trim()
         if (!msg) {
-          failed++
-          setProgress(i + 1)
-          continue
-        }
-
-        if (isSafeNumber(customer.phone) && smsByteLength(msg) > 90) {
           failed++
           setProgress(i + 1)
           continue
@@ -268,11 +248,6 @@ export default function SmsModal({
             marginBottom: 14,
           }}>
             발송 완료 — 성공 {result.success}건 · 실패 {result.failed}건
-            {bulkSafeLmsCount > 0 && !sending && (
-              <span style={{ display: 'block', marginTop: 4, color: '#92400E' }}>
-                (안심번호 LMS 초과 건은 자동 스킵됨)
-              </span>
-            )}
           </div>
         )}
 
@@ -357,18 +332,10 @@ export default function SmsModal({
                 }}>
                   {previewContent}
                 </div>
-                <div style={{ marginTop: 6, fontSize: 11, color: previewLmsBlocked ? '#DC2626' : '#6b7280' }}>
+                <div style={{ marginTop: 6, fontSize: 11, color: '#6b7280' }}>
                   {previewByteLen} bytes · {previewSmsType}
-                  {previewSafeOnly ? ' (안심번호: SMS만 허용)' : ''}
-                  {previewLmsBlocked ? ' — 내용이 너무 깁니다.' : ''}
                 </div>
               </div>
-            )}
-
-            {isBulk && bulkSafeLmsCount > 0 && (
-              <p style={{ fontSize: 12, color: '#B45309', margin: '0 0 14px' }}>
-                안심번호 {bulkSafeLmsCount}건은 90바이트 초과로 발송 시 자동 스킵됩니다.
-              </p>
             )}
           </>
         )}
@@ -394,16 +361,16 @@ export default function SmsModal({
             <button
               type="button"
               onClick={handleSend}
-              disabled={sending || loadingScripts || scripts.length === 0 || previewLmsBlocked}
+              disabled={sending || loadingScripts || scripts.length === 0}
               style={{
                 padding: '10px 18px',
                 border: 'none',
                 borderRadius: 8,
-                background: sending || previewLmsBlocked ? '#9ca3af' : '#0f766e',
+                background: sending ? '#9ca3af' : '#0f766e',
                 color: '#fff',
                 fontSize: 13,
                 fontWeight: 600,
-                cursor: sending || previewLmsBlocked ? 'not-allowed' : 'pointer',
+                cursor: sending ? 'not-allowed' : 'pointer',
                 fontFamily: 'inherit',
               }}
             >
