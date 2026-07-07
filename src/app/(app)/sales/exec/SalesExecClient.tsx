@@ -34,14 +34,14 @@ function ScriptPickerModal(props: {
   if (!props.open) return null
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 250 }}>
-      <div style={{ background: '#fff', borderRadius: 14, padding: 18, width: 560, maxWidth: '95vw', maxHeight: '90vh', overflow: 'auto' }}>
+      <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 14, padding: 18, width: 560, maxWidth: '95vw', maxHeight: '90vh', overflow: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
           <div style={{ fontSize: 15, fontWeight: 900 }}>{props.title}</div>
-          <button onClick={props.onClose} style={{ background: 'transparent', border: 'none', fontSize: 20, cursor: 'pointer', color: '#9ca3af' }}>✕</button>
+          <button onClick={props.onClose} style={{ background: 'transparent', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-hint)' }}>✕</button>
         </div>
 
         {props.scripts.length === 0 ? (
-          <div style={{ padding: '18px 0', color: '#9ca3af', fontSize: 13 }}>
+          <div style={{ padding: '18px 0', color: 'var(--text-hint)', fontSize: 13 }}>
             사용 가능한 스크립트가 없습니다.
           </div>
         ) : (
@@ -52,8 +52,8 @@ function ScriptPickerModal(props: {
                 onClick={() => props.onPick(s)}
                 style={{
                   textAlign: 'left',
-                  background: '#fff',
-                  border: '1px solid #e5e7eb',
+                  background: 'var(--surface-2)',
+                  border: '1px solid var(--border)',
                   borderRadius: 12,
                   padding: 12,
                   cursor: 'pointer',
@@ -65,7 +65,7 @@ function ScriptPickerModal(props: {
                     <div style={{ fontSize: 11, fontWeight: 900, color: '#0f766e' }}>DEFAULT</div>
                   )}
                 </div>
-                <div style={{ marginTop: 6, fontSize: 12, color: '#6b7280', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
                   {s.content}
                 </div>
               </button>
@@ -164,7 +164,7 @@ export default function SalesExecClient(props: {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: '#111827' }}>실행센터</h1>
-          <div style={{ marginTop: 6, fontSize: 12, color: '#6b7280' }}>
+          <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-muted)' }}>
             지금 당장 해야 할 것을 즉시 실행합니다.
           </div>
         </div>
@@ -180,8 +180,8 @@ export default function SalesExecClient(props: {
           style={{
             padding: '8px 16px',
             borderRadius: 20,
-            border: '1px solid #e5e7eb',
-            background: tab === 'top' ? '#111827' : '#fff',
+            border: '1px solid var(--border)',
+            background: tab === 'top' ? '#111827' : 'var(--surface-2)',
             color: tab === 'top' ? '#fff' : '#374151',
             fontSize: 13,
             fontWeight: 700,
@@ -196,8 +196,8 @@ export default function SalesExecClient(props: {
           style={{
             padding: '8px 16px',
             borderRadius: 20,
-            border: '1px solid #e5e7eb',
-            background: tab === 'safe' ? '#0f766e' : '#fff',
+            border: '1px solid var(--border)',
+            background: tab === 'safe' ? '#0f766e' : 'var(--surface-2)',
             color: tab === 'safe' ? '#fff' : '#374151',
             fontSize: 13,
             fontWeight: 700,
@@ -232,10 +232,10 @@ export default function SalesExecClient(props: {
       </div>
 
       {tab === 'top' && (
-        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, overflow: 'hidden' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr .6fr .8fr .8fr 1.2fr', background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+        <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr .6fr .8fr .8fr 1.2fr', background: 'var(--surface-1)', borderBottom: '1px solid var(--border)' }}>
             {['거래처', '점수', '추천 행동', '마지막 연락일', ''].map((h) => (
-              <div key={h} style={{ padding: '10px 12px', fontSize: 11, fontWeight: 900, color: '#6b7280' }}>{h}</div>
+              <div key={h} style={{ padding: '10px 12px', fontSize: 11, fontWeight: 900, color: 'var(--text-muted)' }}>{h}</div>
             ))}
           </div>
 
@@ -250,10 +250,10 @@ export default function SalesExecClient(props: {
             </div>
           ) : (
             top.map((t) => (
-              <div key={t.customer_id} style={{ display: 'grid', gridTemplateColumns: '1.4fr .6fr .8fr .8fr 1.2fr', borderBottom: '1px solid #f3f4f6', alignItems: 'center' }}>
+                <div key={t.customer_id} style={{ display: 'grid', gridTemplateColumns: '1.4fr .6fr .8fr .8fr 1.2fr', borderBottom: '0.5px solid var(--border)', alignItems: 'center' }}>
                 <div style={{ padding: '12px' }}>
                   <div style={{ fontSize: 13, fontWeight: 900, color: '#111827' }}>{t.customer_name}</div>
-                  <div style={{ marginTop: 3, fontSize: 12, color: '#9ca3af' }}>
+                  <div style={{ marginTop: 3, fontSize: 12, color: 'var(--text-hint)' }}>
                     주문공백 {t.days_since_last_order}일 · 미연락 {t.days_since_last_contact ?? '-'}일
                   </div>
                 </div>
@@ -263,7 +263,7 @@ export default function SalesExecClient(props: {
                 <div style={{ padding: '12px', fontSize: 12, fontWeight: 900, color: '#111827' }}>
                   {ACTION_LABEL[t.recommended_action]}
                 </div>
-                <div style={{ padding: '12px', fontSize: 12, color: '#6b7280' }}>
+                <div style={{ padding: '12px', fontSize: 12, color: 'var(--text-muted)' }}>
                   {kstDateOnly(t.last_contacted_at)}
                 </div>
                 <div style={{ padding: '12px', display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
@@ -283,7 +283,7 @@ export default function SalesExecClient(props: {
                   </button>
                   <Link
                     href={`/orders/new?customer_id=${encodeURIComponent(t.customer_id)}`}
-                    style={{ padding: '7px 10px', background: '#fff', color: '#111827', border: '1px solid #e5e7eb', borderRadius: 10, fontSize: 12, fontWeight: 900, textDecoration: 'none' }}
+                    style={{ padding: '7px 10px', background: 'var(--surface-2)', color: '#111827', border: '1px solid var(--border)', borderRadius: 10, fontSize: 12, fontWeight: 900, textDecoration: 'none' }}
                   >
                     🧾 주문작성
                   </Link>
@@ -295,8 +295,8 @@ export default function SalesExecClient(props: {
       )}
 
       {tab === 'safe' && (
-        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, overflow: 'hidden' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '40px 1.4fr 1fr 1fr', background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+        <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '40px 1.4fr 1fr 1fr', background: 'var(--surface-1)', borderBottom: '1px solid var(--border)' }}>
             <div style={{ padding: '10px 12px' }}>
               <input
                 type="checkbox"
@@ -307,17 +307,17 @@ export default function SalesExecClient(props: {
               />
             </div>
             {['거래처', '연락처', ''].map((h) => (
-              <div key={h} style={{ padding: '10px 12px', fontSize: 11, fontWeight: 900, color: '#6b7280' }}>{h}</div>
+              <div key={h} style={{ padding: '10px 12px', fontSize: 11, fontWeight: 900, color: 'var(--text-muted)' }}>{h}</div>
             ))}
           </div>
 
           {safeWithPhone.length === 0 ? (
-            <div style={{ padding: 18, textAlign: 'center', fontSize: 13, color: '#9ca3af' }}>
+            <div style={{ padding: 18, textAlign: 'center', fontSize: 13, color: 'var(--text-hint)' }}>
               안심번호(050) 거래처가 없습니다.
             </div>
           ) : (
             safeWithPhone.map((c) => (
-              <div key={c.id} style={{ display: 'grid', gridTemplateColumns: '40px 1.4fr 1fr 1fr', borderBottom: '1px solid #f3f4f6', alignItems: 'center' }}>
+              <div key={c.id} style={{ display: 'grid', gridTemplateColumns: '40px 1.4fr 1fr 1fr', borderBottom: '0.5px solid var(--border)', alignItems: 'center' }}>
                 <div style={{ padding: '12px' }}>
                   <input
                     type="checkbox"
@@ -327,7 +327,7 @@ export default function SalesExecClient(props: {
                   />
                 </div>
                 <div style={{ padding: '12px', fontSize: 13, fontWeight: 700, color: '#111827' }}>{c.name}</div>
-                <div style={{ padding: '12px', fontSize: 12, color: '#6b7280' }}>{c.phone}</div>
+                <div style={{ padding: '12px', fontSize: 12, color: 'var(--text-muted)' }}>{c.phone}</div>
                 <div style={{ padding: '12px', display: 'flex', justifyContent: 'flex-end' }}>
                   <button
                     type="button"

@@ -51,6 +51,6 @@ export default async function CustomerListPage({
 }
 
 const s: Record<string, React.CSSProperties> = {
-  subBtn: { padding: '8px 14px', background: '#fff', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13, color: '#374151', textDecoration: 'none' },
-  newBtn: { padding: '8px 16px', background: '#111827', color: '#fff', borderRadius: 8, fontSize: 13, fontWeight: 500, textDecoration: 'none' },
+  subBtn: { padding: '8px 14px', background: 'var(--surface-2)', border: '1px solid var(--border-strong)', borderRadius: 8, fontSize: 13, color: 'var(--text-secondary)', textDecoration: 'none' },
+  newBtn: { padding: '8px 16px', background: 'var(--color-primary)', color: '#fff', borderRadius: 8, fontSize: 13, fontWeight: 500, textDecoration: 'none' },
 }

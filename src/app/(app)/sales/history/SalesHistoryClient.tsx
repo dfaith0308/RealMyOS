@@ -55,14 +55,14 @@ function EditModal({ log, onSave, onClose }: {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}>
-      <div style={{ background: '#fff', borderRadius: 12, padding: 24, width: 420, maxWidth: '95vw' }}>
+      <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 12, padding: 24, width: 420, maxWidth: '95vw' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
           <span style={{ fontWeight: 700, fontSize: 15 }}>이력 수정</span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#9ca3af' }}>✕</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--text-hint)' }}>✕</button>
         </div>
 
         <div style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', marginBottom: 6 }}>결과</div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>결과</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
             {Object.entries(OUTCOME_LABEL).map(([k, v]) => (
               <button key={k} onClick={() => setOutcome(k)}
@@ -74,20 +74,20 @@ function EditModal({ log, onSave, onClose }: {
         </div>
 
         <div style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', marginBottom: 6 }}>메모</div>
-          <textarea style={{ width: '100%', padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: 7, fontSize: 13, minHeight: 72, resize: 'vertical', boxSizing: 'border-box' }}
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>메모</div>
+          <textarea style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 7, fontSize: 13, minHeight: 72, resize: 'vertical', boxSizing: 'border-box', background: 'var(--surface-2)' }}
             value={memo} onChange={e => setMemo(e.target.value)} />
         </div>
 
         <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', marginBottom: 6 }}>다음 날짜</div>
-            <input type="date" style={{ width: '100%', padding: '7px 10px', border: '1px solid #e5e7eb', borderRadius: 7, fontSize: 13, boxSizing: 'border-box' }}
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>다음 날짜</div>
+            <input type="date" style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--border)', borderRadius: 7, fontSize: 13, boxSizing: 'border-box', background: 'var(--surface-2)' }}
               value={nextDate} onChange={e => setNextDate(e.target.value)} />
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', marginBottom: 6 }}>고객 상태</div>
-            <select style={{ width: '100%', padding: '7px 10px', border: '1px solid #e5e7eb', borderRadius: 7, fontSize: 13, boxSizing: 'border-box' }}
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>고객 상태</div>
+            <select style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--border)', borderRadius: 7, fontSize: 13, boxSizing: 'border-box', background: 'var(--surface-2)' }}
               value={custStatus} onChange={e => setCustStatus(e.target.value)}>
               <option value="">-</option>
               {Object.entries(CUSTOMER_STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -97,7 +97,7 @@ function EditModal({ log, onSave, onClose }: {
 
         <div style={{ display: 'flex', gap: 10 }}>
           <button onClick={onClose}
-            style={{ flex: 1, padding: '9px', border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', fontSize: 13, cursor: 'pointer' }}>취소</button>
+            style={{ flex: 1, padding: '9px', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--surface-2)', fontSize: 13, cursor: 'pointer' }}>취소</button>
           <button onClick={handleSave} disabled={saving}
             style={{ flex: 2, padding: '9px', background: saving ? '#93C5FD' : '#111827', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
             {saving ? '저장 중...' : '저장'}
@@ -175,15 +175,15 @@ export default function SalesHistoryClient({ initialHistory }: { initialHistory:
       </div>
 
       {/* 테이블 헤더 */}
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, overflow: 'hidden', background: '#fff' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '110px 1.2fr 90px 120px 110px 90px 120px', background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+      <div style={{ border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', background: 'var(--surface-2)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '110px 1.2fr 90px 120px 110px 90px 120px', background: 'var(--surface-1)', borderBottom: '1px solid var(--border)' }}>
           {['날짜', '거래처', '행동', '결과코드', '다음행동일', '담당자', '주문발생여부'].map((h) => (
-            <div key={h} style={{ padding: '10px 10px', fontSize: 11, fontWeight: 900, color: '#6b7280' }}>{h}</div>
+            <div key={h} style={{ padding: '10px 10px', fontSize: 11, fontWeight: 900, color: 'var(--text-muted)' }}>{h}</div>
           ))}
         </div>
 
       {filtered.length === 0 ? (
-        <div style={{ textAlign: 'center', color: '#9ca3af', padding: '60px 0', fontSize: 14 }}>
+        <div style={{ textAlign: 'center', color: 'var(--text-hint)', padding: '60px 0', fontSize: 14 }}>
           영업 기록이 없습니다.
         </div>
       ) : (
@@ -196,10 +196,10 @@ export default function SalesHistoryClient({ initialHistory }: { initialHistory:
           const owner = h.contacted_by ? h.contacted_by.slice(0, 8) : '-'
           return (
             <div key={h.id} style={{ display: 'grid', gridTemplateColumns: '110px 1.2fr 90px 120px 110px 90px 120px', borderBottom: '1px solid #f3f4f6', alignItems: 'center', opacity: isDeleting ? 0.4 : 1 }}>
-              <div style={{ padding: '10px 10px', fontSize: 12, color: '#6b7280' }}>{day}</div>
+              <div style={{ padding: '10px 10px', fontSize: 12, color: 'var(--text-muted)' }}>{day}</div>
               <div style={{ padding: '10px 10px' }}>
                 <div style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>{h.customer_name}</div>
-                {h.memo && <div style={{ marginTop: 4, fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{h.memo}</div>}
+                {h.memo && <div style={{ marginTop: 4, fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{h.memo}</div>}
               </div>
               <div style={{ padding: '10px 10px', fontSize: 12, color: '#111827' }}>
                 {METHOD_ICON[method] ?? ''} {methodLabel}
@@ -210,18 +210,18 @@ export default function SalesHistoryClient({ initialHistory }: { initialHistory:
                     {outcomeInfo.label}
                   </span>
                 ) : (
-                  <span style={{ fontSize: 12, color: '#9ca3af' }}>-</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-hint)' }}>-</span>
                 )}
               </div>
               <div style={{ padding: '10px 10px', fontSize: 12, color: '#D97706' }}>{h.next_action_date ?? '-'}</div>
-              <div style={{ padding: '10px 10px', fontSize: 12, color: '#6b7280' }}>{owner}</div>
+              <div style={{ padding: '10px 10px', fontSize: 12, color: 'var(--text-muted)' }}>{owner}</div>
               <div style={{ padding: '10px 10px', fontSize: 12 }}>
                 {h.converted_order_id ? (
                   <Link href={`/orders/${encodeURIComponent(h.converted_order_id)}`} style={{ color: '#16A34A', fontWeight: 900, textDecoration: 'none' }}>
                     주문발생 ✅
                   </Link>
                 ) : (
-                  <span style={{ color: '#9ca3af' }}>-</span>
+                  <span style={{ color: 'var(--text-hint)' }}>-</span>
                 )}
               </div>
             </div>

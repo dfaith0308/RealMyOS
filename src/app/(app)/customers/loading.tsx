@@ -13,9 +13,9 @@ export default function Loading() {
         ))}
       </div>
       {/* 테이블 스켈레톤 */}
-      <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden' }}>
-        <div style={{ background: '#f9fafb', padding: '10px 16px', borderBottom: '1px solid #e5e7eb' }}>
-          <div style={{ width: '100%', height: 14, background: '#e5e7eb', borderRadius: 4 }} />
+      <div style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', background: 'var(--surface-2)' }}>
+        <div style={{ background: 'var(--surface-1)', padding: '10px 16px', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ width: '100%', height: 14, background: 'var(--border)', borderRadius: 4 }} />
         </div>
         {[...Array(7)].map((_, i) => (
           <div key={i} style={{ padding: '14px 16px', borderBottom: i < 6 ? '1px solid #f3f4f6' : 'none', display: 'flex', gap: 16 }}>

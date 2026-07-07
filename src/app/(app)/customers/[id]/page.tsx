@@ -22,8 +22,8 @@ export default async function CustomerDetailPage({
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '28px 24px' }}>
       {/* 브레드크럼 */}
-      <div style={{ fontSize: 13, color: '#9ca3af', marginBottom: 16 }}>
-        <Link href="/customers" style={{ color: '#6b7280', textDecoration: 'none' }}>거래처</Link>
+      <div style={{ fontSize: 13, color: 'var(--text-hint)', marginBottom: 16 }}>
+        <Link href="/customers" style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>거래처</Link>
         {' / '}
         <span>{customer.name}</span>
       </div>
