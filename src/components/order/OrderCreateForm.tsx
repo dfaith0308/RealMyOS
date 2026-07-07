@@ -596,153 +596,164 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines, quote
 
   return (
     <div style={s.wrap}>
-      <div style={s.titleBar}>
-        <span style={s.titleText}>주문 등록</span>
-        {selectedCustomer && <span style={s.customerBadge}>{selectedCustomer.name}</span>}
-      </div>
-
-      {error && <div style={s.errBox}>{error}</div>}
-
-      {paymentWarning && (
-        <div style={s.warnBox}>
-          <span>⚠️ {paymentWarning}</span>
-          <button type="button" style={s.warnClose} onClick={() => setPaymentWarning(null)}>✕</button>
+      <div style={s.card}>
+        <div style={s.titleBar}>
+          <span style={s.titleText}>주문 등록</span>
+          {selectedCustomer && <span style={s.customerBadge}>{selectedCustomer.name}</span>}
         </div>
-      )}
 
-      {paymentFailed && (
-        <div style={s.paymentFailBanner}>
+        {error && <div style={s.errBox}>{error}</div>}
+
+        {paymentWarning && (
+          <div style={s.warnBox}>
+            <span>⚠️ {paymentWarning}</span>
+            <button type="button" style={s.warnClose} onClick={() => setPaymentWarning(null)}>✕</button>
+          </div>
+        )}
+
+        {paymentFailed && (
+          <div style={s.paymentFailBanner}>
+            <div>
+              <p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>⚠️ 수금이 저장되지 않았습니다</p>
+              <p style={{ margin: '4px 0 0 0', fontSize: 12 }}>{paymentError}</p>
+              <p style={{ margin: '4px 0 0 0', fontSize: 12 }}>주문은 정상 등록됐습니다. 아래 버튼으로 지금 수금하세요.</p>
+            </div>
+            <a href={`/payments/new?customer_id=${paymentFailed.customerId}&amount=${paymentFailed.amount}`}
+              style={s.payNowBtn}>지금 수금하기 →</a>
+          </div>
+        )}
+
+        {success && (
+          <div style={s.okBox}>
+            <span>{success}</span>
+            <span style={{ fontSize: 11, color: 'var(--text-success)', marginTop: 4, display: 'block' }}>잠시 후 주문 목록으로 이동합니다...</span>
+          </div>
+        )}
+
+        {/* 상단 2컬럼 */}
+        <div style={s.topGrid}>
           <div>
-            <p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>⚠️ 수금이 저장되지 않았습니다</p>
-            <p style={{ margin: '4px 0 0 0', fontSize: 12 }}>{paymentError}</p>
-            <p style={{ margin: '4px 0 0 0', fontSize: 12 }}>주문은 정상 등록됐습니다. 아래 버튼으로 지금 수금하세요.</p>
-          </div>
-          <a href={`/payments/new?customer_id=${paymentFailed.customerId}&amount=${paymentFailed.amount}`}
-            style={s.payNowBtn}>지금 수금하기 →</a>
-        </div>
-      )}
-
-      {success && (
-        <div style={s.okBox}>
-          <span>{success}</span>
-          <span style={{ fontSize: 11, color: '#15803D', marginTop: 4, display: 'block' }}>잠시 후 주문 목록으로 이동합니다...</span>
-        </div>
-      )}
-
-      {/* 상단 입력 */}
-      <div style={s.topRow}>
-        <div style={{ ...s.field, flex: 2 }}>
-          <label style={s.label}>거래처 *</label>
-          <div style={s.rel}>
-            <input style={s.input} placeholder="거래처명 · 대표자명 · 연락처 검색 (↑↓ 이동, Enter 선택)"
-              value={customerQuery}
-              onChange={(e) => {
-                setCustomerQuery(e.target.value)
-                setShowCustomerDd(true)
-                setActiveIndex(-1)
-              }}
-              onFocus={() => setShowCustomerDd(true)}
-              onBlur={() => setTimeout(() => setShowCustomerDd(false), 150)}
-              onKeyDown={handleCustomerKeyDown}
-              autoComplete="off" />
-            {showCustomerDd && filteredCustomers.length > 0 && (
-              <ul style={s.dd}>
-                {filteredCustomers.slice(0, 8).map((c, idx) => (
-                  <li key={c.id}
-                    style={{ ...s.ddItem, ...(activeIndex === idx ? s.ddItemActive : null) }}
-                    onMouseDown={() => selectCustomer(c)}
-                    onMouseEnter={() => setActiveIndex(idx)}>
-                    <div style={s.customerInfo}>
-                      <div style={s.customerName}>{c.name}</div>
-                      {c.representative_name && (
-                        <div style={s.customerSub}>{c.representative_name}</div>
-                      )}
-                      {c.phone && (
-                        <div style={s.customerSub}>{c.phone}</div>
-                      )}
-                    </div>
-                    {c.payment_terms_days > 0 && <span style={s.pill}>{c.payment_terms_days}일 외상</span>}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
-        <div style={{ ...s.field, flex: 1, maxWidth: 168 }}>
-          <label style={s.label}>주문일</label>
-          <div style={{ position: 'relative' }}>
-            <input type="text"
-              style={{ ...s.input, borderColor: dateError ? '#EF4444' : undefined, paddingRight: 32 }}
-              value={orderDate}
-              onChange={handleDateChange}
-              onBlur={handleDateBlur}
-              placeholder="YYYY-MM-DD 또는 YYYYMMDD"
-              maxLength={10} />
-            <input type="date"
-              style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', width: 22, height: 22, opacity: 0, cursor: 'pointer' }}
-              value={validateDate(orderDate) ? orderDate : ''}
-              onChange={(e) => { if (e.target.value) { setOrderDate(e.target.value); setDateError('') } }} />
-            <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 14, pointerEvents: 'none', color: '#9ca3af' }}>📅</span>
-          </div>
-          {dateError && (
-            <div style={{ fontSize: 11, color: '#EF4444', marginTop: 3 }}>{dateError}</div>
-          )}
-        </div>
-      </div>
-
-      {/* 상품 검색 */}
-      {selectedCustomer && (
-        <div style={s.field}>
-          <label style={s.label}>
-            상품 추가
-            {loadingProducts && <span style={s.loading}> 불러오는 중...</span>}
-          </label>
-          <div style={s.rel}>
-            <input ref={productRef} style={s.input}
-              placeholder="상품명·코드 검색 — Enter로 첫 번째 선택"
-              value={productQuery}
-              onChange={(e) => { setProductQuery(e.target.value); setShowProductDd(true) }}
-              onFocus={() => setShowProductDd(true)}
-              onBlur={() => setTimeout(() => setShowProductDd(false), 150)}
-              onKeyDown={handleProductKeyDown}
-              autoComplete="off" disabled={loadingProducts} />
-            {showProductDd && filteredProducts.length > 0 && (
-              <ul style={s.dd}>
-                {filteredProducts.slice(0, 10).map((p) => {
-                  const hasPrev = p.has_purchase_history
-                  return (
-                    <li key={p.id} style={{
-                      ...s.ddItem,
-                      background:  hasPrev ? '#FAFFF4' : '#fff',
-                      borderLeft:  hasPrev ? '3px solid #86EFAC' : '3px solid transparent',
-                    }} onMouseDown={() => addProduct(p)}>
-                      <span style={s.pCode}>{p.product_code}</span>
-                      <span style={s.pName}>
-                        {p.name}
-                        {hasPrev && <span style={s.prevBadge}>최근구매</span>}
-                      </span>
-                      <span style={s.pPrice}>{hasPrev ? formatKRW(p.last_unit_price) : ''}</span>
-                      {p.tax_type === 'exempt' && <span style={s.pillGray}>면세</span>}
+            <p style={s.topLabel}>
+              거래처 <span style={{ color: 'var(--text-danger)' }}>*</span>
+            </p>
+            <div style={s.rel}>
+              <input style={s.input} placeholder="거래처명 · 대표자명 · 연락처 검색 (↑↓ 이동, Enter 선택)"
+                value={customerQuery}
+                onChange={(e) => {
+                  setCustomerQuery(e.target.value)
+                  setShowCustomerDd(true)
+                  setActiveIndex(-1)
+                }}
+                onFocus={() => setShowCustomerDd(true)}
+                onBlur={() => setTimeout(() => setShowCustomerDd(false), 150)}
+                onKeyDown={handleCustomerKeyDown}
+                autoComplete="off" />
+              {showCustomerDd && filteredCustomers.length > 0 && (
+                <ul style={s.dd}>
+                  {filteredCustomers.slice(0, 8).map((c, idx) => (
+                    <li key={c.id}
+                      style={{ ...s.ddItem, ...(activeIndex === idx ? s.ddItemActive : null) }}
+                      onMouseDown={() => selectCustomer(c)}
+                      onMouseEnter={() => setActiveIndex(idx)}>
+                      <div style={s.customerInfo}>
+                        <div style={s.customerName}>{c.name}</div>
+                        {c.representative_name && (
+                          <div style={s.customerSub}>{c.representative_name}</div>
+                        )}
+                        {c.phone && (
+                          <div style={s.customerSub}>{c.phone}</div>
+                        )}
+                      </div>
+                      {c.payment_terms_days > 0 && <span style={s.pill}>{c.payment_terms_days}일 외상</span>}
                     </li>
-                  )
-                })}
-              </ul>
-            )}
-            {showProductDd && productQuery.trim() && filteredProducts.length === 0 && !loadingProducts && (
-              <div style={s.ddEmpty}>
-                <p style={s.ddEmptyText}>&apos;{productQuery.trim()}&apos; 검색 결과가 없습니다</p>
-                <button
-                  type="button"
-                  style={s.ddEmptyBtn}
-                  onMouseDown={(e) => { e.preventDefault(); setShowQuickAdd(true); setShowProductDd(false) }}
-                >
-                  + &apos;{productQuery.trim()}&apos; 상품 바로 등록
-                </button>
-              </div>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <p style={s.topLabel}>주문일</p>
+            <div style={{ position: 'relative' }}>
+              <input type="text"
+                style={{ ...s.input, borderColor: dateError ? 'var(--text-danger)' : 'var(--border)', paddingRight: 32 }}
+                value={orderDate}
+                onChange={handleDateChange}
+                onBlur={handleDateBlur}
+                placeholder="YYYY-MM-DD 또는 YYYYMMDD"
+                maxLength={10} />
+              <input type="date"
+                style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', width: 22, height: 22, opacity: 0, cursor: 'pointer' }}
+                value={validateDate(orderDate) ? orderDate : ''}
+                onChange={(e) => { if (e.target.value) { setOrderDate(e.target.value); setDateError('') } }} />
+              <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 14, pointerEvents: 'none', color: 'var(--text-hint)' }}>📅</span>
+            </div>
+            {dateError && (
+              <div style={{ fontSize: 11, color: 'var(--text-danger)', marginTop: 3 }}>{dateError}</div>
             )}
           </div>
         </div>
-      )}
+
+        {/* 상품 영역 */}
+        {!selectedCustomer && (
+          <div style={s.emptyAddBox}>
+            <p style={s.emptyAddTitle}>거래처를 선택하면 상품을 추가할 수 있습니다</p>
+            <p style={s.emptyAddSub}>상품명 또는 코드로 검색</p>
+          </div>
+        )}
+
+        {selectedCustomer && (
+          <div style={{ marginBottom: 16 }}>
+            <p style={s.topLabel}>
+              상품 추가
+              {loadingProducts && <span style={{ color: 'var(--text-hint)', fontWeight: 400 }}> 불러오는 중...</span>}
+            </p>
+            <div style={s.rel}>
+              <input ref={productRef} style={s.input}
+                placeholder="상품명·코드 검색 — Enter로 첫 번째 선택"
+                value={productQuery}
+                onChange={(e) => { setProductQuery(e.target.value); setShowProductDd(true) }}
+                onFocus={() => setShowProductDd(true)}
+                onBlur={() => setTimeout(() => setShowProductDd(false), 150)}
+                onKeyDown={handleProductKeyDown}
+                autoComplete="off" disabled={loadingProducts} />
+              {showProductDd && filteredProducts.length > 0 && (
+                <ul style={s.dd}>
+                  {filteredProducts.slice(0, 10).map((p) => {
+                    const hasPrev = p.has_purchase_history
+                    return (
+                      <li key={p.id} style={{
+                        ...s.ddItem,
+                        background:  hasPrev ? '#FAFFF4' : 'var(--surface-2)',
+                        borderLeft:  hasPrev ? '3px solid #86EFAC' : '3px solid transparent',
+                      }} onMouseDown={() => addProduct(p)}>
+                        <span style={s.pCode}>{p.product_code}</span>
+                        <span style={s.pName}>
+                          {p.name}
+                          {hasPrev && <span style={s.prevBadge}>최근구매</span>}
+                        </span>
+                        <span style={s.pPrice}>{hasPrev ? formatKRW(p.last_unit_price) : ''}</span>
+                        {p.tax_type === 'exempt' && <span style={s.pillGray}>면세</span>}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+              {showProductDd && productQuery.trim() && filteredProducts.length === 0 && !loadingProducts && (
+                <div style={s.ddEmpty}>
+                  <p style={s.ddEmptyText}>&apos;{productQuery.trim()}&apos; 검색 결과가 없습니다</p>
+                  <button
+                    type="button"
+                    style={s.ddEmptyBtn}
+                    onMouseDown={(e) => { e.preventDefault(); setShowQuickAdd(true); setShowProductDd(false) }}
+                  >
+                    + &apos;{productQuery.trim()}&apos; 상품 바로 등록
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
       {/* 주문 라인 — resolveLine 기반 */}
       {lines.length > 0 && (
@@ -893,32 +904,33 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines, quote
           value={memo} onChange={(e) => setMemo(e.target.value)} />
       </div>
 
-      {/* 수금 동시 처리 */}
-      <div style={{ borderTop: '1px solid #f3f4f6', paddingTop: 16 }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14, fontWeight: 500 }}>
-          <input type="checkbox" checked={doPayment}
-            onChange={(e) => {
-              const checked = e.target.checked
-              setDoPayment(checked)
-              if (checked) {
-                // 현재 주문 finalAmount 기준으로만 자동 입력
-                setPaymentAmount(finalAmount > 0 ? String(finalAmount) : '')
-              } else {
-                setPaymentAmount('')  // 체크 해제 시 반드시 초기화
-              }
-            }} />
-          수금 동시 처리
-        </label>
+        {/* 수금 동시 처리 */}
+        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+            <input type="checkbox" checked={doPayment}
+              style={{ width: 16, height: 16, accentColor: 'var(--color-primary)' }}
+              onChange={(e) => {
+                const checked = e.target.checked
+                setDoPayment(checked)
+                if (checked) {
+                  // 현재 주문 finalAmount 기준으로만 자동 입력
+                  setPaymentAmount(finalAmount > 0 ? String(finalAmount) : '')
+                } else {
+                  setPaymentAmount('')  // 체크 해제 시 반드시 초기화
+                }
+              }} />
+            <span style={{ fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>수금 동시 처리</span>
+          </label>
         {doPayment && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
             <div style={{ display: 'flex', gap: 8 }}>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 4 }}>수금 금액</div>
+                <div style={{ fontSize: 11, color: 'var(--text-hint)', marginBottom: 4, whiteSpace: 'nowrap' }}>수금 금액</div>
                 <input style={s.input} type="number" value={paymentAmount}
                   onChange={(e) => setPaymentAmount(e.target.value)} placeholder="0" min={0} />
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 4 }}>수금일</div>
+                <div style={{ fontSize: 11, color: 'var(--text-hint)', marginBottom: 4, whiteSpace: 'nowrap' }}>수금일</div>
                 <div style={{ position: 'relative' }}>
                   <input type="text"
                     style={{ ...s.input, paddingRight: 32, borderColor: paymentDateError ? '#EF4444' : undefined }}
@@ -931,7 +943,7 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines, quote
                     style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', width: 22, height: 22, opacity: 0, cursor: 'pointer' }}
                     value={validateDate(paymentDate) ? paymentDate : ''}
                     onChange={(e) => { if (e.target.value) { setPaymentDateP(e.target.value); setPaymentDateError('') } }} />
-                  <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 14, pointerEvents: 'none', color: '#9ca3af' }}>📅</span>
+                  <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 14, pointerEvents: 'none', color: 'var(--text-hint)' }}>📅</span>
                 </div>
                 {paymentDateError && (
                   <div style={{ fontSize: 11, color: '#EF4444', marginTop: 3 }}>{paymentDateError}</div>
@@ -939,7 +951,7 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines, quote
               </div>
             </div>
             <div>
-              <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 4 }}>수금 방식</div>
+              <div style={{ fontSize: 11, color: 'var(--text-hint)', marginBottom: 4, whiteSpace: 'nowrap' }}>수금 방식</div>
               <div style={{ display: 'flex', border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
                 {(['transfer', 'cash', 'card', 'platform'] as PaymentMethod[]).map((m, i) => (
                   <button key={m} type="button" style={{
@@ -962,15 +974,20 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines, quote
         )}
       </div>
 
-      {/* 저장 버튼 */}
-      <div style={s.footer}>
-        <button
-          style={isPending || isSubmitting || !lines.length ? s.btnOff : s.btn}
-          onClick={handleSubmit}
-          disabled={isPending || isSubmitting || !lines.length}>
-          {isPending ? '저장 중...' : `주문 등록${lines.length ? ` (${formatKRW(finalAmount)})` : ''}`}
-        </button>
-      </div>
+        {/* 하단 액션 바 */}
+        <div style={s.actionBar}>
+          <div />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <a href="/orders" style={s.cancelBtn}>취소</a>
+            <button
+              style={isPending || isSubmitting || !lines.length ? s.submitBtnOff : s.submitBtn}
+              onClick={handleSubmit}
+              disabled={isPending || isSubmitting || !lines.length}
+            >
+              {isPending ? '저장 중...' : '주문 등록'}
+            </button>
+          </div>
+        </div>
 
       {showQuickAdd && (
         <QuickProductAddModal
@@ -984,6 +1001,7 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines, quote
           }}
         />
       )}
+      </div>
     </div>
   )
 }
@@ -994,21 +1012,23 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines, quote
 
 const s: Record<string, React.CSSProperties> = {
   wrap:             { maxWidth: 960, margin: '0 auto', padding: '28px 24px 48px', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", sans-serif' },
-  titleBar:         { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24, paddingBottom: 16, borderBottom: '1px solid #e5e7eb' },
+  card:             { background: 'var(--surface-2)', borderRadius: 12, border: '1px solid var(--border)', padding: 24 },
+  titleBar:         { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, paddingBottom: 16, borderBottom: '1px solid var(--border)' },
   titleText:        { fontSize: 18, fontWeight: 600 },
-  customerBadge:    { background: '#EFF6FF', color: '#1D4ED8', fontSize: 13, fontWeight: 500, padding: '3px 10px', borderRadius: 20 },
+  customerBadge:    { background: 'var(--bg-accent)', color: 'var(--text-accent)', fontSize: 13, fontWeight: 500, padding: '3px 10px', borderRadius: 20, whiteSpace: 'nowrap' },
   errBox:           { background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 16 },
   okBox:            { background: '#F0FDF4', color: '#15803D', border: '1px solid #BBF7D0', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 16 },
   warnBox:          { background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#B45309', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   warnClose:        { background: 'none', border: 'none', color: '#B45309', cursor: 'pointer', fontSize: 18 },
-  topRow:           { display: 'flex', gap: 12, marginBottom: 16, alignItems: 'flex-end' },
+  topGrid:          { display: 'grid', gridTemplateColumns: '1fr 200px', gap: 12, marginBottom: 20 },
+  topLabel:         { fontSize: 12, fontWeight: 500, color: 'var(--text-muted)', margin: '0 0 6px', whiteSpace: 'nowrap' },
   field:            { display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 16, flex: 1 },
   label:            { fontSize: 11, fontWeight: 500, color: '#6b7280', letterSpacing: '0.04em', textTransform: 'uppercase' },
   loading:          { color: '#9ca3af', fontWeight: 400 },
   rel:              { position: 'relative' },
-  input:            { width: '100%', padding: '9px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, outline: 'none', background: '#fff', boxSizing: 'border-box' },
-  dd:               { position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.10)', zIndex: 50, maxHeight: 320, overflowY: 'auto', listStyle: 'none', margin: 0, padding: 0 },
-  ddEmpty:          { position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.10)', zIndex: 50, padding: '14px 16px' },
+  input:            { width: '100%', padding: '9px 12px', border: '1px solid var(--border-strong)', borderRadius: 8, fontSize: 14, outline: 'none', background: 'var(--surface-2)', boxSizing: 'border-box' },
+  dd:               { position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.10)', zIndex: 50, maxHeight: 320, overflowY: 'auto', listStyle: 'none', margin: 0, padding: 0 },
+  ddEmpty:          { position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.10)', zIndex: 50, padding: '14px 16px' },
   ddEmptyText:      { margin: '0 0 10px', fontSize: 13, color: '#6b7280' },
   ddEmptyBtn:       { width: '100%', padding: '9px 12px', border: '1px dashed #86EFAC', borderRadius: 8, background: '#F0FDF4', color: '#15803D', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' },
   ddItem:           { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', cursor: 'pointer', fontSize: 14, borderBottom: '1px solid #f9fafb' },
@@ -1022,6 +1042,9 @@ const s: Record<string, React.CSSProperties> = {
   pCode:            { fontSize: 11, color: '#9ca3af', fontFamily: 'monospace', minWidth: 76 },
   pName:            { flex: 1 },
   pPrice:           { marginLeft: 'auto', fontSize: 13, fontVariantNumeric: 'tabular-nums' },
+  emptyAddBox:      { border: '2px dashed var(--border)', borderRadius: 8, padding: '32px 20px', textAlign: 'center', marginBottom: 20 },
+  emptyAddTitle:    { fontSize: 14, color: 'var(--text-hint)', margin: '0 0 4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
+  emptyAddSub:      { fontSize: 12, color: 'var(--border-strong)', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
   tableWrap:        { border: '1px solid #e5e7eb', borderRadius: 10, overflowX: 'auto', marginBottom: 12 },
   table:            { width: '100%', borderCollapse: 'collapse', fontSize: 13 },
   th:               { padding: '9px 12px', textAlign: 'left', fontSize: 11, fontWeight: 500, color: '#6b7280', background: '#f9fafb', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' },
@@ -1050,6 +1073,8 @@ const s: Record<string, React.CSSProperties> = {
   discountField:    { display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 160 },
   discountLabel:    { fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap', fontWeight: 500 },
   discountInput:    { width: 120, padding: '6px 10px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 13, textAlign: 'right', outline: 'none' },
-  btn:              { padding: '13px 32px', background: '#111827', color: '#fff', border: 'none', borderRadius: 8, fontSize: 15, fontWeight: 500, cursor: 'pointer' },
-  btnOff:           { padding: '13px 32px', background: '#e5e7eb', color: '#9ca3af', border: 'none', borderRadius: 8, fontSize: 15, fontWeight: 500, cursor: 'not-allowed' },
+  actionBar:        { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 20 },
+  cancelBtn:        { padding: '10px 20px', background: 'var(--surface-0)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 14, color: 'var(--text-muted)', cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', whiteSpace: 'nowrap' },
+  submitBtn:        { padding: '10px 24px', background: 'var(--color-primary)', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 500, color: '#fff', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' },
+  submitBtnOff:     { padding: '10px 24px', background: 'var(--border)', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 500, color: 'var(--text-hint)', cursor: 'not-allowed', fontFamily: 'inherit', whiteSpace: 'nowrap' },
 }
