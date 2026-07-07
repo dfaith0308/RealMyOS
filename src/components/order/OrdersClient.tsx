@@ -136,13 +136,22 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
     return `${lines[0].product_name} 외 ${lines.length - 1}건`
   }
 
+  function calcOrderProfit(lines: OrderListItem['order_lines']): number {
+    return lines.reduce((s, l) => {
+      const cost = (l.cost_price ?? 0) * l.quantity
+      const revenue = l.unit_price * l.quantity
+      return s + (revenue - cost)
+    }, 0)
+  }
+
   const groupedByDate = useMemo(() => {
-    const map = new Map<string, { date: string; rows: OrderListItem[]; cnt: number; sum: number }>()
+    const map = new Map<string, { date: string; rows: OrderListItem[]; cnt: number; sum: number; profit: number }>()
     for (const o of viewFiltered) {
-      const g = map.get(o.order_date) ?? { date: o.order_date, rows: [], cnt: 0, sum: 0 }
+      const g = map.get(o.order_date) ?? { date: o.order_date, rows: [], cnt: 0, sum: 0, profit: 0 }
       g.rows.push(o)
       g.cnt += 1
       g.sum += o.total_amount ?? 0
+      g.profit += calcOrderProfit(o.order_lines)
       map.set(o.order_date, g)
     }
     return [...map.values()]
@@ -247,7 +256,16 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
                     <span style={ui.groupDate}>{g.date}</span>
                     <span style={ui.groupMeta}>{g.cnt}건</span>
                   </div>
-                  <span style={ui.groupSum}>합계 {formatKRW(g.sum)}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span style={{ fontSize: 13, fontWeight: 500, color: '#1a1a1a' }}>
+                      합계 {g.sum.toLocaleString()}원
+                    </span>
+                    {g.profit > 0 && (
+                      <span style={{ fontSize: 12, color: '#1f5d3a' }}>
+                        예상 수익 약 {g.profit.toLocaleString()}원
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div style={ui.colHead}>
@@ -278,8 +296,19 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
                         {formatKRW(bal)}
                       </span>
 
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
-                        <Link href={`/orders/${o.id}`} style={ui.openBtn}>열기</Link>
+                      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                        <Link
+                          href={`/orders/${o.id}/edit`}
+                          style={{ fontSize: 12, color: '#1f5d3a', background: '#f0f7f3', border: '1px solid #bbf7d0', borderRadius: 6, padding: '5px 12px', textDecoration: 'none', whiteSpace: 'nowrap' }}
+                        >
+                          수정
+                        </Link>
+                        <Link
+                          href={`/orders/${o.id}`}
+                          style={{ fontSize: 12, color: '#6b7280', background: '#f7f6f2', border: '1px solid #e5e7eb', borderRadius: 6, padding: '5px 12px', textDecoration: 'none', whiteSpace: 'nowrap' }}
+                        >
+                          열기
+                        </Link>
                         <button
                           type="button"
                           onClick={() => router.push(`/orders/new?reorder=${encodeURIComponent(o.id)}`)}
