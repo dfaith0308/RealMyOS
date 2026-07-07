@@ -41,12 +41,12 @@ export default async function PaymentsPage({
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
           <h1 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>수금 목록</h1>
-          <p style={{ fontSize: 12, color: '#9ca3af', margin: '4px 0 0 0' }}>
+          <p style={{ fontSize: 12, color: 'var(--text-hint)', margin: '4px 0 0 0' }}>
             {paymentsResult.data?.length ?? 0}건
           </p>
         </div>
         <Link href="/payments/new"
-          style={{ padding: '8px 16px', background: '#111827', color: '#fff', borderRadius: 8, fontSize: 13, fontWeight: 500, textDecoration: 'none' }}>
+          style={{ padding: '8px 16px', background: 'var(--color-primary)', color: '#fff', borderRadius: 8, fontSize: 13, fontWeight: 500, textDecoration: 'none' }}>
           + 수금 등록
         </Link>
       </div>

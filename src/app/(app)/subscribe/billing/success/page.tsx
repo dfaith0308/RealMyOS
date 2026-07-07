@@ -54,16 +54,16 @@ export default async function BillingSuccessPage({
 
   return (
     <main style={{ maxWidth: 480, margin: '0 auto', padding: '40px 20px', textAlign: 'center' }}>
-      <div style={{ background: '#fff', borderRadius: 16, padding: '40px 24px' }}>
+      <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 16, padding: '40px 24px' }}>
         <div style={{ fontSize: 56, marginBottom: 16 }}>🎉</div>
-        <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1a1a1a', margin: '0 0 8px' }}>구독 완료!</h1>
-        <p style={{ fontSize: 14, color: '#6b7280', margin: '0 0 24px' }}>구독이 시작됐습니다</p>
+        <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 8px' }}>구독 완료!</h1>
+        <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: '0 0 24px' }}>구독이 시작됐습니다</p>
         <a
           href="/dashboard"
           style={{
             display: 'block',
             padding: 14,
-            background: '#111827',
+            background: 'var(--color-primary)',
             borderRadius: 12,
             color: '#fff',
             textDecoration: 'none',

@@ -49,24 +49,24 @@ function ScheduleEditModal({ schedule, onSave, onClose }: {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300 }}>
-      <div style={{ background: '#fff', borderRadius: 12, padding: 24, width: 360, maxWidth: '95vw' }}>
+      <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 12, padding: 24, width: 360, maxWidth: '95vw' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
           <span style={{ fontWeight: 700, fontSize: 15 }}>스케줄 수정 — {schedule.customer_name}</span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#9ca3af' }}>✕</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--text-hint)' }}>✕</button>
         </div>
         <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', marginBottom: 6 }}>날짜</div>
-          <input type="date" style={{ width: '100%', padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: 7, fontSize: 14, boxSizing: 'border-box' }}
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>날짜</div>
+          <input type="date" style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 7, fontSize: 14, boxSizing: 'border-box', background: 'var(--surface-2)' }}
             value={date} onChange={e => setDate(e.target.value)} />
         </div>
         <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', marginBottom: 6 }}>방법</div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>방법</div>
           <div style={{ display: 'flex', gap: 8 }}>
             {(['call','message','visit'] as const).map((v) => {
               const label = v === 'call' ? '📞 전화' : v === 'message' ? '💬 문자' : '🚗 방문'
               return (
                 <button key={v} onClick={() => setAction(v)}
-                  style={{ flex: 1, padding: '8px 0', border: `2px solid ${action === v ? '#111827' : '#e5e7eb'}`, borderRadius: 7, fontSize: 13, cursor: 'pointer', background: action === v ? '#111827' : '#fff', color: action === v ? '#fff' : '#374151', fontWeight: action === v ? 600 : 400 }}>
+                  style={{ flex: 1, padding: '8px 0', border: `2px solid ${action === v ? '#111827' : 'var(--border)'}`, borderRadius: 7, fontSize: 13, cursor: 'pointer', background: action === v ? '#111827' : 'var(--surface-2)', color: action === v ? '#fff' : '#374151', fontWeight: action === v ? 600 : 400 }}>
                   {label}
                 </button>
               )
@@ -75,7 +75,7 @@ function ScheduleEditModal({ schedule, onSave, onClose }: {
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button onClick={onClose}
-            style={{ flex: 1, padding: '9px', border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff', fontSize: 13, cursor: 'pointer' }}>취소</button>
+            style={{ flex: 1, padding: '9px', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--surface-2)', fontSize: 13, cursor: 'pointer' }}>취소</button>
           <button onClick={handleSave} disabled={saving}
             style={{ flex: 2, padding: '9px', background: saving ? '#93C5FD' : '#111827', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
             {saving ? '저장 중...' : '저장'}
@@ -113,15 +113,15 @@ function MiniCalendar({ selected, onSelect, markedDates }: {
   const DAY = ['일','월','화','수','목','금','토']
 
   return (
-    <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden', background: '#fff', userSelect: 'none' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-        <button onClick={prev} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#6b7280', lineHeight: 1 }}>‹</button>
+    <div style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', background: 'var(--surface-2)', userSelect: 'none' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--surface-1)', borderBottom: '1px solid var(--border)' }}>
+        <button onClick={prev} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--text-muted)', lineHeight: 1 }}>‹</button>
         <span style={{ fontWeight: 700, fontSize: 14 }}>{year}년 {MON[month]}</span>
-        <button onClick={next} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#6b7280', lineHeight: 1 }}>›</button>
+        <button onClick={next} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--text-muted)', lineHeight: 1 }}>›</button>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: '1px solid #f3f4f6' }}>
         {DAY.map((d, i) => (
-          <div key={d} style={{ padding: '5px 0', textAlign: 'center', fontSize: 11, color: i===0 ? '#EF4444' : i===6 ? '#3B82F6' : '#9ca3af', fontWeight: 500 }}>{d}</div>
+          <div key={d} style={{ padding: '5px 0', textAlign: 'center', fontSize: 11, color: i===0 ? '#EF4444' : i===6 ? '#3B82F6' : 'var(--text-hint)', fontWeight: 500 }}>{d}</div>
         ))}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>

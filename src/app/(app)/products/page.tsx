@@ -32,9 +32,9 @@ export default async function ProductsPage({
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
           <h1 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>상품 목록</h1>
-          <p style={{ fontSize: 12, color: '#9ca3af', margin: '4px 0 0 0' }}>{products.length}개</p>
+          <p style={{ fontSize: 12, color: 'var(--text-hint)', margin: '4px 0 0 0' }}>{products.length}개</p>
         </div>
-        <Link href="/products/bulk" style={{ padding: "8px 14px", background: "#fff", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 13, color: "#374151", textDecoration: "none" }}>대량등록</Link>
+        <Link href="/products/bulk" style={{ padding: "8px 14px", background: "var(--surface-2)", border: "1px solid var(--border-strong)", borderRadius: 8, fontSize: 13, color: "var(--text-secondary)", textDecoration: "none" }}>대량등록</Link>
         <Link href="/products/new" style={s.newBtn}>+ 상품 등록</Link>
       </div>
 
@@ -61,9 +61,9 @@ export default async function ProductsPage({
 }
 
 const s: Record<string, React.CSSProperties> = {
-  newBtn:    { padding: '8px 16px', background: '#111827', color: '#fff', borderRadius: 8, fontSize: 13, fontWeight: 500, textDecoration: 'none' },
-  input:     { padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13, outline: 'none' },
-  select:    { padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13, background: '#fff' },
-  searchBtn: { padding: '8px 16px', background: '#111827', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, cursor: 'pointer' },
-  resetBtn:  { padding: '8px 14px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, color: '#6b7280', textDecoration: 'none' },
+  newBtn:    { padding: '8px 16px', background: 'var(--color-primary)', color: '#fff', borderRadius: 8, fontSize: 13, fontWeight: 500, textDecoration: 'none' },
+  input:     { padding: '8px 12px', border: '1px solid var(--border-strong)', borderRadius: 8, fontSize: 13, outline: 'none', background: 'var(--surface-2)' },
+  select:    { padding: '8px 12px', border: '1px solid var(--border-strong)', borderRadius: 8, fontSize: 13, background: 'var(--surface-2)' },
+  searchBtn: { padding: '8px 16px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, cursor: 'pointer' },
+  resetBtn:  { padding: '8px 14px', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, color: 'var(--text-muted)', textDecoration: 'none' },
 }

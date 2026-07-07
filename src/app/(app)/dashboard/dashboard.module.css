@@ -3,7 +3,7 @@
   flex-direction: column;
   gap: 12px;
   overflow-x: hidden;
-  background: #f7f6f2;
+  background: var(--surface-0);
 }
 
 .kpiGrid {
@@ -13,14 +13,14 @@
 }
 
 .kpiCard {
-  background: #ffffff;
+  background: var(--surface-2);
   border-radius: 12px;
   padding: 14px 14px 12px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   overflow: hidden;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border);
   text-decoration: none;
   color: inherit;
 }
@@ -51,7 +51,7 @@
 }
 .pillWarn { background: #FEF2E8; color: var(--color-warning); }
 .pillSuccess { background: #F0FDF4; color: var(--color-success); }
-.pillAccent { background: #EFF6FF; color: #2563eb; }
+.pillAccent { background: var(--bg-accent); color: var(--text-accent); }
 
 .kpiNum {
   font-size: 26px;
@@ -85,9 +85,9 @@
 }
 
 .card {
-  background: #ffffff;
+  background: var(--surface-2);
   border-radius: 12px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -100,7 +100,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--border);
 }
 .cardTitle {
   font-size: 13px;
@@ -129,7 +129,7 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  border-right: 1px solid #e5e7eb;
+  border-right: 1px solid var(--border);
 }
 .analysisCol:last-child { border-right: none; }
 
@@ -138,7 +138,7 @@
   font-size: 12px;
   font-weight: 400;
   color: var(--color-text-secondary);
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--border);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -149,7 +149,7 @@
   align-items: center;
   gap: 10px;
   padding: 10px 14px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 0.5px solid var(--border);
   text-decoration: none;
   color: inherit;
   min-width: 0;
@@ -187,8 +187,8 @@
   margin: 12px 14px 0;
   padding: 10px 12px;
   border-radius: 12px;
-  border: 1px solid #e5e7eb;
-  background: #ffffff;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -224,7 +224,7 @@
   padding: 10px 14px;
   text-decoration: none;
   color: inherit;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 0.5px solid var(--border);
   min-width: 0;
 }
 .collectionRow:last-child { border-bottom: none; }
@@ -269,7 +269,7 @@
   .kpiGrid { grid-template-columns: 1fr 1fr; }
   .lower { grid-template-columns: 1fr; }
   .analysisGrid { grid-template-columns: 1fr; }
-  .analysisCol { border-right: none; border-bottom: 1px solid #e5e7eb; }
+  .analysisCol { border-right: none; border-bottom: 0.5px solid var(--border); }
   .analysisCol:last-child { border-bottom: none; }
 }
 
