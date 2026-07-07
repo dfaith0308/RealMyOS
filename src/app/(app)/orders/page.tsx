@@ -46,7 +46,7 @@ export default async function OrdersPage({
     }),
     supabase
       .from('customers')
-      .select('id, name')
+      .select('id, name, representative_name, phone')
       .eq('tenant_id', ctx.tenant_id)
       .eq('is_buyer', true)
       .is('deleted_at', null)

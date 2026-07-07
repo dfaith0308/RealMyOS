@@ -7,9 +7,10 @@ import { formatKRW } from '@/lib/calc'
 import type { OrderListItem } from '@/actions/order-query'
 import styles from '@/app/(app)/orders/orders-ops.module.css'
 import type { OrderOperationStatus } from '@/types/order'
+import SearchableCustomerSelect, { type SearchableCustomer } from '@/components/order/SearchableCustomerSelect'
 
 interface Filters { from: string; to: string; status: string; order_status: OrderOperationStatus | ''; customer_id: string; view?: string }
-interface Customer { id: string; name: string }
+type Customer = SearchableCustomer
 
 interface Props {
   orders: OrderListItem[]
@@ -224,12 +225,13 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
           <option value="cancelled">취소</option>
         </select>
 
-        <select value={customerId} onChange={(e) => setCustomerId(e.target.value)} style={ui.select} aria-label="거래처">
-          <option value="">전체 거래처</option>
-          {customers.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
+        <div style={{ width: 260 }}>
+          <SearchableCustomerSelect
+            customers={customers}
+            value={customerId}
+            onChange={(id) => setCustomerId(id)}
+          />
+        </div>
       </div>
 
       {/* 목록 */}
