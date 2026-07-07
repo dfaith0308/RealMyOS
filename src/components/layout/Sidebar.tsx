@@ -195,7 +195,7 @@ function SidebarInner({ onNavigate }: { onNavigate?: () => void }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <div style={s.brandText}>식식이OS</div>
           {subStatus && (
-            <div style={{ fontSize: 11, color: 'rgba(247,246,242,0.72)', fontWeight: 700 }}>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontWeight: 700 }}>
               구독: {subLabel(subStatus.plan)}
               {subStatus.plan_expires_at ? ` · ~${new Date(subStatus.plan_expires_at).toLocaleDateString('ko-KR')}` : ''}
             </div>
@@ -227,11 +227,11 @@ function SidebarInner({ onNavigate }: { onNavigate?: () => void }) {
                 style={{
                   ...s.groupRow,
                   background: groupActive && !hasItems
-                    ? 'var(--color-primary)'
+                    ? 'rgba(255,255,255,0.15)'
                     : hovered
                       ? 'rgba(255,255,255,0.08)'
                       : 'transparent',
-                  color: groupActive && !hasItems ? '#ffffff' : 'var(--color-bg)',
+                  color: groupActive && !hasItems ? '#ffffff' : 'rgba(255,255,255,0.7)',
                 }}
                 onMouseEnter={() => setHoverKey(group.label)}
                 onMouseLeave={() => setHoverKey((p) => (p === group.label ? null : p))}
@@ -242,7 +242,7 @@ function SidebarInner({ onNavigate }: { onNavigate?: () => void }) {
                   style={{
                     ...s.groupLink,
                     color: 'inherit',
-                    fontWeight: groupActive && !hasItems ? 700 : 600,
+                    fontWeight: groupActive && !hasItems ? 500 : 600,
                   }}
                   onClick={(e) => {
                     if (hasItems && group.href !== '/sales/schedule') {
@@ -287,12 +287,12 @@ function SidebarInner({ onNavigate }: { onNavigate?: () => void }) {
                         style={{
                           ...s.subItem,
                           background: active
-                            ? 'var(--color-primary)'
+                            ? 'rgba(255,255,255,0.15)'
                             : subHovered
                               ? 'rgba(255,255,255,0.08)'
                               : 'transparent',
-                          color: active ? '#ffffff' : 'rgba(247,246,242,0.82)',
-                          fontWeight: active ? 700 : 600,
+                          color: active ? '#ffffff' : 'rgba(255,255,255,0.7)',
+                          fontWeight: active ? 500 : 600,
                         }}
                       >
                         {item.label}
@@ -412,8 +412,8 @@ const s: Record<string, React.CSSProperties> = {
   desktopNav: {
     width: 200,
     minHeight: '100vh',
-    background: 'var(--color-text)',
-    color: 'var(--color-bg)',
+    background: '#1f5d3a',
+    color: '#ffffff',
     display: 'flex',
     flexDirection: 'column',
     flexShrink: 0,
@@ -423,8 +423,8 @@ const s: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     width: '100%',
     minHeight: '100vh',
-    background: 'var(--color-text)',
-    color: 'var(--color-bg)',
+    background: '#1f5d3a',
+    color: '#ffffff',
   },
   brand: {
     display: 'flex',
@@ -447,14 +447,15 @@ const s: Record<string, React.CSSProperties> = {
     width: 10,
     height: 10,
     borderRadius: 999,
-    background: 'var(--color-primary)',
-    boxShadow: '0 0 0 3px rgba(31,93,58,0.18)',
+    background: '#ffffff',
+    boxShadow: '0 0 0 3px rgba(255,255,255,0.18)',
     flexShrink: 0,
   },
   brandText: {
     fontSize: 14,
     fontWeight: 800,
     letterSpacing: '-0.2px',
+    color: '#ffffff',
   },
   nav: {
     flex: 1,
@@ -477,7 +478,7 @@ const s: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: 8,
     padding: '8px 10px',
-    borderRadius: 10,
+    borderRadius: 6,
   },
   groupLink: {
     flex: 1,
@@ -487,7 +488,7 @@ const s: Record<string, React.CSSProperties> = {
   },
   caret: {
     fontSize: 12,
-    color: 'rgba(247,246,242,0.62)',
+    color: 'rgba(255,255,255,0.5)',
     flexShrink: 0,
   },
   subList: {
@@ -501,7 +502,7 @@ const s: Record<string, React.CSSProperties> = {
   subItem: {
     display: 'block',
     padding: '7px 10px',
-    borderRadius: 10,
+    borderRadius: 6,
     fontSize: 12,
     textDecoration: 'none',
   },
@@ -510,28 +511,28 @@ const s: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: 8,
     padding: '8px 10px',
-    borderRadius: 10,
+    borderRadius: 6,
     cursor: 'not-allowed',
     opacity: 0.55,
     fontSize: 13,
-    color: 'rgba(247,246,242,0.62)',
+    color: 'rgba(255,255,255,0.5)',
   },
   soonItem: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '7px 10px',
-    borderRadius: 10,
+    borderRadius: 6,
     fontSize: 12,
     cursor: 'not-allowed',
-    color: 'rgba(247,246,242,0.62)',
+    color: 'rgba(255,255,255,0.5)',
   },
   soonBadge: {
     fontSize: 9,
     padding: '1px 6px',
     borderRadius: 999,
     border: '1px solid rgba(255,255,255,0.14)',
-    color: 'rgba(247,246,242,0.72)',
+    color: 'rgba(255,255,255,0.7)',
   },
   footer: {
     padding: 10,
@@ -540,10 +541,10 @@ const s: Record<string, React.CSSProperties> = {
   logoutBtn: {
     width: '100%',
     padding: '9px 10px',
-    borderRadius: 10,
+    borderRadius: 6,
     border: '1px solid rgba(255,255,255,0.14)',
-    background: 'rgba(255,255,255,0.06)',
-    color: 'var(--color-bg)',
+    background: 'rgba(255,255,255,0.1)',
+    color: 'rgba(255,255,255,0.7)',
     fontSize: 12,
     fontWeight: 800,
     cursor: 'pointer',
@@ -554,7 +555,7 @@ const s: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     gap: 5,
     padding: 12,
-    background: 'rgba(43,43,43,0.90)',
+    background: 'rgba(31,93,58,0.95)',
     border: '1px solid rgba(255,255,255,0.12)',
     borderRadius: 12,
     cursor: 'pointer',
@@ -567,7 +568,7 @@ const s: Record<string, React.CSSProperties> = {
     display: 'block',
     width: 18,
     height: 2,
-    background: 'var(--color-bg)',
+    background: '#ffffff',
     borderRadius: 2,
   },
   dim: { position: 'fixed' as const, inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 300 },
@@ -577,7 +578,7 @@ const s: Record<string, React.CSSProperties> = {
     left: 0,
     bottom: 0,
     width: 260,
-    background: 'var(--color-text)',
+    background: '#1f5d3a',
     zIndex: 400,
     display: 'flex',
     flexDirection: 'column',
@@ -586,12 +587,12 @@ const s: Record<string, React.CSSProperties> = {
   },
   mobileHeader: { display: 'flex', justifyContent: 'flex-end', padding: '10px 10px 0' },
   closeBtn: {
-    background: 'rgba(255,255,255,0.06)',
+    background: 'rgba(255,255,255,0.1)',
     border: '1px solid rgba(255,255,255,0.12)',
     borderRadius: 12,
     fontSize: 14,
     cursor: 'pointer',
-    color: 'var(--color-bg)',
+    color: '#ffffff',
     padding: '8px 10px',
   },
 }
