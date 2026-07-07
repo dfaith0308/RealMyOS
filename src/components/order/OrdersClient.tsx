@@ -144,14 +144,44 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
     }, 0)
   }
 
+  function calcGroupMargin(orders: OrderListItem[]): {
+    profit: number
+    revenue: number
+    marginRate: number | null
+    hasEnoughCost: boolean
+  } {
+    let profit = 0
+    let revenue = 0
+    let linesWithCost = 0
+    let totalLines = 0
+
+    for (const o of orders) {
+      for (const l of o.order_lines) {
+        totalLines++
+        const rev = (l.unit_price ?? 0) * (l.quantity ?? 1)
+        const cost = (l.cost_price ?? 0) * (l.quantity ?? 1)
+        revenue += rev
+        if (l.cost_price != null && l.cost_price > 0) {
+          profit += rev - cost
+          linesWithCost++
+        }
+      }
+    }
+
+    const hasEnoughCost = totalLines > 0 && linesWithCost / totalLines >= 0.5
+    const marginRate = hasEnoughCost && revenue > 0
+      ? Math.round((profit / revenue) * 100 * 10) / 10
+      : null
+
+    return { profit, revenue, marginRate, hasEnoughCost }
+  }
+
   const groupedByDate = useMemo(() => {
-    const map = new Map<string, { date: string; rows: OrderListItem[]; cnt: number; sum: number; profit: number }>()
+    const map = new Map<string, { date: string; rows: OrderListItem[]; cnt: number }>()
     for (const o of viewFiltered) {
-      const g = map.get(o.order_date) ?? { date: o.order_date, rows: [], cnt: 0, sum: 0, profit: 0 }
+      const g = map.get(o.order_date) ?? { date: o.order_date, rows: [], cnt: 0 }
       g.rows.push(o)
       g.cnt += 1
-      g.sum += o.total_amount ?? 0
-      g.profit += calcOrderProfit(o.order_lines)
       map.set(o.order_date, g)
     }
     return [...map.values()]
@@ -249,7 +279,9 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
           <div className={styles.empty}>조건에 해당하는 주문이 없습니다</div>
         ) : (
           <div style={ui.listWrap}>
-            {groupedByDate.map((g, gi) => (
+            {groupedByDate.map((g, gi) => {
+              const { profit, revenue, marginRate, hasEnoughCost } = calcGroupMargin(g.rows)
+              return (
               <div key={`g-${g.date}`} style={{ borderTop: gi === 0 ? 'none' : '1px solid var(--border)' }}>
                 <div style={ui.groupHead}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
@@ -258,12 +290,26 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <span style={{ fontSize: 13, fontWeight: 500, color: '#1a1a1a' }}>
-                      합계 {g.sum.toLocaleString()}원
+                      합계 {revenue.toLocaleString()}원
                     </span>
-                    {g.profit > 0 && (
-                      <span style={{ fontSize: 12, color: '#1f5d3a' }}>
-                        예상 수익 약 {g.profit.toLocaleString()}원
-                      </span>
+                    {hasEnoughCost && profit > 0 && (
+                      <>
+                        <span style={{ fontSize: 12, color: '#1f5d3a' }}>
+                          예상 수익 약 {profit.toLocaleString()}원
+                        </span>
+                        {marginRate !== null && (
+                          <span style={{
+                            fontSize: 11,
+                            background: marginRate >= 20 ? '#f0f7f3' : marginRate >= 10 ? '#fffbeb' : '#fef2f2',
+                            color: marginRate >= 20 ? '#1f5d3a' : marginRate >= 10 ? '#d97706' : '#dc2626',
+                            padding: '2px 8px',
+                            borderRadius: 20,
+                            fontWeight: 500,
+                          }}>
+                            {marginRate}%
+                          </span>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
@@ -321,7 +367,8 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
                   )
                 })}
               </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
