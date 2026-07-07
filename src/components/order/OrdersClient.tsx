@@ -5,14 +5,10 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { formatKRW } from '@/lib/calc'
 import type { OrderListItem } from '@/actions/order-query'
-import { CommandStrip } from '@/components/dashboard/CommandStrip'
-import { Surface } from '@/components/ui/Surface'
-import { KPIBlock } from '@/components/ui/KPIBlock'
-import { StatusBadge } from '@/components/ui/StatusBadge'
 import styles from '@/app/(app)/orders/orders-ops.module.css'
-import { ORDER_OPERATION_STATUS_LIST, type OrderOperationStatus } from '@/types/order'
+import type { OrderOperationStatus } from '@/types/order'
 
-interface Filters { from: string; to: string; status: string; order_status: OrderOperationStatus | ''; customer_id: string }
+interface Filters { from: string; to: string; status: string; order_status: OrderOperationStatus | ''; customer_id: string; view?: string }
 interface Customer { id: string; name: string }
 
 interface Props {
@@ -21,9 +17,15 @@ interface Props {
   filters: Filters
 }
 
-type StatusChip = '' | 'draft' | 'confirmed' | 'cancelled' | 'today'
-type OpsTab = 'all' | 'today_delivery' | 'delayed' | 'prep' | 'done'
 type Preset = 'month' | '7d' | 'custom'
+type View =
+  | 'all'
+  | 'in_progress'
+  | 'done'
+  | 'cancelled'
+  | 'today_delivery'
+  | 'arrears'
+  | 'today_new'
 
 function kstTodayStr() {
   const now = new Date(Date.now() + 9 * 3600000)
@@ -47,13 +49,19 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
   const [from, setFrom] = useState(filters.from)
   const [to, setTo] = useState(filters.to)
   const [customerId, setCustomerId] = useState(filters.customer_id)
-  const [status, setStatus] = useState<StatusChip>(
-    filters.status === 'draft' || filters.status === 'confirmed' || filters.status === 'cancelled'
-      ? (filters.status as StatusChip)
-      : '',
-  )
-  const [opsTab, setOpsTab] = useState<OpsTab>('all')
-  const [orderStatus, setOrderStatus] = useState<OrderOperationStatus | ''>(filters.order_status ?? '')
+  const [view, setView] = useState<View>(() => {
+    const v = String(filters.view ?? '')
+    if (
+      v === 'all' ||
+      v === 'in_progress' ||
+      v === 'done' ||
+      v === 'cancelled' ||
+      v === 'today_delivery' ||
+      v === 'arrears' ||
+      v === 'today_new'
+    ) return v
+    return 'all'
+  })
 
   const preset: Preset = useMemo(() => {
     if (from === monthStartStr() && to === kstTodayStr()) return 'month'
@@ -69,68 +77,57 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
       if (from) params.set('from', from)
       if (to) params.set('to', to)
       if (customerId) params.set('customer_id', customerId)
-      if (status && status !== 'today') params.set('status', status)
-      if (orderStatus) params.set('order_status', orderStatus)
+      if (view && view !== 'all') params.set('view', view)
       const q = params.toString()
       router.push(q ? `/orders?${q}` : '/orders')
     }, 250)
     return () => {
       if (debounce.current) window.clearTimeout(debounce.current)
     }
-  }, [from, to, customerId, status, orderStatus, router])
+  }, [from, to, customerId, view, router])
 
   const todayStr = useMemo(() => kstTodayStr(), [])
 
-  const baseOrders = useMemo(() => {
-    if (status === 'today') {
-      return orders.filter((o) => o.order_date === todayStr && o.status !== 'cancelled')
-    }
-    return orders
-  }, [orders, status, todayStr])
+  const baseOrders = useMemo(() => orders, [orders])
 
-  const opsFiltered = useMemo(() => {
-    const ms1d = 86400000
-    const todayMs = new Date(todayStr + 'T00:00:00Z').getTime()
-    const isDelayed = (o: OrderListItem) => {
-      // due_date 부재 → 운영 탭의 "지연"은 order_date 기준 근사치
-      if (o.order_status === '납품완료' || o.order_status === '취소') return false
-      const d = new Date(o.order_date + 'T00:00:00Z').getTime()
-      return d <= todayMs - ms1d
-    }
-    if (opsTab === 'all') return baseOrders
-    if (opsTab === 'prep') return baseOrders.filter((o) => o.order_status === '출고준비')
-    if (opsTab === 'done') return baseOrders.filter((o) => o.order_status === '납품완료')
-    if (opsTab === 'today_delivery') {
+  const viewFiltered = useMemo(() => {
+    if (view === 'today_delivery') {
       return baseOrders.filter(
         (o) =>
           o.order_date === todayStr &&
+          o.status !== 'cancelled' &&
           (o.order_status === '출고완료' || o.order_status === '납품완료'),
       )
     }
-    // delayed
-    return baseOrders.filter(isDelayed)
-  }, [baseOrders, opsTab, todayStr])
+    if (view === 'today_new') {
+      return baseOrders.filter((o) => o.order_date === todayStr && o.status === 'draft')
+    }
+    if (view === 'arrears') {
+      return baseOrders.filter((o) => (o.current_balance ?? 0) > 0)
+    }
+    if (view === 'done') {
+      return baseOrders.filter((o) => o.order_status === '납품완료')
+    }
+    if (view === 'cancelled') {
+      return baseOrders.filter((o) => o.status === 'cancelled' || o.order_status === '취소')
+    }
+    if (view === 'in_progress') {
+      return baseOrders.filter((o) => o.status !== 'cancelled' && o.order_status !== '납품완료' && o.order_status !== '취소')
+    }
+    return baseOrders
+  }, [baseOrders, todayStr, view])
 
-  const counts = useMemo(() => {
-    const draft = orders.filter((o) => o.status === 'draft').length
-    const confirmed = orders.filter((o) => o.status === 'confirmed').length
-    const cancelled = orders.filter((o) => o.status === 'cancelled').length
-    const today = orders.filter((o) => o.order_date === todayStr && o.status !== 'cancelled').length
-    const todayNeeds = orders.filter((o) => o.order_date === todayStr && o.status === 'draft').length
-    const periodConfirmedAmt = orders
-      .filter((o) => o.status === 'confirmed')
-      .reduce((s, o) => s + o.total_amount, 0)
-    return { draft, confirmed, cancelled, today, todayNeeds, periodConfirmedAmt }
+  const todaySummary = useMemo(() => {
+    const todayOrders = orders.filter((o) => o.order_date === todayStr && o.status !== 'cancelled')
+    const todayDelivery = todayOrders.filter((o) => o.order_status === '출고완료' || o.order_status === '납품완료').length
+    const arrearsCustomers = new Set(
+      orders
+        .filter((o) => (o.current_balance ?? 0) > 0)
+        .map((o) => o.customer_id),
+    )
+    const todayNew = todayOrders.filter((o) => o.status === 'draft').length
+    return { todayDelivery, arrearsCustomers: arrearsCustomers.size, todayNew }
   }, [orders, todayStr])
-
-  const headline = `오늘 처리할 주문 ${counts.today}건`
-  const subline = (
-    <>
-      처리 필요(draft) {counts.draft} · 오늘 주문 {counts.today} · 진행 {counts.confirmed}
-    </>
-  )
-
-  const badgeStatus = counts.draft > 0 ? ('warning' as const) : ('confirmed' as const)
 
   function summarizeLines(lines: OrderListItem['order_lines']): string {
     if (!lines.length) return '-'
@@ -140,7 +137,7 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
 
   const groupedByDate = useMemo(() => {
     const map = new Map<string, { date: string; rows: OrderListItem[]; cnt: number; sum: number }>()
-    for (const o of opsFiltered) {
+    for (const o of viewFiltered) {
       const g = map.get(o.order_date) ?? { date: o.order_date, rows: [], cnt: 0, sum: 0 }
       g.rows.push(o)
       g.cnt += 1
@@ -148,7 +145,7 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
       map.set(o.order_date, g)
     }
     return [...map.values()]
-  }, [opsFiltered])
+  }, [viewFiltered])
 
   function statusBadge(o: OrderListItem): { label: string; bg: string; fg: string } | null {
     if (o.status === 'cancelled') return { label: '취소', bg: 'var(--bg-danger)', fg: 'var(--text-danger)' }
@@ -159,346 +156,171 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
 
   return (
     <>
-      <CommandStrip
-        kicker="Orders"
-        headline={headline}
-        subline={subline}
-        actions={[
-          { label: '주문 등록', href: '/orders/new', kind: 'primary' },
-          { label: 'Draft 보기', href: '/orders?status=draft', kind: 'secondary' },
-        ]}
-      />
+      {/* 상단 헤더 */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div>
+          <h1 style={{ fontSize: 18, fontWeight: 500, color: 'var(--text-primary)', margin: 0 }}>주문 목록</h1>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Link href="/orders/new" style={ui.primaryBtn}>주문 등록</Link>
+          <Link href="/orders?status=draft" style={ui.secondaryBtn}>Draft 보기</Link>
+        </div>
+      </div>
 
-      <Surface variant="panel" density="comfortable">
-        <div className={styles.kpiStrip}>
-          <div className={styles.kpiBox}>
-            <div className={styles.kpiHead}>
-              <div className={styles.kpiHeadLabel}>처리 필요(draft)</div>
-              <StatusBadge status={badgeStatus} size="sm" />
-            </div>
-            <KPIBlock
-              label="처리 필요(draft)"
-              value={`${counts.draft}건`}
-              valueSize="lg"
-              align="end"
-              hint={`오늘 draft ${counts.todayNeeds}건`}
-            />
-          </div>
+      {/* 오늘 할 일 */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 16 }}>
+        <button
+          type="button"
+          onClick={() => { setView('today_delivery'); setFrom(todayStr); setTo(todayStr) }}
+          style={{ ...ui.todoCard, borderColor: view === 'today_delivery' ? 'var(--border-strong)' : 'var(--border)' }}
+        >
+          <p style={ui.todoLabel}>오늘 배송</p>
+          <p style={ui.todoValue}>{todaySummary.todayDelivery}건</p>
+        </button>
+        <button
+          type="button"
+          onClick={() => setView('arrears')}
+          style={{ ...ui.todoCard, borderColor: view === 'arrears' ? 'var(--border-strong)' : 'var(--border)' }}
+        >
+          <p style={ui.todoLabel}>미수금 거래처</p>
+          <p style={{ ...ui.todoValue, color: 'var(--text-danger)' }}>{todaySummary.arrearsCustomers}건</p>
+        </button>
+        <button
+          type="button"
+          onClick={() => { setView('today_new'); setFrom(todayStr); setTo(todayStr) }}
+          style={{ ...ui.todoCard, borderColor: view === 'today_new' ? 'var(--border-strong)' : 'var(--border)' }}
+        >
+          <p style={ui.todoLabel}>오늘 신규 주문</p>
+          <p style={{ ...ui.todoValue, color: 'var(--text-success)' }}>{todaySummary.todayNew}건</p>
+        </button>
+      </div>
 
-          <KPIBlock label="오늘 주문" value={`${counts.today}건`} align="end" />
-          <KPIBlock label="진행(confirmed)" value={`${counts.confirmed}건`} align="end" />
-          <KPIBlock label="취소" value={`${counts.cancelled}건`} align="end" />
-          <KPIBlock label="기간 확정 매출" value={formatKRW(counts.periodConfirmedAmt)} align="end" />
+      {/* 필터 1줄 */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+          <button type="button" onClick={() => { setFrom(monthStartStr()); setTo(kstTodayStr()); setView('all') }} style={preset === 'month' ? ui.tabActive : ui.tab}>
+            이번달
+          </button>
+          <button type="button" onClick={() => { setFrom(daysAgoStr(6)); setTo(kstTodayStr()); setView('all') }} style={preset === '7d' ? ui.tabActive : ui.tab}>
+            최근7일
+          </button>
+          <button type="button" onClick={() => {} } style={preset === 'custom' ? ui.tabActive : ui.tab}>
+            직접입력
+          </button>
         </div>
 
-        <div className={styles.kpiNote}>
-          기간 {from} ~ {to}
-        </div>
-      </Surface>
+        {preset === 'custom' && (
+          <>
+            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} style={ui.dateInput} aria-label="시작일" />
+            <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-hint)' }}>~</span>
+            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} style={ui.dateInput} aria-label="종료일" />
+          </>
+        )}
 
-      <Surface variant="panel" density="comfortable">
-        <div className={styles.controls}>
-          <div className={styles.chipRow} aria-label="주문현황 탭">
-            <Chip active={opsTab === 'all'} onClick={() => setOpsTab('all')}>전체</Chip>
-            <Chip active={opsTab === 'today_delivery'} onClick={() => setOpsTab('today_delivery')}>오늘납품</Chip>
-            <Chip active={opsTab === 'delayed'} onClick={() => setOpsTab('delayed')}>지연</Chip>
-            <Chip active={opsTab === 'prep'} onClick={() => setOpsTab('prep')}>출고준비</Chip>
-            <Chip active={opsTab === 'done'} onClick={() => setOpsTab('done')}>완료</Chip>
-          </div>
+        <select value={view} onChange={(e) => setView(e.target.value as View)} style={ui.select} aria-label="상태">
+          <option value="all">전체</option>
+          <option value="in_progress">진행</option>
+          <option value="done">완료</option>
+          <option value="cancelled">취소</option>
+        </select>
 
-          <div className={styles.chipRow} aria-label="상태 필터">
-            <Chip active={status === ''} onClick={() => setStatus('')}>전체</Chip>
-            <Chip active={status === 'draft'} onClick={() => setStatus('draft')}>처리 필요</Chip>
-            <Chip active={status === 'confirmed'} onClick={() => setStatus('confirmed')}>진행</Chip>
-            <Chip active={status === 'cancelled'} onClick={() => setStatus('cancelled')}>취소</Chip>
-            <Chip
-              active={status === 'today'}
-              onClick={() => {
-                setStatus('today')
-                setFrom(todayStr)
-                setTo(todayStr)
-              }}
-            >
-              오늘
-            </Chip>
-          </div>
+        <select value={customerId} onChange={(e) => setCustomerId(e.target.value)} style={ui.select} aria-label="거래처">
+          <option value="">전체 거래처</option>
+          {customers.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+      </div>
 
-          <select
-            className={styles.select}
-            value={customerId}
-            onChange={(e) => setCustomerId(e.target.value)}
-            aria-label="거래처"
-          >
-            <option value="">전체 거래처</option>
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-
-          <select
-            className={styles.select}
-            value={orderStatus}
-            onChange={(e) => setOrderStatus((e.target.value || '') as OrderOperationStatus | '')}
-            aria-label="주문상태"
-          >
-            <option value="">주문상태 전체</option>
-            {ORDER_OPERATION_STATUS_LIST.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-
-          <div className={styles.chipRow} aria-label="기간 프리셋">
-            <Chip active={preset === 'month'} onClick={() => {
-              setFrom(monthStartStr())
-              setTo(kstTodayStr())
-            }}>이번달</Chip>
-            <Chip active={preset === '7d'} onClick={() => {
-              setFrom(daysAgoStr(6))
-              setTo(kstTodayStr())
-            }}>최근7일</Chip>
-            <Chip active={preset === 'custom'} onClick={() => {}}>직접</Chip>
-          </div>
-
-          <input
-            className={styles.dateInput}
-            type="date"
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
-            aria-label="시작일"
-          />
-          <span className={styles.sep}>~</span>
-          <input
-            className={styles.dateInput}
-            type="date"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-            aria-label="종료일"
-          />
-        </div>
-      </Surface>
-
-      <Surface variant="panel" density="comfortable">
-        <div className={styles.queue}>
-          {baseOrders.length === 0 ? (
-            <div className={styles.empty}>조건에 해당하는 주문이 없습니다</div>
-          ) : (
-            <div
-              style={{
-                background: 'var(--surface-2)',
-                borderRadius: 12,
-                border: '1px solid var(--border)',
-                overflow: 'hidden',
-              }}
-            >
-              {groupedByDate.map((g, gi) => (
-                <div key={`g-${g.date}`} style={{ borderTop: gi === 0 ? 'none' : '1px solid var(--border)' }}>
-                  {/* 날짜 그룹 헤더 */}
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '14px 20px',
-                      borderBottom: '1px solid var(--border)',
-                      background: 'var(--surface-2)',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                      <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-                        {g.date}
-                      </span>
-                      <span style={{ fontSize: 12, color: 'var(--text-hint)', whiteSpace: 'nowrap' }}>{g.cnt}건</span>
-                    </div>
-                    <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-                      합계 {formatKRW(g.sum)}
-                    </span>
+      {/* 목록 */}
+      <div className={styles.queue}>
+        {viewFiltered.length === 0 ? (
+          <div className={styles.empty}>조건에 해당하는 주문이 없습니다</div>
+        ) : (
+          <div style={ui.listWrap}>
+            {groupedByDate.map((g, gi) => (
+              <div key={`g-${g.date}`} style={{ borderTop: gi === 0 ? 'none' : '1px solid var(--border)' }}>
+                <div style={ui.groupHead}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                    <span style={ui.groupDate}>{g.date}</span>
+                    <span style={ui.groupMeta}>{g.cnt}건</span>
                   </div>
-
-                  {/* 컬럼 헤더 */}
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: '2fr 1fr 1fr 80px',
-                      padding: '8px 20px',
-                      background: 'var(--surface-0)',
-                      borderBottom: '1px solid var(--border)',
-                      gap: 12,
-                      alignItems: 'center',
-                    }}
-                  >
-                    <span style={{ fontSize: 11, color: 'var(--text-hint)', fontWeight: 500, whiteSpace: 'nowrap' }}>거래처 · 상품</span>
-                    <span style={{ fontSize: 11, color: 'var(--text-hint)', fontWeight: 500, textAlign: 'right', whiteSpace: 'nowrap' }}>금액</span>
-                    <span style={{ fontSize: 11, color: 'var(--text-hint)', fontWeight: 500, textAlign: 'right', whiteSpace: 'nowrap' }}>미수금</span>
-                    <span />
-                  </div>
-
-                  {g.rows.map((o) => {
-                    const bal = o.current_balance ?? 0
-                    const dep = o.deposit_amount ?? 0
-                    const hasDep = dep >= 100
-                    const st = statusBadge(o)
-                    return (
-                      <div
-                        key={o.id}
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: '2fr 1fr 1fr 80px',
-                          padding: '14px 20px',
-                          borderBottom: '0.5px solid var(--border)',
-                          alignItems: 'center',
-                          gap: 12,
-                        }}
-                      >
-                        {/* 거래처 + 상품 */}
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3, minWidth: 0 }}>
-                            <span
-                              style={{
-                                fontSize: 14,
-                                fontWeight: 500,
-                                color: 'var(--text-primary)',
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                              }}
-                              title={o.customer_name}
-                            >
-                              {o.customer_name}
-                            </span>
-
-                            {st && (
-                              <span
-                                style={{
-                                  fontSize: 11,
-                                  background: st.bg,
-                                  color: st.fg,
-                                  padding: '2px 7px',
-                                  borderRadius: 20,
-                                  fontWeight: 500,
-                                  flexShrink: 0,
-                                  whiteSpace: 'nowrap',
-                                }}
-                              >
-                                {st.label}
-                              </span>
-                            )}
-
-                            {hasDep ? (
-                              <span
-                                style={{
-                                  fontSize: 11,
-                                  background: 'var(--bg-warning)',
-                                  color: 'var(--text-warning)',
-                                  padding: '2px 7px',
-                                  borderRadius: 20,
-                                  fontWeight: 500,
-                                  flexShrink: 0,
-                                  whiteSpace: 'nowrap',
-                                }}
-                              >
-                                예치 {formatKRW(dep)}
-                              </span>
-                            ) : null}
-                          </div>
-
-                          <span
-                            style={{
-                              fontSize: 12,
-                              color: 'var(--text-hint)',
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              display: 'block',
-                            }}
-                            title={summarizeLines(o.order_lines)}
-                          >
-                            {summarizeLines(o.order_lines)}
-                          </span>
-                        </div>
-
-                        {/* 금액 */}
-                        <span
-                          style={{
-                            fontSize: 14,
-                            fontWeight: 500,
-                            color: 'var(--text-primary)',
-                            textAlign: 'right',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {formatKRW(o.total_amount)}
-                        </span>
-
-                        {/* 미수금 */}
-                        <span
-                          style={{
-                            fontSize: 13,
-                            color: bal > 0 ? 'var(--text-danger)' : 'var(--text-hint)',
-                            textAlign: 'right',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {formatKRW(bal)}
-                        </span>
-
-                        {/* 열기 버튼 */}
-                        <div style={{ textAlign: 'right' }}>
-                          <Link
-                            href={`/orders/${o.id}`}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontSize: 12,
-                              color: 'var(--text-muted)',
-                              background: 'var(--surface-0)',
-                              border: '1px solid var(--border)',
-                              borderRadius: 6,
-                              padding: '5px 12px',
-                              cursor: 'pointer',
-                              fontFamily: 'inherit',
-                              textDecoration: 'none',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            열기
-                          </Link>
-                        </div>
-                      </div>
-                    )
-                  })}
+                  <span style={ui.groupSum}>합계 {formatKRW(g.sum)}</span>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </Surface>
+
+                <div style={ui.colHead}>
+                  <span style={ui.colLabel}>거래처 · 상품</span>
+                  <span style={{ ...ui.colLabel, textAlign: 'right' }}>금액</span>
+                  <span style={{ ...ui.colLabel, textAlign: 'right' }}>미수금</span>
+                  <span />
+                </div>
+
+                {g.rows.map((o) => {
+                  const bal = o.current_balance ?? 0
+                  const dep = o.deposit_amount ?? 0
+                  const hasDep = dep >= 100
+                  const st = statusBadge(o)
+                  return (
+                    <div key={o.id} style={ui.row}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3, minWidth: 0 }}>
+                          <span style={ui.rowTitle} title={o.customer_name}>{o.customer_name}</span>
+                          {st ? <span style={{ ...ui.badge, background: st.bg, color: st.fg }}>{st.label}</span> : null}
+                          {hasDep ? <span style={{ ...ui.badge, background: 'var(--bg-warning)', color: 'var(--text-warning)' }}>예치 {formatKRW(dep)}</span> : null}
+                        </div>
+                        <span style={ui.rowSub} title={summarizeLines(o.order_lines)}>{summarizeLines(o.order_lines)}</span>
+                      </div>
+
+                      <span style={ui.money}>{formatKRW(o.total_amount)}</span>
+                      <span style={{ ...ui.balance, color: bal > 0 ? 'var(--text-danger)' : 'var(--text-hint)' }}>
+                        {formatKRW(bal)}
+                      </span>
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
+                        <Link href={`/orders/${o.id}`} style={ui.openBtn}>열기</Link>
+                        <button
+                          type="button"
+                          onClick={() => router.push(`/orders/new?reorder=${encodeURIComponent(o.id)}`)}
+                          style={ui.reorderBtn}
+                        >
+                          재주문
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </>
   )
 }
 
-function Chip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean
-  onClick: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      className={[styles.chip, active ? styles.chipActive : '']
-        .filter(Boolean)
-        .join(' ')}
-      onClick={onClick}
-    >
-      {children}
-    </button>
-  )
+const ui: Record<string, React.CSSProperties> = {
+  primaryBtn: { padding: '10px 16px', background: 'var(--color-primary)', color: '#fff', borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' },
+  secondaryBtn: { padding: '10px 16px', background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text-secondary)', borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' },
+  todoCard: { background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 12, padding: '16px 20px', cursor: 'pointer', textAlign: 'left' },
+  todoLabel: { fontSize: 12, color: 'var(--text-hint)', margin: '0 0 4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
+  todoValue: { fontSize: 24, fontWeight: 500, color: 'var(--text-primary)', margin: 0, whiteSpace: 'nowrap' },
+  tab: { height: 34, padding: '0 12px', borderRadius: 999, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' },
+  tabActive: { height: 34, padding: '0 12px', borderRadius: 999, border: '1px solid var(--border-strong)', background: 'var(--surface-0)', color: 'var(--text-primary)', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' },
+  select: { height: 34, padding: '0 10px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-primary)', fontSize: 12, fontWeight: 600, minWidth: 160 },
+  dateInput: { height: 34, padding: '0 10px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-primary)', fontSize: 12, fontWeight: 600 },
+  listWrap: { background: 'var(--surface-2)', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden' },
+  groupHead: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid var(--border)', background: 'var(--surface-2)' },
+  groupDate: { fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', whiteSpace: 'nowrap' },
+  groupMeta: { fontSize: 12, color: 'var(--text-hint)', whiteSpace: 'nowrap' },
+  groupSum: { fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', whiteSpace: 'nowrap' },
+  colHead: { display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 170px', padding: '8px 20px', background: 'var(--surface-0)', borderBottom: '1px solid var(--border)', gap: 12, alignItems: 'center' },
+  colLabel: { fontSize: 11, color: 'var(--text-hint)', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
+  row: { display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 170px', padding: '14px 20px', borderBottom: '0.5px solid var(--border)', alignItems: 'center', gap: 12 },
+  rowTitle: { fontSize: 14, fontWeight: 500, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
+  rowSub: { fontSize: 12, color: 'var(--text-hint)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' },
+  badge: { fontSize: 11, padding: '2px 7px', borderRadius: 20, fontWeight: 500, flexShrink: 0, whiteSpace: 'nowrap' },
+  money: { fontSize: 14, fontWeight: 500, color: 'var(--text-primary)', textAlign: 'right', whiteSpace: 'nowrap' },
+  balance: { fontSize: 13, textAlign: 'right', whiteSpace: 'nowrap' },
+  openBtn: { fontSize: 12, color: 'var(--text-muted)', background: 'var(--surface-0)', border: '1px solid var(--border)', borderRadius: 6, padding: '5px 12px', cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' },
+  reorderBtn: { fontSize: 12, color: 'var(--text-success)', background: 'var(--bg-success)', border: '1px solid #bbf7d0', borderRadius: 6, padding: '5px 12px', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' },
 }

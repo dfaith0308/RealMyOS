@@ -24,6 +24,7 @@ export default async function OrdersPage({
   const status = sp.status ?? ''
   const order_status = sp.order_status ?? ''
   const customerId = sp.customer_id ?? ''
+  const view = sp.view ?? ''
 
   const opStatus: OrderOperationStatus | undefined =
     order_status && (ORDER_OPERATION_STATUS_LIST as readonly string[]).includes(order_status)
@@ -57,7 +58,7 @@ export default async function OrdersPage({
       <OrdersClient
         orders={ordersResult.data ?? []}
         customers={customers ?? []}
-        filters={{ from, to, status, order_status: opStatus ?? '', customer_id: customerId }}
+        filters={{ from, to, status, order_status: opStatus ?? '', customer_id: customerId, view }}
       />
     </main>
   )

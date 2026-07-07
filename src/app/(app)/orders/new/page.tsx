@@ -1,4 +1,4 @@
-import { getLastOrder } from '@/actions/order-query'
+import { getLastOrder, getOrderForReorder } from '@/actions/order-query'
 import { getQuoteDetail } from '@/actions/quote'
 import OrderCreateForm from '@/components/order/OrderCreateForm'
 
@@ -7,9 +7,9 @@ export const metadata = { title: '주문 등록 — RealMyOS' }
 export default async function OrderNewPage({
   searchParams,
 }: {
-  searchParams: { customer_id?: string; quote_id?: string; conv?: string }
+  searchParams: { customer_id?: string; quote_id?: string; conv?: string; reorder?: string }
 }) {
-  const { customer_id, quote_id, conv } = searchParams
+  const { customer_id, quote_id, conv, reorder } = searchParams
 
   let initialCustomerId: string | undefined
   let reorderLines: Array<{
@@ -33,6 +33,15 @@ export default async function OrderNewPage({
       if (result.success && result.data) {
         reorderLines = result.data.lines
       }
+    }
+  }
+
+  // 주문 목록에서 "재주문" (order_id 기반)
+  if (reorder) {
+    const res = await getOrderForReorder(reorder)
+    if (res.success && res.data) {
+      initialCustomerId = res.data.customer_id
+      reorderLines = res.data.lines
     }
   }
 
