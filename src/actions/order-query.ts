@@ -19,7 +19,7 @@ export interface OrderListItem {
   total_amount: number
   status: string
   order_status: OrderOperationStatus
-  order_lines: Array<{ product_name: string; quantity: number; unit_price: number; line_total: number }>
+  order_lines: Array<{ product_name: string; quantity: number; unit_price: number; line_total: number; cost_price?: number | null }>
   current_balance: number | null   // 실시간 잔액 (ledger 기준)
   deposit_amount: number | null    // 예치금
 }
@@ -53,7 +53,7 @@ export async function getOrderList(filters?: {
 
   let query = supabase
     .from('orders')
-    .select('id, order_number, order_date, customer_id, total_amount, status, order_status, customers(name), order_lines(product_name, quantity, unit_price, line_total)')
+    .select('id, order_number, order_date, customer_id, total_amount, status, order_status, customers(name), order_lines(product_name, quantity, unit_price, line_total, cost_price)')
     // 전환: seller_tenant_id 우선 (legacy tenant_id 병행)
     .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
     .is('deleted_at', null)
