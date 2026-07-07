@@ -22,7 +22,6 @@ interface MenuGroup {
 // 메뉴 구조는 이전 버전과 동일하게 유지 (그룹/서브메뉴 복원)
 const MENU: MenuGroup[] = [
   { label: '대시보드', href: '/dashboard' },
-  { label: '구독관리', href: '/subscribe' },
   {
     label: '거래처관리', href: '/customers',
     items: [
@@ -308,6 +307,24 @@ function SidebarInner({ onNavigate }: { onNavigate?: () => void }) {
       </div>
 
       <div style={s.footer}>
+        <Link
+          href="/subscribe"
+          onClick={() => onNavigate?.()}
+          style={{
+            display: 'block',
+            margin: '0 12px 8px',
+            padding: '10px 16px',
+            background: (subStatus?.plan ?? 'free') === 'free' ? '#E8701C' : '#1f5d3a',
+            color: '#fff',
+            borderRadius: 8,
+            fontSize: 13,
+            fontWeight: 700,
+            textDecoration: 'none',
+            textAlign: 'center',
+          }}
+        >
+          {(subStatus?.plan ?? 'free') === 'free' ? '구독 시작하기' : '구독 관리'}
+        </Link>
         <button type="button" onClick={logout} style={s.logoutBtn}>
           로그아웃
         </button>
