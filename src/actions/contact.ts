@@ -25,6 +25,8 @@ export interface CreateContactLogInput {
   customer_status?:   CustomerStatusType
   schedule_id?:       string | null
   methods?:           string[]
+  message_log_id?:    string
+  send_status?:       string
 }
 
 export async function createContactLog(
@@ -131,6 +133,8 @@ export async function createContactLog(
       next_action_type,
       schedule_id:      input.schedule_id       ?? null,
       methods:          input.methods           ?? null,
+      message_log_id:   input.message_log_id    ?? null,
+      send_status:      input.send_status       ?? null,
       // 레거시 — 기존 코드 호환
       outcome:          input.result ?? input.outcome_type ?? null,
       result:           input.result ?? input.outcome_type ?? null,
@@ -151,6 +155,13 @@ export async function createContactLog(
       }
     }
 
+    if (input.message_log_id) {
+      await supabase
+        .from('message_logs')
+        .update({ contact_log_id: data.id })
+        .eq('id', input.message_log_id)
+        .eq('tenant_id', ctx.tenant_id)
+    }
 
     // ── customers 동기화 (실패해도 이력 저장은 유지) ──────────
     try {
@@ -177,6 +188,7 @@ export async function createContactLog(
     }
 
     revalidatePath('/customers')
+    revalidatePath('/sales/history')
     return { success: true, data: { id: data.id } }
 
   } catch (e: any) {

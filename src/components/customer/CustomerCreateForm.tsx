@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation'
 import { createCustomer, checkCustomerDuplicate } from '@/actions/customer'
 import { upsertCustomerTag } from '@/actions/customer-tags'
 import { formatPaymentTerms } from '@/lib/payment-terms'
+import { isSafeNumber } from '@/lib/is-safe-number'
+import SafeNumberSmsModal from '@/components/customer/SafeNumberSmsModal'
 import type { PaymentTermsType } from '@/lib/payment-terms'
 import type { AcquisitionChannel } from '@/actions/acquisition-channel'
 import { addAcquisitionChannel } from '@/actions/acquisition-channel'
@@ -69,6 +71,9 @@ export default function CustomerCreateForm({
   const [targetRevenue, setTargetRevenue] = useState('')
 
   const [selectedTags, setSelectedTags] = useState<Map<string, string>>(new Map())
+
+  const [showSafeModal, setShowSafeModal] = useState(false)
+  const [savedCustomer, setSavedCustomer] = useState<{ id: string; name: string; phone: string } | null>(null)
 
   // payment_terms_days 역산
   function getTermsDays(): number {
@@ -150,6 +155,16 @@ export default function CustomerCreateForm({
         for (const [category, value] of selectedTags.entries()) {
           await upsertCustomerTag({ customer_id: customerId, category, value })
         }
+
+        const savedPhone = phone.trim()
+        if (isSafeNumber(savedPhone)) {
+          setSavedCustomer({ id: customerId, name: name.trim(), phone: savedPhone })
+          setShowSafeModal(true)
+          return
+        }
+
+        router.push(`/customers/${customerId}`)
+        return
       }
 
       if (result.success) router.push('/customers')
@@ -570,6 +585,22 @@ export default function CustomerCreateForm({
           </div>
         </div>
       </form>
+
+      {showSafeModal && savedCustomer && (
+        <SafeNumberSmsModal
+          customerId={savedCustomer.id}
+          customerName={savedCustomer.name}
+          phone={savedCustomer.phone}
+          onClose={() => {
+            setShowSafeModal(false)
+            router.push(`/customers/${savedCustomer.id}`)
+          }}
+          onSent={() => {
+            setShowSafeModal(false)
+            router.push(`/customers/${savedCustomer.id}`)
+          }}
+        />
+      )}
     </div>
   )
 }

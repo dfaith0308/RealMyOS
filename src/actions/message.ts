@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { smsByteLength } from '@/lib/sms-byte-length'
+import { isSafeNumber } from '@/lib/is-safe-number'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import type { ActionResult } from '@/types/order'
 import { getAdminSettingNumber } from '@/actions/admin/policy-console'
@@ -14,12 +15,6 @@ export interface AligoSettings {
 
 function normalizePhoneDigits(phone: string): string {
   return (phone ?? '').replace(/[^0-9]/g, '')
-}
-
-function isSafeNumber(receiverDigits: string): boolean {
-  // PRODUCT: contact_status=safe_number 기반이 이상적이지만,
-  // 현재 실행센터는 phone만 있으므로 050 계열을 안심번호로 간주(운영 관행).
-  return receiverDigits.startsWith('050')
 }
 
 function kstDayStartIso(): { start: string; end: string } {
