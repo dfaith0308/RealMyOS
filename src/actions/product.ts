@@ -733,6 +733,142 @@ export async function getProductById(
   return { success: true, data: data as ProductCopyData }
 }
 
+async function allocateProductCode(
+  supabase: Awaited<ReturnType<typeof createSupabaseServer>>,
+  tenant_id: string,
+): Promise<string> {
+  let seqNum: number | null = null
+  try {
+    const { data: seqData } = await supabase.rpc('nextval_product_code')
+    seqNum = seqData ?? null
+  } catch {
+    // sequence RPC 없으면 fallback
+  }
+  if (seqNum === null) {
+    const { data: lastProduct } = await supabase
+      .from('products')
+      .select('product_code')
+      .eq('tenant_id', tenant_id)
+      .like('product_code', 'P%')
+      .order('product_code', { ascending: false })
+      .limit(1)
+      .single()
+    seqNum = lastProduct?.product_code
+      ? (parseInt(lastProduct.product_code.replace(/[^0-9]/g, ''), 10) || 0) + 1
+      : 1
+  }
+  return `P${String(seqNum).padStart(4, '0')}`
+}
+
+export async function copyProduct(
+  productId: string,
+): Promise<{ success: boolean; newId?: string; error?: string }> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '인증 필요' }
+
+  const { data: original, error: fetchErr } = await supabase
+    .from('products')
+    .select(`
+      name, tax_type, category_id, supplier_id, barcode, ingredients,
+      item_report_number, min_margin_rate, procurement_type, unit, spec, memo,
+      storage_condition, status,
+      product_costs ( cost_price, start_date, end_date ),
+      product_prices ( price_type, price, bulk_min_quantity )
+    `)
+    .eq('id', productId)
+    .eq('tenant_id', ctx.tenant_id)
+    .is('deleted_at', null)
+    .single()
+
+  if (fetchErr || !original) {
+    return { success: false, error: '상품을 찾을 수 없습니다' }
+  }
+
+  const product_code = await allocateProductCode(supabase, ctx.tenant_id)
+  const newName = `${original.name} (복사)`
+
+  const { data: newProduct, error: productError } = await supabase
+    .from('products')
+    .insert({
+      tenant_id: ctx.tenant_id,
+      product_code,
+      name: newName,
+      tax_type: original.tax_type,
+      category_id: original.category_id,
+      supplier_id: original.supplier_id,
+      barcode: null,
+      ingredients: original.ingredients,
+      item_report_number: original.item_report_number,
+      min_margin_rate: original.min_margin_rate,
+      procurement_type: original.procurement_type ?? 'consignment',
+      unit: original.unit,
+      spec: original.spec,
+      memo: original.memo,
+      storage_condition: original.storage_condition,
+      status: original.status,
+    })
+    .select('id, product_code')
+    .single()
+
+  if (productError || !newProduct) {
+    return { success: false, error: productError?.message ?? '상품 복사 실패' }
+  }
+
+  const today = new Date().toISOString().slice(0, 10)
+  const activeCosts = (original.product_costs ?? []).filter((c: { end_date: string | null }) => c.end_date === null)
+  const costsToCopy = activeCosts.length > 0 ? activeCosts : (original.product_costs ?? []).slice(0, 1)
+
+  if (costsToCopy.length > 0) {
+    const { error: costErr } = await supabase.from('product_costs').insert(
+      costsToCopy.map((c: { cost_price: number }) => ({
+        product_id: newProduct.id,
+        cost_price: c.cost_price,
+        start_date: today,
+        end_date: null,
+      })),
+    )
+    if (costErr) {
+      await supabase.from('products').update({ deleted_at: new Date().toISOString() }).eq('id', newProduct.id)
+      return { success: false, error: costErr.message }
+    }
+  }
+
+  const prices = original.product_prices ?? []
+  if (prices.length > 0) {
+    const { error: priceErr } = await supabase.from('product_prices').insert(
+      prices.map((p: { price_type: string; price: number; bulk_min_quantity?: number | null }) => ({
+        product_id: newProduct.id,
+        price_type: p.price_type,
+        price: p.price,
+        bulk_min_quantity: p.bulk_min_quantity ?? null,
+      })),
+    )
+    if (priceErr) {
+      await supabase.from('products').update({ deleted_at: new Date().toISOString() }).eq('id', newProduct.id)
+      return { success: false, error: priceErr.message }
+    }
+  }
+
+  const priceMap = Object.fromEntries(prices.map((p: { price_type: string; price: number }) => [p.price_type, p.price]))
+  await supabase.from('product_stats').upsert(
+    { product_id: newProduct.id, used_by_count: 0, avg_unit_price: priceMap.normal ?? null },
+    { onConflict: 'product_id' },
+  )
+
+  await logProduct(supabase, {
+    product_id: newProduct.id,
+    user_id: ctx.user_id,
+    user_type: ctx.user_type,
+    action: 'copy',
+    before_data: { source_product_id: productId, source_name: original.name },
+    after_data: { id: newProduct.id, product_code: newProduct.product_code, name: newName },
+  })
+
+  revalidatePath('/products')
+  return { success: true, newId: newProduct.id }
+}
+
 // ============================================================
 // SUP-MISSING-009: 상품 상세(탭) 데이터
 // ============================================================
