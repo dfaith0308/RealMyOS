@@ -40,6 +40,8 @@ export default function SmsModal({
   const [scripts, setScripts] = useState<SalesScript[]>([])
   const [loadingScripts, setLoadingScripts] = useState(true)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [useDirectInput, setUseDirectInput] = useState(false)
+  const [directContent, setDirectContent] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
   const [progress, setProgress] = useState(0)
@@ -66,10 +68,10 @@ export default function SmsModal({
   )
 
   const previewName = primary?.name ?? ''
-  const previewContent = useMemo(
-    () => (selectedScript ? substituteCustomerName(selectedScript.content, previewName) : ''),
-    [selectedScript, previewName],
-  )
+  const previewContent = useMemo(() => {
+    if (useDirectInput) return directContent
+    return selectedScript ? substituteCustomerName(selectedScript.content, previewName) : ''
+  }, [useDirectInput, directContent, selectedScript, previewName])
 
   const previewByteLen = smsByteLength(previewContent)
   const previewSmsType: 'SMS' | 'LMS' = previewByteLen <= 90 ? 'SMS' : 'LMS'
@@ -106,7 +108,12 @@ export default function SmsModal({
   }
 
   async function handleSend() {
-    if (!selectedScript) {
+    if (useDirectInput) {
+      if (!directContent.trim()) {
+        setError('발송할 문자 내용을 입력해주세요.')
+        return
+      }
+    } else if (!selectedScript) {
       setError('발송할 스크립트를 선택해주세요.')
       return
     }
@@ -114,6 +121,19 @@ export default function SmsModal({
       setError('발송 대상이 없습니다.')
       return
     }
+
+    const scriptForLog: SalesScript = useDirectInput
+      ? {
+          id: 'direct',
+          type: 'message',
+          title: '직접 입력',
+          content: directContent,
+          is_default: false,
+          sort_order: 0,
+        }
+      : selectedScript!
+
+    const baseContent = useDirectInput ? directContent : selectedScript!.content
 
     setError(null)
     setSending(true)
@@ -126,14 +146,14 @@ export default function SmsModal({
     try {
       for (let i = 0; i < customers.length; i++) {
         const customer = customers[i]
-        const msg = substituteCustomerName(selectedScript.content, customer.name).trim()
+        const msg = substituteCustomerName(baseContent, customer.name).trim()
         if (!msg) {
           failed++
           setProgress(i + 1)
           continue
         }
 
-        const outcome = await sendOne(customer, selectedScript, msg)
+        const outcome = await sendOne(customer, scriptForLog, msg)
         if (outcome === 'limit') {
           setError(`일일 SMS 발송 한도에 도달했습니다. (${success}건 성공, ${failed}건 실패 후 중단)`)
           break
@@ -269,56 +289,112 @@ export default function SmsModal({
 
         {loadingScripts ? (
           <p style={{ fontSize: 13, color: '#6b7280', margin: '12px 0' }}>스크립트 불러오는 중...</p>
-        ) : scripts.length === 0 ? (
-          <p style={{ fontSize: 13, color: '#6b7280', margin: '12px 0' }}>
-            사용 가능한 문자 스크립트가 없습니다. 스크립트관리에서 message 타입 스크립트를 등록해주세요.
-          </p>
         ) : (
           <>
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8 }}>스크립트 선택</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
-              {scripts.map((s) => (
-                <label
-                  key={s.id}
+            {scripts.length > 0 && (
+              <>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8 }}>스크립트 선택</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 0 }}>
+                  {scripts.map((s) => (
+                    <label
+                      key={s.id}
+                      style={{
+                        display: 'flex',
+                        gap: 10,
+                        alignItems: 'flex-start',
+                        padding: '10px 12px',
+                        border: `2px solid ${!useDirectInput && selectedId === s.id ? '#111827' : '#e5e7eb'}`,
+                        borderRadius: 10,
+                        cursor: sending ? 'not-allowed' : 'pointer',
+                        background: !useDirectInput && selectedId === s.id ? '#f9fafb' : '#fff',
+                        opacity: sending ? 0.6 : 1,
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="sms-script"
+                        checked={!useDirectInput && selectedId === s.id}
+                        onChange={() => { setSelectedId(s.id); setUseDirectInput(false) }}
+                        disabled={sending}
+                        style={{ marginTop: 3 }}
+                      />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{s.title}</div>
+                        <div style={{
+                          marginTop: 4,
+                          fontSize: 12,
+                          color: '#6b7280',
+                          whiteSpace: 'pre-wrap',
+                          lineHeight: 1.45,
+                          maxHeight: 72,
+                          overflow: 'hidden',
+                        }}>
+                          {substituteCustomerName(s.content, previewName || '거래처명')}
+                        </div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {scripts.length === 0 && (
+              <p style={{ fontSize: 13, color: '#6b7280', margin: '0 0 12px' }}>
+                등록된 스크립트가 없습니다. 아래에서 직접 입력하거나 스크립트관리에서 message 타입 스크립트를 등록해주세요.
+              </p>
+            )}
+
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => { if (!sending) setUseDirectInput(true) }}
+              onKeyDown={(e) => { if (!sending && (e.key === 'Enter' || e.key === ' ')) setUseDirectInput(true) }}
+              style={{
+                border: useDirectInput ? '2px solid #1f5d3a' : '1px solid #e5e7eb',
+                borderRadius: 8,
+                padding: '12px 14px',
+                cursor: sending ? 'not-allowed' : 'pointer',
+                background: useDirectInput ? '#f0f7f3' : '#fff',
+                marginTop: 8,
+                marginBottom: 14,
+                opacity: sending ? 0.6 : 1,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: useDirectInput ? 10 : 0 }}>
+                <input
+                  type="radio"
+                  name="sms-script"
+                  checked={useDirectInput}
+                  onChange={() => setUseDirectInput(true)}
+                  disabled={sending}
+                  style={{ accentColor: '#1f5d3a' }}
+                />
+                <span style={{ fontSize: 14, fontWeight: 500, color: '#1a1a1a' }}>직접 입력</span>
+              </div>
+              {useDirectInput && (
+                <textarea
+                  value={directContent}
+                  onChange={(e) => setDirectContent(e.target.value)}
+                  placeholder="전송할 문자 내용을 직접 입력하세요"
+                  rows={4}
+                  disabled={sending}
+                  onClick={(e) => e.stopPropagation()}
                   style={{
-                    display: 'flex',
-                    gap: 10,
-                    alignItems: 'flex-start',
+                    width: '100%',
                     padding: '10px 12px',
-                    border: `2px solid ${selectedId === s.id ? '#111827' : '#e5e7eb'}`,
-                    borderRadius: 10,
-                    cursor: sending ? 'not-allowed' : 'pointer',
-                    background: selectedId === s.id ? '#f9fafb' : '#fff',
-                    opacity: sending ? 0.6 : 1,
+                    border: '1px solid #e5e7eb',
+                    borderRadius: 6,
+                    fontSize: 13,
+                    fontFamily: 'inherit',
+                    resize: 'vertical',
+                    boxSizing: 'border-box',
+                    marginTop: 4,
                   }}
-                >
-                  <input
-                    type="radio"
-                    name="sms-script"
-                    checked={selectedId === s.id}
-                    onChange={() => setSelectedId(s.id)}
-                    disabled={sending}
-                    style={{ marginTop: 3 }}
-                  />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{s.title}</div>
-                    <div style={{
-                      marginTop: 4,
-                      fontSize: 12,
-                      color: '#6b7280',
-                      whiteSpace: 'pre-wrap',
-                      lineHeight: 1.45,
-                      maxHeight: 72,
-                      overflow: 'hidden',
-                    }}>
-                      {substituteCustomerName(s.content, previewName || '거래처명')}
-                    </div>
-                  </div>
-                </label>
-              ))}
+                />
+              )}
             </div>
 
-            {selectedScript && !isBulk && (
+            {!isBulk && (useDirectInput || selectedScript) && (
               <div style={{ marginBottom: 14 }}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>미리보기</div>
                 <div style={{
@@ -330,7 +406,7 @@ export default function SmsModal({
                   lineHeight: 1.5,
                   whiteSpace: 'pre-wrap',
                 }}>
-                  {previewContent}
+                  {previewContent || '(내용 없음)'}
                 </div>
                 <div style={{ marginTop: 6, fontSize: 11, color: '#6b7280' }}>
                   {previewByteLen} bytes · {previewSmsType}
@@ -361,7 +437,10 @@ export default function SmsModal({
             <button
               type="button"
               onClick={handleSend}
-              disabled={sending || loadingScripts || scripts.length === 0}
+              disabled={
+                sending || loadingScripts ||
+                (useDirectInput ? !directContent.trim() : !selectedScript)
+              }
               style={{
                 padding: '10px 18px',
                 border: 'none',
