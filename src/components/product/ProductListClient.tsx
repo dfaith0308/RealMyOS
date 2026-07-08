@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
-import { getProductUsers } from '@/actions/product'
+import { useRouter } from 'next/navigation'
+import { copyProduct, getProductUsers } from '@/actions/product'
 import { calcMarginRate, formatKRW } from '@/lib/calc'
 import type { ProductListItem, ProductUser } from '@/actions/product'
 
@@ -12,6 +13,7 @@ interface Props {
 }
 
 export default function ProductListClient({ products, marginThreshold }: Props) {
+  const router = useRouter()
   const [modalProduct, setModalProduct] = useState<ProductListItem | null>(null)
   const [users, setUsers] = useState<ProductUser[]>([])
   const [isPending, startTransition] = useTransition()
@@ -21,6 +23,18 @@ export default function ProductListClient({ products, marginThreshold }: Props) 
     startTransition(async () => {
       const r = await getProductUsers(p.id)
       setUsers(r.data ?? [])
+    })
+  }
+
+  function handleCopy(productId: string) {
+    if (!confirm('이 상품을 복사하시겠습니까?')) return
+    startTransition(async () => {
+      const res = await copyProduct(productId)
+      if (res.success && res.newId) {
+        router.push(`/products/${res.newId}/edit`)
+      } else {
+        alert(res.error ?? '복사 실패')
+      }
     })
   }
 
@@ -82,6 +96,23 @@ export default function ProductListClient({ products, marginThreshold }: Props) 
                   ) : '-'}
                 </td>
                 <td style={td}>
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(p.id)}
+                    style={{
+                      fontSize: 12,
+                      color: '#1f5d3a',
+                      background: '#f0f7f3',
+                      border: '1px solid #bbf7d0',
+                      borderRadius: 6,
+                      padding: '4px 10px',
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                      marginRight: 4,
+                    }}
+                  >
+                    복사
+                  </button>
                   <Link href={`/products/${p.id}/edit`} style={s.editBtn}>수정</Link>
                 </td>
               </tr>
