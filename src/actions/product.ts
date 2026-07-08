@@ -767,21 +767,26 @@ export async function copyProduct(
   const ctx = await getAuthCtx(supabase)
   if (!ctx) return { success: false, error: '인증 필요' }
 
+  const pid = String(productId ?? '').trim()
+  if (!pid) return { success: false, error: '상품을 찾을 수 없습니다' }
+
   const { data: original, error: fetchErr } = await supabase
     .from('products')
     .select(`
       name, tax_type, category_id, supplier_id, barcode, ingredients,
-      item_report_number, min_margin_rate, procurement_type, unit, spec, memo,
-      storage_condition, status,
+      item_report_number, min_margin_rate, procurement_type,
       product_costs ( cost_price, start_date, end_date ),
-      product_prices ( price_type, price, bulk_min_quantity )
+      product_prices ( price_type, price )
     `)
-    .eq('id', productId)
+    .eq('id', pid)
     .eq('tenant_id', ctx.tenant_id)
     .is('deleted_at', null)
-    .single()
+    .maybeSingle()
 
-  if (fetchErr || !original) {
+  if (fetchErr) {
+    return { success: false, error: fetchErr.message }
+  }
+  if (!original) {
     return { success: false, error: '상품을 찾을 수 없습니다' }
   }
 
@@ -802,11 +807,6 @@ export async function copyProduct(
       item_report_number: original.item_report_number,
       min_margin_rate: original.min_margin_rate,
       procurement_type: original.procurement_type ?? 'consignment',
-      unit: original.unit,
-      spec: original.spec,
-      memo: original.memo,
-      storage_condition: original.storage_condition,
-      status: original.status,
     })
     .select('id, product_code')
     .single()
@@ -837,11 +837,10 @@ export async function copyProduct(
   const prices = original.product_prices ?? []
   if (prices.length > 0) {
     const { error: priceErr } = await supabase.from('product_prices').insert(
-      prices.map((p: { price_type: string; price: number; bulk_min_quantity?: number | null }) => ({
+      prices.map((p: { price_type: string; price: number }) => ({
         product_id: newProduct.id,
         price_type: p.price_type,
         price: p.price,
-        bulk_min_quantity: p.bulk_min_quantity ?? null,
       })),
     )
     if (priceErr) {
