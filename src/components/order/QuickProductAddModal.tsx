@@ -15,7 +15,6 @@ export default function QuickProductAddModal({ onClose, onCreated, initialName =
   const [name, setName] = useState(initialName)
   const [costPrice, setCostPrice] = useState('')
   const [salePrice, setSalePrice] = useState('')
-  const [unit, setUnit] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   function handleSubmit() {
@@ -39,7 +38,6 @@ export default function QuickProductAddModal({ onClose, onCreated, initialName =
         name: trimmedName,
         cost_price: cost,
         sale_price: sale,
-        unit: unit.trim() || null,
       })
 
       if (!res.success || !res.product) {
@@ -146,15 +144,6 @@ export default function QuickProductAddModal({ onClose, onCreated, initialName =
               onChange={(e) => setSalePrice(e.target.value.replace(/[^0-9]/g, ''))}
               placeholder="선택 입력"
               inputMode="numeric"
-            />
-          </Field>
-
-          <Field label="단위">
-            <input
-              style={inputStyle}
-              value={unit}
-              onChange={(e) => setUnit(e.target.value)}
-              placeholder="예: kg, L, 개"
             />
           </Field>
         </div>

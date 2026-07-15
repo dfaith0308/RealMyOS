@@ -167,7 +167,6 @@ export async function createProductQuick(input: {
   name: string
   cost_price: number
   sale_price?: number | null
-  unit?: string | null
 }): Promise<{ success: boolean; product?: ProductForOrder; error?: string }> {
   const supabase = await createSupabaseServer()
   const ctx = await getAuthCtx(supabase)
@@ -213,7 +212,6 @@ export async function createProductQuick(input: {
       product_code,
       name,
       tax_type: 'taxable',
-      unit: input.unit?.trim() || null,
       procurement_type: 'consignment',
     })
     .select('id, product_code, name, tax_type, procurement_type')
@@ -254,7 +252,7 @@ export async function createProductQuick(input: {
     user_id: ctx.user_id,
     user_type: ctx.user_type,
     action: 'create',
-    after_data: { name, cost_price: input.cost_price, sale_price: salePrice, unit: input.unit ?? null, product_code, quick: true },
+    after_data: { name, cost_price: input.cost_price, sale_price: salePrice, product_code, quick: true },
   })
 
   revalidatePath('/products')
