@@ -153,8 +153,15 @@ export default function CustomerListAllClient({
               const terms = formatPaymentTerms(c.payment_terms_type, c.payment_day ?? c.payment_terms_days)
               const hasPhone = !!(c.phone ?? '').trim()
               return (
-                <tr key={c.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                  <td style={td}>
+                <tr
+                  key={c.id}
+                  onClick={() => router.push(`/customers/${c.id}`)}
+                  style={{
+                    borderBottom: '1px solid #f3f4f6',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <td style={td} onClick={(e) => e.stopPropagation()}>
                     <input
                       type="checkbox"
                       checked={selected.has(c.id)}
@@ -163,7 +170,15 @@ export default function CustomerListAllClient({
                       aria-label={`${c.name} 선택`}
                     />
                   </td>
-                  <td style={{ ...td, fontWeight: 500 }}>{c.name}</td>
+                  <td style={{ ...td, fontWeight: 500 }}>
+                    <Link
+                      href={`/customers/${c.id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ color: 'inherit', textDecoration: 'none' }}
+                    >
+                      {c.name}
+                    </Link>
+                  </td>
                   <td style={{ ...td, color: '#6b7280' }}>{TYPE_LABEL[c.customer_type] ?? '-'}</td>
                   <td style={{ ...td, color: '#6b7280' }}>{c.phone ?? '-'}</td>
                   <td style={td}>{terms}</td>
@@ -173,7 +188,10 @@ export default function CustomerListAllClient({
                   <td style={td}>
                     <span style={{ fontSize: 12, fontWeight: 500, color: st.color }}>{st.label}</span>
                   </td>
-                  <td style={{ ...td, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <td
+                    style={{ ...td, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     {hasPhone && (
                       <button
                         type="button"
