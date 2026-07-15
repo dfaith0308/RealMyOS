@@ -49,6 +49,8 @@ interface CustomerSalesClientProps {
   initialHistory: SalesHistory[]
   nextAction:     { date: string; type: string } | null
   conversionStats: ConversionStats | null
+  /** true면 영업이력 리스트만 표시 (상세 헤더/퀵액션 숨김) */
+  historyOnly?: boolean
 }
 
 // ============================================================
@@ -115,7 +117,13 @@ function EditModal({ log, onSave, onClose }: {
 // 메인 컴포넌트
 // ============================================================
 
-export default function CustomerSalesClient({ customer, initialHistory, nextAction, conversionStats }: CustomerSalesClientProps) {
+export default function CustomerSalesClient({
+  customer,
+  initialHistory,
+  nextAction,
+  conversionStats,
+  historyOnly = false,
+}: CustomerSalesClientProps) {
   const router = useRouter()
   const [history,    setHistory]    = useState(initialHistory)
   const [editTarget, setEditTarget] = useState<SalesHistory | null>(null)
@@ -139,7 +147,7 @@ export default function CustomerSalesClient({ customer, initialHistory, nextActi
 
   return (
     <>
-      {/* ── 상단 요약 카드 ── */}
+      {!historyOnly ? (
       <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, padding: '20px 24px', marginBottom: 20, background: '#fff' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
           {/* 거래처 정보 */}
@@ -228,6 +236,7 @@ export default function CustomerSalesClient({ customer, initialHistory, nextActi
           ))}
         </div>
       </div>
+      ) : null}
 
       {/* ── 영업이력 ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>

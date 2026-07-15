@@ -16,9 +16,19 @@ const METHOD_OPTIONS: { value: PaymentMethod; label: string }[] = [
   { value: 'platform',  label: '플랫폼' },
 ]
 
-interface Props { initialCustomerId?: string; collectionScheduleId?: string }
+interface Props {
+  initialCustomerId?: string
+  collectionScheduleId?: string
+  onSuccess?: () => void
+  embedded?: boolean
+}
 
-export default function PaymentCreateForm({ initialCustomerId = '', collectionScheduleId = '' }: Props) {
+export default function PaymentCreateForm({
+  initialCustomerId = '',
+  collectionScheduleId = '',
+  onSuccess,
+  embedded = false,
+}: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -161,7 +171,11 @@ export default function PaymentCreateForm({ initialCustomerId = '', collectionSc
         setMemo('')
         setUseDepositEnabled(false)
         setUseDepositAmount('')
-        setTimeout(() => { router.refresh(); setResultDeposit(null) }, 2000)
+        setTimeout(() => {
+          router.refresh()
+          setResultDeposit(null)
+          onSuccess?.()
+        }, 800)
       } else {
         setError(r.error ?? '저장 실패')
       }
@@ -170,7 +184,7 @@ export default function PaymentCreateForm({ initialCustomerId = '', collectionSc
 
   return (
     <div style={s.wrap}>
-      <h1 style={s.title}>수금 등록</h1>
+      {!embedded ? <h1 style={s.title}>수금 등록</h1> : null}
       {error && <div style={s.err}>{error}</div>}
 
       {resultDeposit !== null && resultDeposit > 0 && (

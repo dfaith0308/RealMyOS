@@ -152,9 +152,17 @@ interface OrderCreateFormProps {
     quantity: number; unit_price: number; tax_type?: string
   }>
   quoteContext?: { quote_id: string; conversions: Array<{ item_id: string; qty: number }> }
+  onSuccess?: () => void
+  embedded?: boolean
 }
 
-export default function OrderCreateForm({ initialCustomerId, reorderLines, quoteContext }: OrderCreateFormProps = {}) {
+export default function OrderCreateForm({
+  initialCustomerId,
+  reorderLines,
+  quoteContext,
+  onSuccess,
+  embedded = false,
+}: OrderCreateFormProps = {}) {
   const [isPending, startTransition] = useTransition()
 
   const [customers,       setCustomers]       = useState<CustomerForOrder[]>([])
@@ -519,6 +527,9 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines, quote
       setLines([]); setMemo('')
       resetFinancialState()  // 주문 완료 후 전체 금액 초기화
       setIsSubmitting(false)
+      if (onSuccess) {
+        setTimeout(() => onSuccess(), 600)
+      }
     })
   }
 
@@ -626,7 +637,9 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines, quote
         {success && (
           <div style={s.okBox}>
             <span>{success}</span>
-            <span style={{ fontSize: 11, color: 'var(--text-success)', marginTop: 4, display: 'block' }}>잠시 후 주문 목록으로 이동합니다...</span>
+            {!onSuccess ? (
+              <span style={{ fontSize: 11, color: 'var(--text-success)', marginTop: 4, display: 'block' }}>잠시 후 주문 목록으로 이동합니다...</span>
+            ) : null}
           </div>
         )}
 
@@ -978,7 +991,7 @@ export default function OrderCreateForm({ initialCustomerId, reorderLines, quote
         <div style={s.actionBar}>
           <div />
           <div style={{ display: 'flex', gap: 8 }}>
-            <a href="/orders" style={s.cancelBtn}>취소</a>
+            {!embedded ? <a href="/orders" style={s.cancelBtn}>취소</a> : null}
             <button
               style={isPending || isSubmitting || !lines.length ? s.submitBtnOff : s.submitBtn}
               onClick={handleSubmit}
