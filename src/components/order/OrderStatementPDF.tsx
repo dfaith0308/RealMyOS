@@ -106,13 +106,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#d1d5db',
   },
-  footerNote: {
-    marginTop: 18,
-    textAlign: 'center',
-    fontSize: 11,
-    fontWeight: 700,
-    color: '#111827',
-  },
   stamp: { width: 64, height: 64, objectFit: 'contain' },
 })
 
@@ -249,8 +242,6 @@ export function OrderStatementPdfDoc({ data }: { data: OrderForExport }) {
             <Text style={styles.value}>{data.memo?.trim() || '-'}</Text>
           </View>
         </View>
-
-        <Text style={styles.footerNote}>위 금액을 정히 청구합니다.</Text>
       </Page>
     </Document>
   )

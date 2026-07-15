@@ -136,7 +136,12 @@ function downloadBlob(blob: Blob, filename: string) {
 async function pdfBlobToJpgBlob(pdfBlob: Blob): Promise<Blob> {
   const arr = await pdfBlob.arrayBuffer()
   const pdfjs: any = await import('pdfjs-dist/legacy/build/pdf.mjs')
-  const doc = await pdfjs.getDocument({ data: arr, disableWorker: true }).promise
+  const version = pdfjs.version ?? '5.7.284'
+  if (pdfjs.GlobalWorkerOptions) {
+    pdfjs.GlobalWorkerOptions.workerSrc =
+      `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${version}/pdf.worker.min.mjs`
+  }
+  const doc = await pdfjs.getDocument({ data: arr }).promise
   const page = await doc.getPage(1)
 
   const viewport = page.getViewport({ scale: 2 })

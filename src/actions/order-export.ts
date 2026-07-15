@@ -47,6 +47,19 @@ function joinAddress(address?: string | null, detail?: string | null): string | 
   return parts.length ? parts.join(' ') : null
 }
 
+const PLACEHOLDER_COMPANY_NAMES = new Set(['내 회사', '내회사', 'my company', 'My Company'])
+
+function resolveSupplierName(tenantName: unknown, settingsMap: Map<string, string>): string {
+  const fromSettings = pickSetting(settingsMap, ['company_name', 'business_name', 'shop_name'])
+  if (fromSettings) return fromSettings
+
+  const raw = String(tenantName ?? '').trim()
+  if (raw && !PLACEHOLDER_COMPANY_NAMES.has(raw)) return raw
+
+  // 플레이스홀더면 settings 재시도용 키 / 최후 tenants.name
+  return fromSettings || raw || ''
+}
+
 /**
  * 거래명세서 출력용 주문 데이터.
  * 합계는 저장하지 않음 — 라인의 quantity·unit_price로 클라이언트에서 계산.
@@ -83,15 +96,15 @@ export async function getOrderForExport(orderId: string): Promise<ActionResult<O
 
   const bank_name =
     (t.bank_name as string | null | undefined)?.trim() ||
-    pickSetting(settingsMap, ['bank_name', 'statement_bank_name'])
+    pickSetting(settingsMap, ['statement_bank_name', 'bank_name'])
 
   const bank_account =
     (t.bank_account as string | null | undefined)?.trim() ||
-    pickSetting(settingsMap, ['bank_account', 'statement_bank_account'])
+    pickSetting(settingsMap, ['statement_bank_account', 'bank_account'])
 
   const bank_holder =
     (t.bank_holder as string | null | undefined)?.trim() ||
-    pickSetting(settingsMap, ['bank_holder', 'statement_bank_holder'])
+    pickSetting(settingsMap, ['statement_bank_holder', 'bank_holder'])
 
   const custRaw = (order as any).customers
   const cust = Array.isArray(custRaw) ? custRaw[0] : custRaw
@@ -107,6 +120,21 @@ export async function getOrderForExport(orderId: string): Promise<ActionResult<O
   const orderNumber = String((order as any).order_number ?? order.id)
   const document_number = orderNumber.startsWith('TS-') ? orderNumber : `TS-${orderNumber}`
 
+  const supplierName = resolveSupplierName(t.name, settingsMap)
+  const supplierBiz =
+    (t.business_number as string | null | undefined)?.trim() ||
+    pickSetting(settingsMap, ['business_number', 'company_biz_number', 'biz_number'])
+  const supplierRep =
+    (t.representative_name as string | null | undefined)?.trim() ||
+    pickSetting(settingsMap, ['representative_name', 'company_representative'])
+  const supplierAddress =
+    joinAddress(t.address, t.address_detail) ||
+    pickSetting(settingsMap, ['company_address', 'address'])
+  const supplierPhone =
+    (t.contact_phone as string | null | undefined)?.trim() ||
+    (t.phone as string | null | undefined)?.trim() ||
+    pickSetting(settingsMap, ['company_phone', 'contact_phone', 'phone'])
+
   return {
     success: true,
     data: {
@@ -115,11 +143,11 @@ export async function getOrderForExport(orderId: string): Promise<ActionResult<O
       order_date: String((order as any).order_date ?? '').slice(0, 10),
       memo: (order as any).memo ?? null,
       supplier: {
-        name: String(t.name ?? ''),
-        business_number: t.business_number ?? null,
-        representative_name: t.representative_name ?? null,
-        address: joinAddress(t.address, t.address_detail),
-        phone: t.contact_phone ?? t.phone ?? null,
+        name: supplierName,
+        business_number: supplierBiz,
+        representative_name: supplierRep,
+        address: supplierAddress,
+        phone: supplierPhone,
         stamp_image_url,
         bank_name,
         bank_account,

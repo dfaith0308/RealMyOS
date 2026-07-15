@@ -14,11 +14,16 @@ function downloadBlob(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-/** 견적서 QuoteExportButton과 동일: PDF → canvas(흰 배경) → JPG */
+/** PDF → JPG. pdfjs v5 worker는 .min.mjs (cdnjs .min.js는 404) */
 async function pdfBlobToJpgBlob(pdfBlob: Blob): Promise<Blob> {
   const arr = await pdfBlob.arrayBuffer()
   const pdfjs: any = await import('pdfjs-dist/legacy/build/pdf.mjs')
-  const doc = await pdfjs.getDocument({ data: arr, disableWorker: true }).promise
+  const version = pdfjs.version ?? '5.7.284'
+  if (pdfjs.GlobalWorkerOptions) {
+    pdfjs.GlobalWorkerOptions.workerSrc =
+      `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${version}/pdf.worker.min.mjs`
+  }
+  const doc = await pdfjs.getDocument({ data: arr }).promise
   const page = await doc.getPage(1)
 
   const viewport = page.getViewport({ scale: 2 })

@@ -93,6 +93,27 @@ export async function updateCompanyProfile(input: {
 
   if (error) return { success: false, error: error.message }
 
+  // 전표/견적 export가 settings.company_* 를 쓰므로 동기화
+  const now = new Date().toISOString()
+  await supabase.from('settings').upsert(
+    [
+      { tenant_id: ctx.tenant_id, key: 'company_name', value: name, updated_at: now },
+      {
+        tenant_id: ctx.tenant_id,
+        key: 'company_representative',
+        value: input.representative_name?.trim() || '',
+        updated_at: now,
+      },
+      {
+        tenant_id: ctx.tenant_id,
+        key: 'company_phone',
+        value: input.contact_phone?.trim() || '',
+        updated_at: now,
+      },
+    ],
+    { onConflict: 'tenant_id,key' },
+  )
+
   revalidatePath('/settings')
   return { success: true }
 }
