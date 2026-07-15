@@ -113,6 +113,9 @@ export default function CustomerDetailClient({
             <Link href={`/customers/${customer.id}/edit`} style={btnGhost}>
               수정
             </Link>
+            <Link href={`/customers/${customer.id}/ledger`} style={btnGhost}>
+              원장 보기
+            </Link>
             <button type="button" onClick={() => setShowOrder(true)} style={btnGreen}>
               + 주문 등록
             </button>

@@ -135,7 +135,7 @@ export function CustomersOpsListClient({
           ) : (
             visible.map((c) => {
               const variant = getRowVariant(c)
-              const ledgerHref = `/customers/${c.id}/ledger`
+              const detailHref = `/customers/${c.id}`
               const rowClass = [
                 styles.row,
                 variant === 'danger' ? styles.rowDanger : '',
@@ -165,7 +165,7 @@ export function CustomersOpsListClient({
                 <div
                   key={c.id}
                   className={rowClass}
-                  onClick={() => router.push(ledgerHref)}
+                  onClick={() => router.push(detailHref)}
                   role="button"
                   tabIndex={0}
                 >

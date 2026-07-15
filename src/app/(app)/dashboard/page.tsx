@@ -111,7 +111,7 @@ export default async function DashboardPage() {
                 <div className={styles.empty}>데이터 없음</div>
               ) : (
                 d.top_customers.slice(0, 5).map((c, i) => (
-                  <Link key={`tc-${c.id}`} href={`/customers/${c.id}/ledger`} className={styles.row}>
+                  <Link key={`tc-${c.id}`} href={`/customers/${c.id}`} className={styles.row}>
                     <span className={styles.rank}>{i + 1}</span>
                     <span className={styles.name}>{c.name}</span>
                     <span className={styles.value}>{c.primary_reason || `${c.score}점`}</span>
