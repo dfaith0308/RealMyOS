@@ -428,58 +428,55 @@ export async function sendPolicyConsoleAligoTest(): Promise<ActionResult<{ detai
 
   await ensurePolicyDefaults(supabase, { adminUserId: auth.ctx.user_id })
 
-  const { data: cfg } = await supabase
-    .from('admin_settings')
-    .select('key, value')
-    .in('key', ['aligo_user_id', 'aligo_api_key', 'aligo_sender'])
+  const apiKey = (process.env.SOLAPI_API_KEY ?? '').trim()
+  const apiSecret = (process.env.SOLAPI_API_SECRET ?? '').trim()
+  const sender = normalizePhoneDigits(process.env.SOLAPI_SENDER ?? '')
 
-  const m = new Map((cfg ?? []).map((r: any) => [r.key, String(r.value ?? '')]))
-  const user_id = (m.get('aligo_user_id') ?? '').trim()
-  const api_key = (m.get('aligo_api_key') ?? '').trim()
-  const sender = normalizePhoneDigits(m.get('aligo_sender') ?? '')
-
-  if (!user_id || !api_key || !sender) {
-    return { success: false, error: 'admin_settings에 알리고 사용자 ID / API Key / 발신번호를 채워주세요.' }
+  if (!apiKey || !apiSecret || !sender) {
+    return {
+      success: false,
+      error: '솔라피 환경변수(SOLAPI_API_KEY / SOLAPI_API_SECRET / SOLAPI_SENDER)를 설정해주세요.',
+    }
   }
 
-  const msg = '식식이OS 관리자 정책 콘솔 — 알리고 연동 테스트'
-  const form = new FormData()
-  form.set('key', api_key)
-  form.set('user_id', user_id)
-  form.set('sender', sender)
-  form.set('receiver', sender)
-  form.set('msg', msg)
-
-  let aligo_response: any = null
+  const msg = '식식이OS 관리자 정책 콘솔 — 솔라피 연동 테스트'
+  let provider_response: any = null
   let ok = false
+  let detail = '발송 실패'
+
   try {
-    const res = await fetch('https://apis.aligo.in/send/', { method: 'POST', body: form })
-    const ct = res.headers.get('content-type') ?? ''
-    const json = ct.includes('application/json') ? await res.json() : await res.text()
-    aligo_response = json
-    const result_code = typeof json === 'object' ? String((json as any)?.result_code ?? '') : ''
-    ok = result_code === '1'
+    const { SolapiMessageService } = await import('solapi')
+    const solapi = new SolapiMessageService(apiKey, apiSecret)
+    const result = await solapi.send({
+      to: sender,
+      from: sender,
+      text: msg,
+    })
+    provider_response = result
+    const groupId = result?.groupInfo?.groupId
+    const messageId = result?.messageList?.[0]?.messageId
+    ok = !!(messageId || groupId) && (result?.failedMessageList?.length ?? 0) === 0
+    if (ok) detail = '테스트 발송 요청이 접수되었습니다.'
+    else {
+      detail =
+        result?.failedMessageList?.[0]?.statusMessage ??
+        '솔라피 발송 실패'
+    }
   } catch (e: any) {
-    aligo_response = { error: e?.message ?? 'FETCH_ERROR' }
+    provider_response = { error: e?.message ?? 'FETCH_ERROR' }
+    detail = e?.message ?? '솔라피 발송 오류'
   }
 
   const logRes = await insertAdminLog(supabase, {
     admin_id: auth.ctx.user_id,
-    action_type: 'policy_console_aligo_test',
+    action_type: 'policy_console_solapi_test',
     target_table: 'admin_settings',
-    new_value: { ok, aligo_response },
+    new_value: { ok, provider: 'solapi', provider_response },
   })
   if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
 
-  if (!ok) {
-    const detail =
-      typeof aligo_response === 'object'
-        ? String((aligo_response as any)?.message ?? (aligo_response as any)?.result_message ?? '발송 실패')
-        : '발송 실패'
-    return { success: false, error: detail }
-  }
-
-  return { success: true, data: { detail: '테스트 발송 요청이 접수되었습니다.' } }
+  if (!ok) return { success: false, error: detail }
+  return { success: true, data: { detail } }
 }
 
 /** 플랫폼 정책 숫자 — 테넌트 등 일반 세션에서도 `admin_settings` SELECT만 시도. 실패·무효·미존재 시 `POLICY_SETTING_DEFAULTS` 폴백 (D-018). */

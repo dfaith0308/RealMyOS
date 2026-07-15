@@ -17,7 +17,7 @@ export const POLICY_SETTING_DEFAULTS: Record<string, { value: string; descriptio
   trust_restaurant_level1: { value: '60', description: '식당 Level 1 상한 (점수 이하)' },
   trust_restaurant_level2: { value: '50', description: '식당 Level 2 상한 (점수 이하)' },
   trust_restaurant_level3: { value: '40', description: '식당 Level 3 상한 (점수 이하)' },
-  aligo_user_id: { value: '', description: '알리고 사용자 ID' },
-  aligo_api_key: { value: '', description: '알리고 API Key' },
-  aligo_sender: { value: '', description: '알리고 발신번호 (숫자)' },
+  aligo_user_id: { value: '', description: '레거시 — 실발송은 SOLAPI_* 환경변수' },
+  aligo_api_key: { value: '', description: '레거시 — 실발송은 SOLAPI_* 환경변수' },
+  aligo_sender: { value: '', description: '레거시 — 실발송은 SOLAPI_SENDER 환경변수' },
 }

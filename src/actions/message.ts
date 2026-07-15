@@ -1,11 +1,13 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { SolapiMessageService } from 'solapi'
 import { smsByteLength } from '@/lib/sms-byte-length'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import type { ActionResult } from '@/types/order'
 import { getAdminSettingNumber } from '@/actions/admin/policy-console'
 
+/** @deprecated 알리고 → 솔라피 전환. 하위 호환용 타입 유지 */
 export interface AligoSettings {
   aligo_user_id: string
   aligo_api_key: string
@@ -17,7 +19,6 @@ function normalizePhoneDigits(phone: string): string {
 }
 
 function kstDayStartIso(): { start: string; end: string } {
-  // KST 기준 오늘 00:00 ~ 내일 00:00
   const kstNow = new Date(Date.now() + 9 * 3600000)
   const y = kstNow.getUTCFullYear()
   const m = String(kstNow.getUTCMonth() + 1).padStart(2, '0')
@@ -29,13 +30,24 @@ function kstDayStartIso(): { start: string; end: string } {
 }
 
 async function getSmsDailyLimit(): Promise<number> {
-  // POLICY: sms_daily_limit (없으면 100)
   try {
     const n = await getAdminSettingNumber('sms_daily_limit', { min: 1, max: 10000 })
     return Number.isFinite(n) && n > 0 ? n : 100
   } catch {
     return 100
   }
+}
+
+function getSolapiEnv(): { apiKey: string; apiSecret: string; sender: string } | null {
+  const apiKey = (process.env.SOLAPI_API_KEY ?? '').trim()
+  const apiSecret = (process.env.SOLAPI_API_SECRET ?? '').trim()
+  const sender = normalizePhoneDigits(process.env.SOLAPI_SENDER ?? '')
+  if (!apiKey || !apiSecret || !sender) return null
+  return { apiKey, apiSecret, sender }
+}
+
+function createSolapiClient(apiKey: string, apiSecret: string) {
+  return new SolapiMessageService(apiKey, apiSecret)
 }
 
 async function getSettingMap(keys: string[]): Promise<ActionResult<Map<string, string>>> {
@@ -54,6 +66,7 @@ async function getSettingMap(keys: string[]): Promise<ActionResult<Map<string, s
   return { success: true, data: m }
 }
 
+/** @deprecated 설정은 env(SOLAPI_*)로 이전. UI 하위 호환용 */
 export async function getAligoSettings(): Promise<ActionResult<Partial<AligoSettings>>> {
   const res = await getSettingMap(['aligo_user_id', 'aligo_api_key', 'aligo_sender'])
   if (!res.success) return { success: false, error: res.error ?? '조회 실패', data: {} }
@@ -68,6 +81,7 @@ export async function getAligoSettings(): Promise<ActionResult<Partial<AligoSett
   }
 }
 
+/** @deprecated 설정은 env(SOLAPI_*)로 이전 */
 export async function saveAligoSettings(input: Partial<AligoSettings>): Promise<ActionResult> {
   const supabase = await createSupabaseServer()
   const ctx = await getAuthCtx(supabase)
@@ -101,7 +115,6 @@ export async function saveAligoSettings(input: Partial<AligoSettings>): Promise<
 
   if (error) return { success: false, error: `저장 실패: ${error.message}` }
 
-  // settings_logs best-effort
   const logRows = rows
     .map((r) => ({
       tenant_id: ctx.tenant_id,
@@ -124,6 +137,10 @@ export async function saveAligoSettings(input: Partial<AligoSettings>): Promise<
   return { success: true }
 }
 
+/**
+ * SMS 발송 (함수명 유지: sendAligo)
+ * 내부 구현: 솔라피(SOLAPI) API
+ */
 export async function sendAligo(input: {
   receiver: string
   msg: string
@@ -138,12 +155,6 @@ export async function sendAligo(input: {
 
   const msg = (input.msg ?? '').trim()
   if (!msg) return { success: false, error: '메시지 내용이 비어있습니다.' }
-
-  // ============================================================
-  // SMS Rate limit (cost control)
-  // 1) 테넌트별 일일 발송 한도 (admin_settings.sms_daily_limit, default 100)
-  // 2) 동일 수신번호 + 동일 내용 1시간 내 재발송 차단
-  // ============================================================
 
   const dailyLimit = await getSmsDailyLimit()
   const { start, end } = kstDayStartIso()
@@ -176,68 +187,93 @@ export async function sendAligo(input: {
     return { success: false, error: '같은 번호에 1시간 내 동일 내용 재발송은 차단됩니다' }
   }
 
-  // settings load
-  const settingsRes = await getAligoSettings()
-  const s = settingsRes.data ?? {}
-  const user_id = (s.aligo_user_id ?? '').trim()
-  const key = (s.aligo_api_key ?? '').trim()
-  const sender = normalizePhoneDigits(s.aligo_sender ?? '')
-
-  if (!user_id || !key || !sender) {
-    return { success: false, error: '알리고 설정이 필요합니다 → /settings' }
+  const solapiEnv = getSolapiEnv()
+  if (!solapiEnv) {
+    return {
+      success: false,
+      error: '솔라피 설정이 필요합니다 (SOLAPI_API_KEY / SOLAPI_API_SECRET / SOLAPI_SENDER)',
+    }
   }
 
   const byte_len = smsByteLength(msg)
   const sms_type: 'SMS' | 'LMS' = byte_len <= 90 ? 'SMS' : 'LMS'
 
-  // aligo send
-  const form = new FormData()
-  form.set('key', key)
-  form.set('user_id', user_id)
-  form.set('sender', sender)
-  form.set('receiver', receiverDigits)
-  form.set('msg', msg)
-  if (sms_type === 'LMS') {
-    form.set('title', '식식이OS')
-  }
-
-  let aligo_response: any = null
+  let provider_response: any = null
   let status: 'sent' | 'failed' = 'failed'
   let mid: string | undefined
-  try {
-    const res = await fetch('https://apis.aligo.in/send/', { method: 'POST', body: form })
-    const ct = res.headers.get('content-type') ?? ''
-    const json = ct.includes('application/json') ? await res.json() : await res.text()
-    aligo_response = json
+  let errorMessage: string | undefined
 
-    const result_code = typeof json === 'object' ? String((json as any)?.result_code ?? '') : ''
-    if (result_code === '1') {
+  try {
+    const solapi = createSolapiClient(solapiEnv.apiKey, solapiEnv.apiSecret)
+    const result = await solapi.send({
+      to: receiverDigits,
+      from: solapiEnv.sender,
+      text: msg,
+      ...(sms_type === 'LMS' ? { subject: '식식이OS' } : {}),
+    })
+
+    provider_response = result
+    const groupId = result?.groupInfo?.groupId
+    const messageId =
+      result?.messageList?.[0]?.messageId ??
+      (result as any)?.messageId ??
+      undefined
+
+    mid = messageId || groupId || undefined
+
+    const failedList = result?.failedMessageList ?? []
+    if (mid && failedList.length === 0) {
       status = 'sent'
-      mid = (json as any)?.msg_id ?? (json as any)?.mid ?? undefined
+    } else if (mid && (result.groupInfo?.count?.registeredSuccess ?? 0) > 0) {
+      status = 'sent'
     } else {
       status = 'failed'
+      errorMessage =
+        failedList[0]?.statusMessage ||
+        (typeof (result as any)?.errorMessage === 'string'
+          ? (result as any).errorMessage
+          : '솔라피 발송 실패')
     }
   } catch (e: any) {
-    aligo_response = { error: e?.message ?? 'FETCH_ERROR' }
+    provider_response = {
+      provider: 'solapi',
+      error: e?.message ?? 'FETCH_ERROR',
+      errorCode: e?.errorCode ?? e?.code,
+    }
     status = 'failed'
+    errorMessage = e?.message ?? e?.errorMessage ?? '솔라피 발송 오류'
   }
 
-  // message_logs insert (always)
-  const { data: msgLog, error: msgErr } = await supabase
-    .from('message_logs')
-    .insert({
-      tenant_id: ctx.tenant_id,
-      customer_id: input.customer_id,
-      channel: 'sms',
-      receiver: receiverDigits,
-      content: msg,
-      status,
-      aligo_response,
-      sent_at: new Date().toISOString(),
-      created_by: ctx.user_id,
-    })
-    .select('id')
-    .single()
+  const sentAt = new Date().toISOString()
+  const logPayload: Record<string, unknown> = {
+    tenant_id: ctx.tenant_id,
+    customer_id: input.customer_id,
+    channel: 'sms',
+    receiver: receiverDigits,
+    content: msg,
+    status,
+    aligo_response: { provider: 'solapi', ...(typeof provider_response === 'object' ? provider_response : { raw: provider_response }) },
+    sent_at: sentAt,
+    created_by: ctx.user_id,
+  }
+  if (mid) logPayload.external_id = mid
+
+  let msgLog: { id: string } | null = null
+  let msgErr: { message?: string } | null = null
+
+  {
+    const r = await supabase.from('message_logs').insert(logPayload).select('id').single()
+    msgLog = r.data
+    msgErr = r.error
+  }
+
+  // external_id 컬럼이 없는 DB 대비 fallback
+  if (msgErr && mid && /external_id/i.test(msgErr.message ?? '')) {
+    const { external_id: _drop, ...withoutExternal } = logPayload
+    const r2 = await supabase.from('message_logs').insert(withoutExternal).select('id').single()
+    msgLog = r2.data
+    msgErr = r2.error
+  }
 
   if (msgErr || !msgLog) {
     return { success: false, error: `message_logs 저장 실패: ${msgErr?.message ?? 'unknown'}` }
@@ -246,7 +282,7 @@ export async function sendAligo(input: {
   revalidatePath('/sales/exec')
   return {
     success: status === 'sent',
-    error: status === 'sent' ? undefined : (typeof aligo_response === 'object' ? ((aligo_response as any)?.message ?? (aligo_response as any)?.result_message) : '발송 실패'),
+    error: status === 'sent' ? undefined : (errorMessage ?? '발송 실패'),
     data: { message_log_id: msgLog.id, byte_len, sms_type, aligo_mid: mid },
   }
 }
@@ -256,9 +292,13 @@ export async function sendAligoTest(): Promise<ActionResult> {
   const ctx = await getAuthCtx(supabase)
   if (!ctx) return { success: false, error: '로그인 필요' }
 
-  const sRes = await getAligoSettings()
-  const sender = normalizePhoneDigits(sRes.data?.aligo_sender ?? '')
-  if (!sender) return { success: false, error: '발신번호(aligo_sender) 설정이 필요합니다.' }
+  const solapiEnv = getSolapiEnv()
+  if (!solapiEnv) {
+    return {
+      success: false,
+      error: '솔라피 설정이 필요합니다 (SOLAPI_API_KEY / SOLAPI_API_SECRET / SOLAPI_SENDER)',
+    }
+  }
 
   const { data: cust } = await supabase
     .from('customers')
@@ -273,10 +313,30 @@ export async function sendAligoTest(): Promise<ActionResult> {
   if (!cust?.id) return { success: false, error: '테스트 발송을 위해 거래처(매출처) 1건이 필요합니다.' }
 
   const r = await sendAligo({
-    receiver: sender,
-    msg: '식식이OS 알리고 연동 테스트',
+    receiver: solapiEnv.sender,
+    msg: '식식이OS 솔라피 연동 테스트',
     customer_id: cust.id,
   })
   return r.success ? { success: true } : { success: false, error: r.error ?? '테스트 발송 실패' }
 }
 
+/** 설정 화면용: 솔라피 env 구성 여부 (시크릿 값은 노출하지 않음) */
+export async function getSolapiConfigStatus(): Promise<
+  ActionResult<{ configured: boolean; hasSender: boolean; senderMasked: string | null }>
+> {
+  const ctx = await getAuthCtx(await createSupabaseServer())
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const apiKey = !!(process.env.SOLAPI_API_KEY ?? '').trim()
+  const apiSecret = !!(process.env.SOLAPI_API_SECRET ?? '').trim()
+  const sender = normalizePhoneDigits(process.env.SOLAPI_SENDER ?? '')
+  const configured = apiKey && apiSecret && !!sender
+  const senderMasked = sender
+    ? `${sender.slice(0, 3)}${'*'.repeat(Math.max(0, sender.length - 7))}${sender.slice(-4)}`
+    : null
+
+  return {
+    success: true,
+    data: { configured, hasSender: !!sender, senderMasked },
+  }
+}

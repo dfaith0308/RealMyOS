@@ -28,9 +28,9 @@ const SHORT_LABEL: Record<string, string> = {
   rfq_repeat_limit: 'RFQ 반복 제한',
   delivery_signal_window: '납기 신호 윈도우',
   rfq_open_duration_hours: '입찰 공개 시간',
-  aligo_user_id: '알리고 사용자 ID',
-  aligo_api_key: '알리고 API Key',
-  aligo_sender: '알리고 발신번호',
+  aligo_user_id: '알리고 사용자 ID (레거시)',
+  aligo_api_key: '알리고 API Key (레거시)',
+  aligo_sender: '알리고 발신번호 (레거시)',
 }
 
 function maskValue(key: string, value: string) {
@@ -214,7 +214,7 @@ export default function PolicyConsoleClient({ initial }: { initial: GroupedPolic
         />
       </PolicySection>
 
-      <PolicySection title="5. 알림 설정 (알리고)">
+      <PolicySection title="5. 알림 설정 (솔라피)">
         <div className={s.policyNotifyRow}>
           <button type="button" className={s.policySecondaryBtn} disabled={pending} onClick={sendTest}>
             테스트 발송

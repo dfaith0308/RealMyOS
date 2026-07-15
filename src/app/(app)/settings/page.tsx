@@ -3,23 +3,25 @@ import { getCompanyProfile, getSettings } from '@/actions/settings'
 import { DEFAULT_SETTINGS } from '@/constants/settings'
 import SettingsForm from '@/components/settings/SettingsForm'
 import CompanyProfileForm from '@/components/settings/CompanyProfileForm'
-import { getAligoSettings } from '@/actions/message'
-import AligoSettingsForm from '@/components/settings/AligoSettingsForm'
+import { getSolapiConfigStatus } from '@/actions/message'
+import SolapiSmsStatusPanel from '@/components/settings/SolapiSmsStatusPanel'
 import hubStyles from './settings-hub.module.css'
 
 export const metadata = { title: '설정 — RealMyOS' }
 
 export default async function SettingsPage() {
-  const [result, profileRes, aligo] = await Promise.all([
+  const [result, profileRes, solapi] = await Promise.all([
     getSettings(),
     getCompanyProfile(),
-    getAligoSettings(),
+    getSolapiConfigStatus(),
   ])
   const settings = result.success && result.data ? result.data : DEFAULT_SETTINGS
   const profile =
     profileRes.success && profileRes.data
       ? profileRes.data
       : { name: '', representative_name: '', contact_phone: '' }
+
+  const solapiData = solapi.data ?? { configured: false, hasSender: false, senderMasked: null }
 
   return (
     <main style={{ minHeight: '100vh', background: 'var(--surface-0)', paddingTop: 40 }}>
@@ -53,7 +55,11 @@ export default async function SettingsPage() {
 
         <SettingsForm initial={settings} />
         <div style={{ height: 24 }} />
-        <AligoSettingsForm initial={aligo.data ?? {}} />
+        <SolapiSmsStatusPanel
+          configured={solapiData.configured}
+          hasSender={solapiData.hasSender}
+          senderMasked={solapiData.senderMasked}
+        />
       </div>
     </main>
   )
