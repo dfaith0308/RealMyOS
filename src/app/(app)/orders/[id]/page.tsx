@@ -7,6 +7,7 @@ import { updateOrderStatus } from '@/actions/order'
 import { DataCell, DataTableRow } from '@/components/ui/DataTableRow'
 import { formatKRW } from '@/lib/calc'
 import { ORDER_OPERATION_STATUS_LABEL, ORDER_OPERATION_STATUS_LIST, type OrderOperationStatus } from '@/types/order'
+import OrderStatementExportButtons from '@/components/order/OrderStatementExportButtons'
 
 export const metadata = { title: '주문 상세 — RealMyOS' }
 
@@ -85,7 +86,8 @@ export default async function OrderDetailPage({ params }: { params: { id: string
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <OrderStatementExportButtons orderId={order.id} />
           <Link
             href={`/orders/${order.id}/edit`}
             style={{ padding: '8px 14px', background: '#fff', border: '1px solid #d1d5db', borderRadius: 10, fontSize: 13, fontWeight: 700, color: '#374151', textDecoration: 'none' }}

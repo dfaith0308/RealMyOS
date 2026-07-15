@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
+import { createSupabaseAdmin } from '@/lib/supabase-admin'
 import { DEFAULT_SETTINGS, type TenantSettings } from '@/constants/settings'
 import type { ActionResult } from '@/types/order'
 
@@ -9,6 +10,38 @@ export type CompanyProfile = {
   name: string
   representative_name: string
   contact_phone: string
+}
+
+/** 거래명세서용 도장·입금계좌 */
+export type StatementProfile = {
+  stamp_image_url: string
+  bank_name: string
+  bank_account: string
+  bank_holder: string
+}
+
+const STATEMENT_SETTING_KEYS = {
+  stamp_image_url: 'stamp_image_url',
+  bank_name: 'statement_bank_name',
+  bank_account: 'statement_bank_account',
+  bank_holder: 'statement_bank_holder',
+} as const
+
+async function upsertStatementSettings(
+  supabase: Awaited<ReturnType<typeof createSupabaseServer>>,
+  tenantId: string,
+  values: StatementProfile,
+) {
+  const now = new Date().toISOString()
+  const rows = (Object.keys(STATEMENT_SETTING_KEYS) as (keyof typeof STATEMENT_SETTING_KEYS)[]).map(
+    (k) => ({
+      tenant_id: tenantId,
+      key: STATEMENT_SETTING_KEYS[k],
+      value: values[k] ?? '',
+      updated_at: now,
+    }),
+  )
+  await supabase.from('settings').upsert(rows, { onConflict: 'tenant_id,key' })
 }
 
 export async function getCompanyProfile(): Promise<ActionResult<CompanyProfile>> {
@@ -62,6 +95,125 @@ export async function updateCompanyProfile(input: {
 
   revalidatePath('/settings')
   return { success: true }
+}
+
+export async function getStatementProfile(): Promise<ActionResult<StatementProfile>> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx?.tenant_id) return { success: false, error: '로그인 필요' }
+
+  const [{ data: tenant }, { data: settingsRows }] = await Promise.all([
+    supabase.from('tenants').select('*').eq('id', ctx.tenant_id).maybeSingle(),
+    supabase
+      .from('settings')
+      .select('key, value')
+      .eq('tenant_id', ctx.tenant_id)
+      .in('key', Object.values(STATEMENT_SETTING_KEYS)),
+  ])
+
+  const map = new Map((settingsRows ?? []).map((r: any) => [r.key as string, String(r.value ?? '')]))
+  const t: any = tenant ?? {}
+
+  return {
+    success: true,
+    data: {
+      stamp_image_url: String(t.stamp_image_url ?? map.get('stamp_image_url') ?? ''),
+      bank_name: String(t.bank_name ?? map.get('statement_bank_name') ?? ''),
+      bank_account: String(t.bank_account ?? map.get('statement_bank_account') ?? ''),
+      bank_holder: String(t.bank_holder ?? map.get('statement_bank_holder') ?? ''),
+    },
+  }
+}
+
+export async function updateStatementProfile(input: {
+  bank_name?: string
+  bank_account?: string
+  bank_holder?: string
+  stamp_image_url?: string
+}): Promise<ActionResult> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx?.tenant_id) return { success: false, error: '로그인 필요' }
+
+  const values: StatementProfile = {
+    stamp_image_url: (input.stamp_image_url ?? '').trim(),
+    bank_name: (input.bank_name ?? '').trim(),
+    bank_account: (input.bank_account ?? '').trim(),
+    bank_holder: (input.bank_holder ?? '').trim(),
+  }
+
+  // tenants 컬럼이 있으면 우선 저장 (마이그레이션 적용 전엔 settings로 fallback)
+  const { error: tenantErr } = await supabase
+    .from('tenants')
+    .update({
+      stamp_image_url: values.stamp_image_url || null,
+      bank_name: values.bank_name || null,
+      bank_account: values.bank_account || null,
+      bank_holder: values.bank_holder || null,
+    })
+    .eq('id', ctx.tenant_id)
+
+  if (tenantErr) {
+    console.warn('[updateStatementProfile] tenants update fallback to settings:', tenantErr.message)
+  }
+
+  await upsertStatementSettings(supabase, ctx.tenant_id, values)
+
+  revalidatePath('/settings')
+  return { success: true }
+}
+
+export async function uploadTenantStamp(formData: FormData): Promise<ActionResult<{ url: string }>> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx?.tenant_id) return { success: false, error: '로그인 필요' }
+
+  const raw = formData.get('file')
+  if (!raw || !(raw instanceof File)) return { success: false, error: '파일이 없습니다' }
+  if (raw.size === 0) return { success: false, error: '빈 파일입니다' }
+  if (raw.size > 2 * 1024 * 1024) return { success: false, error: '도장 이미지는 2MB 이하만 업로드할 수 있습니다' }
+
+  const mime = raw.type || 'application/octet-stream'
+  if (!/^image\/(jpeg|png|webp)$/i.test(mime)) {
+    return { success: false, error: 'JPG/PNG/WEBP만 업로드할 수 있습니다' }
+  }
+
+  const admin = await createSupabaseAdmin()
+  try {
+    await admin.storage.createBucket('tenant-assets', {
+      public: true,
+      fileSizeLimit: 2097152,
+      allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
+    })
+  } catch {
+    // 이미 있으면 무시
+  }
+
+  const ext = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpg'
+  const path = `${ctx.tenant_id}/stamp_${Date.now()}.${ext}`
+  const buf = Buffer.from(await raw.arrayBuffer())
+
+  const { data, error } = await admin.storage.from('tenant-assets').upload(path, buf, {
+    contentType: mime,
+    upsert: true,
+  })
+
+  if (error) {
+    const msg = error.message ?? String(error)
+    if (/bucket not found|Bucket not found/i.test(msg)) {
+      return {
+        success: false,
+        error: 'tenant-assets 버킷이 없습니다. Supabase에서 마이그레이션(SQL)을 적용해주세요.',
+      }
+    }
+    return { success: false, error: `업로드 실패: ${msg}` }
+  }
+
+  const { data: pub } = admin.storage.from('tenant-assets').getPublicUrl(data.path)
+  const url = pub.publicUrl
+
+  await updateStatementProfile({ stamp_image_url: url })
+  return { success: true, data: { url } }
 }
 
 export async function getSettings(): Promise<ActionResult<TenantSettings>> {

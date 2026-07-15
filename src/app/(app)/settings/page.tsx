@@ -1,8 +1,9 @@
 import Link from 'next/link'
-import { getCompanyProfile, getSettings } from '@/actions/settings'
+import { getCompanyProfile, getSettings, getStatementProfile } from '@/actions/settings'
 import { DEFAULT_SETTINGS } from '@/constants/settings'
 import SettingsForm from '@/components/settings/SettingsForm'
 import CompanyProfileForm from '@/components/settings/CompanyProfileForm'
+import StatementProfileForm from '@/components/settings/StatementProfileForm'
 import { getSolapiConfigStatus } from '@/actions/message'
 import SolapiSmsStatusPanel from '@/components/settings/SolapiSmsStatusPanel'
 import hubStyles from './settings-hub.module.css'
@@ -10,9 +11,10 @@ import hubStyles from './settings-hub.module.css'
 export const metadata = { title: '설정 — RealMyOS' }
 
 export default async function SettingsPage() {
-  const [result, profileRes, solapi] = await Promise.all([
+  const [result, profileRes, statementRes, solapi] = await Promise.all([
     getSettings(),
     getCompanyProfile(),
+    getStatementProfile(),
     getSolapiConfigStatus(),
   ])
   const settings = result.success && result.data ? result.data : DEFAULT_SETTINGS
@@ -20,6 +22,10 @@ export default async function SettingsPage() {
     profileRes.success && profileRes.data
       ? profileRes.data
       : { name: '', representative_name: '', contact_phone: '' }
+  const statement =
+    statementRes.success && statementRes.data
+      ? statementRes.data
+      : { stamp_image_url: '', bank_name: '', bank_account: '', bank_holder: '' }
 
   const solapiData = solapi.data ?? { configured: false, hasSender: false, senderMasked: null }
 
@@ -34,6 +40,8 @@ export default async function SettingsPage() {
         </div>
 
         <CompanyProfileForm initial={profile} />
+        <div style={{ height: 24 }} />
+        <StatementProfileForm initial={statement} />
         <div style={{ height: 24 }} />
 
         <section className={hubStyles.hubSection} aria-label="설정 하위 메뉴">
