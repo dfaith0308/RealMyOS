@@ -91,20 +91,25 @@ export default function SmsModal({
       return 'limit'
     }
 
-    const messageLogId = sendRes.data?.message_log_id
-    if (!messageLogId) return 'fail'
+    // 발송 API 성공이 기준. message_log_id는 로그 INSERT 실패 시 없을 수 있음
+    if (!sendRes.success) return 'fail'
 
+    const messageLogId = sendRes.data?.message_log_id
     const contactRes = await createContactLog({
       customer_id: customer.id,
       contact_method: 'message',
       methods: ['message'],
       memo: `[${memoPrefix}] ${script.title}\n\n${msg}`,
-      message_log_id: messageLogId,
-      send_status: sendRes.success ? 'sent' : 'failed',
+      ...(messageLogId ? { message_log_id: messageLogId } : {}),
+      send_status: 'sent',
     })
 
-    if (!contactRes.success) return 'fail'
-    return sendRes.success ? 'ok' : 'fail'
+    if (!contactRes.success) {
+      console.error('[SmsModal] contact_logs 저장 실패:', contactRes.error)
+      // SMS 발송은 이미 성공 → 이력 저장 실패해도 성공으로 처리
+      return 'ok'
+    }
+    return 'ok'
   }
 
   async function handleSend() {

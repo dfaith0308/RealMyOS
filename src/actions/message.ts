@@ -145,7 +145,14 @@ export async function sendAligo(input: {
   receiver: string
   msg: string
   customer_id: string
-}): Promise<ActionResult<{ message_log_id: string; byte_len: number; sms_type: 'SMS' | 'LMS'; aligo_mid?: string }>> {
+}): Promise<
+  ActionResult<{
+    message_log_id?: string
+    byte_len: number
+    sms_type: 'SMS' | 'LMS'
+    aligo_mid?: string
+  }>
+> {
   const supabase = await createSupabaseServer()
   const ctx = await getAuthCtx(supabase)
   if (!ctx) return { success: false, error: '로그인 필요' }
@@ -159,11 +166,12 @@ export async function sendAligo(input: {
   const dailyLimit = await getSmsDailyLimit()
   const { start, end } = kstDayStartIso()
 
+  // DB check: message_logs.status ∈ {success, failed, simulated, ...} — 'sent' 아님
   const { count: sentTodayCount, error: countErr } = await supabase
     .from('message_logs')
     .select('id', { count: 'exact', head: true })
     .eq('tenant_id', ctx.tenant_id)
-    .eq('status', 'sent')
+    .eq('status', 'success')
     .gte('sent_at', start)
     .lt('sent_at', end)
 
@@ -172,12 +180,13 @@ export async function sendAligo(input: {
   }
 
   const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+  // receiver 컬럼 없음 → 동일 거래처 + 동일 내용으로 중복 차단
   const { data: dup, error: dupErr } = await supabase
     .from('message_logs')
     .select('id')
     .eq('tenant_id', ctx.tenant_id)
-    .eq('status', 'sent')
-    .eq('receiver', receiverDigits)
+    .eq('customer_id', input.customer_id)
+    .eq('status', 'success')
     .eq('content', msg)
     .gte('sent_at', oneHourAgo)
     .limit(1)
@@ -244,19 +253,29 @@ export async function sendAligo(input: {
     errorMessage = e?.message ?? e?.errorMessage ?? '솔라피 발송 오류'
   }
 
+  // 실제 message_logs 컬럼: tenant_id, customer_id, channel, content, status,
+  // error_message, external_id, sent_at, created_by, ...
+  // 없음: receiver, aligo_response — status 'sent' 불가 (check: success/failed/simulated)
+  const logStatus = status === 'sent' ? 'success' : 'failed'
   const sentAt = new Date().toISOString()
   const logPayload: Record<string, unknown> = {
     tenant_id: ctx.tenant_id,
     customer_id: input.customer_id,
     channel: 'sms',
-    receiver: receiverDigits,
     content: msg,
-    status,
-    aligo_response: { provider: 'solapi', ...(typeof provider_response === 'object' ? provider_response : { raw: provider_response }) },
+    status: logStatus,
     sent_at: sentAt,
     created_by: ctx.user_id,
   }
   if (mid) logPayload.external_id = mid
+  if (errorMessage) {
+    logPayload.error_message = errorMessage
+  } else if (provider_response && logStatus === 'failed') {
+    logPayload.error_message = JSON.stringify({
+      provider: 'solapi',
+      ...(typeof provider_response === 'object' ? provider_response : { raw: provider_response }),
+    }).slice(0, 2000)
+  }
 
   let msgLog: { id: string } | null = null
   let msgErr: { message?: string } | null = null
@@ -276,7 +295,24 @@ export async function sendAligo(input: {
   }
 
   if (msgErr || !msgLog) {
-    return { success: false, error: `message_logs 저장 실패: ${msgErr?.message ?? 'unknown'}` }
+    console.error('[sendAligo] message_logs 저장 실패:', msgErr?.message ?? 'unknown', {
+      tenant_id: ctx.tenant_id,
+      customer_id: input.customer_id,
+      status: logStatus,
+      has_external_id: !!mid,
+    })
+    // 발송 API 자체가 성공이면 로그 실패와 무관하게 성공 처리
+    if (status === 'sent') {
+      revalidatePath('/sales/exec')
+      return {
+        success: true,
+        data: { byte_len, sms_type, aligo_mid: mid },
+      }
+    }
+    return {
+      success: false,
+      error: errorMessage ?? `발송 실패 (로그 저장도 실패: ${msgErr?.message ?? 'unknown'})`,
+    }
   }
 
   revalidatePath('/sales/exec')
