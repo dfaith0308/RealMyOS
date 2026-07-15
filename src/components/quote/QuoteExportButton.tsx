@@ -4,10 +4,18 @@ import { useCallback, useState } from 'react'
 import { pdf, Document, Page, Text, View, Image, StyleSheet, Font } from '@react-pdf/renderer'
 import { getQuoteForExport, logQuoteExport, type QuoteForExport } from '@/actions/quote-export'
 
+// gstatic NotoSansKR woff2 404 → jsDelivr Pretendard TTF (거래명세서와 동일)
 Font.register({
   family: 'NotoSansKR',
   fonts: [
-    { src: 'https://fonts.gstatic.com/s/notosanskr/v36/Pby6FmXiEBPT4ITbgNA5CgmOelzI7xjv.woff2' },
+    {
+      src: 'https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/packages/pretendard/dist/public/static/alternative/Pretendard-Regular.ttf',
+      fontWeight: 400,
+    },
+    {
+      src: 'https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/packages/pretendard/dist/public/static/alternative/Pretendard-Bold.ttf',
+      fontWeight: 700,
+    },
   ],
 })
 
@@ -137,6 +145,9 @@ async function pdfBlobToJpgBlob(pdfBlob: Blob): Promise<Blob> {
   if (!ctx) throw new Error('canvas context 생성 실패')
   canvas.width = Math.ceil(viewport.width)
   canvas.height = Math.ceil(viewport.height)
+  // 흰 배경 보장 (투명/검정 캔버스 방지)
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
   await page.render({ canvasContext: ctx as any, viewport }).promise
 
   return await new Promise<Blob>((resolve, reject) => {

@@ -3,10 +3,19 @@
 import { Document, Page, Text, View, Image, StyleSheet, Font } from '@react-pdf/renderer'
 import type { OrderForExport } from '@/actions/order-export'
 
+// gstatic NotoSansKR woff2 / googlefonts ofl 경로는 404 → jsDelivr Pretendard TTF 사용
+// (@react-pdf는 TTF 권장; Helvetica는 한글 깨짐)
 Font.register({
   family: 'NotoSansKR',
   fonts: [
-    { src: 'https://fonts.gstatic.com/s/notosanskr/v36/Pby6FmXiEBPT4ITbgNA5CgmOelzI7xjv.woff2' },
+    {
+      src: 'https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/packages/pretendard/dist/public/static/alternative/Pretendard-Regular.ttf',
+      fontWeight: 400,
+    },
+    {
+      src: 'https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/packages/pretendard/dist/public/static/alternative/Pretendard-Bold.ttf',
+      fontWeight: 700,
+    },
   ],
 })
 

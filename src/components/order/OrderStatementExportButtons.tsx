@@ -14,63 +14,59 @@ function downloadBlob(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
+/** 견적서 QuoteExportButton과 동일: PDF → canvas(흰 배경) → JPG */
+async function pdfBlobToJpgBlob(pdfBlob: Blob): Promise<Blob> {
+  const arr = await pdfBlob.arrayBuffer()
+  const pdfjs: any = await import('pdfjs-dist/legacy/build/pdf.mjs')
+  const doc = await pdfjs.getDocument({ data: arr, disableWorker: true }).promise
+  const page = await doc.getPage(1)
+
+  const viewport = page.getViewport({ scale: 2 })
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('canvas context 생성 실패')
+  canvas.width = Math.ceil(viewport.width)
+  canvas.height = Math.ceil(viewport.height)
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  await page.render({ canvasContext: ctx as any, viewport }).promise
+
+  return await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('JPG 변환 실패'))), 'image/jpeg', 0.92)
+  })
+}
+
 export default function OrderStatementExportButtons({ orderId }: { orderId: string }) {
-  const [loading, setLoading] = useState<'pdf' | 'print' | null>(null)
+  const [loading, setLoading] = useState<'pdf' | 'jpg' | null>(null)
   const [err, setErr] = useState<string | null>(null)
 
-  const buildPdfBlob = useCallback(async () => {
-    const res = await getOrderForExport(orderId)
-    if (!res.success || !res.data) throw new Error(res.error ?? '주문 조회 실패')
-    return pdf(<OrderStatementPdfDoc data={res.data} />).toBlob()
+  const run = useCallback(async (kind: 'pdf' | 'jpg') => {
+    setErr(null)
+    setLoading(kind)
+    try {
+      const res = await getOrderForExport(orderId)
+      if (!res.success || !res.data) throw new Error(res.error ?? '주문 조회 실패')
+
+      const pdfBlob = await pdf(<OrderStatementPdfDoc data={res.data} />).toBlob()
+
+      if (kind === 'pdf') {
+        downloadBlob(pdfBlob, `거래명세서_${orderId}.pdf`)
+      } else {
+        const jpgBlob = await pdfBlobToJpgBlob(pdfBlob)
+        downloadBlob(jpgBlob, `거래명세서_${orderId}.jpg`)
+      }
+    } catch (e: any) {
+      setErr(e?.message ?? '다운로드 실패')
+    } finally {
+      setLoading(null)
+    }
   }, [orderId])
-
-  const runPdf = useCallback(async () => {
-    setErr(null)
-    setLoading('pdf')
-    try {
-      const blob = await buildPdfBlob()
-      downloadBlob(blob, `거래명세서_${orderId}.pdf`)
-    } catch (e: any) {
-      setErr(e?.message ?? 'PDF 생성 실패')
-    } finally {
-      setLoading(null)
-    }
-  }, [buildPdfBlob, orderId])
-
-  const runPrint = useCallback(async () => {
-    setErr(null)
-    setLoading('print')
-    try {
-      const blob = await buildPdfBlob()
-      const url = URL.createObjectURL(blob)
-      const w = window.open(url, '_blank')
-      if (!w) {
-        URL.revokeObjectURL(url)
-        throw new Error('팝업이 차단되었습니다. 브라우저 팝업을 허용해주세요.')
-      }
-      const tryPrint = () => {
-        try {
-          w.focus()
-          w.print()
-        } catch {
-          // ignore
-        }
-        setTimeout(() => URL.revokeObjectURL(url), 60_000)
-      }
-      // PDF 로드 후 인쇄 시도
-      setTimeout(tryPrint, 800)
-    } catch (e: any) {
-      setErr(e?.message ?? '인쇄 준비 실패')
-    } finally {
-      setLoading(null)
-    }
-  }, [buildPdfBlob])
 
   return (
     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
       <button
         type="button"
-        onClick={runPdf}
+        onClick={() => run('pdf')}
         disabled={loading !== null}
         style={{
           padding: '8px 14px',
@@ -83,11 +79,11 @@ export default function OrderStatementExportButtons({ orderId }: { orderId: stri
           cursor: loading ? 'not-allowed' : 'pointer',
         }}
       >
-        {loading === 'pdf' ? 'PDF 생성 중…' : '거래명세서 PDF'}
+        {loading === 'pdf' ? 'PDF 생성 중…' : 'PDF 다운로드'}
       </button>
       <button
         type="button"
-        onClick={runPrint}
+        onClick={() => run('jpg')}
         disabled={loading !== null}
         style={{
           padding: '8px 14px',
@@ -100,7 +96,7 @@ export default function OrderStatementExportButtons({ orderId }: { orderId: stri
           cursor: loading ? 'not-allowed' : 'pointer',
         }}
       >
-        {loading === 'print' ? '인쇄 준비 중…' : '거래명세서 인쇄'}
+        {loading === 'jpg' ? '이미지 생성 중…' : '이미지 다운로드'}
       </button>
       {err ? (
         <span style={{ fontSize: 12, color: '#DC2626', fontWeight: 600 }}>{err}</span>
