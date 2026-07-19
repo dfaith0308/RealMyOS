@@ -83,7 +83,10 @@ export interface ProductAnalyticsKpi {
   month_sales: number
   avg_margin_rate: number | null
   buyer_count: number
+  /** 이번달 귀속 재구매 사이클 평균(일). 사이클이 없으면 null */
   avg_repurchase_days: number | null
+  /** 지난달 귀속 재구매 사이클 평균(일). 사이클이 없으면 null */
+  avg_repurchase_days_prev_month: number | null
 }
 
 export interface ProductAnalytics {
@@ -379,12 +382,27 @@ export async function getProductAnalytics(
   const avg_margin_rate =
     marginBase > 0 ? Math.round((marginWeighted / marginBase) * 1000) / 10 : null
 
-  const cycles = repurchase
-    .map((r) => r.avg_cycle_days)
-    .filter((n): n is number => n != null && n > 0)
+  // 개별 재구매 간격 → 더 최근 구매일이 속한 달(YYYY-MM)에 귀속
+  const thisYm = thisMonthStart.slice(0, 7)
+  const prevYm = monthStartKST(-1).slice(0, 7)
+  const thisMonthGaps: number[] = []
+  const prevMonthGaps: number[] = []
+  for (const v of datesByCustomer.values()) {
+    const dates = [...v.dates].sort()
+    for (let i = 1; i < dates.length; i++) {
+      const gap = daysBetween(dates[i - 1], dates[i])
+      const ym = ymKey(dates[i])
+      if (ym === thisYm) thisMonthGaps.push(gap)
+      else if (ym === prevYm) prevMonthGaps.push(gap)
+    }
+  }
   const avg_repurchase_days =
-    cycles.length > 0
-      ? Math.round(cycles.reduce((s, n) => s + n, 0) / cycles.length)
+    thisMonthGaps.length > 0
+      ? Math.round(thisMonthGaps.reduce((s, n) => s + n, 0) / thisMonthGaps.length)
+      : null
+  const avg_repurchase_days_prev_month =
+    prevMonthGaps.length > 0
+      ? Math.round(prevMonthGaps.reduce((s, n) => s + n, 0) / prevMonthGaps.length)
       : null
 
   return {
@@ -395,6 +413,7 @@ export async function getProductAnalytics(
         avg_margin_rate,
         buyer_count: buyerMap.size,
         avg_repurchase_days,
+        avg_repurchase_days_prev_month,
       },
       monthly_sales,
       buyers_this_month,

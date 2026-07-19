@@ -20,6 +20,18 @@ function avgCycleKpiColor(days: number | null): string {
   return '#dc2626'
 }
 
+/** 전월 대비 증감. 둘 다 있을 때만 표시. 짧아짐=초록, 길어짐=빨강 */
+function repurchaseDeltaSub(
+  current: number | null | undefined,
+  prev: number | null | undefined,
+): { text: string; color: string } | null {
+  if (current == null || prev == null) return null
+  const d = current - prev
+  if (d === 0) return { text: '변동없음', color: '#9ca3af' }
+  if (d < 0) return { text: `${d}일`, color: '#1f5d3a' }
+  return { text: `+${d}일`, color: '#dc2626' }
+}
+
 export default async function ProductDetailPage({ params }: { params: { id: string } }) {
   const id = params.id
 
@@ -133,21 +145,28 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
               label: '이번달 매출',
               value: formatKRW(a?.kpi.month_sales ?? 0),
               color: '#111827',
+              sub: null as { text: string; color: string } | null,
             },
             {
               label: '평균 마진율',
               value: a?.kpi.avg_margin_rate != null ? `${a.kpi.avg_margin_rate}%` : '-',
               color: '#1f5d3a',
+              sub: null,
             },
             {
               label: '구매 거래처',
               value: `${a?.kpi.buyer_count ?? 0}곳`,
               color: '#111827',
+              sub: null,
             },
             {
               label: '평균 재구매 주기',
               value: a?.kpi.avg_repurchase_days != null ? `${a.kpi.avg_repurchase_days}일` : '-',
               color: avgCycleKpiColor(a?.kpi.avg_repurchase_days ?? null),
+              sub: repurchaseDeltaSub(
+                a?.kpi.avg_repurchase_days,
+                a?.kpi.avg_repurchase_days_prev_month,
+              ),
             },
           ].map((k) => (
             <div
@@ -163,6 +182,11 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
               <div style={{ fontSize: 22, fontWeight: 800, color: k.color, letterSpacing: '-0.02em', ...ellipsis }}>
                 {k.value}
               </div>
+              {k.sub ? (
+                <div style={{ marginTop: 4, fontSize: 12, fontWeight: 700, color: k.sub.color }}>
+                  {k.sub.text}
+                </div>
+              ) : null}
             </div>
           ))}
         </div>
