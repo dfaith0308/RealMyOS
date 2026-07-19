@@ -879,7 +879,8 @@ export interface ProductDetail {
   unit: string | null
   spec: string | null
   barcode: string | null
-  storage_condition: string | null
+  /** DB 컬럼 없음 — UI 호환용 optional */
+  storage_condition?: string | null
   status: string | null
   memo: string | null
   ingredients: string | null
@@ -896,11 +897,12 @@ export async function getProductDetail(
   const ctx = await getAuthCtx(supabase)
   if (!ctx) return { success: false, error: '로그인 필요' }
 
+  // NOTE: products.storage_condition 컬럼은 운영 DB/마이그레이션에 없음 — SELECT 금지
   const { data, error } = await supabase
     .from('products')
     .select(`
       id, product_code, name, category_id, unit, spec, barcode,
-      storage_condition, status, memo, ingredients, item_report_number,
+      status, memo, ingredients, item_report_number,
       min_margin_rate,
       product_categories(name),
       product_costs(cost_price, start_date, end_date, created_at),
@@ -936,7 +938,6 @@ export async function getProductDetail(
       unit: data.unit ?? null,
       spec: data.spec ?? null,
       barcode: data.barcode ?? null,
-      storage_condition: (data as any).storage_condition ?? null,
       status: (data as any).status ?? null,
       memo: data.memo ?? null,
       ingredients: (data as any).ingredients ?? null,

@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
 import type { CSSProperties } from 'react'
 import { getProductDetail } from '@/actions/product'
 import { getProductAnalytics } from '@/actions/product-analytics'
@@ -36,7 +35,39 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
   const id = params.id
 
   const detailRes = await getProductDetail(id)
-  if (!detailRes.success || !detailRes.data) notFound()
+  if (!detailRes.success || !detailRes.data) {
+    console.error('[products/[id]] getProductDetail 실패', id, detailRes.error)
+    return (
+      <main style={{ minHeight: '100vh', background: '#f7f6f2', padding: '28px 24px 60px' }}>
+        <div style={{ maxWidth: 640, margin: '0 auto', background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 24 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', marginBottom: 8 }}>
+            <Link href="/products" style={{ color: '#9ca3af', textDecoration: 'none' }}>상품</Link>
+            {' / '}상세
+          </div>
+          <h1 style={{ margin: '0 0 8px', fontSize: 18, fontWeight: 800, color: '#111827' }}>
+            상품 정보를 불러오지 못했습니다
+          </h1>
+          <p style={{ margin: '0 0 16px', fontSize: 13, color: '#6b7280', lineHeight: 1.5 }}>
+            {detailRes.error ?? '알 수 없는 오류'}
+          </p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Link
+              href="/products"
+              style={{ padding: '10px 16px', background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 10, fontSize: 13, fontWeight: 700, color: '#111827', textDecoration: 'none' }}
+            >
+              목록으로
+            </Link>
+            <Link
+              href={`/products/${id}/edit`}
+              style={{ padding: '10px 16px', background: '#1f5d3a', border: '1px solid #1f5d3a', borderRadius: 10, fontSize: 13, fontWeight: 700, color: '#fff', textDecoration: 'none' }}
+            >
+              수정 페이지
+            </Link>
+          </div>
+        </div>
+      </main>
+    )
+  }
 
   // analytics는 별도 — 실패해도 헤더/기본 정보는 표시
   let analyticsData: Awaited<ReturnType<typeof getProductAnalytics>>['data'] = undefined
