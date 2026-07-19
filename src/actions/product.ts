@@ -718,9 +718,14 @@ export async function getProductById(
   const ctx = await getAuthCtx(supabase)
   if (!ctx) return { success: false, error: '로그인 필요' }
 
+  // products에 unit/spec/memo/cost_price/selling_price 컬럼 없음
   const { data, error } = await supabase
     .from('products')
-    .select('name, product_code, category_id, supplier_id, tax_type, barcode, cost_price, selling_price, min_margin_rate, unit, spec, memo')
+    .select(`
+      name, product_code, category_id, supplier_id, tax_type, barcode, min_margin_rate,
+      product_costs(cost_price, end_date),
+      product_prices(price_type, price)
+    `)
     .eq('id', id)
     .eq('tenant_id', ctx.tenant_id)
     .is('deleted_at', null)
@@ -728,7 +733,28 @@ export async function getProductById(
 
   if (error || !data) return { success: false, error: '상품을 찾을 수 없습니다.' }
 
-  return { success: true, data: data as ProductCopyData }
+  const currentCost = ((data as any).product_costs ?? [])
+    .filter((c: any) => c.end_date === null)[0]?.cost_price ?? 0
+  const salePrice =
+    ((data as any).product_prices ?? []).find((p: any) => p.price_type === 'normal')?.price ?? 0
+
+  return {
+    success: true,
+    data: {
+      name: data.name,
+      product_code: data.product_code,
+      category_id: data.category_id,
+      supplier_id: data.supplier_id,
+      tax_type: data.tax_type,
+      barcode: data.barcode,
+      cost_price: currentCost,
+      selling_price: salePrice,
+      min_margin_rate: data.min_margin_rate,
+      unit: null,
+      spec: null,
+      memo: null,
+    } as ProductCopyData,
+  }
 }
 
 async function allocateProductCode(
@@ -876,18 +902,19 @@ export interface ProductDetail {
   name: string
   category_id: string | null
   category_name: string | null
-  unit: string | null
-  spec: string | null
   barcode: string | null
-  /** DB 컬럼 없음 — UI 호환용 optional */
-  storage_condition?: string | null
-  status: string | null
-  memo: string | null
+  tax_type: string | null
   ingredients: string | null
   item_report_number: string | null
   selling_price: number | null
   min_margin_rate: number | null
   current_cost_price: number | null
+  /** DB에 없는 필드 — UI 호환용 (항상 null) */
+  unit?: string | null
+  spec?: string | null
+  memo?: string | null
+  status?: string | null
+  storage_condition?: string | null
 }
 
 export async function getProductDetail(
@@ -897,13 +924,12 @@ export async function getProductDetail(
   const ctx = await getAuthCtx(supabase)
   if (!ctx) return { success: false, error: '로그인 필요' }
 
-  // NOTE: products.storage_condition 컬럼은 운영 DB/마이그레이션에 없음 — SELECT 금지
+  // 운영 products 컬럼만 SELECT (unit/spec/memo/status/storage_condition 없음)
   const { data, error } = await supabase
     .from('products')
     .select(`
-      id, product_code, name, category_id, unit, spec, barcode,
-      status, memo, ingredients, item_report_number,
-      min_margin_rate,
+      id, product_code, name, barcode, category_id,
+      tax_type, min_margin_rate, ingredients, item_report_number,
       product_categories(name),
       product_costs(cost_price, start_date, end_date, created_at),
       product_prices(price_type, price)
@@ -935,16 +961,18 @@ export async function getProductDetail(
       name: data.name,
       category_id: data.category_id,
       category_name,
-      unit: data.unit ?? null,
-      spec: data.spec ?? null,
       barcode: data.barcode ?? null,
-      status: (data as any).status ?? null,
-      memo: data.memo ?? null,
+      tax_type: (data as any).tax_type ?? null,
       ingredients: (data as any).ingredients ?? null,
       item_report_number: (data as any).item_report_number ?? null,
       selling_price: priceMap.normal ?? null,
       min_margin_rate: data.min_margin_rate ?? null,
       current_cost_price: currentCost,
+      unit: null,
+      spec: null,
+      memo: null,
+      status: null,
+      storage_condition: null,
     },
   }
 }

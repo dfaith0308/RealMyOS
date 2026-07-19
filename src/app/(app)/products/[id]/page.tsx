@@ -81,7 +81,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
 
   const p = detailRes.data
   const a = analyticsData
-  const categoryLine = [p.category_name, p.spec].filter(Boolean).join(' · ') || '미분류'
+  const categoryLine = p.category_name || '미분류'
   const maxMonth = Math.max(1, ...(a?.monthly_sales.map((m) => m.amount) ?? [1]))
 
   return (
