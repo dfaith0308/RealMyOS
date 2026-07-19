@@ -181,38 +181,30 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
     return `${lines[0].product_name} 외 ${lines.length - 1}건`
   }
 
-  function calcOrderProfit(lines: OrderListItem['order_lines']): number {
-    return lines.reduce((s, l) => {
-      const cost = (l.cost_price ?? 0) * l.quantity
-      const revenue = l.unit_price * l.quantity
-      return s + (revenue - cost)
-    }, 0)
-  }
-
   function calcGroupMargin(orders: OrderListItem[]): {
     profit: number
     revenue: number
     marginRate: number | null
     hasEnoughCost: boolean
   } {
-    let profit = 0
     let revenue = 0
+    let costTotal = 0
     let linesWithCost = 0
     let totalLines = 0
 
     for (const o of orders) {
+      revenue += Number(o.final_amount ?? 0)
       for (const l of o.order_lines) {
         totalLines++
-        const rev = (l.unit_price ?? 0) * (l.quantity ?? 1)
         const cost = (l.cost_price ?? 0) * (l.quantity ?? 1)
-        revenue += rev
         if (l.cost_price != null && l.cost_price > 0) {
-          profit += rev - cost
+          costTotal += cost
           linesWithCost++
         }
       }
     }
 
+    const profit = revenue - costTotal
     const hasEnoughCost = totalLines > 0 && linesWithCost / totalLines >= 0.5
     const marginRate = hasEnoughCost && revenue > 0
       ? Math.round((profit / revenue) * 100 * 10) / 10
@@ -385,7 +377,7 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
                         <span style={ui.rowSub} title={summarizeLines(o.order_lines)}>{summarizeLines(o.order_lines)}</span>
                       </div>
 
-                      <span style={ui.money}>{formatKRW(o.total_amount)}</span>
+                      <span style={ui.money}>{formatKRW(o.final_amount)}</span>
                       <span style={{ ...ui.balance, color: bal > 0 ? 'var(--text-danger)' : 'var(--text-hint)' }}>
                         {formatKRW(bal)}
                       </span>

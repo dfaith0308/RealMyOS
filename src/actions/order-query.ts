@@ -8,6 +8,7 @@ import { getCustomersWithBalance } from '@/actions/ledger'
 // ============================================================
 
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
+import { effectiveOrderAmount } from '@/lib/ledger-calc'
 import type { ActionResult, OrderOperationStatus } from '@/types/order'
 
 export interface OrderListItem {
@@ -16,7 +17,12 @@ export interface OrderListItem {
   order_date: string
   customer_id: string
   customer_name: string
+  /** 상품 합계(할인 전) */
   total_amount: number
+  discount_amount: number
+  point_used: number
+  /** 실청구액 = total - discount - point */
+  final_amount: number
   status: string
   order_status: OrderOperationStatus
   order_lines: Array<{ product_name: string; quantity: number; unit_price: number; line_total: number; cost_price?: number | null }>
@@ -53,7 +59,7 @@ export async function getOrderList(filters?: {
 
   let query = supabase
     .from('orders')
-    .select('id, order_number, order_date, customer_id, total_amount, status, order_status, customers(name), order_lines(product_name, quantity, unit_price, line_total, cost_price)')
+    .select('id, order_number, order_date, customer_id, total_amount, discount_amount, point_used, final_amount, status, order_status, customers(name), order_lines(product_name, quantity, unit_price, line_total, cost_price)')
     // 전환: seller_tenant_id 우선 (legacy tenant_id 병행)
     .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
     .is('deleted_at', null)
@@ -82,13 +88,25 @@ export async function getOrderList(filters?: {
     success: true,
     data: (data ?? []).map((o: any) => {
       const bal = balanceMap.get(o.customer_id)
+      const discount_amount = Number(o.discount_amount ?? 0)
+      const point_used = Number(o.point_used ?? 0)
+      const total_amount = Number(o.total_amount ?? 0)
+      const final_amount = effectiveOrderAmount({
+        total_amount,
+        final_amount: o.final_amount,
+        discount_amount,
+        point_used,
+      })
       return {
         id:              o.id,
         order_number:    o.order_number,
         order_date:      o.order_date,
         customer_id:     o.customer_id,
         customer_name:   o.customers?.name ?? '-',
-        total_amount:    o.total_amount,
+        total_amount,
+        discount_amount,
+        point_used,
+        final_amount,
         status:          o.status,
         order_status:    (o.order_status ?? '접수') as OrderOperationStatus,
         order_lines:     o.order_lines ?? [],
