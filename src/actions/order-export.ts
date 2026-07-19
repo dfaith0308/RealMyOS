@@ -27,7 +27,8 @@ export interface OrderForExport {
   total_amount: number
   discount_amount: number
   point_used: number
-  /** 클라이언트 계산 실청구액 (total - discount - point) */
+  deposit_used: number
+  /** 클라이언트 계산 실청구액 (total - discount - point - deposit) */
   payable_amount: number
   supplier: OrderExportParty & {
     stamp_image_url: string | null
@@ -79,7 +80,7 @@ export async function getOrderForExport(orderId: string): Promise<ActionResult<O
       .from('orders')
       .select(`
         id, order_number, order_date, memo, tenant_id, seller_tenant_id, customer_id,
-        total_amount, discount_amount, point_used, final_amount,
+        total_amount, discount_amount, point_used, deposit_used, final_amount,
         customers(name, biz_number, representative_name, address, phone),
         order_lines(product_name, quantity, unit_price, line_total)
       `)
@@ -129,8 +130,9 @@ export async function getOrderForExport(orderId: string): Promise<ActionResult<O
   )
   const discount_amount = Math.max(0, Number((order as any).discount_amount ?? 0))
   const point_used = Math.max(0, Number((order as any).point_used ?? 0))
+  const deposit_used = Math.max(0, Number((order as any).deposit_used ?? 0))
   const total_amount = Number((order as any).total_amount ?? linesSubtotal)
-  const payable_amount = Math.max(0, total_amount - discount_amount - point_used)
+  const payable_amount = Math.max(0, total_amount - discount_amount - point_used - deposit_used)
 
   const orderNumber = String((order as any).order_number ?? order.id)
   const document_number = orderNumber.startsWith('TS-') ? orderNumber : `TS-${orderNumber}`
@@ -160,6 +162,7 @@ export async function getOrderForExport(orderId: string): Promise<ActionResult<O
       total_amount,
       discount_amount,
       point_used,
+      deposit_used,
       payable_amount,
       supplier: {
         name: supplierName,

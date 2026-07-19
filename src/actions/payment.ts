@@ -669,7 +669,7 @@ export async function getCustomerBalance(
 
   const [{ data: orderRows }, { data: paymentRows }, { data: depRow }] = await Promise.all([
     supabase.from('orders')
-      .select('final_amount, total_amount, discount_amount, point_used')
+      .select('final_amount, total_amount, discount_amount, point_used, deposit_used')
       .eq('customer_id', customer_id)
       // 전환: seller_tenant_id 우선 (legacy tenant_id 병행)
       .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
@@ -682,7 +682,7 @@ export async function getCustomerBalance(
       .maybeSingle(),
   ])
 
-  const totalOrders   = (orderRows   ?? []).reduce((s, o) => s + effectiveOrderAmount(o as { final_amount?: number | null; total_amount: number }), 0)
+  const totalOrders   = (orderRows   ?? []).reduce((s, o) => s + effectiveOrderAmount(o as { final_amount?: number | null; total_amount: number; discount_amount?: number | null; point_used?: number | null; deposit_used?: number | null }), 0)
   const totalPayments = (paymentRows ?? []).reduce((s, p) => s + p.amount, 0)
   const balance       = getAccountsReceivable(customer.opening_balance ?? 0, totalOrders, totalPayments, 0)
   const deposit       = getCustomerDeposit((depRow as { balance?: number | null } | null)?.balance)

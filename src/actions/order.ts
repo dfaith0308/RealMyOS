@@ -4,6 +4,10 @@ import { revalidatePath } from 'next/cache'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import { calcOrderTotals, formatOrderNumber } from '@/lib/calc'
 import { linkActionResult } from '@/actions/action-log'
+import {
+  applyOrderDepositAuto,
+  restoreOrderDepositOnCancel,
+} from '@/actions/customer-deposits'
 import type {
   CreateOrderInput,
   ActionResult,
@@ -218,8 +222,10 @@ export async function createOrder(
   }
 
   // final_amount는 DB generated — insert 불가.
-  // 올바른 식: total - discount - point (migration 20260719100000). 반환값은 앱에서 계산.
-  const computed_final = Math.max(0, totals.total_amount - discount_amount - point_used)
+  // 식: total - discount - point - deposit_used (migration 20260719210000)
+  const remaining_before_deposit = Math.max(0, totals.total_amount - discount_amount - point_used)
+  let deposit_used = 0
+  let computed_final = remaining_before_deposit
 
   const { data: newOrder, error: orderErr } = await supabase
     .from('orders')
@@ -235,10 +241,11 @@ export async function createOrder(
       total_amount:       totals.total_amount,   // 상품 합계 (할인 전, 매출 기준)
       discount_amount,
       point_used,
+      deposit_used:       0,
       memo:               input.memo ?? null,
       created_by:         ctx.user_id,
     })
-    .select('id, order_number, total_amount, discount_amount, point_used, final_amount')
+    .select('id, order_number, total_amount, discount_amount, point_used, deposit_used, final_amount')
     .single()
   if (orderErr || !newOrder) return { success: false, error: `주문 생성 실패: ${orderErr?.message}` }
 
@@ -248,6 +255,24 @@ export async function createOrder(
   if (linesErr) {
     await supabase.from('orders').update({ status: 'cancelled' }).eq('id', newOrder.id).eq('tenant_id', ctx.tenant_id)
     return { success: false, error: `라인 저장 실패: ${linesErr.message}` }
+  }
+
+  // confirmed 주문: 예치금 자동 차감 (MIN(잔액, 할인·적립금 후 잔액))
+  if (orderStatus === 'confirmed') {
+    const depRes = await applyOrderDepositAuto({
+      supabase,
+      ctx,
+      order_id: newOrder.id,
+      customer_id: input.customer_id,
+      total_amount: totals.total_amount,
+      discount_amount,
+      point_used,
+      current_deposit_used: 0,
+    })
+    if (depRes.success) {
+      deposit_used = depRes.data?.deposit_used ?? 0
+      computed_final = Math.max(0, remaining_before_deposit - deposit_used)
+    }
   }
 
   // SUP-PARTIAL-002-D: 견적→주문 전환 처리 (best-effort, 동시성은 RPC가 담당)
@@ -348,6 +373,7 @@ export async function createOrder(
       total_amount: newOrder.total_amount,
       discount_amount: newOrder.discount_amount ?? discount_amount,
       point_used: newOrder.point_used ?? point_used,
+      deposit_used,
       final_amount: computed_final,
     },
   }
@@ -473,7 +499,7 @@ export async function cancelOrder(order_id: string, reason?: string): Promise<Ac
   if (!ctx) return { success: false, error: '로그인 필요' }
 
   const { data: order } = await supabase
-    .from('orders').select('id, status, order_number, total_amount, customer_id')
+    .from('orders').select('id, status, order_number, total_amount, customer_id, deposit_used')
     .eq('id', order_id)
     // 전환 기간: seller_tenant_id 우선 + legacy tenant_id 병행
     .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
@@ -489,13 +515,24 @@ export async function cancelOrder(order_id: string, reason?: string): Promise<Ac
   })
   if (rpcErr) return { success: false, error: rpcErr.message }
 
+  // confirmed/draft 모두: 사용된 예치금 append-only 복구
+  if ((order.deposit_used ?? 0) > 0 && order.customer_id) {
+    await restoreOrderDepositOnCancel({
+      supabase,
+      ctx,
+      order_id,
+      customer_id: order.customer_id,
+      deposit_used: order.deposit_used ?? 0,
+    })
+  }
+
   // order_logs: cancel (취소 사유 after_data에 포함)
   await logOrder(supabase, {
     order_id,
     user_id:     ctx.user_id,
     user_type:   ctx.user_type,
     action:      'cancel',
-    before_data: { status: order.status },
+    before_data: { status: order.status, deposit_used: order.deposit_used ?? 0 },
     after_data:  { status: 'cancelled', reason: reason ?? null },
   })
 
@@ -515,6 +552,73 @@ export async function cancelOrder(order_id: string, reason?: string): Promise<Ac
 
   revalidatePath('/orders')
   return { success: true }
+}
+
+/**
+ * draft → confirmed 전환. 전환 시 예치금 자동 차감.
+ */
+export async function confirmOrder(order_id: string): Promise<ActionResult<{ deposit_used: number }>> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const { data: order, error: oErr } = await supabase
+    .from('orders')
+    .select('id, status, customer_id, total_amount, discount_amount, point_used, deposit_used')
+    .eq('id', order_id)
+    .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
+    .is('deleted_at', null)
+    .maybeSingle()
+
+  if (oErr) return { success: false, error: oErr.message }
+  if (!order) return { success: false, error: '주문을 찾을 수 없습니다.' }
+  if (order.status === 'cancelled') return { success: false, error: '취소된 주문은 확정할 수 없습니다.' }
+  if (order.status === 'confirmed') {
+    return { success: true, data: { deposit_used: order.deposit_used ?? 0 } }
+  }
+  if (order.status !== 'draft') {
+    return { success: false, error: `확정할 수 없는 상태입니다: ${order.status}` }
+  }
+
+  const { error: upErr } = await supabase
+    .from('orders')
+    .update({ status: 'confirmed', updated_at: new Date().toISOString() })
+    .eq('id', order_id)
+    .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
+
+  if (upErr) return { success: false, error: upErr.message }
+
+  const depRes = await applyOrderDepositAuto({
+    supabase,
+    ctx,
+    order_id,
+    customer_id: order.customer_id,
+    total_amount: order.total_amount ?? 0,
+    discount_amount: order.discount_amount ?? 0,
+    point_used: order.point_used ?? 0,
+    current_deposit_used: order.deposit_used ?? 0,
+  })
+
+  await logOrder(supabase, {
+    order_id,
+    user_id: ctx.user_id,
+    user_type: ctx.user_type,
+    action: 'update',
+    before_data: { status: 'draft' },
+    after_data: {
+      status: 'confirmed',
+      deposit_used: depRes.data?.deposit_used ?? 0,
+    },
+  })
+
+  revalidatePath('/orders')
+  revalidatePath(`/orders/${order_id}`)
+
+  if (!depRes.success) {
+    return { success: false, error: depRes.error ?? '예치금 차감 실패(주문은 확정됨)' }
+  }
+
+  return { success: true, data: { deposit_used: depRes.data?.deposit_used ?? 0 } }
 }
 
 // ============================================================

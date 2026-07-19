@@ -5,7 +5,8 @@
  * 미수금: getAccountsReceivable() 만 사용 (신규 코드는 calcReceivable 직접 호출 금지)
  *
  * 실청구액:
- * - discount_amount / point_used 가 있으면 total - discount - point 로 계산
+ * - discount_amount / point_used / deposit_used 가 있으면
+ *   total - discount - point - deposit 로 계산
  *   (DB generated final_amount 식이 잘못된 기간에도 앱 단에서 정합 유지)
  * - 없으면 final_amount → total_amount
  */
@@ -16,15 +17,19 @@ export function effectiveOrderAmount(order: {
   total_amount: number
   discount_amount?: number | null
   point_used?: number | null
+  deposit_used?: number | null
 }): number {
   const total = Number(order.total_amount ?? 0)
   const hasHeaderAdjustments =
-    order.discount_amount != null || order.point_used != null
+    order.discount_amount != null ||
+    order.point_used != null ||
+    order.deposit_used != null
 
   if (hasHeaderAdjustments) {
     const discount = Math.max(0, Number(order.discount_amount ?? 0))
     const point = Math.max(0, Number(order.point_used ?? 0))
-    return Math.max(0, total - discount - point)
+    const deposit = Math.max(0, Number(order.deposit_used ?? 0))
+    return Math.max(0, total - discount - point - deposit)
   }
 
   if (order.final_amount != null && Number.isFinite(Number(order.final_amount))) {
@@ -96,6 +101,7 @@ export function getOverdueReceivable(
     total_amount: number
     discount_amount?: number | null
     point_used?: number | null
+    deposit_used?: number | null
   }>,
   paymentTermsDays: number,
   totalInboundPaidConfirmed: number,

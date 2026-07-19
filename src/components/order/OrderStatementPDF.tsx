@@ -138,13 +138,15 @@ export function computeStatementPayable(data: OrderForExport): number {
   const subtotal = typeof data.total_amount === 'number' ? data.total_amount : computeStatementTotal(data)
   const discount = Math.max(0, Number(data.discount_amount ?? 0))
   const point = Math.max(0, Number(data.point_used ?? 0))
-  return Math.max(0, subtotal - discount - point)
+  const deposit = Math.max(0, Number(data.deposit_used ?? 0))
+  return Math.max(0, subtotal - discount - point - deposit)
 }
 
 export function OrderStatementPdfDoc({ data }: { data: OrderForExport }) {
   const subtotal = computeStatementTotal(data)
   const discount = Math.max(0, Number(data.discount_amount ?? 0))
   const point = Math.max(0, Number(data.point_used ?? 0))
+  const deposit = Math.max(0, Number(data.deposit_used ?? 0))
   const payable = computeStatementPayable(data)
   const bankParts = [
     data.supplier.bank_name,
@@ -260,6 +262,16 @@ export function OrderStatementPdfDoc({ data }: { data: OrderForExport }) {
               </View>
               <View style={{ width: '20%' }}>
                 <Text style={{ fontSize: 9, textAlign: 'right', color: '#6b7280' }}>-{formatKRW(point)}</Text>
+              </View>
+            </View>
+          ) : null}
+          {deposit > 0 ? (
+            <View style={styles.tr} wrap={false}>
+              <View style={{ width: '80%' }}>
+                <Text style={{ fontSize: 9, textAlign: 'right', color: '#6b7280' }}>예치금 사용</Text>
+              </View>
+              <View style={{ width: '20%' }}>
+                <Text style={{ fontSize: 9, textAlign: 'right', color: '#6b7280' }}>-{formatKRW(deposit)}</Text>
               </View>
             </View>
           ) : null}

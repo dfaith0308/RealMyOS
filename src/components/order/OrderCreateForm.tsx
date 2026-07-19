@@ -491,6 +491,9 @@ export default function OrderCreateForm({
       }
 
       let successMsg = `✓ ${res.data.order_number} 등록 완료 — ${formatKRW(res.data.final_amount ?? res.data.total_amount)}`
+      if ((res.data.deposit_used ?? 0) > 0) {
+        successMsg += ` · 예치금 -${formatKRW(res.data.deposit_used)}`
+      }
 
       if (doPayment) {
         const amt = Math.round(Number(paymentAmount))

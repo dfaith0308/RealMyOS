@@ -28,7 +28,7 @@ export default async function OrderDetailPage({ params }: { params: { id: string
   const { data: orderRaw, error } = await supabase
     .from('orders')
     .select(`
-      id, order_number, order_date, customer_id, total_amount, discount_amount, point_used, final_amount, status, order_status, memo,
+      id, order_number, order_date, customer_id, total_amount, discount_amount, point_used, deposit_used, final_amount, status, order_status, memo,
       customers(name),
       order_lines(product_name, quantity, unit_price, line_total)
     `)
@@ -109,7 +109,8 @@ export default async function OrderDetailPage({ params }: { params: { id: string
                   0,
                   Number(order.total_amount ?? 0) -
                     Number(order.discount_amount ?? 0) -
-                    Number(order.point_used ?? 0),
+                    Number(order.point_used ?? 0) -
+                    Number((order as { deposit_used?: number }).deposit_used ?? 0),
                 ),
               ),
             },
@@ -120,6 +121,9 @@ export default async function OrderDetailPage({ params }: { params: { id: string
               : []),
             ...(Number(order.point_used ?? 0) > 0
               ? [{ k: '적립금 사용', v: formatKRW(order.point_used) }]
+              : []),
+            ...(Number((order as { deposit_used?: number }).deposit_used ?? 0) > 0
+              ? [{ k: '예치금 사용', v: formatKRW((order as { deposit_used?: number }).deposit_used) }]
               : []),
           ].map((x) => (
             <div key={x.k} style={{ border: '1px solid var(--ds-border-default)', borderRadius: 12, padding: '12px 14px', background: 'var(--ds-surface-panel)' }}>

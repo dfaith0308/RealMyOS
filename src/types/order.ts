@@ -81,7 +81,8 @@ export interface CreatedOrder {
   total_amount:    number   // 상품 합계 (할인 전)
   discount_amount: number
   point_used:      number
-  final_amount:    number   // 실제 결제금액 = total - discount - point
+  deposit_used:    number   // 예치금 상계
+  final_amount:    number   // 실제 청구 = total - discount - point - deposit
 }
 
 export interface CustomerForOrder {
