@@ -26,7 +26,7 @@ interface Props {
   filters: Filters
 }
 
-type Preset = 'all' | 'month' | '7d' | 'custom'
+type Preset = 'all' | 'month' | '7d' | 'range'
 type View =
   | 'all'
   | 'in_progress'
@@ -52,12 +52,21 @@ function daysAgoStr(n: number) {
   return d.toISOString().slice(0, 10)
 }
 
+function initialPreset(filters: Filters): Preset {
+  if (filters.period === 'all' || (!filters.from && !filters.to && filters.period !== 'range')) return 'all'
+  if (filters.period === 'range') return 'range'
+  if (filters.from === monthStartStr() && filters.to === kstTodayStr()) return 'month'
+  if (filters.from === daysAgoStr(6) && filters.to === kstTodayStr()) return '7d'
+  if (filters.from && filters.to) return 'range'
+  return 'month'
+}
+
 export default function OrdersClient({ orders, customers, filters }: Props) {
   const router = useRouter()
 
-  const [from, setFrom] = useState(filters.from)
-  const [to, setTo] = useState(filters.to)
-  const [period, setPeriod] = useState(filters.period === 'all' ? 'all' : '')
+  const [from, setFrom] = useState(filters.from || monthStartStr())
+  const [to, setTo] = useState(filters.to || kstTodayStr())
+  const [preset, setPreset] = useState<Preset>(() => initialPreset(filters))
   const [customerId, setCustomerId] = useState(filters.customer_id)
   const [view, setView] = useState<View>(() => {
     const v = String(filters.view ?? '')
@@ -74,62 +83,77 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
     return 'all'
   })
 
-  const preset: Preset = useMemo(() => {
-    if (period === 'all' || (!from && !to)) return 'all'
-    if (from === monthStartStr() && to === kstTodayStr()) return 'month'
-    if (from === daysAgoStr(6) && to === kstTodayStr()) return '7d'
-    return 'custom'
-  }, [from, to, period])
-
   const debounce = useRef<number | null>(null)
+
+  function pushQuery(next: {
+    preset: Preset
+    from: string
+    to: string
+    customerId: string
+    view: View
+  }) {
+    const params = new URLSearchParams()
+    if (next.preset === 'all') {
+      params.set('period', 'all')
+    } else if (next.preset === 'range') {
+      params.set('period', 'range')
+      if (next.from) params.set('from', next.from)
+      if (next.to) params.set('to', next.to)
+    } else {
+      if (next.from) params.set('from', next.from)
+      if (next.to) params.set('to', next.to)
+    }
+    if (next.customerId) params.set('customer_id', next.customerId)
+    if (next.view && next.view !== 'all') params.set('view', next.view)
+    const q = params.toString()
+    router.push(q ? `/orders?${q}` : '/orders')
+  }
+
+  // 전체/이번달/7일 등: 자동 조회. 기간설정은 「조회」클릭 시에만.
   useEffect(() => {
+    if (preset === 'range') return
     if (debounce.current) window.clearTimeout(debounce.current)
     debounce.current = window.setTimeout(() => {
-      const params = new URLSearchParams()
-      if (period === 'all' || (!from && !to)) {
-        params.set('period', 'all')
-      } else {
-        if (from) params.set('from', from)
-        if (to) params.set('to', to)
-      }
-      if (customerId) params.set('customer_id', customerId)
-      if (view && view !== 'all') params.set('view', view)
-      const q = params.toString()
-      router.push(q ? `/orders?${q}` : '/orders')
+      pushQuery({ preset, from, to, customerId, view })
     }, 250)
     return () => {
       if (debounce.current) window.clearTimeout(debounce.current)
     }
-  }, [from, to, period, customerId, view, router])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preset, from, to, customerId, view])
 
   function selectAllPeriod() {
-    setPeriod('all')
+    setPreset('all')
     setFrom('')
     setTo('')
     setView('all')
   }
 
   function selectMonth() {
-    setPeriod('')
+    setPreset('month')
     setFrom(monthStartStr())
     setTo(kstTodayStr())
     setView('all')
   }
 
   function select7d() {
-    setPeriod('')
+    setPreset('7d')
     setFrom(daysAgoStr(6))
     setTo(kstTodayStr())
     setView('all')
   }
 
-  function selectCustom() {
-    setPeriod('')
-    if (!from || !to) {
-      setFrom(monthStartStr())
-      setTo(kstTodayStr())
-    }
+  function selectRange() {
+    setPreset('range')
+    setFrom((prev) => prev || monthStartStr())
+    setTo((prev) => prev || kstTodayStr())
     setView('all')
+  }
+
+  function handleRangeSearch() {
+    if (!from || !to) return
+    setPreset('range')
+    pushQuery({ preset: 'range', from, to, customerId, view })
   }
 
   const todayStr = useMemo(() => kstTodayStr(), [])
@@ -248,7 +272,7 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 16 }}>
         <button
           type="button"
-          onClick={() => { setView('today_delivery'); setPeriod(''); setFrom(todayStr); setTo(todayStr) }}
+          onClick={() => { setView('today_delivery'); setPreset('range'); setFrom(todayStr); setTo(todayStr); pushQuery({ preset: 'range', from: todayStr, to: todayStr, customerId, view: 'today_delivery' }) }}
           style={{ ...ui.todoCard, borderColor: view === 'today_delivery' ? 'var(--border-strong)' : 'var(--border)' }}
         >
           <p style={ui.todoLabel}>오늘 배송</p>
@@ -264,7 +288,7 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
         </button>
         <button
           type="button"
-          onClick={() => { setView('today_new'); setPeriod(''); setFrom(todayStr); setTo(todayStr) }}
+          onClick={() => { setView('today_new'); setPreset('range'); setFrom(todayStr); setTo(todayStr); pushQuery({ preset: 'range', from: todayStr, to: todayStr, customerId, view: 'today_new' }) }}
           style={{ ...ui.todoCard, borderColor: view === 'today_new' ? 'var(--border-strong)' : 'var(--border)' }}
         >
           <p style={ui.todoLabel}>오늘 신규 주문</p>
@@ -272,45 +296,75 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
         </button>
       </div>
 
-      {/* 필터 1줄 */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-        <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-          <button type="button" onClick={selectAllPeriod} style={preset === 'all' ? ui.tabActive : ui.tab}>
-            전체
-          </button>
-          <button type="button" onClick={selectMonth} style={preset === 'month' ? ui.tabActive : ui.tab}>
-            이번달
-          </button>
-          <button type="button" onClick={select7d} style={preset === '7d' ? ui.tabActive : ui.tab}>
-            최근7일
-          </button>
-          <button type="button" onClick={selectCustom} style={preset === 'custom' ? ui.tabActive : ui.tab}>
-            직접입력
-          </button>
+      {/* 필터 */}
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+            <button type="button" onClick={selectAllPeriod} style={preset === 'all' ? ui.tabActive : ui.tab}>
+              전체
+            </button>
+            <button type="button" onClick={selectMonth} style={preset === 'month' ? ui.tabActive : ui.tab}>
+              이번달
+            </button>
+            <button type="button" onClick={select7d} style={preset === '7d' ? ui.tabActive : ui.tab}>
+              최근7일
+            </button>
+            <button type="button" onClick={selectRange} style={preset === 'range' ? ui.tabActive : ui.tab}>
+              기간설정
+            </button>
+          </div>
+
+          <select value={view} onChange={(e) => setView(e.target.value as View)} style={ui.select} aria-label="상태">
+            <option value="all">전체</option>
+            <option value="in_progress">진행</option>
+            <option value="done">완료</option>
+            <option value="cancelled">취소</option>
+          </select>
+
+          <div style={{ width: 260 }}>
+            <SearchableCustomerSelect
+              customers={customers}
+              value={customerId}
+              onChange={(id) => setCustomerId(id)}
+            />
+          </div>
         </div>
 
-        {preset === 'custom' && (
-          <>
-            <input type="date" value={from} onChange={(e) => { setPeriod(''); setFrom(e.target.value) }} style={ui.dateInput} aria-label="시작일" />
-            <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-hint)' }}>~</span>
-            <input type="date" value={to} onChange={(e) => { setPeriod(''); setTo(e.target.value) }} style={ui.dateInput} aria-label="종료일" />
-          </>
+        {preset === 'range' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+            <input
+              type="date"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+              style={{ padding: '6px 10px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 13 }}
+              aria-label="시작일"
+            />
+            <span style={{ color: '#9ca3af' }}>~</span>
+            <input
+              type="date"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              style={{ padding: '6px 10px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 13 }}
+              aria-label="종료일"
+            />
+            <button
+              type="button"
+              onClick={handleRangeSearch}
+              style={{
+                padding: '6px 14px',
+                background: '#1f5d3a',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 6,
+                fontSize: 13,
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              조회
+            </button>
+          </div>
         )}
-
-        <select value={view} onChange={(e) => setView(e.target.value as View)} style={ui.select} aria-label="상태">
-          <option value="all">전체</option>
-          <option value="in_progress">진행</option>
-          <option value="done">완료</option>
-          <option value="cancelled">취소</option>
-        </select>
-
-        <div style={{ width: 260 }}>
-          <SearchableCustomerSelect
-            customers={customers}
-            value={customerId}
-            onChange={(id) => setCustomerId(id)}
-          />
-        </div>
       </div>
 
       {/* 목록 */}

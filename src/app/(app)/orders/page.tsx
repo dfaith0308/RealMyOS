@@ -27,13 +27,14 @@ export default async function OrdersPage({
   const monthStart = `${nowKst.getUTCFullYear()}-${String(nowKst.getUTCMonth() + 1).padStart(2, '0')}-01`
 
   const periodAll = sp.period === 'all' && !sp.from && !sp.to
+  const periodRange = sp.period === 'range'
   const from = periodAll ? '' : (sp.from ?? monthStart)
   const to = periodAll ? '' : (sp.to ?? today)
   const status = sp.status ?? ''
   const order_status = sp.order_status ?? ''
   const customerId = sp.customer_id ?? ''
   const view = sp.view ?? ''
-  const period = periodAll ? 'all' : (sp.period ?? '')
+  const period = periodAll ? 'all' : periodRange ? 'range' : (sp.period ?? '')
 
   const opStatus: OrderOperationStatus | undefined =
     order_status && (ORDER_OPERATION_STATUS_LIST as readonly string[]).includes(order_status)

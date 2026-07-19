@@ -16,11 +16,12 @@ export default async function PaymentsPage({
   const monthStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01`
 
   const periodAll = searchParams.period === 'all' && !searchParams.from && !searchParams.to
+  const periodRange = searchParams.period === 'range'
   const from = periodAll ? '' : (searchParams.from ?? monthStart)
   const to = periodAll ? '' : (searchParams.to ?? today)
   const customer_id = searchParams.customer_id ?? ''
   const status = searchParams.status ?? 'confirmed'
-  const period = periodAll ? 'all' : (searchParams.period ?? '')
+  const period = periodAll ? 'all' : periodRange ? 'range' : (searchParams.period ?? '')
 
   const supabase = await createSupabaseServer()
   const ctx = await getAuthCtx(supabase)

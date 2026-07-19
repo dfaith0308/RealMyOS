@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { cancelPayment } from '@/actions/payment'
@@ -16,7 +16,7 @@ const STATUS_CFG: Record<string, { label: string; color: string; bg: string }> =
   cancelled: { label: '취소', color: '#B91C1C', bg: '#FEF2F2' },
 }
 
-type PeriodPreset = 'all' | 'month' | '7d' | 'custom'
+type PeriodPreset = 'all' | 'month' | '7d' | 'range'
 
 interface Props {
   payments: PaymentListItem[]
@@ -40,24 +40,24 @@ function daysAgoStr(n: number) {
   return d.toISOString().slice(0, 10)
 }
 
+function initialPreset(filters: Props['filters']): PeriodPreset {
+  if (filters.period === 'all' || (!filters.from && !filters.to && filters.period !== 'range')) return 'all'
+  if (filters.period === 'range') return 'range'
+  if (filters.from === monthStartStr() && filters.to === kstTodayStr()) return 'month'
+  if (filters.from === daysAgoStr(6) && filters.to === kstTodayStr()) return '7d'
+  if (filters.from && filters.to) return 'range'
+  return 'month'
+}
+
 export default function PaymentsClient({ payments, customers, filters }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [cancelTarget, setCancelTarget] = useState<PaymentListItem | null>(null)
-  const [localFilters, setLocalFilters] = useState({
-    from: filters.from,
-    to: filters.to,
-    customer_id: filters.customer_id,
-    status: filters.status,
-    period: filters.period === 'all' ? 'all' : '',
-  })
-
-  const preset: PeriodPreset = useMemo(() => {
-    if (localFilters.period === 'all' || (!localFilters.from && !localFilters.to)) return 'all'
-    if (localFilters.from === monthStartStr() && localFilters.to === kstTodayStr()) return 'month'
-    if (localFilters.from === daysAgoStr(6) && localFilters.to === kstTodayStr()) return '7d'
-    return 'custom'
-  }, [localFilters.from, localFilters.to, localFilters.period])
+  const [preset, setPreset] = useState<PeriodPreset>(() => initialPreset(filters))
+  const [from, setFrom] = useState(filters.from || monthStartStr())
+  const [to, setTo] = useState(filters.to || kstTodayStr())
+  const [customerId, setCustomerId] = useState(filters.customer_id)
+  const [status, setStatus] = useState(filters.status)
 
   const totalConfirmed = payments
     .filter((p) => p.status === 'confirmed')
@@ -66,10 +66,20 @@ export default function PaymentsClient({ payments, customers, filters }: Props) 
     .filter((p) => p.status === 'confirmed')
     .reduce((s, p) => s + (p.deposit_amount ?? 0), 0)
 
-  function pushWith(next: typeof localFilters) {
+  function pushWith(next: {
+    preset: PeriodPreset
+    from: string
+    to: string
+    customer_id: string
+    status: string
+  }) {
     const params = new URLSearchParams()
-    if (next.period === 'all' || (!next.from && !next.to)) {
+    if (next.preset === 'all') {
       params.set('period', 'all')
+    } else if (next.preset === 'range') {
+      params.set('period', 'range')
+      if (next.from) params.set('from', next.from)
+      if (next.to) params.set('to', next.to)
     } else {
       if (next.from) params.set('from', next.from)
       if (next.to) params.set('to', next.to)
@@ -80,27 +90,51 @@ export default function PaymentsClient({ payments, customers, filters }: Props) 
   }
 
   function applyFilters() {
-    pushWith(localFilters)
+    pushWith({
+      preset: preset === 'range' ? 'range' : preset,
+      from,
+      to,
+      customer_id: customerId,
+      status,
+    })
   }
 
   function selectPreset(p: PeriodPreset) {
-    let next = { ...localFilters }
     if (p === 'all') {
-      next = { ...next, period: 'all', from: '', to: '' }
-    } else if (p === 'month') {
-      next = { ...next, period: '', from: monthStartStr(), to: kstTodayStr() }
-    } else if (p === '7d') {
-      next = { ...next, period: '', from: daysAgoStr(6), to: kstTodayStr() }
-    } else {
-      next = {
-        ...next,
-        period: '',
-        from: next.from || monthStartStr(),
-        to: next.to || kstTodayStr(),
-      }
+      setPreset('all')
+      setFrom('')
+      setTo('')
+      pushWith({ preset: 'all', from: '', to: '', customer_id: customerId, status })
+      return
     }
-    setLocalFilters(next)
-    if (p !== 'custom') pushWith(next)
+    if (p === 'month') {
+      const f = monthStartStr()
+      const t = kstTodayStr()
+      setPreset('month')
+      setFrom(f)
+      setTo(t)
+      pushWith({ preset: 'month', from: f, to: t, customer_id: customerId, status })
+      return
+    }
+    if (p === '7d') {
+      const f = daysAgoStr(6)
+      const t = kstTodayStr()
+      setPreset('7d')
+      setFrom(f)
+      setTo(t)
+      pushWith({ preset: '7d', from: f, to: t, customer_id: customerId, status })
+      return
+    }
+    // 기간설정: 탭만 열고 날짜 선택 후 「조회」
+    setPreset('range')
+    setFrom((prev) => prev || monthStartStr())
+    setTo((prev) => prev || kstTodayStr())
+  }
+
+  function handleRangeSearch() {
+    if (!from || !to) return
+    setPreset('range')
+    pushWith({ preset: 'range', from, to, customer_id: customerId, status })
   }
 
   function handleCancel() {
@@ -127,71 +161,87 @@ export default function PaymentsClient({ payments, customers, filters }: Props) 
         )}
       </div>
 
-      <div style={s.filterRow}>
-        <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-          <button type="button" onClick={() => selectPreset('all')} style={preset === 'all' ? s.tabActive : s.tab}>
-            전체
-          </button>
-          <button type="button" onClick={() => selectPreset('month')} style={preset === 'month' ? s.tabActive : s.tab}>
-            이번달
-          </button>
-          <button type="button" onClick={() => selectPreset('7d')} style={preset === '7d' ? s.tabActive : s.tab}>
-            최근7일
-          </button>
-          <button type="button" onClick={() => selectPreset('custom')} style={preset === 'custom' ? s.tabActive : s.tab}>
-            직접입력
+      <div style={{ marginBottom: 16 }}>
+        <div style={s.filterRow}>
+          <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+            <button type="button" onClick={() => selectPreset('all')} style={preset === 'all' ? s.tabActive : s.tab}>
+              전체
+            </button>
+            <button type="button" onClick={() => selectPreset('month')} style={preset === 'month' ? s.tabActive : s.tab}>
+              이번달
+            </button>
+            <button type="button" onClick={() => selectPreset('7d')} style={preset === '7d' ? s.tabActive : s.tab}>
+              최근7일
+            </button>
+            <button type="button" onClick={() => selectPreset('range')} style={preset === 'range' ? s.tabActive : s.tab}>
+              기간설정
+            </button>
+          </div>
+
+          <select
+            value={customerId}
+            style={s.select}
+            onChange={(e) => setCustomerId(e.target.value)}
+          >
+            <option value="">전체 거래처</option>
+            {customers.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <select
+            value={status}
+            style={s.select}
+            onChange={(e) => setStatus(e.target.value)}
+          >
+            <option value="">전체 상태</option>
+            <option value="confirmed">정상</option>
+            <option value="cancelled">취소</option>
+          </select>
+          {preset !== 'range' && (
+            <button style={s.searchBtn} onClick={applyFilters}>
+              검색
+            </button>
+          )}
+          <button style={s.resetBtn} onClick={() => router.push('/payments')}>
+            초기화
           </button>
         </div>
 
-        {preset === 'custom' && (
-          <>
+        {preset === 'range' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
             <input
               type="date"
-              value={localFilters.from}
-              style={s.input}
-              onChange={(e) =>
-                setLocalFilters((p) => ({ ...p, period: '', from: e.target.value }))
-              }
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+              style={{ padding: '6px 10px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 13 }}
             />
-            <span style={{ fontSize: 12, color: '#9ca3af' }}>~</span>
+            <span style={{ color: '#9ca3af' }}>~</span>
             <input
               type="date"
-              value={localFilters.to}
-              style={s.input}
-              onChange={(e) =>
-                setLocalFilters((p) => ({ ...p, period: '', to: e.target.value }))
-              }
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              style={{ padding: '6px 10px', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 13 }}
             />
-          </>
+            <button
+              type="button"
+              onClick={handleRangeSearch}
+              style={{
+                padding: '6px 14px',
+                background: '#1f5d3a',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 6,
+                fontSize: 13,
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              조회
+            </button>
+          </div>
         )}
-
-        <select
-          value={localFilters.customer_id}
-          style={s.select}
-          onChange={(e) => setLocalFilters((p) => ({ ...p, customer_id: e.target.value }))}
-        >
-          <option value="">전체 거래처</option>
-          {customers.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-        <select
-          value={localFilters.status}
-          style={s.select}
-          onChange={(e) => setLocalFilters((p) => ({ ...p, status: e.target.value }))}
-        >
-          <option value="">전체 상태</option>
-          <option value="confirmed">정상</option>
-          <option value="cancelled">취소</option>
-        </select>
-        <button style={s.searchBtn} onClick={applyFilters}>
-          검색
-        </button>
-        <button style={s.resetBtn} onClick={() => router.push('/payments')}>
-          초기화
-        </button>
       </div>
 
       {payments.length === 0 ? (
