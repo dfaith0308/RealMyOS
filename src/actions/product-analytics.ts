@@ -31,9 +31,26 @@ function daysBetween(a: string, b: string): number {
   return Math.round(Math.abs(tb - ta) / 86400000)
 }
 
+/** PostgREST .in() URL 길이 대비 — 배치 조회 */
+async function fetchByIdsInBatches<T>(
+  ids: string[],
+  batchSize: number,
+  fetchBatch: (chunk: string[]) => Promise<{ data: T[] | null; error: { message: string } | null }>,
+): Promise<{ data: T[]; error: string | null }> {
+  const out: T[] = []
+  for (let i = 0; i < ids.length; i += batchSize) {
+    const chunk = ids.slice(i, i + batchSize)
+    if (chunk.length === 0) continue
+    const { data, error } = await fetchBatch(chunk)
+    if (error) return { data: out, error: error.message }
+    if (data?.length) out.push(...data)
+  }
+  return { data: out, error: null }
+}
+
 export interface ProductMonthlySales {
-  month: string       // YYYY-MM
-  label: string       // N월
+  month: string
+  label: string
   amount: number
   is_current: boolean
 }
@@ -55,7 +72,6 @@ export interface ProductCustomerPriceRow {
 export interface ProductRepurchaseRow {
   customer_id: string
   name: string
-  /** 평균 재구매 주기(일). 주문 1건이면 null */
   avg_cycle_days: number | null
   last_order_date: string
   days_since_last: number
@@ -79,7 +95,7 @@ export interface ProductAnalytics {
 
 /**
  * 상품 상세 허브 분석 — 집계는 앱 메모리에서만 (DB 저장 금지).
- * N+1 금지: order_lines 1회 + customer_product_prices 1회.
+ * N+1 금지: order_lines → orders → customers 단계 조회 (중첩 embed 없음).
  */
 export async function getProductAnalytics(
   productId: string,
@@ -94,71 +110,97 @@ export async function getProductAnalytics(
   const thisMonthStart = monthStartKST(0)
   const sixMonthStart = monthStartKST(-5)
 
-  const [{ data: lines, error: lineErr }, { data: priceRows, error: priceErr }, { data: product }] =
-    await Promise.all([
-      supabase
-        .from('order_lines')
-        .select(`
-          quantity, unit_price, cost_price, line_total,
-          orders!inner(
-            id, order_date, status, deleted_at, order_type,
-            customer_id, customer_name, tenant_id, seller_tenant_id,
-            customers(name)
-          )
-        `)
-        .eq('tenant_id', tid)
-        .eq('product_id', productId)
-        .eq('orders.status', 'confirmed')
-        .is('orders.deleted_at', null)
-        .gte('orders.order_date', sixMonthStart)
-        .lte('orders.order_date', today),
-      supabase
-        .from('customer_product_prices')
-        .select('customer_id, last_price, customers(name)')
-        .eq('tenant_id', tid)
-        .eq('product_id', productId)
-        .order('updated_at', { ascending: false, nullsFirst: false })
-        .limit(200),
-      supabase
-        .from('products')
-        .select('id, product_prices(price_type, price)')
-        .eq('tenant_id', tid)
-        .eq('id', productId)
-        .is('deleted_at', null)
-        .maybeSingle(),
-    ])
+  // ── 1) order_lines (단순 조회, 중첩 join 없음) ──
+  const { data: lines, error: lineErr } = await supabase
+    .from('order_lines')
+    .select('id, product_id, order_id, quantity, unit_price, cost_price, line_total')
+    .eq('tenant_id', tid)
+    .eq('product_id', productId)
+    .limit(5000)
 
   if (lineErr) return { success: false, error: lineErr.message }
-  if (priceErr) return { success: false, error: priceErr.message }
 
-  type LineRow = {
-    quantity: number | null
-    unit_price: number | null
-    cost_price: number | null
-    line_total: number | null
-    orders:
-      | {
-          id: string
-          order_date: string
-          status: string
-          deleted_at: string | null
-          order_type: string | null
-          customer_id: string | null
-          customer_name: string | null
-          customers: { name?: string | null } | Array<{ name?: string | null }> | null
-        }
-      | Array<{
-          id: string
-          order_date: string
-          status: string
-          deleted_at: string | null
-          order_type: string | null
-          customer_id: string | null
-          customer_name: string | null
-          customers: { name?: string | null } | Array<{ name?: string | null }> | null
-        }>
+  const orderIds = [...new Set((lines ?? []).map((l) => l.order_id).filter(Boolean))] as string[]
+
+  // ── 2) orders (confirmed + 기간 + tenant) ──
+  let orders: Array<{
+    id: string
+    order_date: string
+    status: string
+    customer_id: string | null
+    customer_name: string | null
+    deleted_at: string | null
+    order_type: string | null
+  }> = []
+
+  if (orderIds.length > 0) {
+    const { data: orderRows, error: orderErr } = await fetchByIdsInBatches(orderIds, 200, async (chunk) => {
+      const res = await supabase
+        .from('orders')
+        .select('id, order_date, status, customer_id, customer_name, deleted_at, order_type')
+        .in('id', chunk)
+        .or(`seller_tenant_id.eq.${tid},tenant_id.eq.${tid}`)
+        .eq('status', 'confirmed')
+        .is('deleted_at', null)
+        .gte('order_date', sixMonthStart)
+        .lte('order_date', today)
+      return { data: res.data as typeof orders | null, error: res.error }
+    })
+    if (orderErr) return { success: false, error: orderErr }
+    orders = orderRows
   }
 
+  const orderById = new Map(orders.map((o) => [o.id, o]))
+
+  // ── 3) customers 이름 ──
+  const customerIdSet = new Set<string>()
+  for (const o of orders) {
+    if (o.customer_id) customerIdSet.add(o.customer_id)
+  }
+
+  // 단가 캐시 + 판매가 (중첩 customers embed 없이)
+  const [{ data: priceRows, error: priceErr }, { data: product }] = await Promise.all([
+    supabase
+      .from('customer_product_prices')
+      .select('customer_id, last_price')
+      .eq('tenant_id', tid)
+      .eq('product_id', productId)
+      .order('updated_at', { ascending: false })
+      .limit(200),
+    supabase
+      .from('products')
+      .select('id, product_prices(price_type, price)')
+      .eq('tenant_id', tid)
+      .eq('id', productId)
+      .is('deleted_at', null)
+      .maybeSingle(),
+  ])
+
+  if (priceErr) return { success: false, error: priceErr.message }
+
+  for (const r of priceRows ?? []) {
+    if (r.customer_id) customerIdSet.add(r.customer_id)
+  }
+
+  const customerIds = [...customerIdSet]
+  const nameById = new Map<string, string>()
+  if (customerIds.length > 0) {
+    const { data: custRows, error: custErr } = await fetchByIdsInBatches(customerIds, 200, async (chunk) => {
+      const res = await supabase
+        .from('customers')
+        .select('id, name')
+        .eq('tenant_id', tid)
+        .in('id', chunk)
+        .is('deleted_at', null)
+      return { data: res.data as Array<{ id: string; name: string }> | null, error: res.error }
+    })
+    if (custErr) return { success: false, error: custErr }
+    for (const c of custRows) {
+      nameById.set(c.id, c.name?.trim() || '알 수 없음')
+    }
+  }
+
+  // ── 라인 × 주문 조인 (메모리) ──
   const flatLines: Array<{
     qty: number
     unit_price: number
@@ -169,28 +211,34 @@ export async function getProductAnalytics(
     customer_name: string
   }> = []
 
-  for (const raw of (lines ?? []) as LineRow[]) {
-    const o = Array.isArray(raw.orders) ? raw.orders[0] : raw.orders
+  for (const raw of lines ?? []) {
+    const o = orderById.get(raw.order_id)
     if (!o || !isSalesOrder(o)) continue
     const cid = (o.customer_id ?? '').trim()
     if (!cid) continue
-    const custJoin = o.customers
-    const joined = Array.isArray(custJoin)
-      ? (custJoin[0]?.name?.trim() ?? '')
-      : (custJoin?.name?.trim() ?? '')
-    const name = (o.customer_name?.trim() || joined || '알 수 없음')
+    const name =
+      nameById.get(cid) ||
+      o.customer_name?.trim() ||
+      '알 수 없음'
+    const qty = Number(raw.quantity ?? 0) || 0
+    const unit_price = Number(raw.unit_price ?? 0) || 0
+    const cost_price = Number(raw.cost_price ?? 0) || 0
+    const line_total =
+      raw.line_total != null && Number.isFinite(Number(raw.line_total))
+        ? Number(raw.line_total)
+        : unit_price * qty
     flatLines.push({
-      qty: Number(raw.quantity ?? 0) || 0,
-      unit_price: Number(raw.unit_price ?? 0) || 0,
-      cost_price: Number(raw.cost_price ?? 0) || 0,
-      line_total: Number(raw.line_total ?? 0) || 0,
+      qty,
+      unit_price,
+      cost_price,
+      line_total,
       order_date: String(o.order_date).slice(0, 10),
       customer_id: cid,
       customer_name: name,
     })
   }
 
-  // 월별 매출 (최근 6개월 슬롯 고정)
+  // 월별 매출
   const monthSlots: string[] = []
   for (let i = -5; i <= 0; i++) {
     monthSlots.push(monthStartKST(i).slice(0, 7))
@@ -236,53 +284,40 @@ export async function getProductAnalytics(
     .sort((a, b) => b.total_amount - a.total_amount)
     .slice(0, 10)
 
-  // 기준 판매가
-  const priceList = (product as any)?.product_prices ?? []
+  const priceList = (product as { product_prices?: Array<{ price_type: string; price: number }> } | null)
+    ?.product_prices ?? []
   const base_price =
-    (priceList.find((p: any) => p.price_type === 'normal')?.price as number | undefined) ?? null
+    priceList.find((p) => p.price_type === 'normal')?.price ?? null
 
-  // 거래처별 단가 — customer_product_prices 우선, 없으면 최근 라인 단가
-  const priceFromCache = new Map<string, { name: string; unit_price: number }>()
+  const priceFromCache = new Map<string, number>()
   for (const r of priceRows ?? []) {
-    const cid = String((r as any).customer_id ?? '')
+    const cid = String(r.customer_id ?? '')
     if (!cid || priceFromCache.has(cid)) continue
-    const last = Number((r as any).last_price ?? 0)
+    const last = Number(r.last_price ?? 0)
     if (!last) continue
-    const cust = (r as any).customers
-    const name = Array.isArray(cust)
-      ? (cust[0]?.name ?? '-')
-      : (cust?.name ?? '-')
-    priceFromCache.set(cid, { name, unit_price: last })
+    priceFromCache.set(cid, last)
   }
-  // 라인에서 거래처별 최신 단가 fallback
-  const latestByCustomer = new Map<string, { name: string; unit_price: number; date: string }>()
+
+  const latestByCustomer = new Map<string, { name: string; unit_price: number }>()
   for (const l of [...flatLines].sort((a, b) => b.order_date.localeCompare(a.order_date))) {
     if (latestByCustomer.has(l.customer_id)) continue
     latestByCustomer.set(l.customer_id, {
       name: l.customer_name,
       unit_price: l.unit_price,
-      date: l.order_date,
     })
   }
-  const customerIds = new Set([
-    ...priceFromCache.keys(),
-    ...latestByCustomer.keys(),
-  ])
-  const customer_prices: ProductCustomerPriceRow[] = [...customerIds]
-    .map((cid) => {
-      const cached = priceFromCache.get(cid)
-      const fromLine = latestByCustomer.get(cid)
-      return {
-        customer_id: cid,
-        name: cached?.name ?? fromLine?.name ?? '-',
-        unit_price: cached?.unit_price ?? fromLine?.unit_price ?? 0,
-      }
-    })
+
+  const allPriceCust = new Set([...priceFromCache.keys(), ...latestByCustomer.keys()])
+  const customer_prices: ProductCustomerPriceRow[] = [...allPriceCust]
+    .map((cid) => ({
+      customer_id: cid,
+      name: nameById.get(cid) ?? latestByCustomer.get(cid)?.name ?? '-',
+      unit_price: priceFromCache.get(cid) ?? latestByCustomer.get(cid)?.unit_price ?? 0,
+    }))
     .filter((r) => r.unit_price > 0)
     .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
     .slice(0, 20)
 
-  // 재구매 주기 — 거래처별 주문일 distinct
   const datesByCustomer = new Map<string, { name: string; dates: Set<string> }>()
   for (const l of flatLines) {
     const cur = datesByCustomer.get(l.customer_id) ?? {
@@ -314,7 +349,6 @@ export async function getProductAnalytics(
     .sort((a, b) => b.days_since_last - a.days_since_last)
     .slice(0, 20)
 
-  // KPI
   const month_sales = monthly_sales.find((m) => m.is_current)?.amount ?? 0
   const monthLines = flatLines.filter((l) => l.order_date >= thisMonthStart)
   let marginWeighted = 0

@@ -35,15 +35,21 @@ function avgCycleKpiColor(days: number | null): string {
 export default async function ProductDetailPage({ params }: { params: { id: string } }) {
   const id = params.id
 
-  const [detailRes, analyticsRes] = await Promise.all([
-    getProductDetail(id),
-    getProductAnalytics(id),
-  ])
-
+  const detailRes = await getProductDetail(id)
   if (!detailRes.success || !detailRes.data) notFound()
 
+  // analytics는 별도 — 실패해도 헤더/기본 정보는 표시
+  let analyticsData: Awaited<ReturnType<typeof getProductAnalytics>>['data'] = undefined
+  try {
+    const analyticsRes = await getProductAnalytics(id)
+    if (analyticsRes.success) analyticsData = analyticsRes.data
+    else console.error('analytics 실패:', analyticsRes.error)
+  } catch (e) {
+    console.error('analytics 실패:', e)
+  }
+
   const p = detailRes.data
-  const a = analyticsRes.data
+  const a = analyticsData
   const categoryLine = [p.category_name, p.spec].filter(Boolean).join(' · ') || '미분류'
   const maxMonth = Math.max(1, ...(a?.monthly_sales.map((m) => m.amount) ?? [1]))
 
@@ -141,12 +147,6 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
           ))}
         </div>
 
-        {!analyticsRes.success ? (
-          <div style={{ ...card, padding: 16, color: '#b91c1c', fontSize: 13, marginBottom: 12 }}>
-            분석 데이터를 불러오지 못했습니다: {analyticsRes.error}
-          </div>
-        ) : null}
-
         {/* 2x2 */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           {/* 월별 매출 */}
@@ -155,26 +155,30 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
               <div style={cardTitle}>월별 매출 추이</div>
               <div style={cardMeta}>최근 6개월</div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, height: 160, paddingTop: 8 }}>
-              {(a?.monthly_sales ?? []).map((m) => {
-                const h = Math.max(4, Math.round((m.amount / maxMonth) * 120))
-                return (
-                  <div key={m.month} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                    <div
-                      title={formatKRW(m.amount)}
-                      style={{
-                        width: '100%',
-                        maxWidth: 36,
-                        height: h,
-                        borderRadius: 6,
-                        background: m.is_current ? '#1f5d3a' : '#e5e7eb',
-                      }}
-                    />
-                    <div style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af' }}>{m.label}</div>
-                  </div>
-                )
-              })}
-            </div>
+            {(a?.monthly_sales?.length ?? 0) === 0 ? (
+              <div style={empty}>매출 데이터가 없습니다</div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, height: 160, paddingTop: 8 }}>
+                {a!.monthly_sales.map((m) => {
+                  const h = Math.max(4, Math.round((m.amount / maxMonth) * 120))
+                  return (
+                    <div key={m.month} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                      <div
+                        title={formatKRW(m.amount)}
+                        style={{
+                          width: '100%',
+                          maxWidth: 36,
+                          height: h,
+                          borderRadius: 6,
+                          background: m.is_current ? '#1f5d3a' : '#e5e7eb',
+                        }}
+                      />
+                      <div style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af' }}>{m.label}</div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </section>
 
           {/* 구매 거래처 */}
