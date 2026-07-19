@@ -98,7 +98,27 @@ export default function PaymentEditForm({
       ) : (
         <form onSubmit={handleSubmit} style={s.form}>
           {error ? <div style={s.err}>{error}</div> : null}
-          {ok ? <div style={s.ok}>{ok}</div> : null}
+          {ok ? (
+            <>
+              <div style={s.ok}>{ok}</div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                <button
+                  type="button"
+                  onClick={() => router.back()}
+                  style={{ padding: '8px 16px', background: '#f7f6f2', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, color: '#374151', cursor: 'pointer', fontFamily: 'inherit' }}
+                >
+                  ← 이전 페이지
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push('/payments')}
+                  style={{ padding: '8px 16px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, color: '#374151', cursor: 'pointer', fontFamily: 'inherit' }}
+                >
+                  수금 목록
+                </button>
+              </div>
+            </>
+          ) : null}
 
           <div>
             <label style={s.label}>수금일자 *</label>
