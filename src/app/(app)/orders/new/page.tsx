@@ -7,9 +7,9 @@ export const metadata = { title: '주문 등록 — RealMyOS' }
 export default async function OrderNewPage({
   searchParams,
 }: {
-  searchParams: { customer_id?: string; quote_id?: string; conv?: string; reorder?: string }
+  searchParams: { customer_id?: string; quote_id?: string; conv?: string; reorder?: string; product_id?: string }
 }) {
-  const { customer_id, quote_id, conv, reorder } = searchParams
+  const { customer_id, quote_id, conv, reorder, product_id } = searchParams
 
   let initialCustomerId: string | undefined
   let reorderLines: Array<{
@@ -81,6 +81,7 @@ export default async function OrderNewPage({
     <main style={{ minHeight: '100vh', background: 'var(--surface-0)', paddingTop: 32 }}>
       <OrderCreateForm
         initialCustomerId={initialCustomerId}
+        initialProductId={product_id}
         reorderLines={reorderLines}
         quoteContext={quoteContext}
       />

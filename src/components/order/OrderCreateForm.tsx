@@ -147,6 +147,8 @@ function sortByPurchaseHistory(products: ProductForOrder[]): ProductForOrder[] {
 
 interface OrderCreateFormProps {
   initialCustomerId?: string
+  /** 상품 상세에서 진입 시 — 거래처 없이 첫 라인에 상품 프리필 */
+  initialProductId?: string
   reorderLines?: Array<{
     product_id: string; product_name: string; product_code: string
     quantity: number; unit_price: number; tax_type?: string
@@ -158,6 +160,7 @@ interface OrderCreateFormProps {
 
 export default function OrderCreateForm({
   initialCustomerId,
+  initialProductId,
   reorderLines,
   quoteContext,
   onSuccess,
@@ -213,15 +216,40 @@ export default function OrderCreateForm({
     })
   }, [initialCustomerId])
 
+  // 상품 상세 → 주문 등록: 거래처 없이 상품만 첫 라인에 프리필
+  useEffect(() => {
+    if (!initialProductId || reorderLines?.length) return
+    let cancelled = false
+    getProductsForOrder().then((r) => {
+      if (cancelled || !r.success) return
+      const list = r.data ?? []
+      setProducts(sortByPurchaseHistory(list))
+      const prod = list.find((p) => p.id === initialProductId)
+      if (!prod) return
+      setLines((prev) => {
+        if (prev.length > 0) return prev
+        return [{
+          uid: crypto.randomUUID(),
+          product: prod,
+          quantity: 1,
+          unit_price_input: String(prod.last_unit_price || 0),
+          total_input: '',
+          mode: 'unit' as const,
+        }]
+      })
+    })
+    return () => { cancelled = true }
+  }, [initialProductId, reorderLines])
+
   useEffect(() => {
     if (!selectedCustomer) return
     setLoadingProducts(true)
     getProductsForOrder(selectedCustomer.id).then((r) => {
       if (!r.success) { setLoadingProducts(false); return }
-      setProducts(sortByPurchaseHistory(r.data ?? []))
+      const sorted = sortByPurchaseHistory(r.data ?? [])
+      setProducts(sorted)
       setLoadingProducts(false)
       if (reorderLines?.length) {
-        const sorted = sortByPurchaseHistory(r.data ?? [])
         const mapped = reorderLines.flatMap((rl) => {
           const prod = sorted.find((p) => p.id === rl.product_id)
           if (!prod) return []
@@ -234,9 +262,36 @@ export default function OrderCreateForm({
           }]
         })
         if (mapped.length) setLines(mapped)
+        return
+      }
+      // 상품 프리필 라인이 있으면 거래처 단가로 갱신
+      if (initialProductId) {
+        const prod = sorted.find((p) => p.id === initialProductId)
+        if (!prod) return
+        setLines((prev) => {
+          if (prev.length === 0) {
+            return [{
+              uid: crypto.randomUUID(),
+              product: prod,
+              quantity: 1,
+              unit_price_input: String(prod.last_unit_price || 0),
+              total_input: '',
+              mode: 'unit' as const,
+            }]
+          }
+          return prev.map((l) =>
+            l.product.id === initialProductId
+              ? {
+                  ...l,
+                  product: prod,
+                  unit_price_input: String(prod.last_unit_price || l.unit_price_input),
+                }
+              : l,
+          )
+        })
       }
     })
-  }, [selectedCustomer, reorderLines])
+  }, [selectedCustomer, reorderLines, initialProductId])
 
   // ── 합계 (렌더마다 재계산 — resolveLine 기반) ─────────────
 
