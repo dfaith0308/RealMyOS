@@ -669,7 +669,7 @@ export async function getCustomerBalance(
 
   const [{ data: orderRows }, { data: paymentRows }, { data: depRow }] = await Promise.all([
     supabase.from('orders')
-      .select('final_amount, total_amount')
+      .select('final_amount, total_amount, discount_amount, point_used')
       .eq('customer_id', customer_id)
       // 전환: seller_tenant_id 우선 (legacy tenant_id 병행)
       .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)

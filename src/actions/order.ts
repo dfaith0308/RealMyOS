@@ -217,7 +217,9 @@ export async function createOrder(
     return { success: false, error: `적립금(${point_used})이 할인 후 잔액(${totals.total_amount - discount_amount})을 초과합니다.` }
   }
 
-  // final_amount는 DB generated / default — insert 금지 (할인·포인트는 아래 컬럼으로 전달)
+  // final_amount는 DB generated — insert 불가.
+  // 올바른 식: total - discount - point (migration 20260719100000). 반환값은 앱에서 계산.
+  const computed_final = Math.max(0, totals.total_amount - discount_amount - point_used)
 
   const { data: newOrder, error: orderErr } = await supabase
     .from('orders')
@@ -338,7 +340,17 @@ export async function createOrder(
   })
 
   revalidatePath('/orders')
-  return { success: true, data: { order_id: newOrder.id, order_number: newOrder.order_number, total_amount: newOrder.total_amount, discount_amount: newOrder.discount_amount ?? 0, point_used: newOrder.point_used ?? 0, final_amount: newOrder.final_amount ?? newOrder.total_amount } }
+  return {
+    success: true,
+    data: {
+      order_id: newOrder.id,
+      order_number: newOrder.order_number,
+      total_amount: newOrder.total_amount,
+      discount_amount: newOrder.discount_amount ?? discount_amount,
+      point_used: newOrder.point_used ?? point_used,
+      final_amount: computed_final,
+    },
+  }
 }
 
 // ============================================================

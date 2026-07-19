@@ -131,8 +131,21 @@ export function computeStatementTotal(data: OrderForExport): number {
   }, 0)
 }
 
+export function computeStatementPayable(data: OrderForExport): number {
+  if (typeof data.payable_amount === 'number' && Number.isFinite(data.payable_amount)) {
+    return Math.max(0, data.payable_amount)
+  }
+  const subtotal = typeof data.total_amount === 'number' ? data.total_amount : computeStatementTotal(data)
+  const discount = Math.max(0, Number(data.discount_amount ?? 0))
+  const point = Math.max(0, Number(data.point_used ?? 0))
+  return Math.max(0, subtotal - discount - point)
+}
+
 export function OrderStatementPdfDoc({ data }: { data: OrderForExport }) {
-  const total = computeStatementTotal(data)
+  const subtotal = computeStatementTotal(data)
+  const discount = Math.max(0, Number(data.discount_amount ?? 0))
+  const point = Math.max(0, Number(data.point_used ?? 0))
+  const payable = computeStatementPayable(data)
   const bankParts = [
     data.supplier.bank_name,
     data.supplier.bank_account,
@@ -181,8 +194,8 @@ export function OrderStatementPdfDoc({ data }: { data: OrderForExport }) {
             <Text style={styles.metaValue}>{data.order_date || '-'}</Text>
           </View>
           <View style={styles.metaBox}>
-            <Text style={styles.metaLabel}>합계금액</Text>
-            <Text style={styles.metaValue}>{formatKRW(total)}원</Text>
+            <Text style={styles.metaLabel}>청구금액</Text>
+            <Text style={styles.metaValue}>{formatKRW(payable)}원</Text>
           </View>
         </View>
 
@@ -224,10 +237,38 @@ export function OrderStatementPdfDoc({ data }: { data: OrderForExport }) {
 
           <View style={styles.totalRow} wrap={false}>
             <View style={{ width: '80%' }}>
-              <Text style={{ fontSize: 10, fontWeight: 700, textAlign: 'right' }}>합계</Text>
+              <Text style={{ fontSize: 10, fontWeight: 700, textAlign: 'right' }}>상품합계</Text>
             </View>
             <View style={{ width: '20%' }}>
-              <Text style={{ fontSize: 10, fontWeight: 700, textAlign: 'right' }}>{formatKRW(total)}</Text>
+              <Text style={{ fontSize: 10, fontWeight: 700, textAlign: 'right' }}>{formatKRW(subtotal)}</Text>
+            </View>
+          </View>
+          {discount > 0 ? (
+            <View style={styles.tr} wrap={false}>
+              <View style={{ width: '80%' }}>
+                <Text style={{ fontSize: 9, textAlign: 'right', color: '#6b7280' }}>기간할인</Text>
+              </View>
+              <View style={{ width: '20%' }}>
+                <Text style={{ fontSize: 9, textAlign: 'right', color: '#6b7280' }}>-{formatKRW(discount)}</Text>
+              </View>
+            </View>
+          ) : null}
+          {point > 0 ? (
+            <View style={styles.tr} wrap={false}>
+              <View style={{ width: '80%' }}>
+                <Text style={{ fontSize: 9, textAlign: 'right', color: '#6b7280' }}>적립금 사용</Text>
+              </View>
+              <View style={{ width: '20%' }}>
+                <Text style={{ fontSize: 9, textAlign: 'right', color: '#6b7280' }}>-{formatKRW(point)}</Text>
+              </View>
+            </View>
+          ) : null}
+          <View style={styles.totalRow} wrap={false}>
+            <View style={{ width: '80%' }}>
+              <Text style={{ fontSize: 10, fontWeight: 700, textAlign: 'right' }}>청구금액</Text>
+            </View>
+            <View style={{ width: '20%' }}>
+              <Text style={{ fontSize: 10, fontWeight: 700, textAlign: 'right' }}>{formatKRW(payable)}</Text>
             </View>
           </View>
         </View>

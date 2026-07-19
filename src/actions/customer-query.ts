@@ -154,7 +154,7 @@ export async function getCustomerOrders(
     .from('orders')
     .select(`
       id, order_date, order_number, status, order_status,
-      total_amount, final_amount,
+      total_amount, discount_amount, point_used, final_amount,
       order_lines ( product_name, quantity )
     `)
     .eq('customer_id', customerId)
@@ -174,10 +174,12 @@ export async function getCustomerOrders(
       order_number: o.order_number ?? null,
       status: o.status ?? '',
       order_status: o.order_status ?? null,
-      total_amount:
-        typeof o.final_amount === 'number' && o.final_amount > 0
-          ? o.final_amount
-          : (o.total_amount ?? 0),
+      total_amount: effectiveOrderAmount({
+        total_amount: o.total_amount ?? 0,
+        final_amount: o.final_amount,
+        discount_amount: o.discount_amount,
+        point_used: o.point_used,
+      }),
       product_summary: orderProductSummary(o.order_lines),
     })),
   }

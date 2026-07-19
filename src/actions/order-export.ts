@@ -24,6 +24,11 @@ export interface OrderForExport {
   document_number: string
   order_date: string
   memo: string | null
+  total_amount: number
+  discount_amount: number
+  point_used: number
+  /** 클라이언트 계산 실청구액 (total - discount - point) */
+  payable_amount: number
   supplier: OrderExportParty & {
     stamp_image_url: string | null
     bank_name: string | null
@@ -74,6 +79,7 @@ export async function getOrderForExport(orderId: string): Promise<ActionResult<O
       .from('orders')
       .select(`
         id, order_number, order_date, memo, tenant_id, seller_tenant_id, customer_id,
+        total_amount, discount_amount, point_used, final_amount,
         customers(name, biz_number, representative_name, address, phone),
         order_lines(product_name, quantity, unit_price, line_total)
       `)
@@ -117,6 +123,15 @@ export async function getOrderForExport(orderId: string): Promise<ActionResult<O
     amount: Number(l.line_total ?? 0),
   }))
 
+  const linesSubtotal = lines.reduce(
+    (s, l) => s + (Number(l.quantity) || 0) * (Number(l.unit_price) || 0),
+    0,
+  )
+  const discount_amount = Math.max(0, Number((order as any).discount_amount ?? 0))
+  const point_used = Math.max(0, Number((order as any).point_used ?? 0))
+  const total_amount = Number((order as any).total_amount ?? linesSubtotal)
+  const payable_amount = Math.max(0, total_amount - discount_amount - point_used)
+
   const orderNumber = String((order as any).order_number ?? order.id)
   const document_number = orderNumber.startsWith('TS-') ? orderNumber : `TS-${orderNumber}`
 
@@ -142,6 +157,10 @@ export async function getOrderForExport(orderId: string): Promise<ActionResult<O
       document_number,
       order_date: String((order as any).order_date ?? '').slice(0, 10),
       memo: (order as any).memo ?? null,
+      total_amount,
+      discount_amount,
+      point_used,
+      payable_amount,
       supplier: {
         name: supplierName,
         business_number: supplierBiz,

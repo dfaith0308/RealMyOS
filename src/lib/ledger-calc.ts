@@ -3,15 +3,34 @@
  *
  * 매출 인정: status === 'confirmed' 만 (delivered/completed 는 회계 미반영)
  * 미수금: getAccountsReceivable() 만 사용 (신규 코드는 calcReceivable 직접 호출 금지)
- * final_amount: 최종 청구액 — point_used 재차감 금지
+ *
+ * 실청구액:
+ * - discount_amount / point_used 가 있으면 total - discount - point 로 계산
+ *   (DB generated final_amount 식이 잘못된 기간에도 앱 단에서 정합 유지)
+ * - 없으면 final_amount → total_amount
  */
 
-/** 주문 1건의 확정금액: final_amount 우선, NULL이면 total_amount */
+/** 주문 1건의 확정금액 */
 export function effectiveOrderAmount(order: {
   final_amount?: number | null
-  total_amount:  number
+  total_amount: number
+  discount_amount?: number | null
+  point_used?: number | null
 }): number {
-  return order.final_amount ?? order.total_amount
+  const total = Number(order.total_amount ?? 0)
+  const hasHeaderAdjustments =
+    order.discount_amount != null || order.point_used != null
+
+  if (hasHeaderAdjustments) {
+    const discount = Math.max(0, Number(order.discount_amount ?? 0))
+    const point = Math.max(0, Number(order.point_used ?? 0))
+    return Math.max(0, total - discount - point)
+  }
+
+  if (order.final_amount != null && Number.isFinite(Number(order.final_amount))) {
+    return Number(order.final_amount)
+  }
+  return total
 }
 
 /** 회계 매출 인정 여부 — confirmed ONLY */
@@ -71,7 +90,13 @@ export function getAccountsReceivable(
  * due 일자 = order_date + paymentTermsDays (일). 별도 due_date 컬럼 도입 시 이 함수만 교체.
  */
 export function getOverdueReceivable(
-  orders: Array<{ order_date: string; final_amount?: number | null; total_amount: number }>,
+  orders: Array<{
+    order_date: string
+    final_amount?: number | null
+    total_amount: number
+    discount_amount?: number | null
+    point_used?: number | null
+  }>,
   paymentTermsDays: number,
   totalInboundPaidConfirmed: number,
   todayStr: string,
@@ -82,7 +107,7 @@ export function getOverdueReceivable(
     const dueDate = new Date(o.order_date + 'T00:00:00Z')
     dueDate.setUTCDate(dueDate.getUTCDate() + paymentTermsDays)
     const dueDateStr = dueDate.toISOString().slice(0, 10)
-    if (dueDateStr < todayStr) overdueSum += effectiveOrderAmount(o as { final_amount?: number | null; total_amount: number })
+    if (dueDateStr < todayStr) overdueSum += effectiveOrderAmount(o)
   }
   return Math.max(0, overdueSum - totalInboundPaidConfirmed)
 }

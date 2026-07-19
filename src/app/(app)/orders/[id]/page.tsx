@@ -28,7 +28,7 @@ export default async function OrderDetailPage({ params }: { params: { id: string
   const { data: orderRaw, error } = await supabase
     .from('orders')
     .select(`
-      id, order_number, order_date, customer_id, total_amount, status, order_status, memo,
+      id, order_number, order_date, customer_id, total_amount, discount_amount, point_used, final_amount, status, order_status, memo,
       customers(name),
       order_lines(product_name, quantity, unit_price, line_total)
     `)
@@ -98,12 +98,29 @@ export default async function OrderDetailPage({ params }: { params: { id: string
       </div>
 
       <Surface variant="panel" density="comfortable">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10 }}>
           {[
             { k: '주문일', v: order.order_date },
-            { k: '총금액', v: formatKRW(order.total_amount) },
+            { k: '상품합계', v: formatKRW(order.total_amount) },
+            {
+              k: '결제금액',
+              v: formatKRW(
+                Math.max(
+                  0,
+                  Number(order.total_amount ?? 0) -
+                    Number(order.discount_amount ?? 0) -
+                    Number(order.point_used ?? 0),
+                ),
+              ),
+            },
             { k: '거래상태(status)', v: order.status },
             { k: '주문상태(order_status)', v: ORDER_OPERATION_STATUS_LABEL[opStatus] ?? opStatus },
+            ...(Number(order.discount_amount ?? 0) > 0
+              ? [{ k: '기간할인', v: formatKRW(order.discount_amount) }]
+              : []),
+            ...(Number(order.point_used ?? 0) > 0
+              ? [{ k: '적립금 사용', v: formatKRW(order.point_used) }]
+              : []),
           ].map((x) => (
             <div key={x.k} style={{ border: '1px solid var(--ds-border-default)', borderRadius: 12, padding: '12px 14px', background: 'var(--ds-surface-panel)' }}>
               <div style={{ fontSize: 11, fontWeight: 900, color: 'var(--ds-text-muted)' }}>{x.k}</div>

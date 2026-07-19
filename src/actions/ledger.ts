@@ -139,7 +139,7 @@ export async function getCustomerLedger(
 
   let ordersQuery = supabase
     .from('orders')
-    .select('id, order_number, order_date, created_at, total_amount, final_amount, total_supply_price, total_vat_amount, memo, order_lines(product_name, quantity)')
+    .select('id, order_number, order_date, created_at, total_amount, discount_amount, point_used, final_amount, total_supply_price, total_vat_amount, memo, order_lines(product_name, quantity)')
     .eq('customer_id', customer_id)
     // 전환: seller_tenant_id 우선 (legacy tenant_id 병행)
     .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
@@ -331,7 +331,7 @@ export async function getDailyCashflow(): Promise<ActionResult<DailyCashflow[]>>
 
   const [{ data: orders }, { data: payments }] = await Promise.all([
     supabase.from('orders')
-      .select('order_date, total_amount, final_amount')
+      .select('order_date, total_amount, discount_amount, point_used, final_amount')
       // 전환: seller_tenant_id 우선 (legacy tenant_id 병행)
       .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
       .eq('status', 'confirmed')
@@ -408,7 +408,7 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
     const [{ data: allOrders }, { data: paymentRows }, { data: contactRows }, { data: actionRows7d }, { data: depositRows }] =
     await Promise.all([
       supabase.from('orders')
-        .select('customer_id, final_amount, total_amount, order_date')
+        .select('customer_id, final_amount, total_amount, discount_amount, point_used, order_date')
         .in('customer_id', ids)
         // 전환: seller_tenant_id 우선 (legacy tenant_id 병행)
         .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
@@ -704,7 +704,7 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
       .select('customer_id, total_sales, last_payment_date')
       .eq('tenant_id', ctx.tenant_id),
     supabase.from('orders')
-      .select('customer_id, final_amount, total_amount, order_date')
+      .select('customer_id, final_amount, total_amount, discount_amount, point_used, order_date')
       // 전환: seller_tenant_id 우선 (legacy tenant_id 병행)
       .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
       .eq('status', 'confirmed').is('deleted_at', null),
@@ -720,7 +720,7 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
   const statsMap    = new Map((statsRows    ?? []).map((s: any) => [s.customer_id, s]))
   const settingsMap = new Map((settingsRows ?? []).map((s: any) => [s.customer_id, s]))
 
-  // final_amount = total_amount - discount_amount - point_used (DB에서 직접 가져옴)
+  // final_amount = total_amount - discount_amount - point_used (앱 effectiveOrderAmount / DB generated)
   const orderFinalMap = new Map<string, number>()
   for (const o of orderRows ?? []) {
     orderFinalMap.set(o.customer_id, (orderFinalMap.get(o.customer_id) ?? 0) + effectiveOrderAmount(o as any))
@@ -730,10 +730,16 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
     paidMap.set(p.customer_id, (paidMap.get(p.customer_id) ?? 0) + (p.amount ?? 0))
   }
 
-  const ordersByCustomerStats = new Map<string, Array<{ order_date: string; final_amount?: number | null; total_amount: number }>>()
-  for (const o of orderRows ?? [] as Array<{ customer_id: string; order_date: string; final_amount?: number | null; total_amount: number }>) {
+  const ordersByCustomerStats = new Map<string, Array<{ order_date: string; final_amount?: number | null; total_amount: number; discount_amount?: number | null; point_used?: number | null }>>()
+  for (const o of orderRows ?? [] as Array<{ customer_id: string; order_date: string; final_amount?: number | null; total_amount: number; discount_amount?: number | null; point_used?: number | null }>) {
     const list = ordersByCustomerStats.get(o.customer_id) ?? []
-    list.push({ order_date: o.order_date, final_amount: o.final_amount, total_amount: o.total_amount })
+    list.push({
+      order_date: o.order_date,
+      final_amount: o.final_amount,
+      total_amount: o.total_amount,
+      discount_amount: o.discount_amount,
+      point_used: o.point_used,
+    })
     ordersByCustomerStats.set(o.customer_id, list)
   }
 
