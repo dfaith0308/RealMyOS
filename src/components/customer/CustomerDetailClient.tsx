@@ -163,7 +163,7 @@ export default function CustomerDetailClient({
         <section style={historyCard}>
           <div style={historyHead}>
             <h2 style={sectionTitle}>주문이력</h2>
-            <Link href={`/orders?customer_id=${customer.id}`} style={allLink}>
+            <Link href={`/orders?customer_id=${customer.id}&period=all`} style={allLink}>
               전체보기 →
             </Link>
           </div>
@@ -204,7 +204,7 @@ export default function CustomerDetailClient({
         <section style={historyCard}>
           <div style={historyHead}>
             <h2 style={sectionTitle}>수금이력</h2>
-            <Link href={`/payments?customer_id=${customer.id}`} style={allLink}>
+            <Link href={`/payments?customer_id=${customer.id}&period=all`} style={allLink}>
               전체보기 →
             </Link>
           </div>

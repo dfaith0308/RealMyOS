@@ -9,24 +9,30 @@ export const metadata = { title: '수금 목록 — RealMyOS' }
 export default async function PaymentsPage({
   searchParams,
 }: {
-  searchParams: { from?: string; to?: string; customer_id?: string; status?: string }
+  searchParams: { from?: string; to?: string; customer_id?: string; status?: string; period?: string }
 }) {
-  const now        = new Date(Date.now() + 9 * 3600000)
-  const today      = now.toISOString().slice(0, 10)
+  const now = new Date(Date.now() + 9 * 3600000)
+  const today = now.toISOString().slice(0, 10)
   const monthStart = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01`
 
-  const from        = searchParams.from        ?? monthStart
-  const to          = searchParams.to          ?? today
+  const periodAll = searchParams.period === 'all' && !searchParams.from && !searchParams.to
+  const from = periodAll ? '' : (searchParams.from ?? monthStart)
+  const to = periodAll ? '' : (searchParams.to ?? today)
   const customer_id = searchParams.customer_id ?? ''
-  const status      = searchParams.status      ?? 'confirmed'  // 기본: 정상 수금만
+  const status = searchParams.status ?? 'confirmed'
+  const period = periodAll ? 'all' : (searchParams.period ?? '')
 
   const supabase = await createSupabaseServer()
   const ctx = await getAuthCtx(supabase)
   if (!ctx) notFound()
 
-  const _t0 = Date.now()
   const [paymentsResult, { data: customers }] = await Promise.all([
-    getPaymentList({ from, to, customer_id: customer_id || undefined, status: status || undefined }),
+    getPaymentList({
+      ...(from ? { from } : {}),
+      ...(to ? { to } : {}),
+      customer_id: customer_id || undefined,
+      status: status || undefined,
+    }),
     supabase
       .from('customers')
       .select('id, name')
@@ -45,8 +51,18 @@ export default async function PaymentsPage({
             {paymentsResult.data?.length ?? 0}건
           </p>
         </div>
-        <Link href="/payments/new"
-          style={{ padding: '8px 16px', background: 'var(--color-primary)', color: '#fff', borderRadius: 8, fontSize: 13, fontWeight: 500, textDecoration: 'none' }}>
+        <Link
+          href="/payments/new"
+          style={{
+            padding: '8px 16px',
+            background: 'var(--color-primary)',
+            color: '#fff',
+            borderRadius: 8,
+            fontSize: 13,
+            fontWeight: 500,
+            textDecoration: 'none',
+          }}
+        >
           + 수금 등록
         </Link>
       </div>
@@ -54,7 +70,7 @@ export default async function PaymentsPage({
       <PaymentsClient
         payments={paymentsResult.data ?? []}
         customers={customers ?? []}
-        filters={{ from, to, customer_id, status }}
+        filters={{ from, to, customer_id, status, period }}
       />
     </main>
   )

@@ -9,7 +9,15 @@ import styles from '@/app/(app)/orders/orders-ops.module.css'
 import type { OrderOperationStatus } from '@/types/order'
 import SearchableCustomerSelect, { type SearchableCustomer } from '@/components/order/SearchableCustomerSelect'
 
-interface Filters { from: string; to: string; status: string; order_status: OrderOperationStatus | ''; customer_id: string; view?: string }
+interface Filters {
+  from: string
+  to: string
+  status: string
+  order_status: OrderOperationStatus | ''
+  customer_id: string
+  view?: string
+  period?: string
+}
 type Customer = SearchableCustomer
 
 interface Props {
@@ -18,7 +26,7 @@ interface Props {
   filters: Filters
 }
 
-type Preset = 'month' | '7d' | 'custom'
+type Preset = 'all' | 'month' | '7d' | 'custom'
 type View =
   | 'all'
   | 'in_progress'
@@ -45,10 +53,11 @@ function daysAgoStr(n: number) {
 }
 
 export default function OrdersClient({ orders, customers, filters }: Props) {
-  const router   = useRouter()
+  const router = useRouter()
 
   const [from, setFrom] = useState(filters.from)
   const [to, setTo] = useState(filters.to)
+  const [period, setPeriod] = useState(filters.period === 'all' ? 'all' : '')
   const [customerId, setCustomerId] = useState(filters.customer_id)
   const [view, setView] = useState<View>(() => {
     const v = String(filters.view ?? '')
@@ -60,23 +69,29 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
       v === 'today_delivery' ||
       v === 'arrears' ||
       v === 'today_new'
-    ) return v
+    )
+      return v
     return 'all'
   })
 
   const preset: Preset = useMemo(() => {
+    if (period === 'all' || (!from && !to)) return 'all'
     if (from === monthStartStr() && to === kstTodayStr()) return 'month'
     if (from === daysAgoStr(6) && to === kstTodayStr()) return '7d'
     return 'custom'
-  }, [from, to])
+  }, [from, to, period])
 
   const debounce = useRef<number | null>(null)
   useEffect(() => {
     if (debounce.current) window.clearTimeout(debounce.current)
     debounce.current = window.setTimeout(() => {
       const params = new URLSearchParams()
-      if (from) params.set('from', from)
-      if (to) params.set('to', to)
+      if (period === 'all' || (!from && !to)) {
+        params.set('period', 'all')
+      } else {
+        if (from) params.set('from', from)
+        if (to) params.set('to', to)
+      }
       if (customerId) params.set('customer_id', customerId)
       if (view && view !== 'all') params.set('view', view)
       const q = params.toString()
@@ -85,7 +100,37 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
     return () => {
       if (debounce.current) window.clearTimeout(debounce.current)
     }
-  }, [from, to, customerId, view, router])
+  }, [from, to, period, customerId, view, router])
+
+  function selectAllPeriod() {
+    setPeriod('all')
+    setFrom('')
+    setTo('')
+    setView('all')
+  }
+
+  function selectMonth() {
+    setPeriod('')
+    setFrom(monthStartStr())
+    setTo(kstTodayStr())
+    setView('all')
+  }
+
+  function select7d() {
+    setPeriod('')
+    setFrom(daysAgoStr(6))
+    setTo(kstTodayStr())
+    setView('all')
+  }
+
+  function selectCustom() {
+    setPeriod('')
+    if (!from || !to) {
+      setFrom(monthStartStr())
+      setTo(kstTodayStr())
+    }
+    setView('all')
+  }
 
   const todayStr = useMemo(() => kstTodayStr(), [])
 
@@ -104,16 +149,16 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
       return baseOrders.filter((o) => o.order_date === todayStr && o.status === 'draft')
     }
     if (view === 'arrears') {
-      return baseOrders.filter((o) => (o.current_balance ?? 0) > 0)
+      return baseOrders.filter((o) => (o.current_balance ?? 0) > 0 && o.status !== 'cancelled')
+    }
+    if (view === 'in_progress') {
+      return baseOrders.filter((o) => o.status !== 'cancelled' && o.order_status !== '납품완료')
     }
     if (view === 'done') {
       return baseOrders.filter((o) => o.order_status === '납품완료')
     }
     if (view === 'cancelled') {
-      return baseOrders.filter((o) => o.status === 'cancelled' || o.order_status === '취소')
-    }
-    if (view === 'in_progress') {
-      return baseOrders.filter((o) => o.status !== 'cancelled' && o.order_status !== '납품완료' && o.order_status !== '취소')
+      return baseOrders.filter((o) => o.status === 'cancelled')
     }
     return baseOrders
   }, [baseOrders, todayStr, view])
@@ -123,7 +168,7 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
     const todayDelivery = todayOrders.filter((o) => o.order_status === '출고완료' || o.order_status === '납품완료').length
     const arrearsCustomers = new Set(
       orders
-        .filter((o) => (o.current_balance ?? 0) > 0)
+        .filter((o) => (o.current_balance ?? 0) > 0 && o.status !== 'cancelled')
         .map((o) => o.customer_id),
     )
     const todayNew = todayOrders.filter((o) => o.status === 'draft').length
@@ -211,7 +256,7 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 16 }}>
         <button
           type="button"
-          onClick={() => { setView('today_delivery'); setFrom(todayStr); setTo(todayStr) }}
+          onClick={() => { setView('today_delivery'); setPeriod(''); setFrom(todayStr); setTo(todayStr) }}
           style={{ ...ui.todoCard, borderColor: view === 'today_delivery' ? 'var(--border-strong)' : 'var(--border)' }}
         >
           <p style={ui.todoLabel}>오늘 배송</p>
@@ -227,7 +272,7 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
         </button>
         <button
           type="button"
-          onClick={() => { setView('today_new'); setFrom(todayStr); setTo(todayStr) }}
+          onClick={() => { setView('today_new'); setPeriod(''); setFrom(todayStr); setTo(todayStr) }}
           style={{ ...ui.todoCard, borderColor: view === 'today_new' ? 'var(--border-strong)' : 'var(--border)' }}
         >
           <p style={ui.todoLabel}>오늘 신규 주문</p>
@@ -238,22 +283,25 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
       {/* 필터 1줄 */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-          <button type="button" onClick={() => { setFrom(monthStartStr()); setTo(kstTodayStr()); setView('all') }} style={preset === 'month' ? ui.tabActive : ui.tab}>
+          <button type="button" onClick={selectAllPeriod} style={preset === 'all' ? ui.tabActive : ui.tab}>
+            전체
+          </button>
+          <button type="button" onClick={selectMonth} style={preset === 'month' ? ui.tabActive : ui.tab}>
             이번달
           </button>
-          <button type="button" onClick={() => { setFrom(daysAgoStr(6)); setTo(kstTodayStr()); setView('all') }} style={preset === '7d' ? ui.tabActive : ui.tab}>
+          <button type="button" onClick={select7d} style={preset === '7d' ? ui.tabActive : ui.tab}>
             최근7일
           </button>
-          <button type="button" onClick={() => {} } style={preset === 'custom' ? ui.tabActive : ui.tab}>
+          <button type="button" onClick={selectCustom} style={preset === 'custom' ? ui.tabActive : ui.tab}>
             직접입력
           </button>
         </div>
 
         {preset === 'custom' && (
           <>
-            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} style={ui.dateInput} aria-label="시작일" />
+            <input type="date" value={from} onChange={(e) => { setPeriod(''); setFrom(e.target.value) }} style={ui.dateInput} aria-label="시작일" />
             <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-hint)' }}>~</span>
-            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} style={ui.dateInput} aria-label="종료일" />
+            <input type="date" value={to} onChange={(e) => { setPeriod(''); setTo(e.target.value) }} style={ui.dateInput} aria-label="종료일" />
           </>
         )}
 
