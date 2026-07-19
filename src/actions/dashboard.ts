@@ -60,7 +60,7 @@ function joinedCustomerName(customers: DashboardOrderCustomerJoin | undefined): 
   return customers.name?.trim() ?? ''
 }
 
-/** TOP5 거래처명 — 스냅샷·조인(배열/객체)·CRM 목록 순 fallback */
+/** TOP10 거래처명 — 스냅샷·조인(배열/객체)·CRM 목록 순 fallback */
 function resolveDashboardCustomerName(
   order: {
     customer_id?: string | null
@@ -112,8 +112,8 @@ export interface DashboardData {
     days_since_order: number
     payment_terms_days: number
   }>
-  top_customer_sales: Array<{ name: string; amount: number; quantity: number }>
-  top_product_sales:  Array<{ name: string; amount: number }>
+  top_customer_sales: Array<{ id: string | null; name: string; amount: number; quantity: number }>
+  top_product_sales:  Array<{ id: string | null; name: string; amount: number }>
   overdue_count:      number
   uncontacted_count:  number
   draft_order_count:  number
@@ -162,7 +162,7 @@ export async function getDashboardData(): Promise<ActionResult<DashboardData>> {
       .gte('order_date', monthStart).lte('order_date', today),
 
     supabase.from('orders')
-      .select('order_lines(product_name, line_total), order_type')
+      .select('order_lines(product_id, product_name, line_total), order_type')
       .or(`seller_tenant_id.eq.${tid},tenant_id.eq.${tid}`)
       .eq('status', 'confirmed')
       .is('deleted_at', null)
@@ -195,8 +195,8 @@ export async function getDashboardData(): Promise<ActionResult<DashboardData>> {
     .filter((o) => isSalesOrder(o))
     .reduce((s, o) => s + resolveDashboardOrderAmount(o), 0)
 
-  // 위험 거래처 TOP5
-  const top_customers = customers.slice(0, 5).map((c) => {
+  // 위험 거래처 TOP10
+  const top_customers = customers.slice(0, 10).map((c) => {
     let primary_reason = ''
     if (c.overdue_amount > 0)
       primary_reason = `연체금 ${Math.round(c.overdue_amount / 10000)}만원`
@@ -221,11 +221,12 @@ export async function getDashboardData(): Promise<ActionResult<DashboardData>> {
     }
   })
 
-  // 거래처 매출 TOP5 — customer_name snapshot 우선, purchase 제외
-  const custSalesMap = new Map<string, { name: string; amount: number; quantity: number }>()
+  // 거래처 매출 TOP10 — customer_id 우선, purchase 제외
+  const custSalesMap = new Map<string, { id: string | null; name: string; amount: number; quantity: number }>()
   for (const o of customerSalesRaw ?? []) {
     if (!isSalesOrder(o)) continue
     const key  = buildCustomerKey(o)
+    const cid  = (o.customer_id as string | null | undefined)?.trim() || null
     const name = resolveDashboardCustomerName(o, customerNameById)
     const lines = o.order_lines ?? []
     const amt  = resolveDashboardOrderAmount(o)
@@ -233,23 +234,38 @@ export async function getDashboardData(): Promise<ActionResult<DashboardData>> {
       (s, l) => s + (l.quantity ?? 0),
       0,
     )
-    const cur  = custSalesMap.get(key) ?? { name, amount: 0, quantity: 0 }
+    const cur  = custSalesMap.get(key) ?? { id: cid, name, amount: 0, quantity: 0 }
     const merged = mergeTopSalesCustomerName(cur.name, name)
-    custSalesMap.set(key, { name: merged, amount: cur.amount + amt, quantity: cur.quantity + qty })
+    custSalesMap.set(key, {
+      id: cur.id ?? cid,
+      name: merged,
+      amount: cur.amount + amt,
+      quantity: cur.quantity + qty,
+    })
   }
   const top_customer_sales = [...custSalesMap.values()]
-    .sort((a, b) => b.amount - a.amount).slice(0, 5)
+    .sort((a, b) => b.amount - a.amount).slice(0, 10)
 
-  // 상품 매출 TOP5 — purchase 제외
-  const prodSalesMap = new Map<string, number>()
+  // 상품 매출 TOP10 — purchase 제외, product_id 기준 집계
+  const prodSalesMap = new Map<string, { id: string | null; name: string; amount: number }>()
   for (const o of ordersForProductSales ?? []) {
     if (!isSalesOrder(o)) continue
-    for (const l of (o as any).order_lines ?? [])
-      prodSalesMap.set(l.product_name, (prodSalesMap.get(l.product_name) ?? 0) + l.line_total)
+    for (const l of (o as any).order_lines ?? []) {
+      const pid = (l.product_id as string | null | undefined)?.trim() || null
+      const pname = String(l.product_name ?? '').trim() || '알 수 없음'
+      const key = pid ?? `name:${pname}`
+      const amt = Number(l.line_total ?? 0) || 0
+      const cur = prodSalesMap.get(key) ?? { id: pid, name: pname, amount: 0 }
+      prodSalesMap.set(key, {
+        id: cur.id ?? pid,
+        name: cur.name !== '알 수 없음' ? cur.name : pname,
+        amount: cur.amount + amt,
+      })
+    }
   }
-  const top_product_sales = [...prodSalesMap.entries()]
-    .sort((a, b) => b[1] - a[1]).slice(0, 5)
-    .map(([name, amount]) => ({ name, amount }))
+  const top_product_sales = [...prodSalesMap.values()]
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 10)
 
   const overdue_count     = customers.filter((c) => c.overdue_amount > 0).length
   const uncontacted_count = customers.filter((c) => (c.days_since_contact ?? 0) >= 14).length

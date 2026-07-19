@@ -76,41 +76,47 @@ export default async function DashboardPage() {
 
           <div className={styles.analysisGrid}>
             <div className={styles.analysisCol}>
-              <div className={styles.analysisColHead}>거래처 매출 TOP 5</div>
+              <div className={styles.analysisColHead}>거래처 매출 TOP 10</div>
               {d.top_customer_sales.length === 0 ? (
                 <div className={styles.empty}>데이터 없음</div>
               ) : (
-                d.top_customer_sales.slice(0, 5).map((c, i) => (
-                  <Link key={`cs-${i}`} href="/customers" className={styles.row}>
-                    <span className={styles.rank}>{i + 1}</span>
-                    <span className={styles.name}>{c.name?.trim() || '알 수 없음'}</span>
-                    <span className={styles.value}>{formatKRW(c.amount)}</span>
-                  </Link>
-                ))
+                d.top_customer_sales.slice(0, 10).map((c, i) => {
+                  const href = c.id ? `/customers/${c.id}` : '/customers'
+                  return (
+                    <Link key={`cs-${c.id ?? i}`} href={href} className={styles.row}>
+                      <span className={styles.rank}>{i + 1}</span>
+                      <span className={styles.name}>{c.name?.trim() || '알 수 없음'}</span>
+                      <span className={styles.value}>{formatKRW(c.amount)}</span>
+                    </Link>
+                  )
+                })
               )}
             </div>
 
             <div className={styles.analysisCol}>
-              <div className={styles.analysisColHead}>상품 매출 TOP 5</div>
+              <div className={styles.analysisColHead}>상품 매출 TOP 10</div>
               {d.top_product_sales.length === 0 ? (
                 <div className={styles.empty}>데이터 없음</div>
               ) : (
-                d.top_product_sales.slice(0, 5).map((p, i) => (
-                  <Link key={`ps-${i}`} href="/products" className={styles.row}>
-                    <span className={styles.rank}>{i + 1}</span>
-                    <span className={styles.name}>{p.name}</span>
-                    <span className={styles.value}>{formatKRW(p.amount)}</span>
-                  </Link>
-                ))
+                d.top_product_sales.slice(0, 10).map((p, i) => {
+                  const href = p.id ? `/products/${p.id}` : '/products'
+                  return (
+                    <Link key={`ps-${p.id ?? i}`} href={href} className={styles.row}>
+                      <span className={styles.rank}>{i + 1}</span>
+                      <span className={styles.name}>{p.name}</span>
+                      <span className={styles.value}>{formatKRW(p.amount)}</span>
+                    </Link>
+                  )
+                })
               )}
             </div>
 
             <div className={styles.analysisCol}>
-              <div className={styles.analysisColHead}>주목 거래처 TOP 5</div>
+              <div className={styles.analysisColHead}>주목 거래처 TOP 10</div>
               {d.top_customers.length === 0 ? (
                 <div className={styles.empty}>데이터 없음</div>
               ) : (
-                d.top_customers.slice(0, 5).map((c, i) => (
+                d.top_customers.slice(0, 10).map((c, i) => (
                   <Link key={`tc-${c.id}`} href={`/customers/${c.id}`} className={styles.row}>
                     <span className={styles.rank}>{i + 1}</span>
                     <span className={styles.name}>{c.name}</span>
@@ -139,7 +145,7 @@ export default async function DashboardPage() {
               <div className={styles.empty}>오늘 수금 대상이 없습니다</div>
             ) : (
               collections.map((c) => (
-                <Link key={c.id} href={`/payments/new?customer_id=${c.id}`} className={styles.collectionRow}>
+                <Link key={c.id} href={`/customers/${c.id}`} className={styles.collectionRow}>
                   <div className={styles.collectionLeft}>
                     <div className={styles.collectionName}>{c.name}</div>
                     <div className={styles.collectionDate}>
