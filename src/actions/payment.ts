@@ -740,6 +740,141 @@ export async function getPaymentDetail(payment_id: string): Promise<ActionResult
   }
 }
 
+// ============================================================
+// 수금 수정 (날짜/금액/방식/메모 + 수정사유)
+// - 예치금(deposit_amount > 0)인 경우 금액 변경 불가
+// - 금액은 활성 배분 합계 이상이어야 함
+// ============================================================
+
+export interface UpdatePaymentInput {
+  payment_id: string
+  payment_date: string
+  amount: number
+  payment_method: PaymentMethod
+  memo?: string | null
+  /** 수정 사유 (필수) */
+  edit_reason: string
+}
+
+export async function updatePayment(
+  input: UpdatePaymentInput,
+): Promise<ActionResult> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인이 필요합니다.' }
+
+  const editReason = (input.edit_reason ?? '').trim()
+  if (!editReason) return { success: false, error: '수정 사유를 입력해주세요.' }
+  if (!input.payment_date) return { success: false, error: '수금일자를 입력해주세요.' }
+  if (!input.amount || input.amount <= 0 || !Number.isInteger(input.amount)) {
+    return { success: false, error: '유효한 금액을 입력해주세요. (양의 정수)' }
+  }
+  const METHODS: PaymentMethod[] = ['transfer', 'cash', 'card', 'platform']
+  if (!METHODS.includes(input.payment_method)) {
+    return { success: false, error: '수금 방법이 올바르지 않습니다.' }
+  }
+
+  const { data: payment, error: payErr } = await supabase
+    .from('payments')
+    .select('id, customer_id, amount, deposit_amount, payment_date, payment_method, memo, status')
+    .eq('id', input.payment_id)
+    .eq('direction', 'inbound')
+    .or(tenantInboundPayeeScope(ctx.tenant_id))
+    .maybeSingle()
+
+  if (payErr) return { success: false, error: payErr.message }
+  if (!payment) return { success: false, error: '수금 내역을 찾을 수 없습니다.' }
+  if (payment.status === 'reversed') return { success: false, error: '취소된 수금은 수정할 수 없습니다.' }
+  if (payment.status !== 'confirmed') {
+    return { success: false, error: '확정된 수금만 수정할 수 있습니다.' }
+  }
+
+  const { data: child } = await supabase
+    .from('payments')
+    .select('id')
+    .eq('reversal_of_id', input.payment_id)
+    .maybeSingle()
+  if (child?.id) return { success: false, error: '취소된 수금은 수정할 수 없습니다.' }
+
+  const amountChanged = payment.amount !== input.amount
+  const depositAmount = payment.deposit_amount ?? 0
+  if (amountChanged && depositAmount > 0) {
+    return {
+      success: false,
+      error: '예치금이 포함된 수금은 금액을 변경할 수 없습니다. 날짜·방식·메모만 수정하거나, 취소 후 재등록하세요.',
+    }
+  }
+
+  if (amountChanged) {
+    const { data: allocRows, error: allocErr } = await supabase
+      .from('collection_allocations')
+      .select('allocated_amount')
+      .eq('tenant_id', ctx.tenant_id)
+      .eq('payment_id', input.payment_id)
+      .eq('status', 'active')
+
+    if (allocErr) return { success: false, error: allocErr.message }
+    const allocatedSum = (allocRows ?? []).reduce(
+      (s, r) => s + (r.allocated_amount ?? 0),
+      0,
+    )
+    if (input.amount < allocatedSum) {
+      return {
+        success: false,
+        error: `금액(${input.amount.toLocaleString()}원)이 배분 합계(${allocatedSum.toLocaleString()}원)보다 작을 수 없습니다.`,
+      }
+    }
+  }
+
+  const today = new Date().toISOString().slice(0, 10)
+  const prevMemo = (payment.memo ?? '').trim()
+  const nextMemoBase = (input.memo ?? '').trim()
+  const auditLine = `[수정 ${today}] ${editReason}`
+  const mergedMemo = [nextMemoBase, auditLine].filter(Boolean).join('\n')
+
+  const { error: updErr } = await supabase
+    .from('payments')
+    .update({
+      payment_date: input.payment_date,
+      amount: input.amount,
+      payment_method: input.payment_method,
+      memo: mergedMemo || null,
+    })
+    .eq('id', input.payment_id)
+    .or(tenantInboundPayeeScope(ctx.tenant_id))
+
+  if (updErr) return { success: false, error: updErr.message }
+
+  await logPaymentReversalAudit(supabase, ctx, 'inbound_payment_updated', {
+    payment_id: input.payment_id,
+    customer_id: payment.customer_id,
+    before: {
+      payment_date: payment.payment_date,
+      amount: payment.amount,
+      payment_method: payment.payment_method,
+      memo: payment.memo,
+      deposit_amount: depositAmount,
+    },
+    after: {
+      payment_date: input.payment_date,
+      amount: input.amount,
+      payment_method: input.payment_method,
+      memo: mergedMemo || null,
+    },
+    edit_reason: editReason,
+    admin_user_id: ctx.user_id,
+    prev_memo_snapshot: prevMemo || null,
+  }).catch(() => {})
+
+  revalidatePath('/payments')
+  revalidatePath(`/payments/${input.payment_id}`)
+  revalidatePath('/customers')
+  revalidatePath(`/customers/${payment.customer_id}`)
+  revalidatePath(`/customers/${payment.customer_id}/ledger`)
+
+  return { success: true }
+}
+
 export interface PaymentAllocationRow {
   id: string
   order_id: string

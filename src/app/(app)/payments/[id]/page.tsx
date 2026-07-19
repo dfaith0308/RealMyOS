@@ -6,6 +6,7 @@ import {
   getPaymentDetail,
 } from '@/actions/payment'
 import PaymentAllocationClient from '@/components/payment/PaymentAllocationClient'
+import PaymentEditForm from '@/components/payment/PaymentEditForm'
 import { Surface } from '@/components/ui/Surface'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import type { DSStatus } from '@/styles/design-system'
@@ -32,6 +33,9 @@ export default async function PaymentDetailPage({ params }: { params: { id: stri
   const allocations = allocRes.data ?? []
   const openOrders = openRes.data ?? []
   const badgeStatus: DSStatus = payment.status === 'confirmed' ? 'confirmed' : 'cancelled'
+  const allocatedSum = allocations
+    .filter((a) => a.status === 'active')
+    .reduce((s, a) => s + a.allocated_amount, 0)
 
   return (
     <main style={{ maxWidth: 980, margin: '0 auto', padding: '32px 24px 60px' }}>
@@ -78,11 +82,15 @@ export default async function PaymentDetailPage({ params }: { params: { id: stri
           ))}
         </div>
         {payment.memo ? (
-          <div style={{ marginTop: 10, fontSize: 12, fontWeight: 800, color: 'var(--ds-text-muted)' }}>
+          <div style={{ marginTop: 10, fontSize: 12, fontWeight: 800, color: 'var(--ds-text-muted)', whiteSpace: 'pre-wrap' }}>
             메모: {payment.memo}
           </div>
         ) : null}
       </Surface>
+
+      <div style={{ marginTop: 12 }}>
+        <PaymentEditForm payment={payment} allocatedSum={allocatedSum} />
+      </div>
 
       <div style={{ marginTop: 12 }}>
         <PaymentAllocationClient payment={payment} allocations={allocations} openOrders={openOrders} />
