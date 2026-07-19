@@ -2,6 +2,7 @@ import Link from 'next/link'
 import type { CSSProperties } from 'react'
 import { getProductDetail } from '@/actions/product'
 import { getProductAnalytics } from '@/actions/product-analytics'
+import ProductRepurchaseListClient from '@/components/product/ProductRepurchaseListClient'
 import { formatKRW } from '@/lib/calc'
 
 export const metadata = { title: '상품 상세 — RealMyOS' }
@@ -10,18 +11,6 @@ const ellipsis: CSSProperties = {
   whiteSpace: 'nowrap',
   overflow: 'hidden',
   textOverflow: 'ellipsis',
-}
-
-function repurchaseColor(days: number, hasCycle: boolean): string {
-  if (hasCycle) {
-    if (days <= 30) return '#1f5d3a'
-    if (days <= 60) return '#d97706'
-    return '#dc2626'
-  }
-  // 마지막 구매일 기준
-  if (days <= 30) return '#1f5d3a'
-  if (days <= 60) return '#d97706'
-  return '#dc2626'
 }
 
 function avgCycleKpiColor(days: number | null): string {
@@ -278,7 +267,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
                       >
                         {row.name}
                       </Link>
-                      <span style={{ fontSize: 14, fontWeight: 800, color: low ? '#dc2626' : '#111827', flexShrink: 0 }}>
+                      <span style={{ fontSize: 14, fontWeight: 800, color: low ? '#E8701C' : '#111827', flexShrink: 0 }}>
                         {formatKRW(row.unit_price)}
                       </span>
                     </div>
@@ -294,33 +283,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
               <div style={cardTitle}>거래처별 재구매 주기</div>
               <div style={cardMeta}>최근 6개월 기준</div>
             </div>
-            {(a?.repurchase.length ?? 0) === 0 ? (
-              <div style={empty}>재구매 이력이 없습니다</div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {a!.repurchase.map((row) => {
-                  const hasCycle = row.avg_cycle_days != null
-                  const label = hasCycle
-                    ? `${row.avg_cycle_days}일마다`
-                    : `${row.days_since_last}일 전 마지막`
-                  const color = repurchaseColor(
-                    hasCycle ? row.avg_cycle_days! : row.days_since_last,
-                    hasCycle,
-                  )
-                  return (
-                    <div key={row.customer_id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, minWidth: 0 }}>
-                      <Link
-                        href={`/customers/${row.customer_id}`}
-                        style={{ fontSize: 14, fontWeight: 600, color: '#374151', textDecoration: 'none', ...ellipsis }}
-                      >
-                        {row.name}
-                      </Link>
-                      <span style={{ fontSize: 13, fontWeight: 800, color, flexShrink: 0 }}>{label}</span>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
+            <ProductRepurchaseListClient rows={a?.repurchase ?? []} />
           </section>
         </div>
       </div>

@@ -67,11 +67,13 @@ export interface ProductCustomerPriceRow {
   customer_id: string
   name: string
   unit_price: number
+  phone: string | null
 }
 
 export interface ProductRepurchaseRow {
   customer_id: string
   name: string
+  phone: string | null
   avg_cycle_days: number | null
   last_order_date: string
   days_since_last: number
@@ -183,20 +185,24 @@ export async function getProductAnalytics(
   }
 
   const customerIds = [...customerIdSet]
-  const nameById = new Map<string, string>()
+  const custById = new Map<string, { name: string; phone: string | null }>()
   if (customerIds.length > 0) {
     const { data: custRows, error: custErr } = await fetchByIdsInBatches(customerIds, 200, async (chunk) => {
       const res = await supabase
         .from('customers')
-        .select('id, name')
+        .select('id, name, phone')
         .eq('tenant_id', tid)
         .in('id', chunk)
         .is('deleted_at', null)
-      return { data: res.data as Array<{ id: string; name: string }> | null, error: res.error }
+      return {
+        data: res.data as Array<{ id: string; name: string; phone: string | null }> | null,
+        error: res.error,
+      }
     })
     if (custErr) return { success: false, error: custErr }
     for (const c of custRows) {
-      nameById.set(c.id, c.name?.trim() || '알 수 없음')
+      const phone = typeof c.phone === 'string' && c.phone.trim() ? c.phone.trim() : null
+      custById.set(c.id, { name: c.name?.trim() || '알 수 없음', phone })
     }
   }
 
@@ -217,7 +223,7 @@ export async function getProductAnalytics(
     const cid = (o.customer_id ?? '').trim()
     if (!cid) continue
     const name =
-      nameById.get(cid) ||
+      custById.get(cid)?.name ||
       o.customer_name?.trim() ||
       '알 수 없음'
     const qty = Number(raw.quantity ?? 0) || 0
@@ -311,11 +317,20 @@ export async function getProductAnalytics(
   const customer_prices: ProductCustomerPriceRow[] = [...allPriceCust]
     .map((cid) => ({
       customer_id: cid,
-      name: nameById.get(cid) ?? latestByCustomer.get(cid)?.name ?? '-',
+      name: custById.get(cid)?.name ?? latestByCustomer.get(cid)?.name ?? '-',
       unit_price: priceFromCache.get(cid) ?? latestByCustomer.get(cid)?.unit_price ?? 0,
+      phone: custById.get(cid)?.phone ?? null,
     }))
     .filter((r) => r.unit_price > 0)
-    .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
+    .sort((a, b) => {
+      // 기준가 대비 할인율 높은 순 (양수 = 기준가보다 저가)
+      if (base_price != null && base_price > 0) {
+        const discA = (base_price - a.unit_price) / base_price
+        const discB = (base_price - b.unit_price) / base_price
+        if (discB !== discA) return discB - discA
+      }
+      return a.name.localeCompare(b.name, 'ko')
+    })
     .slice(0, 20)
 
   const datesByCustomer = new Map<string, { name: string; dates: Set<string> }>()
@@ -341,6 +356,7 @@ export async function getProductAnalytics(
       return {
         customer_id,
         name: v.name,
+        phone: custById.get(customer_id)?.phone ?? null,
         avg_cycle_days: avg,
         last_order_date: last,
         days_since_last: daysBetween(last, today),
