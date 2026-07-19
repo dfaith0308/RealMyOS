@@ -6,7 +6,9 @@ import { useRouter } from 'next/navigation'
 import type { ProductRepurchaseRow } from '@/actions/product-analytics'
 import SmsModal from '@/components/sms/SmsModal'
 
-function repurchaseColor(days: number, hasCycle: boolean): string {
+function repurchaseColor(days: number, hasCycle: boolean, daysSinceLast: number): string {
+  // 실제 미구매 60일 초과면 평소 주기와 무관하게 위험(빨강)
+  if (daysSinceLast > 60) return '#dc2626'
   if (hasCycle) {
     if (days <= 30) return '#1f5d3a'
     if (days <= 60) return '#d97706'
@@ -50,6 +52,7 @@ export default function ProductRepurchaseListClient({
           const color = repurchaseColor(
             hasCycle ? row.avg_cycle_days! : row.days_since_last,
             hasCycle,
+            row.days_since_last,
           )
           // 빨강(이탈)과 동일: days_since_last > 60 → 문자 버튼 (phone 있을 때만)
           const showSmsBtn = row.days_since_last > 60 && !!row.phone
