@@ -8,6 +8,7 @@ import { Surface } from '@/components/ui/Surface'
 import { KPIBlock } from '@/components/ui/KPIBlock'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { CustomerLedgerFlowClient } from '@/components/ledger/CustomerLedgerFlowClient'
+import LedgerStatementExportButtons from '@/components/ledger/LedgerStatementExportButtons'
 import styles from './ledger-flow.module.css'
 
 export const metadata = { title: '거래처 원장 — RealMyOS' }
@@ -114,6 +115,7 @@ export default async function CustomerLedgerPage({
             <Link href={`/payments?customer_id=${id}`} className={styles.btn}>
               수금 내역
             </Link>
+            <LedgerStatementExportButtons customerId={id} from={from} to={to} />
           </div>
         </div>
 
