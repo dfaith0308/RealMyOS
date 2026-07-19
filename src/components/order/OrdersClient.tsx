@@ -263,7 +263,12 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
           <h1 style={{ fontSize: 18, fontWeight: 500, color: 'var(--text-primary)', margin: 0 }}>주문 목록</h1>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <Link href="/orders/new" style={ui.primaryBtn}>주문 등록</Link>
+          <Link
+            href={customerId ? `/orders/new?customer_id=${encodeURIComponent(customerId)}` : '/orders/new'}
+            style={ui.primaryBtn}
+          >
+            주문 등록
+          </Link>
           <Link href="/orders?status=draft" style={ui.secondaryBtn}>Draft 보기</Link>
         </div>
       </div>
