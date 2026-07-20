@@ -6,12 +6,20 @@ import { DataCell, DataTableRow } from '@/components/ui/DataTableRow'
 import { formatKRW } from '@/lib/calc'
 import styles from './CustomerLedgerFlowClient.module.css'
 
+type LedgerOrderLine = {
+  product_name: string
+  quantity: number
+  unit_price: number
+  line_total: number
+}
+
 type LedgerRow = {
   id: string
   date: string
   type: 'order' | 'payment'
   order_number?: string
   summary?: string
+  lines?: LedgerOrderLine[]
   total_amount?: number
   payment_amount?: number
   payment_method?: string
@@ -175,33 +183,54 @@ export function CustomerLedgerFlowClient({
                   const sub = isSale
                     ? r.order_number ? `#${r.order_number}` : ''
                     : (r.payment_method ?? '').toUpperCase()
+                  const lines = isSale ? (r.lines ?? []) : []
                   return (
-                    <DataTableRow
-                      key={r.id}
-                      density="compact"
-                    >
-                      <DataCell>
-                        <div className={styles.rowMain}>
-                          <div className={styles.rowTitle}>{title}</div>
-                          <div className={styles.rowSub}>
-                            {sub}{r.memo ? (sub ? ` · ${r.memo}` : r.memo) : ''}
+                    <div key={r.id}>
+                      <DataTableRow density="compact">
+                        <DataCell>
+                          <div className={styles.rowMain}>
+                            <div className={styles.rowTitle}>{title}</div>
+                            <div className={styles.rowSub}>
+                              {sub}{r.memo ? (sub ? ` · ${r.memo}` : r.memo) : ''}
+                            </div>
                           </div>
-                        </div>
-                      </DataCell>
-                      <DataCell align="end">
-                        <span
-                          className={[
-                            styles.amt,
-                            isSale ? styles.amtSale : styles.amtPay,
-                          ].join(' ')}
-                        >
-                          {isSale ? `+${formatKRW(Math.abs(amt))}` : `−${formatKRW(Math.abs(amt))}`}
-                        </span>
-                      </DataCell>
-                      <DataCell align="end" tone="secondary">
-                        <span className={styles.bal}>{formatKRW(r.running_balance)}</span>
-                      </DataCell>
-                    </DataTableRow>
+                        </DataCell>
+                        <DataCell align="end">
+                          <span
+                            className={[
+                              styles.amt,
+                              isSale ? styles.amtSale : styles.amtPay,
+                            ].join(' ')}
+                          >
+                            {isSale ? `+${formatKRW(Math.abs(amt))}` : `−${formatKRW(Math.abs(amt))}`}
+                          </span>
+                        </DataCell>
+                        <DataCell align="end" tone="secondary">
+                          <span className={styles.bal}>{formatKRW(r.running_balance)}</span>
+                        </DataCell>
+                      </DataTableRow>
+
+                      {lines.map((line, idx) => {
+                        const qty = Number(line.quantity) || 0
+                        const unit = Number(line.unit_price) || 0
+                        const lineAmt =
+                          line.line_total != null && Number.isFinite(Number(line.line_total))
+                            ? Number(line.line_total)
+                            : qty * unit
+                        return (
+                          <div key={`${r.id}-line-${idx}`} className={styles.lineRow}>
+                            <div className={styles.lineName}>
+                              {line.product_name} × {qty}
+                              {unit ? (
+                                <span className={styles.lineUnit}> · {formatKRW(unit)}</span>
+                              ) : null}
+                            </div>
+                            <div className={styles.lineAmt}>{formatKRW(lineAmt)}</div>
+                            <div className={styles.lineBalSpacer} aria-hidden />
+                          </div>
+                        )
+                      })}
+                    </div>
                   )
                 })}
               </div>

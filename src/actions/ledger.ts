@@ -82,6 +82,13 @@ export async function getLedgerSuppliers(): Promise<ActionResult<string[]>> {
 // 거래처별 원장
 // ============================================================
 
+export interface LedgerOrderLine {
+  product_name: string
+  quantity: number
+  unit_price: number
+  line_total: number
+}
+
 export interface LedgerRow {
   id: string
   date: string
@@ -89,6 +96,8 @@ export interface LedgerRow {
   type: 'order' | 'payment'
   order_number?: string
   summary?: string
+  /** 주문 행 품목 상세. payment는 빈 배열 */
+  lines?: LedgerOrderLine[]
   total_supply_price?: number
   total_vat_amount?: number
   total_amount?: number
@@ -141,7 +150,7 @@ export async function getCustomerLedger(
   // 기간 통계/목록은 메모리에서 from~to 및 payment_method 필터
   let ordersQuery = supabase
     .from('orders')
-    .select('id, order_number, order_date, created_at, total_amount, discount_amount, point_used, deposit_used, final_amount, total_supply_price, total_vat_amount, memo, order_lines(product_name, quantity)')
+    .select('id, order_number, order_date, created_at, total_amount, discount_amount, point_used, deposit_used, final_amount, total_supply_price, total_vat_amount, memo, order_lines(product_name, quantity, unit_price, line_total)')
     .eq('customer_id', customer_id)
     // 전환: seller_tenant_id 우선 (legacy tenant_id 병행)
     .or(`seller_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
@@ -195,13 +204,32 @@ export async function getCustomerLedger(
       const o = item.data
       const orderAmt = effectiveOrderAmount(o as { final_amount?: number | null; total_amount: number })
       running += orderAmt
-      const lines = (o.order_lines ?? []) as Array<{ product_name: string; quantity: number }>
+      const rawLines = (o.order_lines ?? []) as Array<{
+        product_name?: string | null
+        quantity?: number | null
+        unit_price?: number | null
+        line_total?: number | null
+      }>
+      const lines: LedgerOrderLine[] = rawLines.map((l) => {
+        const quantity = Number(l.quantity ?? 0) || 0
+        const unit_price = Number(l.unit_price ?? 0) || 0
+        const line_total =
+          l.line_total != null && Number.isFinite(Number(l.line_total))
+            ? Number(l.line_total)
+            : quantity * unit_price
+        return {
+          product_name: String(l.product_name ?? '').trim() || '-',
+          quantity,
+          unit_price,
+          line_total,
+        }
+      })
       const lineSummary = lines.length === 0 ? '-'
         : lines.length === 1 ? `${lines[0].product_name} ${lines[0].quantity}개`
         : `${lines[0].product_name} 외 ${lines.length - 1}건`
       return {
         id: o.id, date: o.order_date, created_at: o.created_at, type: 'order' as const,
-        order_number: o.order_number, summary: lineSummary,
+        order_number: o.order_number, summary: lineSummary, lines,
         total_supply_price: o.total_supply_price, total_vat_amount: o.total_vat_amount,
         total_amount: orderAmt, memo: o.memo ?? undefined, running_balance: running,
       }
@@ -211,7 +239,7 @@ export async function getCustomerLedger(
       return {
         id: p.id, date: p.payment_date, created_at: p.created_at, type: 'payment' as const,
         payment_method: p.payment_method, payment_amount: p.amount,
-        memo: p.memo ?? undefined, running_balance: running,
+        memo: p.memo ?? undefined, running_balance: running, lines: [],
       }
     }
   })

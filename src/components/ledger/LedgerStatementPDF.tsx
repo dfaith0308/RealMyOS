@@ -233,38 +233,77 @@ export function LedgerStatementPdfDoc({ data }: { data: LedgerForExport }) {
               const amount = isOrder
                 ? Number(row.total_amount ?? 0)
                 : Number(row.payment_amount ?? 0)
+              const lines = isOrder ? (row.lines ?? []) : []
               return (
-                <View key={`${row.type}-${row.id}`} style={styles.tr} wrap={false}>
-                  <View style={{ width: '16%' }}>
-                    <Text style={styles.td}>{row.date}</Text>
+                <View key={`${row.type}-${row.id}`} wrap={false}>
+                  <View style={styles.tr}>
+                    <View style={{ width: '16%' }}>
+                      <Text style={styles.td}>{row.date}</Text>
+                    </View>
+                    <View style={{ width: '10%' }}>
+                      <Text style={styles.td}>{isOrder ? '매출' : '입금'}</Text>
+                    </View>
+                    <View style={{ width: '34%' }}>
+                      <Text style={styles.td}>
+                        {rowDescription(row.type, row.summary, row.memo, row.payment_method)}
+                      </Text>
+                    </View>
+                    <View style={{ width: '20%' }}>
+                      <Text
+                        style={[
+                          styles.td,
+                          {
+                            textAlign: 'right',
+                            fontWeight: 700,
+                            color: isOrder ? '#111827' : GREEN,
+                          },
+                        ]}
+                      >
+                        {isOrder ? formatKRW(amount) : `-${formatKRW(amount)}`}
+                      </Text>
+                    </View>
+                    <View style={{ width: '20%' }}>
+                      <Text style={[styles.td, { textAlign: 'right' }]}>
+                        {formatKRW(row.running_balance)}
+                      </Text>
+                    </View>
                   </View>
-                  <View style={{ width: '10%' }}>
-                    <Text style={styles.td}>{isOrder ? '매출' : '입금'}</Text>
-                  </View>
-                  <View style={{ width: '34%' }}>
-                    <Text style={styles.td}>
-                      {rowDescription(row.type, row.summary, row.memo, row.payment_method)}
-                    </Text>
-                  </View>
-                  <View style={{ width: '20%' }}>
-                    <Text
-                      style={[
-                        styles.td,
-                        {
-                          textAlign: 'right',
-                          fontWeight: 700,
-                          color: isOrder ? '#111827' : GREEN,
-                        },
-                      ]}
-                    >
-                      {isOrder ? formatKRW(amount) : `-${formatKRW(amount)}`}
-                    </Text>
-                  </View>
-                  <View style={{ width: '20%' }}>
-                    <Text style={[styles.td, { textAlign: 'right' }]}>
-                      {formatKRW(row.running_balance)}
-                    </Text>
-                  </View>
+
+                  {lines.map((line, idx) => {
+                    const qty = Number(line.quantity) || 0
+                    const unit = Number(line.unit_price) || 0
+                    const lineAmt =
+                      line.line_total != null && Number.isFinite(Number(line.line_total))
+                        ? Number(line.line_total)
+                        : qty * unit
+                    return (
+                      <View
+                        key={`${row.id}-line-${idx}`}
+                        style={[styles.tr, { backgroundColor: '#fafafa' }]}
+                      >
+                        <View style={{ width: '16%' }}>
+                          <Text style={styles.td}> </Text>
+                        </View>
+                        <View style={{ width: '10%' }}>
+                          <Text style={styles.td}> </Text>
+                        </View>
+                        <View style={{ width: '34%' }}>
+                          <Text style={[styles.td, { color: '#6b7280', paddingLeft: 10 }]}>
+                            {line.product_name} × {qty}
+                            {unit ? `  ·  ${formatKRW(unit)}` : ''}
+                          </Text>
+                        </View>
+                        <View style={{ width: '20%' }}>
+                          <Text style={[styles.td, { textAlign: 'right', color: '#6b7280' }]}>
+                            {formatKRW(lineAmt)}
+                          </Text>
+                        </View>
+                        <View style={{ width: '20%' }}>
+                          <Text style={styles.td}> </Text>
+                        </View>
+                      </View>
+                    )
+                  })}
                 </View>
               )
             })

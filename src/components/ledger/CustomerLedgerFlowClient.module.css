@@ -174,3 +174,42 @@
   color: var(--ds-text-muted);
 }
 
+.lineRow {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px;
+  align-items: baseline;
+  padding: 4px 12px 4px 28px;
+  border-bottom: 1px solid var(--ds-border-subtle);
+  background: color-mix(in srgb, var(--ds-neutral-50) 55%, white);
+}
+
+.lineName {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ds-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lineUnit {
+  font-weight: 600;
+  color: var(--ds-text-muted);
+}
+
+.lineAmt {
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--ds-text-secondary);
+  white-space: nowrap;
+  text-align: right;
+  min-width: 72px;
+}
+
+.lineBalSpacer {
+  min-width: 72px;
+}
+
