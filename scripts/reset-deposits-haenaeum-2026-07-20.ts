@@ -16,7 +16,7 @@ import { resolve } from 'node:path'
 import { createClient } from '@supabase/supabase-js'
 
 // ── 대상 테넌트 (하드코딩 — 다른 테넌트 실행 방지) ──
-const TENANT_ID = 'd6409691-940c-48ce-ad3a-6f600616c39c'
+const TENANT_ID = '5bf7aa92-7eaa-4f0e-a75f-89310c7b275d'
 const TENANT_NAME = '해내음코리아'
 const RESET_REASON =
   '정정: 전산오류로 주문 매칭 오류 인해 예치금 처리된 금액 리셋 (2026-07-20)'
