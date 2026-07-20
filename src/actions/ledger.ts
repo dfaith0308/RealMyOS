@@ -137,6 +137,8 @@ export async function getCustomerLedger(
     .single()
   if (!customer) return { success: false, error: '거래처를 찾을 수 없습니다.' }
 
+  // 잔액 누적용: from 미적용, to까지만 (등록·최초미수 이후 ~ 조회종료일)
+  // 기간 통계/목록은 메모리에서 from~to 및 payment_method 필터
   let ordersQuery = supabase
     .from('orders')
     .select('id, order_number, order_date, created_at, total_amount, discount_amount, point_used, deposit_used, final_amount, total_supply_price, total_vat_amount, memo, order_lines(product_name, quantity)')
@@ -148,8 +150,7 @@ export async function getCustomerLedger(
     .order('order_date', { ascending: true })
     .order('created_at', { ascending: true })
 
-  if (options?.from) ordersQuery = ordersQuery.gte('order_date', options.from)
-  if (options?.to)   ordersQuery = ordersQuery.lte('order_date', options.to)
+  if (options?.to) ordersQuery = ordersQuery.lte('order_date', options.to)
 
   const payeeScope = `payee_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`
   const supersededInbound = await fetchInboundSupersededOriginalPaymentIds(supabase, payeeScope)
@@ -170,9 +171,7 @@ export async function getCustomerLedger(
     paymentsQuery = paymentsQuery.not('id', 'in', `(${supersededInbound.join(',')})`)
   }
 
-  if (options?.from)           paymentsQuery = paymentsQuery.gte('payment_date', options.from)
-  if (options?.to)             paymentsQuery = paymentsQuery.lte('payment_date', options.to)
-  if (options?.payment_method) paymentsQuery = paymentsQuery.eq('payment_method', options.payment_method)
+  if (options?.to) paymentsQuery = paymentsQuery.lte('payment_date', options.to)
 
   const [{ data: orders }, { data: payments }] = await Promise.all([ordersQuery, paymentsQuery])
 
@@ -189,19 +188,20 @@ export async function getCustomerLedger(
     return a.data.created_at.localeCompare(b.data.created_at)
   })
 
-  let running = customer.opening_balance ?? 0
-  const rows: LedgerRow[] = merged.map((item) => {
+  const bootstrapOpening = customer.opening_balance ?? 0
+  let running = bootstrapOpening
+  const allRows: LedgerRow[] = merged.map((item) => {
     if (item.kind === 'order') {
       const o = item.data
       const orderAmt = effectiveOrderAmount(o as { final_amount?: number | null; total_amount: number })
       running += orderAmt
       const lines = (o.order_lines ?? []) as Array<{ product_name: string; quantity: number }>
-      const summary = lines.length === 0 ? '-'
+      const lineSummary = lines.length === 0 ? '-'
         : lines.length === 1 ? `${lines[0].product_name} ${lines[0].quantity}개`
         : `${lines[0].product_name} 외 ${lines.length - 1}건`
       return {
-        id: o.id, date: o.order_date, created_at: o.created_at, type: 'order',
-        order_number: o.order_number, summary,
+        id: o.id, date: o.order_date, created_at: o.created_at, type: 'order' as const,
+        order_number: o.order_number, summary: lineSummary,
         total_supply_price: o.total_supply_price, total_vat_amount: o.total_vat_amount,
         total_amount: orderAmt, memo: o.memo ?? undefined, running_balance: running,
       }
@@ -209,26 +209,56 @@ export async function getCustomerLedger(
       const p = item.data
       running -= p.amount
       return {
-        id: p.id, date: p.payment_date, created_at: p.created_at, type: 'payment',
+        id: p.id, date: p.payment_date, created_at: p.created_at, type: 'payment' as const,
         payment_method: p.payment_method, payment_amount: p.amount,
         memo: p.memo ?? undefined, running_balance: running,
       }
     }
   })
 
-  const totalOrders   = (orders ?? []).reduce((s, o) => s + effectiveOrderAmount(o as { final_amount?: number | null; total_amount: number }), 0)
-  const totalPayments = (payments ?? []).reduce((s, p) => s + p.amount, 0)
-  const current_balance = getAccountsReceivable(customer.opening_balance ?? 0, totalOrders, totalPayments, 0)
+  const from = options?.from
+  const methodFilter = options?.payment_method
+
+  // 전미수금 = from 직전 누적 잔액 (이전 거래 없으면 최초 미수금)
+  let periodOpening = bootstrapOpening
+  if (from) {
+    for (const row of allRows) {
+      if (row.date < from) periodOpening = row.running_balance
+      else break
+    }
+  }
+
+  const rows = allRows.filter((row) => {
+    if (from && row.date < from) return false
+    if (methodFilter && row.type === 'payment' && row.payment_method !== methodFilter) return false
+    return true
+  })
+
+  const totalOrders = rows
+    .filter((r) => r.type === 'order')
+    .reduce((s, r) => s + (Number(r.total_amount) || 0), 0)
+  const totalPayments = rows
+    .filter((r) => r.type === 'payment')
+    .reduce((s, r) => s + (Number(r.payment_amount) || 0), 0)
+
+  // 총미수금 = 최초미수 + to까지 전체 주문/입금 (from·payment_method 미적용)
+  const lifetimeOrders = (orders ?? []).reduce(
+    (s, o) => s + effectiveOrderAmount(o as { final_amount?: number | null; total_amount: number }),
+    0,
+  )
+  const lifetimePayments = (payments ?? []).reduce((s, p) => s + Number(p.amount ?? 0), 0)
+  const current_balance = getAccountsReceivable(bootstrapOpening, lifetimeOrders, lifetimePayments, 0)
 
   const tax_summary: TaxSummary = (() => {
     // MVP: 수금 기준 세금계산서 대상 금액 집계 (RULE-02: 런타임 계산만, DB 저장 금지)
+    // 기간 표시분(rows의 입금)과 동일 범위
     let taxable_paid = 0
     let card_paid = 0
-    for (const p of payments ?? []) {
-      const method = (p as { payment_method?: string | null }).payment_method ?? null
-      const amount = Number((p as { amount?: number | null }).amount ?? 0)
+    for (const r of rows) {
+      if (r.type !== 'payment') continue
+      const method = r.payment_method ?? null
+      const amount = Number(r.payment_amount ?? 0)
       if (!amount) continue
-
       if (method === 'cash' || method === 'transfer') taxable_paid += amount
       else if (method === 'card') card_paid += amount
     }
@@ -245,7 +275,7 @@ export async function getCustomerLedger(
       rows,
       summary: {
         customer_id: customer.id, customer_name: customer.name,
-        opening_balance: customer.opening_balance ?? 0,
+        opening_balance: periodOpening,
         total_orders: totalOrders, total_payments: totalPayments,
         current_balance,
       },
