@@ -1038,7 +1038,7 @@ export default function OrderCreateForm({
             </div>
             {Number(paymentAmount) > totals.total && totals.total > 0 && (
               <div style={{ fontSize: 12, color: '#1D4ED8', background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 6, padding: '8px 12px' }}>
-                💰 초과 금액은 예치금으로 처리됩니다.
+                초과분은 미수금(AR)에 자동 반영됩니다
               </div>
             )}
           </div>
