@@ -160,13 +160,9 @@ export default function PaymentCreateForm({
         collection_schedule_id: collectionScheduleId || undefined,
       })
       if (r.success && r.data) {
-        if (r.data.deposit_amount > 0) {
-          setResultDeposit(r.data.deposit_amount)
-          setBalance(0)
-          setDeposit((d) => (d ?? 0) + r.data!.deposit_amount)
-        } else {
-          setBalance((b) => Math.max(0, (b ?? 0) - totalSettlement))
-        }
+        // 예치금 미운영: RPC deposit_amount는 무시. 초과입금도 AR에만 반영.
+        setBalance((b) => Math.max(0, (b ?? 0) - Math.min(totalSettlement, Math.max(0, b ?? 0))))
+        setResultDeposit(0) // 성공 배너용 (예치금 발생 배너 비표시)
         setAmount('')
         setMemo('')
         setUseDepositEnabled(false)
@@ -267,7 +263,7 @@ export default function PaymentCreateForm({
             placeholder="0" min={1} />
           {overAmount > 0 && (
             <div style={s.overWarn}>
-              ⚠️ 잔액 초과 — {formatKRW(overAmount)} 예치금으로 처리됩니다
+              ℹ️ 미수보다 {formatKRW(overAmount)} 초과 — 초과분은 미수금(AR)에 자동 반영됩니다
             </div>
           )}
         </div>
