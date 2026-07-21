@@ -4,7 +4,7 @@ import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import type { ActionResult } from '@/types/order'
 import type { PaymentTermsType } from '@/lib/payment-terms'
 import { isSafeNumber } from '@/lib/is-safe-number'
-import { effectiveOrderAmount, getAccountsReceivable } from '@/lib/ledger-calc'
+import { effectiveOrderAmount, saleAmount, getAccountsReceivable } from '@/lib/ledger-calc'
 
 export interface CustomerListItem {
   id: string
@@ -154,7 +154,7 @@ export async function getCustomerOrders(
     .from('orders')
     .select(`
       id, order_date, order_number, status, order_status,
-      total_amount, discount_amount, point_used, final_amount,
+      total_amount, discount_amount, point_used, deposit_used, final_amount,
       order_lines ( product_name, quantity )
     `)
     .eq('customer_id', customerId)
@@ -174,9 +174,8 @@ export async function getCustomerOrders(
       order_number: o.order_number ?? null,
       status: o.status ?? '',
       order_status: o.order_status ?? null,
-      total_amount: effectiveOrderAmount({
+      total_amount: saleAmount({
         total_amount: o.total_amount ?? 0,
-        final_amount: o.final_amount,
         discount_amount: o.discount_amount,
         point_used: o.point_used,
       }),
@@ -249,7 +248,7 @@ export async function getCustomerFinanceSummary(
   const [{ data: orderRows }, { data: paymentRows }, { data: lastPay }] = await Promise.all([
     supabase
       .from('orders')
-      .select('order_date, final_amount, total_amount')
+      .select('order_date, final_amount, total_amount, discount_amount, point_used, deposit_used')
       .eq('customer_id', customerId)
       .or(sellerScope)
       .eq('status', 'confirmed')
@@ -278,9 +277,23 @@ export async function getCustomerFinanceSummary(
   let lifetime = 0
   let monthSales = 0
   for (const o of orderRows ?? []) {
-    const amt = effectiveOrderAmount(o as { final_amount?: number | null; total_amount: number })
-    lifetime += amt
-    if (o.order_date >= monthStart && o.order_date <= today) monthSales += amt
+    // lifetime → AR(미수) 입력 — deposit 차감
+    const recv = effectiveOrderAmount(o as {
+      final_amount?: number | null
+      total_amount: number
+      discount_amount?: number | null
+      point_used?: number | null
+      deposit_used?: number | null
+    })
+    lifetime += recv
+    // monthSales → 매출 KPI — deposit 미차감
+    if (o.order_date >= monthStart && o.order_date <= today) {
+      monthSales += saleAmount(o as {
+        total_amount: number
+        discount_amount?: number | null
+        point_used?: number | null
+      })
+    }
   }
 
   const totalPayments = (paymentRows ?? []).reduce((s, p) => s + (p.amount ?? 0), 0)

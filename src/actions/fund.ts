@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
-import { effectiveOrderAmount } from '@/lib/ledger-calc'
+import { saleAmount } from '@/lib/ledger-calc'
 import type { ActionResult } from '@/types/order'
 
 // ============================================================
@@ -43,7 +43,7 @@ async function getMonthlySales(
 
   const { data } = await supabase
     .from('orders')
-    .select('total_amount, final_amount')
+    .select('total_amount, discount_amount, point_used')
     // 전환: seller_tenant_id 우선 (legacy tenant_id 병행)
     .or(`seller_tenant_id.eq.${tenant_id},tenant_id.eq.${tenant_id}`)
     .eq('status', 'confirmed')
@@ -52,8 +52,8 @@ async function getMonthlySales(
     .lte('order_date', to)
 
   return (data ?? []).reduce(
-    (s: number, o: { total_amount: number; final_amount?: number | null }) =>
-      s + effectiveOrderAmount(o),
+    (s: number, o: { total_amount: number; discount_amount?: number | null; point_used?: number | null }) =>
+      s + saleAmount(o),
     0,
   )
 }

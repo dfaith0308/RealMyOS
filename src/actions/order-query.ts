@@ -8,7 +8,7 @@ import { getCustomersWithBalance } from '@/actions/ledger'
 // ============================================================
 
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
-import { effectiveOrderAmount } from '@/lib/ledger-calc'
+import { saleAmount } from '@/lib/ledger-calc'
 import type { ActionResult, OrderOperationStatus } from '@/types/order'
 
 export interface OrderListItem {
@@ -93,12 +93,11 @@ export async function getOrderList(filters?: {
       const point_used = Number(o.point_used ?? 0)
       const deposit_used = Number(o.deposit_used ?? 0)
       const total_amount = Number(o.total_amount ?? 0)
-      const final_amount = effectiveOrderAmount({
+      // 목록 표시용 매출액 (deposit 미차감). 필드명 final_amount는 레거시 유지.
+      const final_amount = saleAmount({
         total_amount,
-        final_amount: o.final_amount,
         discount_amount,
         point_used,
-        deposit_used,
       })
       return {
         id:              o.id,

@@ -5,6 +5,7 @@ import { getCustomersWithScore } from '@/actions/ledger'
 import { getDailyFundPlan } from '@/actions/fund'
 import {
   effectiveOrderAmount,
+  saleAmount,
   isSalesOrder,
   buildCustomerKey,
   getAccountsReceivable,
@@ -30,23 +31,27 @@ function parseOrderMoney(value: unknown): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-/** 대시보드 매출 집계 — 헤더 0/null 시 total_amount·라인 합계 fallback (analytics와 정합) */
+/** 대시보드 매출 집계 — saleAmount(deposit 미차감). 헤더 0/null 시 라인 합계 fallback */
 function resolveDashboardOrderAmount(order: {
-  final_amount?: number | null
   total_amount?: number | null
+  discount_amount?: number | null
+  point_used?: number | null
   order_lines?: DashboardOrderLine[] | null
 }): number {
-  const final = parseOrderMoney(order.final_amount)
-  const total = parseOrderMoney(order.total_amount)
+  const total = parseOrderMoney(order.total_amount) ?? 0
+  const sale = saleAmount({
+    total_amount: total,
+    discount_amount: order.discount_amount,
+    point_used: order.point_used,
+  })
+  if (sale !== 0) return sale
+
   const lineSum = (order.order_lines ?? []).reduce(
     (s, l) => s + (parseOrderMoney(l.line_total) ?? 0),
     0,
   )
-
-  if (final !== null && final !== 0) return final
-  if (total !== null && total !== 0) return total
   if (lineSum !== 0) return lineSum
-  return final ?? total ?? 0
+  return sale
 }
 
 type DashboardOrderCustomerJoin =
@@ -148,14 +153,14 @@ export async function getDashboardData(): Promise<ActionResult<DashboardData>> {
     getDailyFundPlan(today),
 
     supabase.from('orders')
-      .select('total_amount, final_amount, order_type, order_lines(line_total)')
+      .select('total_amount, discount_amount, point_used, order_type, order_lines(line_total)')
       .or(`seller_tenant_id.eq.${tid},tenant_id.eq.${tid}`)
       .eq('status', 'confirmed')
       .is('deleted_at', null)
       .gte('order_date', monthStart).lte('order_date', today),
 
     supabase.from('orders')
-      .select('customer_id, customer_name, total_amount, final_amount, order_type, customers(name), order_lines(quantity, line_total)')
+      .select('customer_id, customer_name, total_amount, discount_amount, point_used, order_type, customers(name), order_lines(quantity, line_total)')
       .or(`seller_tenant_id.eq.${tid},tenant_id.eq.${tid}`)
       .eq('status', 'confirmed')
       .is('deleted_at', null)

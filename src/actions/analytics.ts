@@ -24,7 +24,7 @@ import { fetchInboundSupersededOriginalPaymentIds } from '@/lib/inbound-payment-
 // ============================================================
 
 const ORDER_SELECT = `
-  id, order_date, order_type, total_amount, final_amount,
+  id, order_date, order_type, total_amount, discount_amount, point_used, deposit_used, final_amount,
   customer_id, customer_name, customers(name),
   order_lines(product_name, quantity, unit_price, cost_price, line_total)
 `

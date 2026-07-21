@@ -11,6 +11,7 @@ import { serializeSafe } from '@/lib/serialize-safe'
 import { getAdminSettingNumber } from '@/actions/admin/policy-console'
 import {
   effectiveOrderAmount,
+  saleAmount,
   getAccountsReceivable,
   getOverdueReceivable,
   getCustomerDeposit,
@@ -403,7 +404,7 @@ export async function getDailyCashflow(): Promise<ActionResult<DailyCashflow[]>>
   for (const o of orders ?? []) {
     revenueByDate.set(
       o.order_date,
-      (revenueByDate.get(o.order_date) ?? 0) + effectiveOrderAmount(o as { final_amount?: number | null; total_amount: number }),
+      (revenueByDate.get(o.order_date) ?? 0) + saleAmount(o as { total_amount: number; discount_amount?: number | null; point_used?: number | null }),
     )
   }
   for (const p of payments ?? []) collectedByDate.set(p.payment_date, (collectedByDate.get(p.payment_date) ?? 0) + p.amount)

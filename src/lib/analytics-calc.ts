@@ -10,6 +10,7 @@
  */
 
 import {
+  saleAmount,
   effectiveOrderAmount,
   isSalesOrder,
   buildCustomerKey,
@@ -34,6 +35,9 @@ export interface AnalyticsOrder {
   order_date:     string
   order_type?:    string | null
   total_amount:   number
+  discount_amount?: number | null
+  point_used?:    number | null
+  deposit_used?:  number | null
   final_amount?:  number | null
   customer_id?:   string | null
   customer_name?: string | null
@@ -264,6 +268,7 @@ export function buildOverviewSummary(
 }
 
 // ============================================================
-// 사용자 지정 외 / 거래처 정렬용 — effectiveOrderAmount는 호환 보존
+// 재export — 매출은 saleAmount / 라인합(line_total), 미수는 effectiveOrderAmount
+// 본 파일 집계는 order_lines.line_total 기준이라 deposit 미차감(매출 정의와 일치)
 // ============================================================
-export { effectiveOrderAmount, isSalesOrder, buildCustomerKey, resolveCustomerName }
+export { saleAmount, effectiveOrderAmount, isSalesOrder, buildCustomerKey, resolveCustomerName }

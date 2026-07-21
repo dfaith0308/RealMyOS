@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { formatKRW } from '@/lib/calc'
+import { saleAmount } from '@/lib/ledger-calc'
 import type { OrderListItem } from '@/actions/order-query'
 import styles from '@/app/(app)/orders/orders-ops.module.css'
 import type { OrderOperationStatus } from '@/types/order'
@@ -217,7 +218,7 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
     let totalLines = 0
 
     for (const o of orders) {
-      revenue += Number(o.final_amount ?? 0)
+      revenue += saleAmount(o)
       for (const l of o.order_lines) {
         totalLines++
         const cost = (l.cost_price ?? 0) * (l.quantity ?? 1)
@@ -436,7 +437,7 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
                         <span style={ui.rowSub} title={summarizeLines(o.order_lines)}>{summarizeLines(o.order_lines)}</span>
                       </div>
 
-                      <span style={ui.money}>{formatKRW(o.final_amount)}</span>
+                      <span style={ui.money}>{formatKRW(saleAmount(o))}</span>
                       <span style={{ ...ui.balance, color: bal > 0 ? 'var(--text-danger)' : 'var(--text-hint)' }}>
                         {formatKRW(bal)}
                       </span>

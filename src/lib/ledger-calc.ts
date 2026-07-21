@@ -4,14 +4,26 @@
  * 매출 인정: status === 'confirmed' 만 (delivered/completed 는 회계 미반영)
  * 미수금: getAccountsReceivable() 만 사용 (신규 코드는 calcReceivable 직접 호출 금지)
  *
- * 실청구액:
- * - discount_amount / point_used / deposit_used 가 있으면
- *   total - discount - point - deposit 로 계산
- *   (DB generated final_amount 식이 잘못된 기간에도 앱 단에서 정합 유지)
- * - 없으면 final_amount → total_amount
+ * 매출(saleAmount): total - discount - point
+ *   — deposit_used 제외. 예치금은 결제수단일 뿐 판매를 취소하지 않음.
+ * 실청구/미수(effectiveOrderAmount = receivableAmount):
+ *   — total - discount - point - deposit (= DB final_amount)
+ *   — 헤더 조정값이 없으면 final_amount → total_amount fallback
  */
 
-/** 주문 1건의 확정금액 */
+/** 매출액 — deposit_used 미차감 */
+export function saleAmount(order: {
+  total_amount: number
+  discount_amount?: number | null
+  point_used?: number | null
+}): number {
+  const total = Number(order.total_amount ?? 0)
+  const discount = Math.max(0, Number(order.discount_amount ?? 0))
+  const point = Math.max(0, Number(order.point_used ?? 0))
+  return Math.max(0, total - discount - point)
+}
+
+/** 실청구액(미수 가산분) — deposit_used 차감. 원장·AR 전용 */
 export function effectiveOrderAmount(order: {
   final_amount?: number | null
   total_amount: number
@@ -37,6 +49,9 @@ export function effectiveOrderAmount(order: {
   }
   return total
 }
+
+/** effectiveOrderAmount 별칭 — 미수/원장 용도 명시 */
+export const receivableAmount = effectiveOrderAmount
 
 /** 회계 매출 인정 여부 — confirmed ONLY */
 export function isConfirmedRevenueStatus(status: string): boolean {
