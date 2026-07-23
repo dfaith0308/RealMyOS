@@ -9,8 +9,6 @@ import type { AcquisitionChannel } from '@/actions/acquisition-channel'
 import type { CustomerListItem } from '@/actions/customer-query'
 import type { PaymentTermsType } from '@/lib/payment-terms'
 
-import type { PaymentTermsType } from '@/lib/payment-terms'
-
 type CustomerType = 'business' | 'individual' | 'prospect'
 
 interface Props {
