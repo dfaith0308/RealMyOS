@@ -9,6 +9,10 @@ import type { AcquisitionChannel } from '@/actions/acquisition-channel'
 import type { CustomerListItem } from '@/actions/customer-query'
 import type { PaymentTermsType } from '@/lib/payment-terms'
 
+import type { PaymentTermsType } from '@/lib/payment-terms'
+
+type CustomerType = 'business' | 'individual' | 'prospect'
+
 interface Props {
   customer: CustomerListItem
   channels: AcquisitionChannel[]
@@ -20,6 +24,9 @@ export default function CustomerEditForm({ customer, channels: init }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
+  const [customerType, setCustomerType] = useState<CustomerType>(
+    (customer.customer_type as CustomerType) || 'business',
+  )
   const [name, setName] = useState(customer.name)
   const [phone, setPhone] = useState(customer.phone ?? '')
   const [address, setAddress] = useState(customer.address ?? '')
@@ -71,6 +78,8 @@ export default function CustomerEditForm({ customer, channels: init }: Props) {
     startTransition(async () => {
       const payload: any = {
         name, phone: phone || undefined, address: address || undefined,
+        customer_type: customerType,
+        // business가 아니어도 기존 값은 유지(표시만 숨김 — 데이터 삭제 방지)
         biz_number: bizNumber || undefined,
         representative_name: repName || undefined,
         business_type: bizType || undefined,
@@ -113,19 +122,33 @@ export default function CustomerEditForm({ customer, channels: init }: Props) {
       {success && <div style={s.ok}>저장됐습니다.</div>}
 
       <form onSubmit={handleSubmit} style={s.form}>
+        <F label="고객 유형">
+          <Seg options={[
+            { value: 'business', label: '사업자' },
+            { value: 'individual', label: '개인' },
+            { value: 'prospect', label: '예비' },
+          ]} value={customerType} onChange={(v) => setCustomerType(v as CustomerType)} />
+        </F>
+
         <F label="상호명 / 이름 *">
           <input style={s.input} value={name} onChange={(e) => setName(e.target.value)} required />
         </F>
-        <F label="사업자등록번호">
-          <input style={s.input} value={bizNumber}
-            onChange={(e) => setBizNumber(e.target.value.replace(/-/g, ''))} />
-        </F>
-        <F label="대표자명">
-          <input style={s.input} value={repName} onChange={(e) => setRepName(e.target.value)} />
-        </F>
-        <F label="업태">
-          <input style={s.input} value={bizType} onChange={(e) => setBizType(e.target.value)} />
-        </F>
+
+        {customerType === 'business' && (
+          <>
+            <F label="사업자등록번호">
+              <input style={s.input} value={bizNumber}
+                onChange={(e) => setBizNumber(e.target.value.replace(/-/g, ''))} />
+            </F>
+            <F label="대표자명">
+              <input style={s.input} value={repName} onChange={(e) => setRepName(e.target.value)} />
+            </F>
+            <F label="업태">
+              <input style={s.input} value={bizType} onChange={(e) => setBizType(e.target.value)} />
+            </F>
+          </>
+        )}
+
         <F label="연락처">
           <input style={s.input} value={phone} onChange={(e) => setPhone(e.target.value)} />
         </F>
