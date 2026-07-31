@@ -141,7 +141,7 @@ export default async function PushPage() {
         )}
       </div>
 
-      <PushSendClient />
+      <PushSendClient tenants={tenantList} />
 
       <div
         style={{
