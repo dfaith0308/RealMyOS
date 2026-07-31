@@ -6,6 +6,7 @@ import { createPayment, getCustomerBalance } from '@/actions/payment'
 import { useDeposit } from '@/actions/customer-deposits'
 import { getCustomersForOrder } from '@/actions/order'
 import { formatKRW, todayStr } from '@/lib/calc'
+import { classifyAccountsReceivable } from '@/lib/ledger-calc'
 import type { CustomerForOrder } from '@/types/order'
 import type { PaymentMethod } from '@/actions/payment'
 
@@ -160,8 +161,8 @@ export default function PaymentCreateForm({
         collection_schedule_id: collectionScheduleId || undefined,
       })
       if (r.success && r.data) {
-        // 예치금 미운영: RPC deposit_amount는 무시. 초과입금도 AR에만 반영.
-        setBalance((b) => Math.max(0, (b ?? 0) - Math.min(totalSettlement, Math.max(0, b ?? 0))))
+        // 예치금 미운영: 초과입금은 AR 음수로 반영 (클램프 금지).
+        setBalance((b) => (b ?? 0) - totalSettlement)
         setResultDeposit(0) // 성공 배너용 (예치금 발생 배너 비표시)
         setAmount('')
         setMemo('')
@@ -237,10 +238,20 @@ export default function PaymentCreateForm({
             ) : (
               <div style={{ display: 'flex', gap: 20 }}>
                 <div>
-                  <div style={s.balLabel}>미수금</div>
-                  <div style={{ ...s.balVal, color: (balance ?? 0) > 0 ? '#B91C1C' : '#15803D' }}>
-                    {formatKRW(balance ?? 0)}
-                  </div>
+                  {(() => {
+                    const ar = classifyAccountsReceivable(balance ?? 0)
+                    return (
+                      <>
+                        <div style={s.balLabel}>{ar.label}</div>
+                        <div style={{ ...s.balVal, color: ar.color }}>
+                          {formatKRW(ar.absolute)}
+                        </div>
+                        {ar.hint ? (
+                          <div style={{ fontSize: 11, color: ar.color, marginTop: 2 }}>{ar.hint}</div>
+                        ) : null}
+                      </>
+                    )
+                  })()}
                 </div>
                 {(deposit ?? 0) > 0 && (
                   <div>
@@ -263,7 +274,7 @@ export default function PaymentCreateForm({
             placeholder="0" min={1} />
           {overAmount > 0 && (
             <div style={s.overWarn}>
-              ℹ️ 미수보다 {formatKRW(overAmount)} 초과 — 초과분은 미수금(AR)에 자동 반영됩니다
+              ℹ️ 미수보다 {formatKRW(overAmount)} 초과 — 초과입금으로 반영되며 다음 주문에 자동 차감됩니다
             </div>
           )}
         </div>

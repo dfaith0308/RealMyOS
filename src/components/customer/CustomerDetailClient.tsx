@@ -4,6 +4,7 @@ import { useState, useTransition, type CSSProperties } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { formatKRW } from '@/lib/calc'
+import { classifyAccountsReceivable } from '@/lib/ledger-calc'
 import type {
   CustomerFinanceSummary,
   CustomerOrderRowItem,
@@ -148,7 +149,17 @@ export default function CustomerDetailClient({
       {error ? <p style={{ color: '#dc2626', fontSize: 13, margin: '0 0 12px' }}>{error}</p> : null}
 
       <div style={kpiGrid}>
-        <KpiCard label="미수금" value={formatKRW(finance.receivable)} valueColor="#dc2626" />
+        {(() => {
+          const ar = classifyAccountsReceivable(finance.receivable)
+          return (
+            <KpiCard
+              label={ar.label}
+              value={formatKRW(ar.absolute)}
+              valueColor={ar.color}
+              hint={ar.hint ?? undefined}
+            />
+          )
+        })()}
         <KpiCard label="이번달 매출" value={formatKRW(finance.month_sales)} />
         <KpiCard
           label="마지막 수금"

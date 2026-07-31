@@ -3,6 +3,7 @@
  *
  * 매출 인정: status === 'confirmed' 만 (delivered/completed 는 회계 미반영)
  * 미수금: getAccountsReceivable() 만 사용 (신규 코드는 calcReceivable 직접 호출 금지)
+ * 음수 AR = 초과입금(선수금). UI는 classifyAccountsReceivable()로 라벨/색 분기.
  *
  * 매출(saleAmount): total - discount - point
  *   — deposit_used 제외. 예치금은 결제수단일 뿐 판매를 취소하지 않음.
@@ -92,6 +93,9 @@ export function resolveCustomerName(order: {
 /**
  * Receivable Single Function — 미수금(Accounts Receivable)
  * 반품 도입 시 totalReturnAmount 에 합산 반영
+ *
+ * 음수 = 초과입금(선수금). 예치금 미운영 정책(2026-07-21)에 따라
+ * Math.max(0) 클램프하지 않고 부호 그대로 반환한다.
  */
 export function getAccountsReceivable(
   openingBalance: number,
@@ -99,10 +103,71 @@ export function getAccountsReceivable(
   totalInboundPaidConfirmed: number,
   totalReturnAmount = 0,
 ): number {
-  return Math.max(
-    0,
-    openingBalance + totalConfirmedSalesFinal - totalInboundPaidConfirmed - totalReturnAmount,
+  return (
+    openingBalance + totalConfirmedSalesFinal - totalInboundPaidConfirmed - totalReturnAmount
   )
+}
+
+/** AR 부호별 UI 표시 (미수금 / 초과입금 / 정산완료) */
+export type ArDisplayKind = 'receivable' | 'prepayment' | 'settled'
+
+export type ArDisplay = {
+  kind: ArDisplayKind
+  /** 원본 부호 값 (음수 = 초과입금) */
+  signed: number
+  /** 표시용 절댓값 */
+  absolute: number
+  /** KPI/컬럼 라벨 */
+  label: string
+  /** 금액 색상 */
+  color: string
+  /** 음수일 때 부가 설명 */
+  hint: string | null
+}
+
+const AR_COLOR_RECEIVABLE = '#dc2626'
+const AR_COLOR_PREPAYMENT = '#1d4ed8'
+const AR_COLOR_SETTLED = '#15803d'
+
+/**
+ * AR 숫자를 사용자 라벨/색으로 변환.
+ * 초과입금은 "-20,000원"이 아니라 라벨 "초과입금" + 절댓값으로 보여 준다.
+ */
+export function classifyAccountsReceivable(ar: number): ArDisplay {
+  const signed = Number(ar) || 0
+  if (signed > 0) {
+    return {
+      kind: 'receivable',
+      signed,
+      absolute: signed,
+      label: '미수금',
+      color: AR_COLOR_RECEIVABLE,
+      hint: null,
+    }
+  }
+  if (signed < 0) {
+    return {
+      kind: 'prepayment',
+      signed,
+      absolute: Math.abs(signed),
+      label: '초과입금',
+      color: AR_COLOR_PREPAYMENT,
+      hint: '다음 주문에 자동 차감',
+    }
+  }
+  return {
+    kind: 'settled',
+    signed: 0,
+    absolute: 0,
+    label: '미수금',
+    color: AR_COLOR_SETTLED,
+    hint: null,
+  }
+}
+
+/** formatKRW(absolute) 와 함께 쓸 표시 금액 — 초과입금도 양수로 */
+export function arDisplayAmount(ar: number): number {
+  return classifyAccountsReceivable(ar).absolute
 }
 
 /**
@@ -148,8 +213,7 @@ export function calcReceivable(
 }
 
 /**
- * @deprecated 레거시 호환. 신규: 미수는 getAccountsReceivable, 예치는 getCustomerDeposit
- * (음수 선수 표현 금지 정책 — 남는 값은 예치 테이블 기준)
+ * @deprecated 예치금 미운영. 초과입금은 getAccountsReceivable 음수로 표현.
  */
 export function calcDeposit(
   _totalOrderFinal: number,

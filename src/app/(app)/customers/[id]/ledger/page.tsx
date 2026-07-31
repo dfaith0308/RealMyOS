@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getCustomerLedger } from '@/actions/ledger'
 import { formatKRW } from '@/lib/calc'
+import { classifyAccountsReceivable } from '@/lib/ledger-calc'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import CallOutcomeButtons from '@/components/customer/CallOutcomeButtons'
 import { Surface } from '@/components/ui/Surface'
@@ -59,8 +60,9 @@ export default async function CustomerLedgerPage({
           86400000,
       )
     : null
+  const arDisplay = classifyAccountsReceivable(summary.current_balance)
   const badgeStatus =
-    summary.current_balance > 0 ? ('warning' as const) : ('paid' as const)
+    arDisplay.kind === 'receivable' ? ('warning' as const) : ('paid' as const)
 
   const supabase = await createSupabaseServer()
   const ctx = await getAuthCtx(supabase)
@@ -122,15 +124,35 @@ export default async function CustomerLedgerPage({
         <div className={styles.kpiStrip}>
           <div className={styles.kpiBox}>
             <div className={styles.kpiHead}>
-              <div className={styles.kpiHeadLabel}>현재 미수금</div>
-              <StatusBadge status={badgeStatus} size="sm" />
+              <div className={styles.kpiHeadLabel}>{arDisplay.label}</div>
+              {arDisplay.kind === 'prepayment' ? (
+                <span
+                  title={arDisplay.hint ?? undefined}
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: arDisplay.color,
+                    background: '#eff6ff',
+                    border: '1px solid #bfdbfe',
+                    borderRadius: 999,
+                    padding: '2px 8px',
+                  }}
+                >
+                  초과입금
+                </span>
+              ) : (
+                <StatusBadge status={badgeStatus} size="sm" />
+              )}
             </div>
             <KPIBlock
-              label="현재 미수금"
-              value={formatKRW(summary.current_balance)}
+              label={arDisplay.label}
+              value={formatKRW(arDisplay.absolute)}
               valueSize="lg"
               align="end"
-              hint={`최근 수금 ${lastPayDays === null ? '없음' : `D+${lastPayDays}`}`}
+              hint={
+                arDisplay.hint ??
+                `최근 수금 ${lastPayDays === null ? '없음' : `D+${lastPayDays}`}`
+              }
             />
           </div>
 

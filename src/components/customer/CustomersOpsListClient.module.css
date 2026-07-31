@@ -226,6 +226,7 @@
   letter-spacing: -.02em;
 }
 .moneyDanger { color: var(--ds-status-danger); }
+.moneyPrepay { color: #1d4ed8; }
 .moneyZero   {
   color: var(--ds-text-secondary);
   font-weight: 600;

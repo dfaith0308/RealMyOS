@@ -1,5 +1,6 @@
 import { getDashboardData, getTodayCollections } from '@/actions/dashboard'
 import { formatKRW } from '@/lib/calc'
+import { classifyAccountsReceivable } from '@/lib/ledger-calc'
 import styles from './dashboard.module.css'
 import Link from 'next/link'
 
@@ -23,6 +24,7 @@ export default async function DashboardPage() {
     return Math.round(xs.reduce((a, b) => a + b, 0) / xs.length)
   })()
   const collectionTotal = collections.reduce((s, c) => s + (c.current_balance ?? 0), 0)
+  const arKpi = classifyAccountsReceivable(d.total_receivable)
 
   return (
     <main className={styles.page}>
@@ -30,11 +32,28 @@ export default async function DashboardPage() {
       <div className={styles.kpiGrid}>
         <Link href="/customers?filter=receivable" className={styles.kpiCard}>
           <div className={styles.kpiTop}>
-            <div className={styles.kpiLabel}>총 미수금</div>
-            <div className={`${styles.pill} ${styles.pillWarn}`}>주의</div>
+            <div className={styles.kpiLabel}>
+              {arKpi.kind === 'prepayment' ? '총 초과입금' : '총 미수금'}
+            </div>
+            <div
+              className={`${styles.pill} ${
+                arKpi.kind === 'prepayment' ? styles.pillSuccess : styles.pillWarn
+              }`}
+            >
+              {arKpi.kind === 'prepayment' ? '선수' : '주의'}
+            </div>
           </div>
-          <div className={`${styles.kpiNum} ${styles.kpiNumDanger}`}>{formatKRW(d.total_receivable)}</div>
-          <div className={styles.kpiSub}>원 · 거래처 원장 이동</div>
+          <div
+            className={styles.kpiNum}
+            style={{ color: arKpi.color }}
+          >
+            {formatKRW(arKpi.absolute)}
+          </div>
+          <div className={styles.kpiSub}>
+            {arKpi.kind === 'prepayment'
+              ? '원 · 다음 주문 자동 차감'
+              : '원 · 거래처 원장 이동'}
+          </div>
         </Link>
 
         <Link href="/customers?filter=overdue" className={styles.kpiCard}>

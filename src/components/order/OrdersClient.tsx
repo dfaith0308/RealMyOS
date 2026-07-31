@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { formatKRW } from '@/lib/calc'
-import { saleAmount } from '@/lib/ledger-calc'
+import { saleAmount, classifyAccountsReceivable } from '@/lib/ledger-calc'
 import type { OrderListItem } from '@/actions/order-query'
 import styles from '@/app/(app)/orders/orders-ops.module.css'
 import type { OrderOperationStatus } from '@/types/order'
@@ -417,12 +417,13 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
                 <div style={ui.colHead}>
                   <span style={ui.colLabel}>거래처 · 상품</span>
                   <span style={{ ...ui.colLabel, textAlign: 'right' }}>금액</span>
-                  <span style={{ ...ui.colLabel, textAlign: 'right' }}>미수금</span>
+                  <span style={{ ...ui.colLabel, textAlign: 'right' }}>미수/초과</span>
                   <span />
                 </div>
 
                 {g.rows.map((o) => {
                   const bal = o.current_balance ?? 0
+                  const ar = classifyAccountsReceivable(bal)
                   const dep = o.deposit_amount ?? 0
                   const hasDep = dep >= 100
                   const st = statusBadge(o)
@@ -438,8 +439,8 @@ export default function OrdersClient({ orders, customers, filters }: Props) {
                       </div>
 
                       <span style={ui.money}>{formatKRW(saleAmount(o))}</span>
-                      <span style={{ ...ui.balance, color: bal > 0 ? 'var(--text-danger)' : 'var(--text-hint)' }}>
-                        {formatKRW(bal)}
+                      <span style={{ ...ui.balance, color: ar.color }} title={ar.hint ?? ar.label}>
+                        {ar.kind === 'prepayment' ? `초과 ${formatKRW(ar.absolute)}` : formatKRW(ar.absolute)}
                       </span>
 
                       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>

@@ -192,8 +192,8 @@ export async function getDashboardData(): Promise<ActionResult<DashboardData>> {
     customers.map((c) => [c.id, c.name?.trim() || ''] as const).filter(([, n]) => n.length > 0),
   )
 
-  // KPI
-  const total_receivable = customers.reduce((s, c) => s + Math.max(0, c.receivable_amount), 0)
+  // KPI — 부호 유지(음수=초과입금). UI에서 라벨/색 분기.
+  const total_receivable = customers.reduce((s, c) => s + (c.receivable_amount ?? 0), 0)
   const total_deposit    = customers.reduce((s, c) => s + (c.deposit_amount ?? 0), 0)
   const total_overdue    = customers.reduce((s, c) => s + c.overdue_amount, 0)
   const monthly_sales    = (monthlySalesRaw ?? [])
@@ -323,7 +323,7 @@ export async function getAiInsight(ctx: DashboardData['ai_context']): Promise<st
 - 연체 거래처 수: ${ctx.overdue_count}곳
 - 최우선 거래처: ${ctx.top_score_name} (점수 ${ctx.top_score})
 - 최장 미연락: ${ctx.max_days_contact}일
-- 총 미수금: ${Math.round(ctx.receivable_amount / 10000)}만원
+- 총 미수금(음수=초과입금): ${Math.round(ctx.receivable_amount / 10000)}만원
 규칙: 반드시 1문장, 50자 이내, 구체적인 행동 포함`
 
     const controller = new AbortController()

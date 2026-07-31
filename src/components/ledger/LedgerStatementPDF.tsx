@@ -4,6 +4,7 @@
 
 import { Document, Page, Text, View, Image, StyleSheet, Font } from '@react-pdf/renderer'
 import type { LedgerForExport } from '@/actions/ledger-export'
+import { classifyAccountsReceivable } from '@/lib/ledger-calc'
 
 Font.register({
   family: 'NotoSansKR',
@@ -148,6 +149,9 @@ export function LedgerStatementPdfDoc({ data }: { data: LedgerForExport }) {
     .filter(Boolean)
     .join(' ')
 
+  const arCurrent = classifyAccountsReceivable(data.current_balance)
+  const arOpening = classifyAccountsReceivable(data.opening_balance)
+
   return (
     <Document>
       <Page size="A4" style={styles.page}>
@@ -195,8 +199,12 @@ export function LedgerStatementPdfDoc({ data }: { data: LedgerForExport }) {
             </Text>
           </View>
           <View style={styles.metaBox}>
-            <Text style={styles.metaLabel}>총미수금</Text>
-            <Text style={styles.metaValue}>{formatKRW(data.current_balance)}원</Text>
+            <Text style={styles.metaLabel}>
+              {arCurrent.kind === 'prepayment' ? '총초과입금' : '총미수금'}
+            </Text>
+            <Text style={[styles.metaValue, { color: arCurrent.color }]}>
+              {formatKRW(arCurrent.absolute)}원
+            </Text>
           </View>
         </View>
 
@@ -312,8 +320,12 @@ export function LedgerStatementPdfDoc({ data }: { data: LedgerForExport }) {
 
         <View style={styles.summaryRow}>
           <View style={styles.summaryCell}>
-            <Text style={styles.summaryLabel}>전미수금</Text>
-            <Text style={styles.summaryValue}>{formatKRW(data.opening_balance)}원</Text>
+            <Text style={styles.summaryLabel}>
+              {arOpening.kind === 'prepayment' ? '기초초과입금' : '전미수금'}
+            </Text>
+            <Text style={[styles.summaryValue, { color: arOpening.color }]}>
+              {formatKRW(arOpening.absolute)}원
+            </Text>
           </View>
           <View style={styles.summaryCell}>
             <Text style={styles.summaryLabel}>기간매출</Text>
@@ -324,9 +336,11 @@ export function LedgerStatementPdfDoc({ data }: { data: LedgerForExport }) {
             <Text style={styles.summaryValue}>{formatKRW(data.period_payments)}원</Text>
           </View>
           <View style={styles.summaryCell}>
-            <Text style={styles.summaryLabel}>총미수금</Text>
-            <Text style={[styles.summaryValue, { color: GREEN }]}>
-              {formatKRW(data.current_balance)}원
+            <Text style={styles.summaryLabel}>
+              {arCurrent.kind === 'prepayment' ? '총초과입금' : '총미수금'}
+            </Text>
+            <Text style={[styles.summaryValue, { color: arCurrent.color }]}>
+              {formatKRW(arCurrent.absolute)}원
             </Text>
           </View>
         </View>

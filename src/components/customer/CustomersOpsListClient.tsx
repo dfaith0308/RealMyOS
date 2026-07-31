@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { formatKRW } from '@/lib/calc'
+import { classifyAccountsReceivable } from '@/lib/ledger-calc'
 import type { CustomerWithScore } from '@/actions/ledger'
 import { Surface } from '@/components/ui/Surface'
 import { StatusBadge } from '@/components/ui/StatusBadge'
@@ -125,7 +126,7 @@ export function CustomersOpsListClient({
           <span>상태</span>
           <span>거래처</span>
           <span className={styles.alR}>마지막 수금</span>
-          <span className={styles.alR}>미수금</span>
+          <span className={styles.alR}>미수/초과입금</span>
           <span className={styles.alR}>액션</span>
         </div>
 
@@ -145,10 +146,12 @@ export function CustomersOpsListClient({
               const badgeCls = [styles.badge, getBadgeClass(c, styles)].join(' ')
               const daysCls = [styles.daysVal, getDaysClass(c, styles)].join(' ')
 
+              const ar = classifyAccountsReceivable(c.receivable_amount ?? 0)
               const moneyMainCls = [
                 styles.moneyMain,
                 c.overdue_amount > 0 ? styles.moneyDanger : '',
-                (c.receivable_amount ?? 0) === 0 ? styles.moneyZero : '',
+                ar.kind === 'settled' ? styles.moneyZero : '',
+                ar.kind === 'prepayment' ? styles.moneyPrepay : '',
               ].filter(Boolean).join(' ')
 
               const moneySubCls = [
@@ -158,7 +161,7 @@ export function CustomersOpsListClient({
 
               const btnCls = [
                 styles.regBtn,
-                (c.receivable_amount ?? 0) === 0 ? styles.regBtnDim : '',
+                ar.kind !== 'receivable' ? styles.regBtnDim : '',
               ].filter(Boolean).join(' ')
 
               return (
@@ -202,8 +205,12 @@ export function CustomersOpsListClient({
                   </div>
 
                   <div className={styles.colMoney}>
-                    <div className={moneyMainCls}>{formatKRW(c.receivable_amount ?? 0)}</div>
-                    <div className={moneySubCls}>연체 {formatKRW(c.overdue_amount ?? 0)}</div>
+                    <div className={moneyMainCls}>{formatKRW(ar.absolute)}</div>
+                    <div className={moneySubCls}>
+                      {ar.kind === 'prepayment'
+                        ? ar.hint ?? '초과입금'
+                        : `연체 ${formatKRW(c.overdue_amount ?? 0)}`}
+                    </div>
                   </div>
 
                   <div className={styles.colAction}>

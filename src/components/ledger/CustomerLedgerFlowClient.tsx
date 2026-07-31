@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { DataCell, DataTableRow } from '@/components/ui/DataTableRow'
 import { formatKRW } from '@/lib/calc'
+import { classifyAccountsReceivable } from '@/lib/ledger-calc'
 import styles from './CustomerLedgerFlowClient.module.css'
 
 type LedgerOrderLine = {
@@ -152,8 +153,17 @@ export function CustomerLedgerFlowClient({
 
       <div className={styles.flow}>
         <div className={styles.opening}>
-          <div className={styles.openingLabel}>기초잔액</div>
-          <div className={styles.bal}>{formatKRW(openingBalance)}</div>
+          <div className={styles.openingLabel}>
+            {classifyAccountsReceivable(openingBalance).kind === 'prepayment'
+              ? '기초 초과입금'
+              : '기초잔액'}
+          </div>
+          <div
+            className={styles.bal}
+            style={{ color: classifyAccountsReceivable(openingBalance).color }}
+          >
+            {formatKRW(classifyAccountsReceivable(openingBalance).absolute)}
+          </div>
         </div>
 
         {rows.length === 0 ? (
@@ -206,7 +216,18 @@ export function CustomerLedgerFlowClient({
                           </span>
                         </DataCell>
                         <DataCell align="end" tone="secondary">
-                          <span className={styles.bal}>{formatKRW(r.running_balance)}</span>
+                          {(() => {
+                            const rb = classifyAccountsReceivable(r.running_balance)
+                            return (
+                              <span
+                                className={styles.bal}
+                                style={{ color: rb.color }}
+                                title={rb.hint ? `${rb.label} · ${rb.hint}` : rb.label}
+                              >
+                                {formatKRW(rb.signed)}
+                              </span>
+                            )
+                          })()}
                         </DataCell>
                       </DataTableRow>
 

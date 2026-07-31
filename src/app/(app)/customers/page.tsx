@@ -1,5 +1,6 @@
 import { getCustomersWithScore } from '@/actions/ledger'
 import { formatKRW } from '@/lib/calc'
+import { classifyAccountsReceivable } from '@/lib/ledger-calc'
 import type { CustomerWithScore } from '@/actions/ledger'
 import { CommandStrip } from '@/components/dashboard/CommandStrip'
 import { CustomersOpsListClient } from '@/components/customer/CustomersOpsListClient'
@@ -20,7 +21,9 @@ export default async function CustomersPage({
 
   const totalOverdue = all.reduce((s, c) => s + (c.overdue_amount ?? 0), 0)
   const totalReceivable = all.reduce((s, c) => s + (c.receivable_amount ?? 0), 0)
+  const totalReceivableDue = all.reduce((s, c) => s + Math.max(0, c.receivable_amount ?? 0), 0)
   const overdueCount = all.filter((c) => (c.overdue_amount ?? 0) > 0).length
+  const arNet = classifyAccountsReceivable(totalReceivable)
 
   const initialFilter =
     filter === 'overdue'
@@ -77,13 +80,19 @@ export default async function CustomersPage({
           <Link href="/customers?filter=receivable" className={`${styles.opsCell} ${styles.opsCellOrange}`}>
             <div className={styles.opsLabel}>오늘 수금 예정</div>
             <div className={`${styles.opsNum} ${styles.numOrange}`}>{todayCollectionCount}곳</div>
-            <div className={styles.opsSub}>{formatKRW(totalReceivable)} 대상</div>
+            <div className={styles.opsSub}>{formatKRW(totalReceivableDue)} 대상</div>
           </Link>
 
           <Link href="/customers?filter=receivable" className={`${styles.opsCell} ${styles.opsCellGreen}`}>
-            <div className={styles.opsLabel}>총 미수금</div>
-            <div className={`${styles.opsNum} ${styles.numNormal}`}>{formatKRW(totalReceivable)}</div>
-            <div className={styles.opsSub}>거래처 원장 이동</div>
+            <div className={styles.opsLabel}>
+              {arNet.kind === 'prepayment' ? '총 초과입금' : '총 미수금'}
+            </div>
+            <div className={`${styles.opsNum} ${styles.numNormal}`} style={{ color: arNet.color }}>
+              {formatKRW(arNet.absolute)}
+            </div>
+            <div className={styles.opsSub}>
+              {arNet.kind === 'prepayment' ? '다음 주문 자동 차감' : '거래처 원장 이동'}
+            </div>
           </Link>
 
           <Link href="/customers?filter=risk" className={`${styles.opsCell} ${styles.opsCellAmber}`}>
