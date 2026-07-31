@@ -89,15 +89,25 @@ export async function createPayment(
   }
 
   // 2026-07-21 정책: 예치금 미운영.
-  // create_payment_atomic이 반환하는 deposit_amount는 무시한다.
-  // 초과입금은 payments 전액만 기록 → getAccountsReceivable에 자연 반영.
-  const deposit_amount = (rpcData.deposit_amount as number | null) ?? 0
+  // RPC는 여전히 deposit_amount를 계산·저장할 수 있으므로, TS에서 즉시 0으로 정규화한다.
+  // (RPC 자체는 수정하지 않음)
+  const paymentId = rpcData.id as string
+  const { error: zeroDepErr } = await supabase
+    .from('payments')
+    .update({ deposit_amount: 0 })
+    .eq('id', paymentId)
+    // 전환: payee_tenant_id 우선 (legacy tenant_id 병행)
+    .or(`payee_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`)
+  if (zeroDepErr && process.env.NODE_ENV === 'development') {
+    console.warn('[createPayment] deposit_amount zeroize failed', zeroDepErr.message)
+  }
+  const deposit_amount = 0
 
   // FIFO 자동 배분 (best-effort): 배분 실패해도 수금 자체는 성공 유지
   try {
     await supabase.rpc('allocate_payment_fifo', {
       p_tenant_id:  ctx.tenant_id,
-      p_payment_id: rpcData.id as string,
+      p_payment_id: paymentId,
     })
   } catch { /* noop */ }
 
@@ -106,7 +116,7 @@ export async function createPayment(
     tenant_id:          ctx.tenant_id,
     result_type:        'payment_completed',
     result_amount:      input.amount,
-    related_payment_id: rpcData.id as string,
+    related_payment_id: paymentId,
   }).catch(() => {})  // action_log 실패는 수금 성공에 영향 없음
 
   revalidatePath('/customers')
@@ -115,9 +125,9 @@ export async function createPayment(
   return {
     success: true,
     data: {
-      id:             rpcData.id             as string,
+      id:             paymentId,
       applied_amount: rpcData.applied_amount as number,
-      deposit_amount, // RPC 반환값 전달만 (예치금 적립 안 함)
+      deposit_amount, // 항상 0 (예치금 미운영)
       balance_before: rpcData.balance_before as number,
       mode:           'rpc',
       warning:        dupWarning || undefined,
