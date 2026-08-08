@@ -188,22 +188,20 @@ export default async function CustomerLedgerPage({
 
       <div className={styles.bottom}>
         <Surface variant="panel" density="comfortable">
-          <details>
-            <summary className={styles.detailsSummary}>세금계산서 요약 (수금 기준)</summary>
-            <div className={styles.detailsContent}>
-              {(tax_summary.taxable_paid > 0 ||
-                tax_summary.card_paid > 0 ||
-                tax_summary.invoice_amount > 0) ? (
-                <div className={styles.kpiStrip}>
-                  <KPIBlock label="과세합계" value={formatKRW(tax_summary.taxable_paid)} align="end" />
-                  <KPIBlock label="카드(제외)" value={formatKRW(tax_summary.card_paid)} align="end" />
-                  <KPIBlock label="계산서발행" value={formatKRW(tax_summary.invoice_amount)} align="end" />
-                </div>
-              ) : (
-                <div className={styles.empty}>표시할 데이터가 없습니다</div>
-              )}
-            </div>
-          </details>
+          <div className={styles.detailsSummary}>세금계산서 요약 (수금 기준)</div>
+          <div className={styles.detailsContent}>
+            {(tax_summary.taxable_paid > 0 ||
+              tax_summary.card_paid > 0 ||
+              tax_summary.invoice_amount > 0) ? (
+              <div className={styles.kpiStrip}>
+                <KPIBlock label="과세합계" value={formatKRW(tax_summary.taxable_paid)} align="end" />
+                <KPIBlock label="카드(제외)" value={formatKRW(tax_summary.card_paid)} align="end" />
+                <KPIBlock label="계산서발행" value={formatKRW(tax_summary.invoice_amount)} align="end" />
+              </div>
+            ) : (
+              <div className={styles.empty}>표시할 데이터가 없습니다</div>
+            )}
+          </div>
         </Surface>
 
         <Surface variant="panel" density="comfortable">

@@ -28,7 +28,7 @@ type LedgerRow = {
   running_balance: number
 }
 
-type Preset = 'month' | '7d' | 'custom'
+type Preset = 'month' | 'lastMonth' | '7d' | 'custom'
 type Method = '' | 'transfer' | 'cash' | 'card' | 'platform'
 
 function kstTodayStr() {
@@ -39,6 +39,18 @@ function kstTodayStr() {
 function monthStartStr() {
   const d = new Date(Date.now() + 9 * 3600000)
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-01`
+}
+
+function lastMonthRange() {
+  const d = new Date(Date.now() + 9 * 3600000)
+  const y = d.getUTCFullYear()
+  const m = d.getUTCMonth()
+  const lastMonthIdx = m === 0 ? 11 : m - 1
+  const lastYear = m === 0 ? y - 1 : y
+  const from = `${lastYear}-${String(lastMonthIdx + 1).padStart(2, '0')}-01`
+  const lastDay = new Date(Date.UTC(lastYear, lastMonthIdx + 1, 0)).getUTCDate()
+  const to = `${lastYear}-${String(lastMonthIdx + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+  return { from, to }
 }
 
 function daysAgoStr(n: number) {
@@ -74,7 +86,9 @@ export function CustomerLedgerFlowClient({
   const [method, setMethod] = useState<Method>(initialMethod)
 
   const preset: Preset = useMemo(() => {
+    const last = lastMonthRange()
     if (from === monthStartStr() && to === kstTodayStr()) return 'month'
+    if (from === last.from && to === last.to) return 'lastMonth'
     if (from === daysAgoStr(6) && to === kstTodayStr()) return '7d'
     return 'custom'
   }, [from, to])
@@ -120,6 +134,11 @@ export function CustomerLedgerFlowClient({
             setFrom(monthStartStr())
             setTo(kstTodayStr())
           }}>이번달</Chip>
+          <Chip active={preset === 'lastMonth'} onClick={() => {
+            const r = lastMonthRange()
+            setFrom(r.from)
+            setTo(r.to)
+          }}>지난달</Chip>
           <Chip active={preset === '7d'} onClick={() => {
             setFrom(daysAgoStr(6))
             setTo(kstTodayStr())

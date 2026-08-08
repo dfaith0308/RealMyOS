@@ -130,11 +130,15 @@
 }
 
 .detailsSummary {
-  cursor: pointer;
   font-size: 12px;
   font-weight: 900;
   color: var(--ds-text-secondary);
   list-style: none;
+}
+
+details > .detailsSummary,
+summary.detailsSummary {
+  cursor: pointer;
 }
 
 .detailsSummary::-webkit-details-marker {

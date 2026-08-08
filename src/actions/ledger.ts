@@ -17,6 +17,12 @@ import {
   getCustomerDeposit,
 } from '@/lib/ledger-calc'
 import { fetchInboundSupersededOriginalPaymentIds } from '@/lib/inbound-payment-superseded'
+import {
+  computeTaxSummaryFromLedgerRows,
+  type TaxSummary,
+} from '@/lib/ledger-tax-summary'
+
+export type { TaxSummary }
 
 // ============================================================
 // 원장 허브용 셀렉트 데이터 (RULE-01)
@@ -118,12 +124,6 @@ export interface LedgerSummary {
   current_balance: number
 }
 
-export interface TaxSummary {
-  taxable_paid: number
-  card_paid: number
-  invoice_amount: number
-}
-
 export interface CustomerLedgerOptions {
   from?:           string
   to?:             string
@@ -203,7 +203,12 @@ export async function getCustomerLedger(
   const allRows: LedgerRow[] = merged.map((item) => {
     if (item.kind === 'order') {
       const o = item.data
-      const orderAmt = effectiveOrderAmount(o as { final_amount?: number | null; total_amount: number })
+      // AR·원장 누적: saleAmount (deposit_used 미차감). 예치금 미운영.
+      const orderAmt = saleAmount(o as {
+        total_amount: number
+        discount_amount?: number | null
+        point_used?: number | null
+      })
       running += orderAmt
       const rawLines = (o.order_lines ?? []) as Array<{
         product_name?: string | null
@@ -272,31 +277,20 @@ export async function getCustomerLedger(
 
   // 총미수금 = 최초미수 + to까지 전체 주문/입금 (from·payment_method 미적용)
   const lifetimeOrders = (orders ?? []).reduce(
-    (s, o) => s + effectiveOrderAmount(o as { final_amount?: number | null; total_amount: number }),
+    (s, o) =>
+      s +
+      saleAmount(o as {
+        total_amount: number
+        discount_amount?: number | null
+        point_used?: number | null
+      }),
     0,
   )
   const lifetimePayments = (payments ?? []).reduce((s, p) => s + Number(p.amount ?? 0), 0)
   const current_balance = getAccountsReceivable(bootstrapOpening, lifetimeOrders, lifetimePayments, 0)
 
-  const tax_summary: TaxSummary = (() => {
-    // MVP: 수금 기준 세금계산서 대상 금액 집계 (RULE-02: 런타임 계산만, DB 저장 금지)
-    // 기간 표시분(rows의 입금)과 동일 범위
-    let taxable_paid = 0
-    let card_paid = 0
-    for (const r of rows) {
-      if (r.type !== 'payment') continue
-      const method = r.payment_method ?? null
-      const amount = Number(r.payment_amount ?? 0)
-      if (!amount) continue
-      if (method === 'cash' || method === 'transfer') taxable_paid += amount
-      else if (method === 'card') card_paid += amount
-    }
-    return {
-      taxable_paid,
-      card_paid,
-      invoice_amount: taxable_paid,
-    }
-  })()
+  // 기간 표시분(rows의 입금)과 동일 범위 — 공유 함수 재사용
+  const tax_summary = computeTaxSummaryFromLedgerRows(rows)
 
   return {
     success: true,
@@ -311,6 +305,131 @@ export async function getCustomerLedger(
       tax_summary,
     },
   }
+}
+
+// ============================================================
+// 원장 허브 — 거래처 전체 세금계산서 요약 (수금 기준, 배치)
+// ============================================================
+
+export interface LedgerTaxInvoiceRow {
+  customer_id: string
+  name: string
+  biz_number: string | null
+  taxable_paid: number
+  card_paid: number
+  invoice_amount: number
+}
+
+export interface LedgerTaxInvoiceOptions {
+  from?: string
+  to?: string
+  payment_method?: string
+}
+
+/**
+ * getLedgerCustomers 대상 전체에 대해 getCustomerLedger 와 동일 tax_summary 산식 적용.
+ * N+1 금지: customers + payments 각 1회 조회 후 메모리 그룹.
+ */
+export async function getLedgerTaxInvoiceSummaries(
+  options?: LedgerTaxInvoiceOptions,
+): Promise<ActionResult<LedgerTaxInvoiceRow[]>> {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx) return { success: false, error: '로그인 필요' }
+
+  const from = options?.from
+  const to = options?.to
+  const methodFilter = options?.payment_method
+
+  const payeeScope = `payee_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`
+
+  const [customersRes, supersededInbound] = await Promise.all([
+    supabase
+      .from('customers')
+      .select('id, name, biz_number')
+      .eq('tenant_id', ctx.tenant_id)
+      .eq('is_buyer', true)
+      .is('deleted_at', null)
+      .order('name')
+      .limit(1000),
+    fetchInboundSupersededOriginalPaymentIds(supabase, payeeScope),
+  ])
+
+  if (customersRes.error) {
+    return { success: false, error: customersRes.error.message }
+  }
+
+  const customers = customersRes.data ?? []
+  if (customers.length === 0) return { success: true, data: [] }
+
+  type PayRow = {
+    id: string
+    customer_id: string | null
+    payment_date: string
+    amount: number
+    payment_method: string | null
+  }
+  const payments: PayRow[] = []
+  const pageSize = 1000
+  for (let fromIdx = 0; ; fromIdx += pageSize) {
+    let paymentsQuery = supabase
+      .from('payments')
+      .select('id, customer_id, payment_date, amount, payment_method')
+      .or(payeeScope)
+      .eq('direction', 'inbound')
+      .eq('status', 'confirmed')
+      .is('reversal_of_id', null)
+      .not('customer_id', 'is', null)
+      .order('payment_date', { ascending: true })
+      .order('id', { ascending: true })
+      .range(fromIdx, fromIdx + pageSize - 1)
+
+    if (to) paymentsQuery = paymentsQuery.lte('payment_date', to)
+    if (from) paymentsQuery = paymentsQuery.gte('payment_date', from)
+    if (supersededInbound.length) {
+      paymentsQuery = paymentsQuery.not('id', 'in', `(${supersededInbound.join(',')})`)
+    }
+
+    const { data: page, error: payErr } = await paymentsQuery
+    if (payErr) return { success: false, error: payErr.message }
+    const batch = (page ?? []) as PayRow[]
+    payments.push(...batch)
+    if (batch.length < pageSize) break
+  }
+
+  const byCustomer = new Map<
+    string,
+    Array<{ type: 'payment'; payment_method?: string | null; payment_amount?: number }>
+  >()
+
+  for (const p of payments) {
+    const cid = p.customer_id
+    if (!cid) continue
+    if (methodFilter && p.payment_method !== methodFilter) continue
+    const list = byCustomer.get(cid) ?? []
+    list.push({
+      type: 'payment',
+      payment_method: p.payment_method,
+      payment_amount: Number(p.amount ?? 0),
+    })
+    byCustomer.set(cid, list)
+  }
+
+  const rows: LedgerTaxInvoiceRow[] = customers.map((c) => {
+    const tax = computeTaxSummaryFromLedgerRows(byCustomer.get(c.id) ?? [])
+    return {
+      customer_id: c.id,
+      name: c.name,
+      biz_number: c.biz_number ?? null,
+      taxable_paid: tax.taxable_paid,
+      card_paid: tax.card_paid,
+      invoice_amount: tax.invoice_amount,
+    }
+  })
+
+  rows.sort((a, b) => b.invoice_amount - a.invoice_amount || a.name.localeCompare(b.name, 'ko'))
+
+  return { success: true, data: rows }
 }
 
 // ============================================================
@@ -555,9 +674,18 @@ export async function getCustomersWithBalance(): Promise<ActionResult<CustomerWi
     const opening = openingMap.get(c.id) ?? 0
     const paid    = paymentMap.get(c.id) ?? 0
 
-    const totalFinal      = orders.reduce((s, o) => s + effectiveOrderAmount(o as any), 0)
+    const totalSales = orders.reduce(
+      (s, o) =>
+        s +
+        saleAmount(o as {
+          total_amount: number
+          discount_amount?: number | null
+          point_used?: number | null
+        }),
+      0,
+    )
     const totalOrdersAmt  = orders.reduce((s, o) => s + o.total_amount, 0)  // 매출 집계용
-    const receivable_amount = getAccountsReceivable(opening, totalFinal, paid, 0)
+    const receivable_amount = getAccountsReceivable(opening, totalSales, paid, 0)
     const current_balance   = receivable_amount
     const deposit_amount    = depositByCustomer.get(c.id) ?? 0
     const overdue_amount    = getOverdueReceivable(orders, terms, paid, todayStr)
@@ -779,10 +907,18 @@ export async function getCustomersWithStats(): Promise<ActionResult<CustomerWith
   const statsMap    = new Map((statsRows    ?? []).map((s: any) => [s.customer_id, s]))
   const settingsMap = new Map((settingsRows ?? []).map((s: any) => [s.customer_id, s]))
 
-  // final_amount = total_amount - discount_amount - point_used (앱 effectiveOrderAmount / DB generated)
+  // AR 입력 = saleAmount (deposit 미차감). effectiveOrderAmount는 연체·실청구용.
   const orderFinalMap = new Map<string, number>()
   for (const o of orderRows ?? []) {
-    orderFinalMap.set(o.customer_id, (orderFinalMap.get(o.customer_id) ?? 0) + effectiveOrderAmount(o as any))
+    orderFinalMap.set(
+      o.customer_id,
+      (orderFinalMap.get(o.customer_id) ?? 0) +
+        saleAmount(o as {
+          total_amount: number
+          discount_amount?: number | null
+          point_used?: number | null
+        }),
+    )
   }
   const paidMap = new Map<string, number>()
   for (const p of paymentRows ?? []) {
