@@ -52,7 +52,7 @@ function lastMonthRange() {
 }
 
 function downloadTaxCsv(rows: LedgerTaxInvoiceRow[], from: string, to: string) {
-  const header = ['거래처명', '사업자번호', '과세금액', '면세금액', '합계']
+  const header = ['거래처명', '사업자번호', '과세금액', '면세금액', '합계', '미배분']
   const lines = rows.map((r) =>
     [
       csvEscape(r.name),
@@ -60,6 +60,7 @@ function downloadTaxCsv(rows: LedgerTaxInvoiceRow[], from: string, to: string) {
       String(r.taxable_goods_amount),
       String(r.exempt_goods_amount),
       String(r.goods_total),
+      String(r.unallocated_amount),
     ].join(','),
   )
   const bom = '\uFEFF'
@@ -107,6 +108,12 @@ export default function LedgerHubClient({
   useEffect(() => {
     setTaxRows(initialTaxRows)
   }, [initialTaxRows])
+
+  const unallocatedSummary = useMemo(() => {
+    const withUnalloc = taxRows.filter((r) => (r.unallocated_amount ?? 0) > 0)
+    const total = withUnalloc.reduce((s, r) => s + (r.unallocated_amount ?? 0), 0)
+    return { count: withUnalloc.length, total }
+  }, [taxRows])
 
   const supplierOptions = useMemo(
     () => suppliers.filter((s) => s.trim().length > 0),
@@ -323,6 +330,21 @@ export default function LedgerHubClient({
               <p style={{ color: '#B91C1C', fontSize: 13, margin: '0 0 12px' }}>{taxError}</p>
             )}
 
+            {unallocatedSummary.count > 0 && (
+              <div style={s.unallocBanner} role="status">
+                미배분 수금 있는 거래처{' '}
+                <strong>{unallocatedSummary.count}곳</strong>
+                {' · '}합계{' '}
+                <strong style={{ color: '#B91C1C' }}>
+                  {formatKRW(unallocatedSummary.total)}
+                </strong>
+                <span style={{ color: '#9ca3af', fontWeight: 400 }}>
+                  {' '}
+                  — 계산서 발행 전 배분 확인 필요
+                </span>
+              </div>
+            )}
+
             <div style={{ overflowX: 'auto' }}>
               <table style={s.table}>
                 <thead>
@@ -332,35 +354,53 @@ export default function LedgerHubClient({
                     <th style={{ ...s.th, textAlign: 'right' }}>과세금액</th>
                     <th style={{ ...s.th, textAlign: 'right' }}>면세금액</th>
                     <th style={{ ...s.th, textAlign: 'right' }}>합계</th>
+                    <th style={{ ...s.th, textAlign: 'right' }}>미배분</th>
                   </tr>
                 </thead>
                 <tbody>
                   {taxRows.length === 0 ? (
                     <tr>
-                      <td colSpan={5} style={s.emptyTd}>
+                      <td colSpan={6} style={s.emptyTd}>
                         표시할 데이터가 없습니다
                       </td>
                     </tr>
                   ) : (
-                    taxRows.map((r) => (
-                      <tr key={r.customer_id}>
-                        <td style={s.td}>
-                          <Link href={`/customers/${r.customer_id}/ledger`} style={s.rowLink}>
-                            {r.name}
-                          </Link>
-                        </td>
-                        <td style={s.td}>{r.biz_number || '—'}</td>
-                        <td style={{ ...s.td, textAlign: 'right' }}>
-                          {formatKRW(r.taxable_goods_amount)}
-                        </td>
-                        <td style={{ ...s.td, textAlign: 'right' }}>
-                          {formatKRW(r.exempt_goods_amount)}
-                        </td>
-                        <td style={{ ...s.td, textAlign: 'right', fontWeight: 600 }}>
-                          {formatKRW(r.goods_total)}
-                        </td>
-                      </tr>
-                    ))
+                    taxRows.map((r) => {
+                      const hasUnalloc = (r.unallocated_amount ?? 0) > 0
+                      return (
+                        <tr
+                          key={r.customer_id}
+                          style={hasUnalloc ? s.unallocRow : undefined}
+                        >
+                          <td style={s.td}>
+                            <Link href={`/customers/${r.customer_id}/ledger`} style={s.rowLink}>
+                              {r.name}
+                            </Link>
+                          </td>
+                          <td style={s.td}>{r.biz_number || '—'}</td>
+                          <td style={{ ...s.td, textAlign: 'right' }}>
+                            {formatKRW(r.taxable_goods_amount)}
+                          </td>
+                          <td style={{ ...s.td, textAlign: 'right' }}>
+                            {formatKRW(r.exempt_goods_amount)}
+                          </td>
+                          <td style={{ ...s.td, textAlign: 'right', fontWeight: 600 }}>
+                            {formatKRW(r.goods_total)}
+                          </td>
+                          <td
+                            style={{
+                              ...s.td,
+                              textAlign: 'right',
+                              ...(hasUnalloc
+                                ? { color: '#B91C1C', fontWeight: 700 }
+                                : { color: '#9ca3af' }),
+                            }}
+                          >
+                            {hasUnalloc ? formatKRW(r.unallocated_amount) : '—'}
+                          </td>
+                        </tr>
+                      )
+                    })
                   )}
                 </tbody>
               </table>
@@ -604,5 +644,17 @@ const s: Record<string, React.CSSProperties> = {
     textAlign: 'center',
     color: '#9ca3af',
     fontSize: 13,
+  },
+  unallocBanner: {
+    marginBottom: 12,
+    padding: '10px 12px',
+    background: '#FEF2F2',
+    border: '1px solid #FECACA',
+    borderRadius: 8,
+    fontSize: 13,
+    color: '#7F1D1D',
+  },
+  unallocRow: {
+    background: '#FFF7F7',
   },
 }

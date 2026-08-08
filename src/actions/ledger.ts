@@ -325,6 +325,8 @@ export interface LedgerTaxInvoiceRow {
   exempt_goods_amount: number
   /** taxable_goods_amount + exempt_goods_amount */
   goods_total: number
+  /** 수금액 − active 배분 합 (미배분 수금) */
+  unallocated_amount: number
 }
 
 export interface LedgerTaxInvoiceOptions {
@@ -500,7 +502,12 @@ export async function getLedgerTaxInvoiceSummaries(
   }
 
   const goodsByCustomer = new Map<string, { taxable: number; exempt: number }>()
+  const allocatedByPayment = new Map<string, number>()
   for (const a of allocations) {
+    allocatedByPayment.set(
+      a.payment_id,
+      (allocatedByPayment.get(a.payment_id) ?? 0) + a.allocated_amount,
+    )
     const cid = paymentCustomer.get(a.payment_id)
     if (!cid || !customerById.has(cid) || a.allocated_amount <= 0) continue
     const split = orderSplit.get(a.order_id) ?? { taxable: 0, exempt: 0 }
@@ -517,6 +524,19 @@ export async function getLedgerTaxInvoiceSummaries(
     goodsByCustomer.set(cid, cur)
   }
 
+  const unallocatedByCustomer = new Map<string, number>()
+  for (const p of payments) {
+    const cid = p.customer_id
+    if (!cid || !customerById.has(cid)) continue
+    const allocated = allocatedByPayment.get(p.id) ?? 0
+    const unalloc = Math.max(0, Number(p.amount ?? 0) - allocated)
+    if (unalloc <= 0) continue
+    unallocatedByCustomer.set(
+      cid,
+      (unallocatedByCustomer.get(cid) ?? 0) + unalloc,
+    )
+  }
+
   const rows: LedgerTaxInvoiceRow[] = []
   for (const c of customers) {
     const tax = computeTaxSummaryFromLedgerRows(byCustomerPays.get(c.id) ?? [])
@@ -524,12 +544,14 @@ export async function getLedgerTaxInvoiceSummaries(
     const taxable_goods_amount = goods.taxable
     const exempt_goods_amount = goods.exempt
     const goods_total = taxable_goods_amount + exempt_goods_amount
+    const unallocated_amount = unallocatedByCustomer.get(c.id) ?? 0
 
     if (
       tax.taxable_paid === 0 &&
       tax.card_paid === 0 &&
       taxable_goods_amount === 0 &&
-      exempt_goods_amount === 0
+      exempt_goods_amount === 0 &&
+      unallocated_amount === 0
     ) {
       continue
     }
@@ -543,11 +565,13 @@ export async function getLedgerTaxInvoiceSummaries(
       taxable_goods_amount,
       exempt_goods_amount,
       goods_total,
+      unallocated_amount,
     })
   }
 
   rows.sort(
     (a, b) =>
+      b.unallocated_amount - a.unallocated_amount ||
       b.goods_total - a.goods_total ||
       b.taxable_paid - a.taxable_paid ||
       a.name.localeCompare(b.name, 'ko'),
