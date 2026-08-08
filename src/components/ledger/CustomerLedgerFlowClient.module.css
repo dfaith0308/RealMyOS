@@ -3,6 +3,7 @@
   gap: 10px;
   align-items: center;
   flex-wrap: wrap;
+  margin-bottom: 4px;
 }
 
 .chipRow {
@@ -15,12 +16,12 @@
 .chip {
   height: 30px;
   padding: 0 12px;
-  border-radius: 999px;
+  border-radius: 8px;
   border: 1px solid var(--ds-border-default);
   background: var(--ds-surface-panel);
   color: var(--ds-text-secondary);
   font-size: 12px;
-  font-weight: 900;
+  font-weight: 700;
   cursor: pointer;
 }
 
@@ -29,8 +30,8 @@
 }
 
 .chipActive {
-  background: var(--ds-brand-text);
-  border-color: var(--ds-brand-text);
+  background: var(--ds-text-primary);
+  border-color: var(--ds-text-primary);
   color: var(--ds-text-inverse);
 }
 
@@ -42,12 +43,12 @@
 .dateInput {
   height: 34px;
   padding: 0 10px;
-  border-radius: 10px;
+  border-radius: 8px;
   border: 1px solid var(--ds-border-default);
   background: var(--ds-surface-panel);
   color: var(--ds-text-primary);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .dateInput:focus-visible {
@@ -57,12 +58,13 @@
 
 .sep {
   font-size: 12px;
-  font-weight: 900;
+  font-weight: 700;
   color: var(--ds-text-muted);
 }
 
 .flow {
   border-top: 1px solid var(--ds-border-subtle);
+  margin-top: 12px;
 }
 
 .groupHead {
@@ -74,13 +76,13 @@
   justify-content: space-between;
   gap: 12px;
   padding: 10px 12px;
-  background: var(--ds-surface-panel);
-  border-bottom: 1px solid var(--ds-border-default);
+  background: color-mix(in srgb, var(--ds-neutral-50) 65%, white);
+  border-bottom: 1px solid var(--ds-border-subtle);
 }
 
 .groupDate {
   font-size: 12px;
-  font-weight: 900;
+  font-weight: 800;
   color: var(--ds-text-primary);
   letter-spacing: -0.01em;
   white-space: nowrap;
@@ -88,20 +90,20 @@
 
 .groupNums {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   align-items: baseline;
   font-variant-numeric: tabular-nums;
 }
 
 .gNum {
   font-size: 11px;
-  font-weight: 900;
-  color: var(--ds-text-secondary);
+  font-weight: 700;
+  color: var(--ds-text-muted);
   white-space: nowrap;
 }
 
 .gNumStrong {
-  color: var(--ds-text-primary);
+  color: var(--ds-text-secondary);
 }
 
 .rowMain {
@@ -113,7 +115,7 @@
 
 .rowTitle {
   font-size: 13px;
-  font-weight: 900;
+  font-weight: 700;
   color: var(--ds-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -122,7 +124,7 @@
 
 .rowSub {
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 600;
   color: var(--ds-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -131,29 +133,34 @@
 
 .amt {
   font-size: 13px;
-  font-weight: 900;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
 .amtSale {
-  color: color-mix(in srgb, var(--ds-brand-primary) 15%, var(--ds-text-primary));
+  color: var(--ds-text-primary);
 }
 
 .amtPay {
-  color: var(--ds-status-success);
+  color: var(--ds-text-secondary);
 }
 
 .bal {
   font-size: 12px;
-  font-weight: 900;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   color: var(--ds-text-primary);
 }
 
+.balQuiet {
+  color: var(--ds-text-muted);
+  font-weight: 600;
+}
+
 .opening {
-  padding: 10px 12px;
+  padding: 12px;
   border-bottom: 1px solid var(--ds-border-subtle);
   display: flex;
   justify-content: space-between;
@@ -163,14 +170,14 @@
 
 .openingLabel {
   font-size: 12px;
-  font-weight: 900;
+  font-weight: 700;
   color: var(--ds-text-secondary);
 }
 
 .empty {
   padding: 14px 0;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--ds-text-muted);
 }
 
@@ -179,29 +186,30 @@
   grid-template-columns: 1fr auto auto;
   gap: 12px;
   align-items: baseline;
-  padding: 4px 12px 4px 28px;
-  border-bottom: 1px solid var(--ds-border-subtle);
-  background: color-mix(in srgb, var(--ds-neutral-50) 55%, white);
+  padding: 6px 12px 6px 28px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ds-border-subtle) 70%, white);
+  background: color-mix(in srgb, var(--ds-neutral-50) 35%, white);
 }
 
 .lineName {
   min-width: 0;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--ds-text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 1.45;
 }
 
 .lineUnit {
-  font-weight: 600;
+  font-weight: 500;
   color: var(--ds-text-muted);
 }
 
 .lineAmt {
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: var(--ds-text-secondary);
   white-space: nowrap;
@@ -212,4 +220,3 @@
 .lineBalSpacer {
   min-width: 72px;
 }
-

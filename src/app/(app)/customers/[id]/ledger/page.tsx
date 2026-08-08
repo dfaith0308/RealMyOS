@@ -7,7 +7,6 @@ import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import CallOutcomeButtons from '@/components/customer/CallOutcomeButtons'
 import { Surface } from '@/components/ui/Surface'
 import { KPIBlock } from '@/components/ui/KPIBlock'
-import { StatusBadge } from '@/components/ui/StatusBadge'
 import { CustomerLedgerFlowClient } from '@/components/ledger/CustomerLedgerFlowClient'
 import LedgerStatementExportButtons from '@/components/ledger/LedgerStatementExportButtons'
 import styles from './ledger-flow.module.css'
@@ -75,8 +74,6 @@ export default async function CustomerLedgerPage({
       )
     : null
   const arDisplay = classifyAccountsReceivable(summary.current_balance)
-  const badgeStatus =
-    arDisplay.kind === 'receivable' ? ('warning' as const) : ('paid' as const)
 
   const supabase = await createSupabaseServer()
   const ctx = await getAuthCtx(supabase)
@@ -136,28 +133,12 @@ export default async function CustomerLedgerPage({
         </div>
 
         <div className={styles.kpiStrip}>
-          <div className={styles.kpiBox}>
-            <div className={styles.kpiHead}>
-              <div className={styles.kpiHeadLabel}>{arDisplay.label}</div>
-              {arDisplay.kind === 'prepayment' ? (
-                <span
-                  title={arDisplay.hint ?? undefined}
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 600,
-                    color: arDisplay.color,
-                    background: '#eff6ff',
-                    border: '1px solid #bfdbfe',
-                    borderRadius: 999,
-                    padding: '2px 8px',
-                  }}
-                >
-                  초과입금
-                </span>
-              ) : (
-                <StatusBadge status={badgeStatus} size="sm" />
-              )}
-            </div>
+          <div
+            className={[
+              styles.kpiBox,
+              arDisplay.absolute === 0 ? styles.kpiQuiet : styles.kpiSoft,
+            ].join(' ')}
+          >
             <KPIBlock
               label={arDisplay.label}
               value={formatKRW(arDisplay.absolute)}
@@ -170,13 +151,40 @@ export default async function CustomerLedgerPage({
             />
           </div>
 
-          <KPIBlock label="기간 매출" value={formatKRW(summary.total_orders)} align="end" />
-          <KPIBlock label="기간 수금" value={formatKRW(summary.total_payments)} align="end" />
-          <KPIBlock
-            label="순흐름"
-            value={netFlow >= 0 ? `+${formatKRW(netFlow)}` : `−${formatKRW(Math.abs(netFlow))}`}
-            align="end"
-          />
+          <div
+            className={
+              summary.total_orders === 0 ? styles.kpiQuiet : styles.kpiSoft
+            }
+          >
+            <KPIBlock
+              label="기간 매출"
+              value={formatKRW(summary.total_orders)}
+              align="end"
+            />
+          </div>
+          <div
+            className={
+              summary.total_payments === 0 ? styles.kpiQuiet : styles.kpiSoft
+            }
+          >
+            <KPIBlock
+              label="기간 수금"
+              value={formatKRW(summary.total_payments)}
+              align="end"
+            />
+          </div>
+          <div className={netFlow === 0 ? styles.kpiQuiet : styles.kpiSoft}>
+            <KPIBlock
+              label="기간 자금 증감"
+              value={
+                netFlow >= 0
+                  ? `+${formatKRW(netFlow)}`
+                  : `−${formatKRW(Math.abs(netFlow))}`
+              }
+              align="end"
+              hint="매출 대비 수금이 더 많으면 +"
+            />
+          </div>
           <KPIBlock
             label="최근 수금"
             value={lastPayDays === null ? '없음' : `D+${lastPayDays}`}
@@ -201,19 +209,19 @@ export default async function CustomerLedgerPage({
       </Surface>
 
       <div className={styles.bottom}>
-        <Surface variant="panel" density="comfortable">
+        <div className={styles.taxCard}>
           <div className={styles.detailsSummary}>세금계산서 요약 (주문일 기준)</div>
           <div className={styles.detailsContent}>
             <div className={styles.kpiNote} style={{ marginBottom: 10 }}>
               기간 {from} ~ {to}
             </div>
-            <div className={styles.kpiStrip}>
+            <div className={styles.taxKpiStrip}>
               <KPIBlock label="과세금액" value={formatKRW(taxableGoods)} align="end" />
               <KPIBlock label="면세금액" value={formatKRW(exemptGoods)} align="end" />
               <KPIBlock label="합계" value={formatKRW(goodsTotal)} align="end" />
             </div>
           </div>
-        </Surface>
+        </div>
 
         <Surface variant="panel" density="comfortable">
           <details>

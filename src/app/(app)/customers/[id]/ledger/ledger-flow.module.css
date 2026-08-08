@@ -4,7 +4,7 @@
   padding: 28px 24px 60px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
 
 .topbar {
@@ -23,7 +23,7 @@
 
 .back {
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--ds-text-muted);
   text-decoration: none;
 }
@@ -34,7 +34,7 @@
 
 .title {
   font-size: 18px;
-  font-weight: 900;
+  font-weight: 800;
   color: var(--ds-text-primary);
   letter-spacing: -0.02em;
   margin: 0;
@@ -45,6 +45,7 @@
   gap: 8px;
   align-items: center;
   flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .btn {
@@ -53,12 +54,12 @@
   justify-content: center;
   height: 32px;
   padding: 0 12px;
-  border-radius: 10px;
+  border-radius: 8px;
   border: 1px solid var(--ds-border-default);
   background: var(--ds-surface-panel);
   color: var(--ds-text-primary);
   font-size: 12px;
-  font-weight: 900;
+  font-weight: 700;
   text-decoration: none;
   white-space: nowrap;
 }
@@ -68,13 +69,13 @@
 }
 
 .btnPrimary {
-  background: var(--ds-brand-primary);
-  border-color: color-mix(in srgb, var(--ds-brand-primary) 30%, white);
+  background: var(--ds-text-primary);
+  border-color: var(--ds-text-primary);
   color: var(--ds-text-inverse);
 }
 
 .btnPrimary:hover {
-  background: color-mix(in srgb, var(--ds-brand-primary) 85%, black);
+  background: color-mix(in srgb, var(--ds-text-primary) 88%, black);
 }
 
 .btn:focus-visible {
@@ -87,39 +88,37 @@
   grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
   gap: 12px;
   align-items: start;
+  margin-top: 4px;
 }
 
 .kpiBox {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 }
 
-.kpiHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+/* 0원: 톤 다운 / 금액 있음: 본문과 동일 흑백, 살짝만 대비 */
+.kpiQuiet {
+  opacity: 0.72;
 }
 
-.kpiHeadLabel {
-  font-size: 12px;
-  font-weight: 900;
-  color: var(--ds-text-secondary);
+.kpiSoft {
+  opacity: 1;
 }
 
 .kpiNote {
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--ds-text-muted);
   text-align: right;
   font-variant-numeric: tabular-nums;
+  margin-top: 8px;
 }
 
 .empty {
   padding: 12px 0;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--ds-text-muted);
 }
 
@@ -129,9 +128,23 @@
   gap: 12px;
 }
 
+.taxCard {
+  border: 1px solid var(--ds-border-subtle);
+  border-radius: 12px;
+  padding: 16px 18px;
+  background: color-mix(in srgb, var(--ds-neutral-50) 80%, white);
+}
+
+.taxKpiStrip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
 .detailsSummary {
   font-size: 12px;
-  font-weight: 900;
+  font-weight: 800;
   color: var(--ds-text-secondary);
   list-style: none;
 }
@@ -155,7 +168,7 @@ summary.detailsSummary {
 
 .logRow {
   padding: 10px 12px;
-  border-bottom: 1px dashed var(--ds-border-subtle);
+  border-bottom: 1px solid var(--ds-border-subtle);
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -170,36 +183,39 @@ summary.detailsSummary {
 
 .logType {
   font-size: 11px;
-  font-weight: 900;
+  font-weight: 800;
   color: var(--ds-text-secondary);
 }
 
 .logMsg {
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--ds-text-primary);
 }
 
 .logMeta {
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--ds-text-muted);
   margin-left: auto;
 }
 
 .logBadge {
   font-size: 11px;
-  font-weight: 900;
-  color: var(--ds-status-success);
-  background: color-mix(in srgb, var(--ds-status-success) 10%, white);
-  border: 1px solid color-mix(in srgb, var(--ds-status-success) 25%, white);
+  font-weight: 700;
+  color: var(--ds-text-secondary);
+  background: color-mix(in srgb, var(--ds-neutral-50) 90%, white);
+  border: 1px solid var(--ds-border-default);
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: 6px;
   font-variant-numeric: tabular-nums;
 }
 
 @media (max-width: 980px) {
   .kpiStrip {
+    grid-template-columns: 1fr 1fr;
+  }
+  .taxKpiStrip {
     grid-template-columns: 1fr;
   }
   .topbar {
@@ -210,4 +226,3 @@ summary.detailsSummary {
     justify-content: flex-start;
   }
 }
-

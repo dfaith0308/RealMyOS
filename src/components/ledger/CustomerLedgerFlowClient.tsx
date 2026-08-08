@@ -178,8 +178,12 @@ export function CustomerLedgerFlowClient({
               : '기초잔액'}
           </div>
           <div
-            className={styles.bal}
-            style={{ color: classifyAccountsReceivable(openingBalance).color }}
+            className={[
+              styles.bal,
+              openingBalance === 0 ? styles.balQuiet : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
           >
             {formatKRW(classifyAccountsReceivable(openingBalance).absolute)}
           </div>
@@ -198,7 +202,7 @@ export function CustomerLedgerFlowClient({
                     <span className={styles.gNum}>매출 {formatKRW(g.sales)}</span>
                     <span className={styles.gNum}>수금 {formatKRW(g.paid)}</span>
                     <span className={[styles.gNum, styles.gNumStrong].join(' ')}>
-                      순흐름 {net >= 0 ? `+${formatKRW(net)}` : `−${formatKRW(Math.abs(net))}`}
+                      증감 {net >= 0 ? `+${formatKRW(net)}` : `−${formatKRW(Math.abs(net))}`}
                     </span>
                   </div>
                 </div>
@@ -239,8 +243,12 @@ export function CustomerLedgerFlowClient({
                             const rb = classifyAccountsReceivable(r.running_balance)
                             return (
                               <span
-                                className={styles.bal}
-                                style={{ color: rb.color }}
+                                className={[
+                                  styles.bal,
+                                  rb.signed === 0 ? styles.balQuiet : '',
+                                ]
+                                  .filter(Boolean)
+                                  .join(' ')}
                                 title={rb.hint ? `${rb.label} · ${rb.hint}` : rb.label}
                               >
                                 {formatKRW(rb.signed)}
