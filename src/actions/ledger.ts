@@ -315,9 +315,16 @@ export interface LedgerTaxInvoiceRow {
   customer_id: string
   name: string
   biz_number: string | null
+  /** 기존 tax_summary: cash|transfer 수금 합 (필터용) */
   taxable_paid: number
+  /** 기존 tax_summary: card 수금 합 */
   card_paid: number
-  invoice_amount: number
+  /** 수금 배분×주문라인 tax_type=taxable 비례 금액 */
+  taxable_goods_amount: number
+  /** 수금 배분×주문라인 tax_type=exempt 비례 금액 */
+  exempt_goods_amount: number
+  /** taxable_goods_amount + exempt_goods_amount */
+  goods_total: number
 }
 
 export interface LedgerTaxInvoiceOptions {
@@ -326,9 +333,28 @@ export interface LedgerTaxInvoiceOptions {
   payment_method?: string
 }
 
+async function fetchAllPages<T>(
+  pageSize: number,
+  fetchPage: (
+    from: number,
+    to: number,
+  ) => Promise<{ data: T[] | null; error: { message: string } | null }>,
+): Promise<{ data: T[]; error: string | null }> {
+  const out: T[] = []
+  for (let fromIdx = 0; ; fromIdx += pageSize) {
+    const { data, error } = await fetchPage(fromIdx, fromIdx + pageSize - 1)
+    if (error) return { data: out, error: error.message }
+    const batch = data ?? []
+    out.push(...batch)
+    if (batch.length < pageSize) break
+  }
+  return { data: out, error: null }
+}
+
 /**
- * getLedgerCustomers 대상 전체에 대해 getCustomerLedger 와 동일 tax_summary 산식 적용.
- * N+1 금지: customers + payments 각 1회 조회 후 메모리 그룹.
+ * 기간·결제수단 수금이 있는 거래처만 반환.
+ * tax_summary + collection_allocations→order_lines tax_type 과세/면세 분리.
+ * N+1 금지.
  */
 export async function getLedgerTaxInvoiceSummaries(
   options?: LedgerTaxInvoiceOptions,
@@ -361,6 +387,7 @@ export async function getLedgerTaxInvoiceSummaries(
 
   const customers = customersRes.data ?? []
   if (customers.length === 0) return { success: true, data: [] }
+  const customerById = new Map(customers.map((c) => [c.id, c]))
 
   type PayRow = {
     id: string
@@ -369,10 +396,9 @@ export async function getLedgerTaxInvoiceSummaries(
     amount: number
     payment_method: string | null
   }
-  const payments: PayRow[] = []
-  const pageSize = 1000
-  for (let fromIdx = 0; ; fromIdx += pageSize) {
-    let paymentsQuery = supabase
+
+  const payPage = await fetchAllPages<PayRow>(1000, async (fromIdx, toIdx) => {
+    let q = supabase
       .from('payments')
       .select('id, customer_id, payment_date, amount, payment_method')
       .or(payeeScope)
@@ -382,52 +408,150 @@ export async function getLedgerTaxInvoiceSummaries(
       .not('customer_id', 'is', null)
       .order('payment_date', { ascending: true })
       .order('id', { ascending: true })
-      .range(fromIdx, fromIdx + pageSize - 1)
-
-    if (to) paymentsQuery = paymentsQuery.lte('payment_date', to)
-    if (from) paymentsQuery = paymentsQuery.gte('payment_date', from)
+      .range(fromIdx, toIdx)
+    if (to) q = q.lte('payment_date', to)
+    if (from) q = q.gte('payment_date', from)
+    if (methodFilter) q = q.eq('payment_method', methodFilter)
     if (supersededInbound.length) {
-      paymentsQuery = paymentsQuery.not('id', 'in', `(${supersededInbound.join(',')})`)
+      q = q.not('id', 'in', `(${supersededInbound.join(',')})`)
     }
+    return q
+  })
+  if (payPage.error) return { success: false, error: payPage.error }
 
-    const { data: page, error: payErr } = await paymentsQuery
-    if (payErr) return { success: false, error: payErr.message }
-    const batch = (page ?? []) as PayRow[]
-    payments.push(...batch)
-    if (batch.length < pageSize) break
-  }
+  const payments = payPage.data
+  const paymentIds = payments.map((p) => p.id)
+  const paymentCustomer = new Map(
+    payments
+      .filter((p) => p.customer_id)
+      .map((p) => [p.id, p.customer_id as string]),
+  )
 
-  const byCustomer = new Map<
+  const byCustomerPays = new Map<
     string,
     Array<{ type: 'payment'; payment_method?: string | null; payment_amount?: number }>
   >()
-
   for (const p of payments) {
     const cid = p.customer_id
-    if (!cid) continue
-    if (methodFilter && p.payment_method !== methodFilter) continue
-    const list = byCustomer.get(cid) ?? []
+    if (!cid || !customerById.has(cid)) continue
+    const list = byCustomerPays.get(cid) ?? []
     list.push({
       type: 'payment',
       payment_method: p.payment_method,
       payment_amount: Number(p.amount ?? 0),
     })
-    byCustomer.set(cid, list)
+    byCustomerPays.set(cid, list)
   }
 
-  const rows: LedgerTaxInvoiceRow[] = customers.map((c) => {
-    const tax = computeTaxSummaryFromLedgerRows(byCustomer.get(c.id) ?? [])
-    return {
+  type AllocRow = {
+    payment_id: string
+    order_id: string
+    allocated_amount: number
+  }
+  const allocations: AllocRow[] = []
+  const chunkSize = 200
+  for (let i = 0; i < paymentIds.length; i += chunkSize) {
+    const chunk = paymentIds.slice(i, i + chunkSize)
+    if (!chunk.length) continue
+    const { data, error } = await supabase
+      .from('collection_allocations')
+      .select('payment_id, order_id, allocated_amount')
+      .eq('tenant_id', ctx.tenant_id)
+      .eq('status', 'active')
+      .in('payment_id', chunk)
+    if (error) return { success: false, error: error.message }
+    for (const a of data ?? []) {
+      allocations.push({
+        payment_id: a.payment_id as string,
+        order_id: a.order_id as string,
+        allocated_amount: Number(a.allocated_amount ?? 0),
+      })
+    }
+  }
+
+  const orderIds = [...new Set(allocations.map((a) => a.order_id).filter(Boolean))]
+  type LineRow = { order_id: string; tax_type: string | null; line_total: number | null }
+  const lines: LineRow[] = []
+  for (let i = 0; i < orderIds.length; i += chunkSize) {
+    const chunk = orderIds.slice(i, i + chunkSize)
+    if (!chunk.length) continue
+    const { data, error } = await supabase
+      .from('order_lines')
+      .select('order_id, tax_type, line_total')
+      .in('order_id', chunk)
+    if (error) return { success: false, error: error.message }
+    for (const l of data ?? []) {
+      lines.push({
+        order_id: l.order_id as string,
+        tax_type: (l.tax_type as string | null) ?? null,
+        line_total: l.line_total == null ? null : Number(l.line_total),
+      })
+    }
+  }
+
+  const orderSplit = new Map<string, { taxable: number; exempt: number }>()
+  for (const l of lines) {
+    const amt = Number(l.line_total ?? 0)
+    if (!amt) continue
+    const cur = orderSplit.get(l.order_id) ?? { taxable: 0, exempt: 0 }
+    if (l.tax_type === 'exempt') cur.exempt += amt
+    else cur.taxable += amt
+    orderSplit.set(l.order_id, cur)
+  }
+
+  const goodsByCustomer = new Map<string, { taxable: number; exempt: number }>()
+  for (const a of allocations) {
+    const cid = paymentCustomer.get(a.payment_id)
+    if (!cid || !customerById.has(cid) || a.allocated_amount <= 0) continue
+    const split = orderSplit.get(a.order_id) ?? { taxable: 0, exempt: 0 }
+    const orderSum = split.taxable + split.exempt
+    const cur = goodsByCustomer.get(cid) ?? { taxable: 0, exempt: 0 }
+    if (orderSum <= 0) {
+      goodsByCustomer.set(cid, cur)
+      continue
+    }
+    const taxableShare = Math.round((a.allocated_amount * split.taxable) / orderSum)
+    const exemptShare = a.allocated_amount - taxableShare
+    cur.taxable += taxableShare
+    cur.exempt += exemptShare
+    goodsByCustomer.set(cid, cur)
+  }
+
+  const rows: LedgerTaxInvoiceRow[] = []
+  for (const c of customers) {
+    const tax = computeTaxSummaryFromLedgerRows(byCustomerPays.get(c.id) ?? [])
+    const goods = goodsByCustomer.get(c.id) ?? { taxable: 0, exempt: 0 }
+    const taxable_goods_amount = goods.taxable
+    const exempt_goods_amount = goods.exempt
+    const goods_total = taxable_goods_amount + exempt_goods_amount
+
+    if (
+      tax.taxable_paid === 0 &&
+      tax.card_paid === 0 &&
+      taxable_goods_amount === 0 &&
+      exempt_goods_amount === 0
+    ) {
+      continue
+    }
+
+    rows.push({
       customer_id: c.id,
       name: c.name,
       biz_number: c.biz_number ?? null,
       taxable_paid: tax.taxable_paid,
       card_paid: tax.card_paid,
-      invoice_amount: tax.invoice_amount,
-    }
-  })
+      taxable_goods_amount,
+      exempt_goods_amount,
+      goods_total,
+    })
+  }
 
-  rows.sort((a, b) => b.invoice_amount - a.invoice_amount || a.name.localeCompare(b.name, 'ko'))
+  rows.sort(
+    (a, b) =>
+      b.goods_total - a.goods_total ||
+      b.taxable_paid - a.taxable_paid ||
+      a.name.localeCompare(b.name, 'ko'),
+  )
 
   return { success: true, data: rows }
 }

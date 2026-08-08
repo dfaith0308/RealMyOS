@@ -52,14 +52,14 @@ function lastMonthRange() {
 }
 
 function downloadTaxCsv(rows: LedgerTaxInvoiceRow[], from: string, to: string) {
-  const header = ['거래처명', '사업자번호', '과세합계', '카드(제외)', '계산서발행']
+  const header = ['거래처명', '사업자번호', '과세금액', '면세금액', '합계']
   const lines = rows.map((r) =>
     [
       csvEscape(r.name),
       csvEscape(r.biz_number ?? ''),
-      String(r.taxable_paid),
-      String(r.card_paid),
-      String(r.invoice_amount),
+      String(r.taxable_goods_amount),
+      String(r.exempt_goods_amount),
+      String(r.goods_total),
     ].join(','),
   )
   const bom = '\uFEFF'
@@ -329,9 +329,9 @@ export default function LedgerHubClient({
                   <tr>
                     <th style={s.th}>거래처명</th>
                     <th style={s.th}>사업자번호</th>
-                    <th style={{ ...s.th, textAlign: 'right' }}>과세합계</th>
-                    <th style={{ ...s.th, textAlign: 'right' }}>카드(제외)</th>
-                    <th style={{ ...s.th, textAlign: 'right' }}>계산서발행</th>
+                    <th style={{ ...s.th, textAlign: 'right' }}>과세금액</th>
+                    <th style={{ ...s.th, textAlign: 'right' }}>면세금액</th>
+                    <th style={{ ...s.th, textAlign: 'right' }}>합계</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -350,10 +350,14 @@ export default function LedgerHubClient({
                           </Link>
                         </td>
                         <td style={s.td}>{r.biz_number || '—'}</td>
-                        <td style={{ ...s.td, textAlign: 'right' }}>{formatKRW(r.taxable_paid)}</td>
-                        <td style={{ ...s.td, textAlign: 'right' }}>{formatKRW(r.card_paid)}</td>
+                        <td style={{ ...s.td, textAlign: 'right' }}>
+                          {formatKRW(r.taxable_goods_amount)}
+                        </td>
+                        <td style={{ ...s.td, textAlign: 'right' }}>
+                          {formatKRW(r.exempt_goods_amount)}
+                        </td>
                         <td style={{ ...s.td, textAlign: 'right', fontWeight: 600 }}>
-                          {formatKRW(r.invoice_amount)}
+                          {formatKRW(r.goods_total)}
                         </td>
                       </tr>
                     ))
