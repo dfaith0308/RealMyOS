@@ -333,6 +333,8 @@ export interface LedgerTaxInvoiceOptions {
   from?: string
   to?: string
   payment_method?: string
+  /** 지정 시 해당 거래처만 계산 (허브와 동일 산식, 0원이어도 행 반환) */
+  customer_id?: string
 }
 
 async function fetchAllPages<T>(
@@ -368,18 +370,24 @@ export async function getLedgerTaxInvoiceSummaries(
   const from = options?.from
   const to = options?.to
   const methodFilter = options?.payment_method
+  const customerIdFilter = options?.customer_id
 
   const payeeScope = `payee_tenant_id.eq.${ctx.tenant_id},tenant_id.eq.${ctx.tenant_id}`
 
+  let customersQuery = supabase
+    .from('customers')
+    .select('id, name, biz_number')
+    .eq('tenant_id', ctx.tenant_id)
+    .eq('is_buyer', true)
+    .is('deleted_at', null)
+    .order('name')
+    .limit(1000)
+  if (customerIdFilter) {
+    customersQuery = customersQuery.eq('id', customerIdFilter)
+  }
+
   const [customersRes, supersededInbound] = await Promise.all([
-    supabase
-      .from('customers')
-      .select('id, name, biz_number')
-      .eq('tenant_id', ctx.tenant_id)
-      .eq('is_buyer', true)
-      .is('deleted_at', null)
-      .order('name')
-      .limit(1000),
+    customersQuery,
     fetchInboundSupersededOriginalPaymentIds(supabase, payeeScope),
   ])
 
@@ -414,6 +422,7 @@ export async function getLedgerTaxInvoiceSummaries(
     if (to) q = q.lte('payment_date', to)
     if (from) q = q.gte('payment_date', from)
     if (methodFilter) q = q.eq('payment_method', methodFilter)
+    if (customerIdFilter) q = q.eq('customer_id', customerIdFilter)
     if (supersededInbound.length) {
       q = q.not('id', 'in', `(${supersededInbound.join(',')})`)
     }
@@ -547,6 +556,7 @@ export async function getLedgerTaxInvoiceSummaries(
     const unallocated_amount = unallocatedByCustomer.get(c.id) ?? 0
 
     if (
+      !customerIdFilter &&
       tax.taxable_paid === 0 &&
       tax.card_paid === 0 &&
       taxable_goods_amount === 0 &&

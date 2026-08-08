@@ -197,8 +197,19 @@ export default function LedgerHubClient({
     })
   }
 
+  function customerLedgerHref(customerId: string) {
+    const params = new URLSearchParams()
+    if (from) params.set('from', from)
+    if (to) params.set('to', to)
+    if (paymentMethod) params.set('payment_method', paymentMethod)
+    const q = params.toString()
+    return q
+      ? `/customers/${customerId}/ledger?${q}`
+      : `/customers/${customerId}/ledger`
+  }
+
   function selectCustomer(id: string) {
-    if (id) router.push(`/customers/${id}/ledger`)
+    if (id) router.push(customerLedgerHref(id))
   }
 
   function selectSupplier(name: string) {
@@ -373,7 +384,7 @@ export default function LedgerHubClient({
                           style={hasUnalloc ? s.unallocRow : undefined}
                         >
                           <td style={s.td}>
-                            <Link href={`/customers/${r.customer_id}/ledger`} style={s.rowLink}>
+                            <Link href={customerLedgerHref(r.customer_id)} style={s.rowLink}>
                               {r.name}
                             </Link>
                           </td>

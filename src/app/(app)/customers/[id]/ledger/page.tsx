@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { getCustomerLedger } from '@/actions/ledger'
+import { getCustomerLedger, getLedgerTaxInvoiceSummaries } from '@/actions/ledger'
 import { formatKRW } from '@/lib/calc'
 import { classifyAccountsReceivable } from '@/lib/ledger-calc'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
@@ -38,15 +38,31 @@ export default async function CustomerLedgerPage({
       ? payment_method
       : ''
 
-  const result = await getCustomerLedger(id, {
-    from,
-    to,
-    payment_method: payment_method || undefined,
-  })
+  const [result, taxInvoiceResult] = await Promise.all([
+    getCustomerLedger(id, {
+      from,
+      to,
+      payment_method: methodSafe || undefined,
+    }),
+    getLedgerTaxInvoiceSummaries({
+      from,
+      to,
+      payment_method: methodSafe || undefined,
+      customer_id: id,
+    }),
+  ])
 
   if (!result.success || !result.data) notFound()
 
-  const { rows, summary, tax_summary } = result.data
+  const { rows, summary } = result.data
+
+  const taxInvoice = taxInvoiceResult.success
+    ? taxInvoiceResult.data?.[0] ?? null
+    : null
+  const taxableGoods = taxInvoice?.taxable_goods_amount ?? 0
+  const exemptGoods = taxInvoice?.exempt_goods_amount ?? 0
+  const goodsTotal = taxInvoice?.goods_total ?? 0
+  const unallocated = taxInvoice?.unallocated_amount ?? 0
 
   const netFlow = (summary.total_payments ?? 0) - (summary.total_orders ?? 0)
   const lastPay = [...rows]
@@ -190,17 +206,39 @@ export default async function CustomerLedgerPage({
         <Surface variant="panel" density="comfortable">
           <div className={styles.detailsSummary}>세금계산서 요약 (수금 기준)</div>
           <div className={styles.detailsContent}>
-            {(tax_summary.taxable_paid > 0 ||
-              tax_summary.card_paid > 0 ||
-              tax_summary.invoice_amount > 0) ? (
-              <div className={styles.kpiStrip}>
-                <KPIBlock label="과세합계" value={formatKRW(tax_summary.taxable_paid)} align="end" />
-                <KPIBlock label="카드(제외)" value={formatKRW(tax_summary.card_paid)} align="end" />
-                <KPIBlock label="계산서발행" value={formatKRW(tax_summary.invoice_amount)} align="end" />
+            <div className={styles.kpiNote} style={{ marginBottom: 10 }}>
+              기간 {from} ~ {to}
+              {methodSafe
+                ? ` · ${methodSafe === 'transfer' ? '무통장' : methodSafe === 'cash' ? '현금' : methodSafe === 'card' ? '카드' : methodSafe}`
+                : ' · 전체 결제수단'}
+            </div>
+            <div className={styles.kpiStrip}>
+              <KPIBlock label="과세금액" value={formatKRW(taxableGoods)} align="end" />
+              <KPIBlock label="면세금액" value={formatKRW(exemptGoods)} align="end" />
+              <KPIBlock label="합계" value={formatKRW(goodsTotal)} align="end" />
+              <KPIBlock
+                label="미배분"
+                value={formatKRW(unallocated)}
+                align="end"
+                hint={unallocated > 0 ? '계산서 발행 전 배분 확인 필요' : undefined}
+              />
+            </div>
+            {unallocated > 0 ? (
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: '8px 10px',
+                  background: '#FEF2F2',
+                  border: '1px solid #FECACA',
+                  borderRadius: 8,
+                  fontSize: 12,
+                  color: '#B91C1C',
+                  fontWeight: 600,
+                }}
+              >
+                미배분 수금 {formatKRW(unallocated)} — 허브 표와 동일 기준
               </div>
-            ) : (
-              <div className={styles.empty}>표시할 데이터가 없습니다</div>
-            )}
+            ) : null}
           </div>
         </Surface>
 
