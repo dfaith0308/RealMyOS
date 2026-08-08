@@ -10,7 +10,6 @@ import LedgerHubClient from '@/components/ledger/LedgerHubClient'
 export const metadata = { title: '원장관리 — RealMyOS' }
 
 type LedgerKind = 'sales' | 'purchases'
-type PaymentMethodFilter = '' | 'transfer' | 'cash' | 'card'
 
 export default async function LedgerPage({
   searchParams,
@@ -20,7 +19,6 @@ export default async function LedgerPage({
     from?: string
     to?: string
     supplier?: string
-    payment_method?: string
   }
 }) {
   const supabase = await createSupabaseServer()
@@ -36,25 +34,10 @@ export default async function LedgerPage({
   const to = searchParams.to ?? today
   const supplier = searchParams.supplier ?? ''
 
-  const rawMethod = searchParams.payment_method
-  const paymentMethod: PaymentMethodFilter =
-    rawMethod === undefined
-      ? 'transfer'
-      : rawMethod === 'transfer' ||
-          rawMethod === 'cash' ||
-          rawMethod === 'card' ||
-          rawMethod === ''
-        ? rawMethod
-        : 'transfer'
-
   const [customersResult, suppliersResult, taxResult] = await Promise.all([
     getLedgerCustomers(),
     getLedgerSuppliers(),
-    getLedgerTaxInvoiceSummaries({
-      from,
-      to,
-      payment_method: paymentMethod || undefined,
-    }),
+    getLedgerTaxInvoiceSummaries({ from, to }),
   ])
 
   return (
@@ -74,7 +57,6 @@ export default async function LedgerPage({
           initialFrom={from}
           initialTo={to}
           initialSupplier={supplier}
-          initialPaymentMethod={paymentMethod}
           initialTaxRows={taxResult.success ? (taxResult.data ?? []) : []}
           customers={customersResult.data ?? []}
           suppliers={suppliersResult.success ? (suppliersResult.data ?? []) : []}

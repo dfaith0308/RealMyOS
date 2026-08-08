@@ -47,7 +47,6 @@ export default async function CustomerLedgerPage({
     getLedgerTaxInvoiceSummaries({
       from,
       to,
-      payment_method: methodSafe || undefined,
       customer_id: id,
     }),
   ])
@@ -62,7 +61,6 @@ export default async function CustomerLedgerPage({
   const taxableGoods = taxInvoice?.taxable_goods_amount ?? 0
   const exemptGoods = taxInvoice?.exempt_goods_amount ?? 0
   const goodsTotal = taxInvoice?.goods_total ?? 0
-  const unpaid = taxInvoice?.unpaid_amount ?? taxInvoice?.unallocated_amount ?? 0
 
   const netFlow = (summary.total_payments ?? 0) - (summary.total_orders ?? 0)
   const lastPay = [...rows]
@@ -208,37 +206,12 @@ export default async function CustomerLedgerPage({
           <div className={styles.detailsContent}>
             <div className={styles.kpiNote} style={{ marginBottom: 10 }}>
               기간 {from} ~ {to}
-              {methodSafe
-                ? ` · ${methodSafe === 'transfer' ? '무통장' : methodSafe === 'cash' ? '현금' : methodSafe === 'card' ? '카드' : methodSafe}`
-                : ' · 전체 결제수단'}
             </div>
             <div className={styles.kpiStrip}>
               <KPIBlock label="과세금액" value={formatKRW(taxableGoods)} align="end" />
               <KPIBlock label="면세금액" value={formatKRW(exemptGoods)} align="end" />
               <KPIBlock label="합계" value={formatKRW(goodsTotal)} align="end" />
-              <KPIBlock
-                label="미수"
-                value={formatKRW(unpaid)}
-                align="end"
-                hint={unpaid > 0 ? '기간 주문 − active 배분' : undefined}
-              />
             </div>
-            {unpaid > 0 ? (
-              <div
-                style={{
-                  marginTop: 10,
-                  padding: '8px 10px',
-                  background: '#FEF2F2',
-                  border: '1px solid #FECACA',
-                  borderRadius: 8,
-                  fontSize: 12,
-                  color: '#B91C1C',
-                  fontWeight: 600,
-                }}
-              >
-                미수 {formatKRW(unpaid)} — 허브 표와 동일 기준
-              </div>
-            ) : null}
           </div>
         </Surface>
 

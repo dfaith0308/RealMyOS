@@ -12,14 +12,12 @@ import { formatKRW } from '@/lib/calc'
 import styles from './LedgerHubClient.module.css'
 
 type LedgerKind = 'sales' | 'purchases'
-type PaymentMethodFilter = '' | 'transfer' | 'cash' | 'card'
 
 interface Props {
   initialKind: LedgerKind
   initialFrom: string
   initialTo: string
   initialSupplier: string
-  initialPaymentMethod: PaymentMethodFilter
   initialTaxRows: LedgerTaxInvoiceRow[]
   customers: LedgerCustomerOption[]
   suppliers: string[]
@@ -52,7 +50,7 @@ function lastMonthRange() {
 }
 
 function downloadTaxCsv(rows: LedgerTaxInvoiceRow[], from: string, to: string) {
-  const header = ['거래처명', '사업자번호', '과세금액', '면세금액', '합계', '미수']
+  const header = ['거래처명', '사업자번호', '과세금액', '면세금액', '합계']
   const lines = rows.map((r) =>
     [
       csvEscape(r.name),
@@ -60,7 +58,6 @@ function downloadTaxCsv(rows: LedgerTaxInvoiceRow[], from: string, to: string) {
       String(r.taxable_goods_amount),
       String(r.exempt_goods_amount),
       String(r.goods_total),
-      String(r.unpaid_amount ?? r.unallocated_amount),
     ].join(','),
   )
   const bom = '\uFEFF'
@@ -85,7 +82,6 @@ export default function LedgerHubClient({
   initialFrom,
   initialTo,
   initialSupplier,
-  initialPaymentMethod,
   initialTaxRows,
   customers,
   suppliers,
@@ -97,8 +93,6 @@ export default function LedgerHubClient({
   const [from, setFrom] = useState(initialFrom)
   const [to, setTo] = useState(initialTo)
   const [supplier, setSupplier] = useState(initialSupplier)
-  const [paymentMethod, setPaymentMethod] =
-    useState<PaymentMethodFilter>(initialPaymentMethod)
   const [taxRows, setTaxRows] = useState<LedgerTaxInvoiceRow[]>(initialTaxRows)
   const [taxError, setTaxError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -108,17 +102,6 @@ export default function LedgerHubClient({
   useEffect(() => {
     setTaxRows(initialTaxRows)
   }, [initialTaxRows])
-
-  const unpaidSummary = useMemo(() => {
-    const withUnpaid = taxRows.filter(
-      (r) => (r.unpaid_amount ?? r.unallocated_amount ?? 0) > 0,
-    )
-    const total = withUnpaid.reduce(
-      (s, r) => s + (r.unpaid_amount ?? r.unallocated_amount ?? 0),
-      0,
-    )
-    return { count: withUnpaid.length, total }
-  }, [taxRows])
 
   const supplierOptions = useMemo(
     () => suppliers.filter((s) => s.trim().length > 0),
@@ -145,31 +128,27 @@ export default function LedgerHubClient({
       supplier?: string
       from?: string
       to?: string
-      payment_method?: PaymentMethodFilter
     }) => {
       const params = new URLSearchParams()
       const k = next.kind ?? kind
       const f = next.from ?? from
       const t = next.to ?? to
-      const pm = next.payment_method ?? paymentMethod
       if (k && k !== 'sales') params.set('kind', k)
       if (f) params.set('from', f)
       if (t) params.set('to', t)
-      if (pm) params.set('payment_method', pm)
       const sup = next.supplier ?? supplier
       if (k === 'purchases' && sup) params.set('supplier', sup)
       const q = params.toString()
       router.push(q ? `/ledger?${q}` : '/ledger')
     },
-    [kind, from, to, paymentMethod, supplier, router],
+    [kind, from, to, supplier, router],
   )
 
-  async function reloadTax(nextFrom: string, nextTo: string, nextMethod: PaymentMethodFilter) {
+  async function reloadTax(nextFrom: string, nextTo: string) {
     setTaxError(null)
     const res = await getLedgerTaxInvoiceSummaries({
       from: nextFrom || undefined,
       to: nextTo || undefined,
-      payment_method: nextMethod || undefined,
     })
     if (!res.success || !res.data) {
       setTaxError(res.error ?? '집계 실패')
@@ -181,7 +160,7 @@ export default function LedgerHubClient({
   function applyFilters() {
     startTransition(() => {
       pushQuery({})
-      void reloadTax(from, to, paymentMethod)
+      void reloadTax(from, to)
     })
   }
 
@@ -190,15 +169,7 @@ export default function LedgerHubClient({
     setTo(range.to)
     startTransition(() => {
       pushQuery({ from: range.from, to: range.to })
-      void reloadTax(range.from, range.to, paymentMethod)
-    })
-  }
-
-  function onPaymentMethodChange(pm: PaymentMethodFilter) {
-    setPaymentMethod(pm)
-    startTransition(() => {
-      pushQuery({ payment_method: pm })
-      void reloadTax(from, to, pm)
+      void reloadTax(range.from, range.to)
     })
   }
 
@@ -206,7 +177,6 @@ export default function LedgerHubClient({
     const params = new URLSearchParams()
     if (from) params.set('from', from)
     if (to) params.set('to', to)
-    if (paymentMethod) params.set('payment_method', paymentMethod)
     const q = params.toString()
     return q
       ? `/customers/${customerId}/ledger?${q}`
@@ -291,21 +261,6 @@ export default function LedgerHubClient({
           style={s.input}
           onChange={(e) => setTo(e.target.value)}
         />
-        {kind === 'sales' && (
-          <>
-            <label style={s.lb}>결제수단</label>
-            <select
-              style={s.methodSelect}
-              value={paymentMethod}
-              onChange={(e) => onPaymentMethodChange(e.target.value as PaymentMethodFilter)}
-            >
-              <option value="transfer">무통장</option>
-              <option value="cash">현금</option>
-              <option value="card">카드</option>
-              <option value="">전체</option>
-            </select>
-          </>
-        )}
         <button type="button" style={s.searchBtn} onClick={applyFilters} disabled={pending}>
           적용
         </button>
@@ -326,9 +281,6 @@ export default function LedgerHubClient({
                 <h2 style={s.h2}>세금계산서 요약 (주문일 기준)</h2>
                 <p style={s.hint}>
                   기간 {from || '-'} ~ {to || '-'}
-                  {paymentMethod
-                    ? ` · ${paymentMethod === 'transfer' ? '무통장' : paymentMethod === 'cash' ? '현금' : '카드'}`
-                    : ' · 전체 결제수단'}
                   {pending ? ' · 불러오는 중…' : ''}
                 </p>
               </div>
@@ -346,17 +298,6 @@ export default function LedgerHubClient({
               <p style={{ color: '#B91C1C', fontSize: 13, margin: '0 0 12px' }}>{taxError}</p>
             )}
 
-            {unpaidSummary.count > 0 && (
-              <div style={s.unallocBanner} role="status">
-                미수 있는 거래처{' '}
-                <strong>{unpaidSummary.count}곳</strong>
-                {' · '}합계{' '}
-                <strong style={{ color: '#B91C1C' }}>
-                  {formatKRW(unpaidSummary.total)}
-                </strong>
-              </div>
-            )}
-
             <div style={{ overflowX: 'auto' }}>
               <table style={s.table}>
                 <thead>
@@ -366,54 +307,35 @@ export default function LedgerHubClient({
                     <th style={{ ...s.th, textAlign: 'right' }}>과세금액</th>
                     <th style={{ ...s.th, textAlign: 'right' }}>면세금액</th>
                     <th style={{ ...s.th, textAlign: 'right' }}>합계</th>
-                    <th style={{ ...s.th, textAlign: 'right' }}>미수</th>
                   </tr>
                 </thead>
                 <tbody>
                   {taxRows.length === 0 ? (
                     <tr>
-                      <td colSpan={6} style={s.emptyTd}>
+                      <td colSpan={5} style={s.emptyTd}>
                         표시할 데이터가 없습니다
                       </td>
                     </tr>
                   ) : (
-                    taxRows.map((r) => {
-                      const unpaid = r.unpaid_amount ?? r.unallocated_amount ?? 0
-                      const hasUnpaid = unpaid > 0
-                      return (
-                        <tr
-                          key={r.customer_id}
-                          style={hasUnpaid ? s.unallocRow : undefined}
-                        >
-                          <td style={s.td}>
-                            <Link href={customerLedgerHref(r.customer_id)} style={s.rowLink}>
-                              {r.name}
-                            </Link>
-                          </td>
-                          <td style={s.td}>{r.biz_number || '—'}</td>
-                          <td style={{ ...s.td, textAlign: 'right' }}>
-                            {formatKRW(r.taxable_goods_amount)}
-                          </td>
-                          <td style={{ ...s.td, textAlign: 'right' }}>
-                            {formatKRW(r.exempt_goods_amount)}
-                          </td>
-                          <td style={{ ...s.td, textAlign: 'right', fontWeight: 600 }}>
-                            {formatKRW(r.goods_total)}
-                          </td>
-                          <td
-                            style={{
-                              ...s.td,
-                              textAlign: 'right',
-                              ...(hasUnpaid
-                                ? { color: '#B91C1C', fontWeight: 700 }
-                                : { color: '#9ca3af' }),
-                            }}
-                          >
-                            {hasUnpaid ? formatKRW(unpaid) : '—'}
-                          </td>
-                        </tr>
-                      )
-                    })
+                    taxRows.map((r) => (
+                      <tr key={r.customer_id}>
+                        <td style={s.td}>
+                          <Link href={customerLedgerHref(r.customer_id)} style={s.rowLink}>
+                            {r.name}
+                          </Link>
+                        </td>
+                        <td style={s.td}>{r.biz_number || '—'}</td>
+                        <td style={{ ...s.td, textAlign: 'right' }}>
+                          {formatKRW(r.taxable_goods_amount)}
+                        </td>
+                        <td style={{ ...s.td, textAlign: 'right' }}>
+                          {formatKRW(r.exempt_goods_amount)}
+                        </td>
+                        <td style={{ ...s.td, textAlign: 'right', fontWeight: 600 }}>
+                          {formatKRW(r.goods_total)}
+                        </td>
+                      </tr>
+                    ))
                   )}
                 </tbody>
               </table>
@@ -478,43 +400,31 @@ export default function LedgerHubClient({
         </>
       ) : (
         <section style={s.section}>
-          <h2 style={s.h2}>매입원장 — 매입처 선택</h2>
-          <p style={s.hint}>현재는 진입·필터 단계이며, 상세 표는 SUP-TODO-004-B에서 제공합니다.</p>
-
-          <select
-            style={s.select}
-            value={supplier}
-            onChange={(e) => selectSupplier(e.target.value)}
-          >
-            <option value="">매입처 선택…</option>
-            {supplierOptions.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-
+          <h2 style={s.h2}>매입원장 — 공급처 선택</h2>
+          <p style={s.hint}>
+            기간·공급처를 선택하면 매입 내역으로 이동합니다. (상세 화면은 후속)
+          </p>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <select
+              style={s.select}
+              value={supplier}
+              onChange={(e) => selectSupplier(e.target.value)}
+            >
+              <option value="">공급처 선택</option>
+              {supplierOptions.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+            {supplier ? (
+              <span style={{ fontSize: 13, color: '#374151' }}>선택: {supplier}</span>
+            ) : null}
+          </div>
           {supplierOptions.length === 0 && (
-            <p style={{ color: '#9ca3af', fontSize: 13, marginTop: 12 }}>매입 데이터가 없습니다.</p>
-          )}
-
-          {supplier && (
-            <div style={s.summaryBox}>
-              <p style={{ fontSize: 13, margin: 0 }}>
-                선택: <strong>{supplier}</strong> · 기간 {from || '-'} ~ {to || '-'}
-              </p>
-              <p style={{ fontSize: 12, color: '#9ca3af', margin: '4px 0 0 0' }}>
-                상세 매입원장(매입·지급 합계, 잔액)은 다음 단계에서 활성화됩니다.
-              </p>
-              <div style={{ marginTop: 12 }}>
-                <Link href="/purchases" style={s.linkBtn}>
-                  매입 목록 →
-                </Link>
-                <Link href="/disbursements" style={{ ...s.linkBtn, marginLeft: 8 }}>
-                  지급 목록 →
-                </Link>
-              </div>
-            </div>
+            <p style={{ color: '#9ca3af', fontSize: 13, marginTop: 12 }}>
+              등록된 매입 공급처가 없습니다.
+            </p>
           )}
         </section>
       )}
@@ -558,14 +468,6 @@ const s: Record<string, React.CSSProperties> = {
     borderRadius: 8,
     fontSize: 13,
     outline: 'none',
-  },
-  methodSelect: {
-    padding: '7px 10px',
-    border: '1px solid #d1d5db',
-    borderRadius: 8,
-    fontSize: 13,
-    background: '#fff',
-    minWidth: 100,
   },
   select: {
     padding: '8px 10px',
@@ -627,14 +529,6 @@ const s: Record<string, React.CSSProperties> = {
   },
   h2: { fontSize: 15, fontWeight: 600, margin: '0 0 8px 0' },
   hint: { fontSize: 12, color: '#9ca3af', margin: '0 0 16px 0' },
-  summaryBox: {
-    marginTop: 16,
-    padding: 16,
-    background: '#f9fafb',
-    border: '1px solid #e5e7eb',
-    borderRadius: 10,
-  },
-  linkBtn: { fontSize: 12, color: '#1D4ED8', textDecoration: 'none' },
   rowLink: { color: '#111827', textDecoration: 'none', fontWeight: 500 },
   table: { width: '100%', borderCollapse: 'collapse', fontSize: 13 },
   th: {
@@ -656,18 +550,5 @@ const s: Record<string, React.CSSProperties> = {
     padding: '24px 10px',
     textAlign: 'center',
     color: '#9ca3af',
-    fontSize: 13,
-  },
-  unallocBanner: {
-    marginBottom: 12,
-    padding: '10px 12px',
-    background: '#FEF2F2',
-    border: '1px solid #FECACA',
-    borderRadius: 8,
-    fontSize: 13,
-    color: '#7F1D1D',
-  },
-  unallocRow: {
-    background: '#FFF7F7',
   },
 }

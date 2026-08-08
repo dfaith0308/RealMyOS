@@ -1,6 +1,5 @@
 /**
- * 수금 기준 세금계산서 대상 금액 집계 (RULE-02: 런타임 계산만, DB 저장 금지).
- * getCustomerLedger tax_summary 와 동일 산식 — 신규 계산식 금지.
+ * 세금계산서·수금 관련 런타임 집계 헬퍼 (RULE-02: DB 저장 금지).
  */
 
 export interface TaxSummary {
@@ -34,4 +33,24 @@ export function computeTaxSummaryFromLedgerRows(
     card_paid,
     invoice_amount: taxable_paid,
   }
+}
+
+export type OrderLineTaxInput = {
+  tax_type?: string | null
+  line_total?: number | null
+}
+
+/** 주문 라인 line_total을 tax_type별로 합산 (세금계산서 요약용) */
+export function sumOrderLinesByTaxType(
+  lines: OrderLineTaxInput[],
+): { taxable: number; exempt: number } {
+  let taxable = 0
+  let exempt = 0
+  for (const l of lines) {
+    const amt = Number(l.line_total ?? 0)
+    if (!amt) continue
+    if (l.tax_type === 'exempt') exempt += amt
+    else taxable += amt
+  }
+  return { taxable, exempt }
 }
