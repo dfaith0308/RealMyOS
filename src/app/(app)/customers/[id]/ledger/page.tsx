@@ -62,7 +62,7 @@ export default async function CustomerLedgerPage({
   const taxableGoods = taxInvoice?.taxable_goods_amount ?? 0
   const exemptGoods = taxInvoice?.exempt_goods_amount ?? 0
   const goodsTotal = taxInvoice?.goods_total ?? 0
-  const unallocated = taxInvoice?.unallocated_amount ?? 0
+  const unpaid = taxInvoice?.unpaid_amount ?? taxInvoice?.unallocated_amount ?? 0
 
   const netFlow = (summary.total_payments ?? 0) - (summary.total_orders ?? 0)
   const lastPay = [...rows]
@@ -204,7 +204,7 @@ export default async function CustomerLedgerPage({
 
       <div className={styles.bottom}>
         <Surface variant="panel" density="comfortable">
-          <div className={styles.detailsSummary}>세금계산서 요약 (수금 기준)</div>
+          <div className={styles.detailsSummary}>세금계산서 요약 (주문일 기준)</div>
           <div className={styles.detailsContent}>
             <div className={styles.kpiNote} style={{ marginBottom: 10 }}>
               기간 {from} ~ {to}
@@ -217,13 +217,13 @@ export default async function CustomerLedgerPage({
               <KPIBlock label="면세금액" value={formatKRW(exemptGoods)} align="end" />
               <KPIBlock label="합계" value={formatKRW(goodsTotal)} align="end" />
               <KPIBlock
-                label="미배분"
-                value={formatKRW(unallocated)}
+                label="미수"
+                value={formatKRW(unpaid)}
                 align="end"
-                hint={unallocated > 0 ? '계산서 발행 전 배분 확인 필요' : undefined}
+                hint={unpaid > 0 ? '기간 주문 − active 배분' : undefined}
               />
             </div>
-            {unallocated > 0 ? (
+            {unpaid > 0 ? (
               <div
                 style={{
                   marginTop: 10,
@@ -236,7 +236,7 @@ export default async function CustomerLedgerPage({
                   fontWeight: 600,
                 }}
               >
-                미배분 수금 {formatKRW(unallocated)} — 허브 표와 동일 기준
+                미수 {formatKRW(unpaid)} — 허브 표와 동일 기준
               </div>
             ) : null}
           </div>
