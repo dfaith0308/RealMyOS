@@ -26,8 +26,12 @@ export async function middleware(request: NextRequest) {
   // 공개 경로 — 인증 불필요
   const isPublic =
     pathname.startsWith('/login') ||
+    pathname.startsWith('/forgot-password') ||
+    pathname.startsWith('/reset-password') ||
     pathname.startsWith('/auth') ||
-    pathname.startsWith('/onboarding')
+    pathname.startsWith('/onboarding') ||
+    pathname.startsWith('/terms') ||
+    pathname.startsWith('/privacy')
 
   const hostname = request.headers.get('host') ?? ''
   const isAdminDomain = hostname.startsWith('admin.')
