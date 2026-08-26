@@ -452,7 +452,7 @@ export default function ListingsClient({
                     {formatKRW(row.commerce_price)}
                   </td>
                   <td className={s.tdNowrap}>
-                    <span className={statusBadgeClass(row.status, s)}>{row.status}</span>
+                    <span className={statusBadgeClass(row.status, s)}>{statusLabel(row.status)}</span>
                   </td>
                   <td className={s.tdNowrap}>{String(row.created_at).slice(0, 16).replace('T', ' ')}</td>
                   <td className={s.tdNowrap}>
@@ -552,6 +552,18 @@ export default function ListingsClient({
       )}
     </>
   )
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  visible: '노출중',
+  draft: '임시저장',
+  hidden: '숨김',
+  sold_out: '품절',
+  discontinued: '판매중단',
+}
+
+function statusLabel(status: string): string {
+  return STATUS_LABEL[status] ?? status
 }
 
 function statusBadgeClass(status: string, mod: typeof s): string {
