@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getListingForEdit, getShippingGroups } from '@/actions/admin/commerce'
-import ListingEditClient from '@/components/commerce/ListingEditClient'
+import ListingFormClient from '@/components/commerce/ListingFormClient'
 import s from '../../../../../admin-shared.module.css'
 
 export default async function AdminCommerceProductEditPage(props: { params: Promise<{ id: string }> }) {
@@ -40,7 +40,8 @@ export default async function AdminCommerceProductEditPage(props: { params: Prom
 
   return (
     <main style={{ maxWidth: 1600, margin: '0 auto', width: '100%', boxSizing: 'border-box', padding: '20px 32px 96px' }}>
-      <ListingEditClient
+      <ListingFormClient
+        mode="edit"
         initial={lr.data}
         shippingGroups={sr.data.groups}
       />

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { flushSync } from 'react-dom'
 import {
+  createListingFull,
   createShippingGroup,
   deleteShippingGroup,
   getAdminCategories,
@@ -137,57 +138,6 @@ function toggleThumbBadge(current: string[], label: string): string[] {
   return [...current, label]
 }
 
-/** 향후 "상품 복제" 등에서 초기 상태를 재사용할 수 있도록 묶음 */
-export type ListingStudioFormState = {
-  rootCategoryId: string
-  subCategoryId: string
-  brandName: string
-  productName: string
-  spec: string
-  supplyPrice: string
-  commercePrice: string
-  originalPrice: string
-  marginMode: 'price' | 'margin'
-  marginInput: string
-  shippingType: ListingShippingType
-  shippingBoxQty: string
-  shippingBoxFee: string
-  conditionalFreeThreshold: string
-  shippingGroupId: string
-  thumbnailBadges: string[]
-  thumbnailUrl: string
-  detailBlocks: DetailImageBlock[]
-  listingDescription: string
-  adminMemo: string
-  visibility: 'draft' | 'visible'
-}
-
-export function createEmptyListingStudioForm(): ListingStudioFormState {
-  return {
-    rootCategoryId: '',
-    subCategoryId: '',
-    brandName: '',
-    productName: '',
-    spec: '',
-    supplyPrice: '',
-    commercePrice: '',
-    originalPrice: '',
-    marginMode: 'price',
-    marginInput: '',
-    shippingType: 'free',
-    shippingBoxQty: '',
-    shippingBoxFee: '',
-    conditionalFreeThreshold: '',
-    shippingGroupId: '',
-    thumbnailBadges: [],
-    thumbnailUrl: '',
-    detailBlocks: [],
-    listingDescription: '',
-    adminMemo: '',
-    visibility: 'draft',
-  }
-}
-
 function flattenAdminCategoryTree(nodes: AdminCategoryNode[]): AdminCategoryRow[] {
   const out: AdminCategoryRow[] = []
   function walk(n: AdminCategoryNode) {
@@ -266,13 +216,72 @@ function resolveRootSubCategoryIds(
   return { rootCategoryId: '', subCategoryId: '' }
 }
 
-export default function ListingEditClient({
-  initial,
-  shippingGroups: initialShippingGroups,
-}: {
-  initial: ListingForEditData
-  shippingGroups: ShippingGroupListItem[]
-}) {
+export type ListingFormMode = 'new' | 'edit'
+
+/**
+ * 신규/수정 공통 초기값.
+ * 수정 모드(initial 있음)만 기존 값을 프리필하고, 신규 모드는 빈 값으로 시작한다.
+ * 두 모드의 유일한 차이는 이 함수 안에만 존재한다.
+ */
+function buildInitialFormValues(initial: ListingForEditData | null) {
+  const thumb = initial?.thumbnail_url?.trim() ?? ''
+  const images =
+    initial && Array.isArray(initial.image_urls)
+      ? initial.image_urls.filter((u) => String(u).trim())
+      : []
+  const positive = (n: number | null | undefined): string => (n != null && n > 0 ? String(n) : '')
+  const shipping = initial?.shipping_type ?? ''
+
+  return {
+    brandName: initial?.brand_name ?? '',
+    productName: initial?.product_name ?? '',
+    spec: initial?.spec ?? '',
+    commercePrice: initial ? String(initial.commerce_price) : '',
+    originalPrice: positive(initial?.original_price),
+    shippingType: ((LISTING_SHIPPING_TYPES as readonly string[]).includes(shipping)
+      ? shipping
+      : 'free') as ListingShippingType,
+    freeShippingQty: positive(initial?.free_shipping_qty),
+    bulkQty: positive(initial?.bulk_qty),
+    bulkDiscountRate: positive(initial?.bulk_discount_rate),
+    baseShippingFee: positive(initial?.base_shipping_fee) || '3500',
+    boxQty: String(initial?.box_qty ?? 1),
+    shippingGroupId: initial?.shipping_group_id ?? '',
+    origin: initial?.origin ?? '',
+    storageMethod: initial?.storage_method ?? '',
+    minOrderQty: String(initial?.min_order_qty ?? 1),
+    packageUnit: initial?.package_unit ?? '',
+    usageDesc: initial?.usage_desc ?? '',
+    allergen: initial?.allergen ?? '',
+    manufacturer: initial?.manufacturer ?? '',
+    ingredients: initial?.ingredients ?? '',
+    barcode: initial?.barcode ?? '',
+    itemReportNumber: initial?.item_report_number ?? '',
+    aiStrengths: initial?.ai_strengths ?? '',
+    aiUsage: initial?.ai_usage ?? '',
+    aiSummary: initial?.ai_summary ?? '',
+    thumbnailBadges: initial && Array.isArray(initial.badge_labels) ? [...initial.badge_labels] : [],
+    thumbnailUrl: thumb,
+    showThumbUrlField: Boolean(thumb && /^https?:\/\//i.test(thumb)),
+    thumbUploadState: (thumb ? 'success' : 'idle') as 'idle' | 'uploading' | 'success' | 'error',
+    thumbSource: (thumb ? 'url' : 'none') as 'none' | 'upload' | 'url',
+    detailBlocks: urlsToDetailBlocks(images),
+    listingDescription: initial?.description ?? '',
+    adminMemo: initial?.admin_memo ?? '',
+    storefrontPublished: initial ? listingStorefrontPublished(initial) : false,
+  }
+}
+
+type ListingFormProps =
+  | { mode: 'new'; initial?: undefined; shippingGroups?: undefined }
+  | { mode: 'edit'; initial: ListingForEditData; shippingGroups: ShippingGroupListItem[] }
+
+export default function ListingFormClient(props: ListingFormProps) {
+  const mode: ListingFormMode = props.mode
+  const initial: ListingForEditData | null = props.mode === 'edit' ? props.initial : null
+  const initialShippingGroups: ShippingGroupListItem[] =
+    props.mode === 'edit' ? props.shippingGroups : []
+  const v = useMemo(() => buildInitialFormValues(initial), [initial])
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -285,9 +294,9 @@ export default function ListingEditClient({
   const [rootCategoryId, setRootCategoryId] = useState('')
   const [subCategoryId, setSubCategoryId] = useState('')
 
-  const [brandName, setBrandName] = useState(initial.brand_name ?? '')
-  const [productName, setProductName] = useState(initial.product_name)
-  const [spec, setSpec] = useState(initial.spec ?? '')
+  const [brandName, setBrandName] = useState(v.brandName)
+  const [productName, setProductName] = useState(v.productName)
+  const [spec, setSpec] = useState(v.spec)
 
   const previewProductName = useMemo(
     () => extractPureProductName(productName, brandName.trim() || null, spec.trim() || null),
@@ -295,54 +304,39 @@ export default function ListingEditClient({
   )
 
   const [supplyPrice, setSupplyPrice] = useState('')
-  const [commercePrice, setCommercePrice] = useState(String(initial.commerce_price))
-  const [originalPrice, setOriginalPrice] = useState(
-    initial.original_price != null && initial.original_price > 0 ? String(initial.original_price) : '',
-  )
+  const [commercePrice, setCommercePrice] = useState(v.commercePrice)
+  const [originalPrice, setOriginalPrice] = useState(v.originalPrice)
   const [marginMode, setMarginMode] = useState<'price' | 'margin'>('price')
   const [marginInput, setMarginInput] = useState('')
 
-  const [shippingType, setShippingType] = useState<ListingShippingType>(
-    (LISTING_SHIPPING_TYPES as readonly string[]).includes(initial.shipping_type)
-      ? (initial.shipping_type as ListingShippingType)
-      : 'free',
-  )
+  const [shippingType, setShippingType] = useState<ListingShippingType>(v.shippingType)
   const [shippingBoxQty, setShippingBoxQty] = useState('')
   const [shippingBoxFee, setShippingBoxFee] = useState('')
   const [conditionalFreeThreshold, setConditionalFreeThreshold] = useState('')
-  const [freeShippingQty, setFreeShippingQty] = useState(
-    initial.free_shipping_qty != null && initial.free_shipping_qty > 0 ? String(initial.free_shipping_qty) : '',
-  )
-  const [bulkQty, setBulkQty] = useState(
-    initial.bulk_qty != null && initial.bulk_qty > 0 ? String(initial.bulk_qty) : '',
-  )
-  const [bulkDiscountRate, setBulkDiscountRate] = useState(
-    initial.bulk_discount_rate != null && initial.bulk_discount_rate > 0
-      ? String(initial.bulk_discount_rate)
-      : '',
-  )
-  const [baseShippingFee, setBaseShippingFee] = useState(
-    initial.base_shipping_fee != null && initial.base_shipping_fee > 0
-      ? String(initial.base_shipping_fee)
-      : '3500',
-  )
-  const [boxQty, setBoxQty] = useState(String(initial.box_qty ?? 1))
-  const [shippingGroupId, setShippingGroupId] = useState(initial.shipping_group_id ?? '')
+  const [freeShippingQty, setFreeShippingQty] = useState(v.freeShippingQty)
+  const [bulkQty, setBulkQty] = useState(v.bulkQty)
+  const [bulkDiscountRate, setBulkDiscountRate] = useState(v.bulkDiscountRate)
+  const [baseShippingFee, setBaseShippingFee] = useState(v.baseShippingFee)
+  const [boxQty, setBoxQty] = useState(v.boxQty)
+  const [shippingGroupId, setShippingGroupId] = useState(v.shippingGroupId)
 
-  const [origin, setOrigin] = useState(initial.origin ?? '')
-  const [storageMethod, setStorageMethod] = useState(initial.storage_method ?? '')
-  const [minOrderQty, setMinOrderQty] = useState(String(initial.min_order_qty ?? 1))
-  const [packageUnit, setPackageUnit] = useState(initial.package_unit ?? '')
-  const [usageDesc, setUsageDesc] = useState(initial.usage_desc ?? '')
-  const [allergen, setAllergen] = useState(initial.allergen ?? '')
-  const [manufacturer, setManufacturer] = useState(initial.manufacturer ?? '')
-  const [ingredients, setIngredients] = useState(initial.ingredients ?? '')
-  const [barcode, setBarcode] = useState(initial.barcode ?? '')
-  const [itemReportNumber, setItemReportNumber] = useState(initial.item_report_number ?? '')
-  const [aiStrengths, setAiStrengths] = useState(initial.ai_strengths ?? '')
-  const [aiUsage, setAiUsage] = useState(initial.ai_usage ?? '')
-  const [aiSummary, setAiSummary] = useState(initial.ai_summary ?? '')
+  const [origin, setOrigin] = useState(v.origin)
+  const [storageMethod, setStorageMethod] = useState(v.storageMethod)
+  const [minOrderQty, setMinOrderQty] = useState(v.minOrderQty)
+  const [packageUnit, setPackageUnit] = useState(v.packageUnit)
+  const [usageDesc, setUsageDesc] = useState(v.usageDesc)
+  const [allergen, setAllergen] = useState(v.allergen)
+  const [manufacturer, setManufacturer] = useState(v.manufacturer)
+  const [ingredients, setIngredients] = useState(v.ingredients)
+  const [barcode, setBarcode] = useState(v.barcode)
+  const [itemReportNumber, setItemReportNumber] = useState(v.itemReportNumber)
+  const [aiStrengths, setAiStrengths] = useState(v.aiStrengths)
+  const [aiUsage, setAiUsage] = useState(v.aiUsage)
+  const [aiSummary, setAiSummary] = useState(v.aiSummary)
   const [analyzing, setAnalyzing] = useState(false)
+
+  const initialCategoryId = initial?.category_id ?? null
+  const initialSubCategoryId = initial?.sub_category_id ?? null
 
   const [shippingGroups, setShippingGroups] = useState<ShippingGroupListItem[]>(initialShippingGroups)
   const [showAddShippingGroup, setShowAddShippingGroup] = useState(false)
@@ -353,33 +347,26 @@ export default function ListingEditClient({
   const [modalEditName, setModalEditName] = useState('')
   const [modalEditDescription, setModalEditDescription] = useState('')
 
-  const initialThumb = initial.thumbnail_url?.trim() ?? ''
-  const initialImages = Array.isArray(initial.image_urls)
-    ? initial.image_urls.filter((u) => String(u).trim())
-    : []
+  const [thumbnailBadges, setThumbnailBadges] = useState<string[]>(v.thumbnailBadges)
 
-  const [thumbnailBadges, setThumbnailBadges] = useState<string[]>(
-    Array.isArray(initial.badge_labels) ? [...initial.badge_labels] : [],
-  )
-
-  const [thumbnailUrl, setThumbnailUrl] = useState(initialThumb)
-  const [showThumbUrlField, setShowThumbUrlField] = useState(Boolean(initialThumb && /^https?:\/\//i.test(initialThumb)))
+  const [thumbnailUrl, setThumbnailUrl] = useState(v.thumbnailUrl)
+  const [showThumbUrlField, setShowThumbUrlField] = useState(v.showThumbUrlField)
   const [thumbUploadState, setThumbUploadState] = useState<'idle' | 'uploading' | 'success' | 'error'>(
-    initialThumb ? 'success' : 'idle',
+    v.thumbUploadState,
   )
   const [thumbFileMeta, setThumbFileMeta] = useState<{ name: string } | null>(null)
-  const [thumbSource, setThumbSource] = useState<'none' | 'upload' | 'url'>(initialThumb ? 'url' : 'none')
+  const [thumbSource, setThumbSource] = useState<'none' | 'upload' | 'url'>(v.thumbSource)
   const [thumbPublicWarning, setThumbPublicWarning] = useState(false)
-  const [detailBlocks, setDetailBlocks] = useState<DetailImageBlock[]>(() => urlsToDetailBlocks(initialImages))
-  const [listingDescription, setListingDescription] = useState(initial.description ?? '')
+  const [detailBlocks, setDetailBlocks] = useState<DetailImageBlock[]>(v.detailBlocks)
+  const [listingDescription, setListingDescription] = useState(v.listingDescription)
 
   useEffect(() => {
     detailBlocksRef.current = detailBlocks
   }, [detailBlocks])
 
-  const [adminMemo, setAdminMemo] = useState(initial.admin_memo ?? '')
-  const [storefrontPublished, setStorefrontPublished] = useState(listingStorefrontPublished(initial))
-  const discontinued = initial.status === 'discontinued'
+  const [adminMemo, setAdminMemo] = useState(v.adminMemo)
+  const [storefrontPublished, setStorefrontPublished] = useState(v.storefrontPublished)
+  const discontinued = initial?.status === 'discontinued'
 
   const thumbFileRef = useRef<HTMLInputElement>(null)
   const detailFilesRef = useRef<HTMLInputElement>(null)
@@ -415,10 +402,11 @@ export default function ListingEditClient({
       }
       const flat = flattenAdminCategoryTree(res.data?.tree ?? [])
       setCategoryFlat(flat)
+      if (!initialCategoryId && !initialSubCategoryId) return
       const { rootCategoryId: root, subCategoryId: sub } = resolveRootSubCategoryIds(
         flat,
-        initial.category_id,
-        initial.sub_category_id ?? null,
+        initialCategoryId,
+        initialSubCategoryId,
       )
       setRootCategoryId(root)
       setSubCategoryId(sub)
@@ -426,7 +414,7 @@ export default function ListingEditClient({
     return () => {
       cancelled = true
     }
-  }, [initial.category_id, initial.sub_category_id])
+  }, [initialCategoryId, initialSubCategoryId])
 
   useEffect(() => {
     void refreshShippingGroups()
@@ -987,11 +975,55 @@ export default function ListingEditClient({
     if (h.origin) setOrigin(h.origin)
   }
 
-  function saveListing() {
+  function applyResetForm() {
+    const base = buildInitialFormValues(null)
+    setRootCategoryId('')
+    setSubCategoryId('')
+    setBrandName(base.brandName)
+    setProductName(base.productName)
+    setSpec(base.spec)
+    setSupplyPrice('')
+    setCommercePrice(base.commercePrice)
+    setOriginalPrice(base.originalPrice)
+    setMarginMode('price')
+    setMarginInput('')
+    setShippingType(base.shippingType)
+    setShippingBoxQty('')
+    setShippingBoxFee('')
+    setConditionalFreeThreshold('')
+    setShippingGroupId(base.shippingGroupId)
+    setShowAddShippingGroup(false)
+    setNewShippingGroupName('')
+    setManageShippingModal(false)
+    setModalEditGroupId(null)
+    setThumbnailBadges(base.thumbnailBadges)
+    setThumbnailUrl(base.thumbnailUrl)
+    setShowThumbUrlField(base.showThumbUrlField)
+    setThumbUploadState(base.thumbUploadState)
+    setThumbFileMeta(null)
+    setThumbSource(base.thumbSource)
+    setThumbPublicWarning(false)
+    setDetailBlocks(base.detailBlocks)
+    setListingDescription(base.listingDescription)
+    setAdminMemo(base.adminMemo)
+    setStorefrontPublished(base.storefrontPublished)
+    setUploadError(null)
+    setRetryDetailId(null)
+  }
+
+  /**
+   * 신규/수정 공통 저장.
+   * 신규 모드만 CTA 버튼이 status를 직접 지정하고(임시저장/공개), andReset으로 연속 등록을 지원한다.
+   */
+  function saveListing(opts?: { status?: 'draft' | 'visible'; andReset?: boolean }) {
+    const forcedStatus = opts?.status ?? null
+    const andReset = opts?.andReset ?? false
+    const willPublish = mode === 'new' ? forcedStatus === 'visible' : storefrontPublished
+
     if (isSubmitting) return
     setIsSubmitting(true)
     setError(null)
-    if (storefrontPublished && !thumbnailUrl.trim()) {
+    if (willPublish && !thumbnailUrl.trim()) {
       setThumbPublicWarning(true)
     } else {
       setThumbPublicWarning(false)
@@ -1034,43 +1066,53 @@ export default function ListingEditClient({
     const badge_labels = thumbnailBadges.length > 0 ? thumbnailBadges : null
     const description = listingDescription.trim() || null
 
+    const shared = {
+      product_name: pn,
+      brand_name: brandName.trim() || null,
+      spec: spec.trim() || null,
+      category_id: effectiveCategoryId,
+      commerce_price: price,
+      original_price: op,
+      shipping_type: shippingType,
+      shipping_group_id: shippingGroupId.trim() || null,
+      badge_labels,
+      admin_memo: adminMemo.trim() || null,
+      description,
+      ai_strengths: aiStrengths.trim() || null,
+      ai_usage: aiUsage.trim() || null,
+      ai_summary: aiSummary.trim() || null,
+      thumbnail_url: thumbnailUrl.trim() || null,
+      image_urls: image_urls.length > 0 ? image_urls : null,
+      base_shipping_fee: shippingFeeNum || 3500,
+      free_shipping_qty: freeQtyNum || null,
+      bulk_qty: bulkQtyNum || null,
+      bulk_discount_rate: bulkRateNum || null,
+      box_qty: boxQtyNum > 0 ? boxQtyNum : 1,
+      origin: origin.trim() || null,
+      storage_method: storageMethod.trim() || null,
+      min_order_qty: minOrderQty ? Number(minOrderQty) : 1,
+      package_unit: packageUnit.trim() || null,
+      usage_desc: usageDesc.trim() || null,
+      allergen: allergen.trim() || null,
+      ingredients: ingredients.trim() || null,
+      manufacturer: manufacturer.trim() || null,
+      barcode: barcode.trim() || null,
+      item_report_number: itemReportNumber.trim() || null,
+    }
+
     startTransition(async () => {
       try {
-        const r = await updateListingFull({
-          listing_id: initial.id,
-          product_name: pn,
-          brand_name: brandName.trim() || null,
-          spec: spec.trim() || null,
-          category_id: effectiveCategoryId,
-          commerce_price: price,
-          original_price: op,
-          storefront_published: discontinued ? false : storefrontPublished,
-          shipping_type: shippingType,
-          shipping_group_id: shippingGroupId.trim() || null,
-          badge_labels,
-          admin_memo: adminMemo.trim() || null,
-          description,
-          ai_strengths: aiStrengths.trim() || null,
-          ai_usage: aiUsage.trim() || null,
-          ai_summary: aiSummary.trim() || null,
-          thumbnail_url: thumbnailUrl.trim() || null,
-          image_urls: image_urls.length > 0 ? image_urls : null,
-          base_shipping_fee: shippingFeeNum || 3500,
-          free_shipping_qty: freeQtyNum || null,
-          bulk_qty: bulkQtyNum || null,
-          bulk_discount_rate: bulkRateNum || null,
-          box_qty: boxQtyNum > 0 ? boxQtyNum : 1,
-          origin: origin.trim() || null,
-          storage_method: storageMethod.trim() || null,
-          min_order_qty: minOrderQty ? Number(minOrderQty) : 1,
-          package_unit: packageUnit.trim() || null,
-          usage_desc: usageDesc.trim() || null,
-          allergen: allergen.trim() || null,
-          ingredients: ingredients.trim() || null,
-          manufacturer: manufacturer.trim() || null,
-          barcode: barcode.trim() || null,
-          item_report_number: itemReportNumber.trim() || null,
-        })
+        const r =
+          initial != null
+            ? await updateListingFull({
+                ...shared,
+                listing_id: initial.id,
+                storefront_published: discontinued ? false : storefrontPublished,
+              })
+            : await createListingFull({
+                ...shared,
+                status: forcedStatus ?? (storefrontPublished ? 'visible' : 'draft'),
+              })
         if (!r.success) {
           const msg = r.error ?? '저장에 실패했습니다'
           setError(msg)
@@ -1078,7 +1120,19 @@ export default function ListingEditClient({
           setIsSubmitting(false)
           return
         }
-        showToast('저장되었습니다')
+        const successToast =
+          initial != null
+            ? '저장되었습니다'
+            : willPublish
+              ? '상품이 저장되었습니다 · 스토어에 공개되었습니다'
+              : '임시저장이 완료되었습니다'
+        showToast(successToast)
+        if (andReset) {
+          applyResetForm()
+          setIsSubmitting(false)
+          router.refresh()
+          return
+        }
         setIsSubmitting(false)
         router.push('/admin/commerce/products')
       } catch (e) {
@@ -1323,8 +1377,14 @@ export default function ListingEditClient({
       <div className={mod.shell}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <div>
-            <h1 style={{ fontSize: 17, fontWeight: 500, color: 'var(--ds-text-primary)', margin: '0 0 3px' }}>상품 수정</h1>
-            <p style={{ fontSize: 12, color: 'var(--ds-text-secondary)', margin: 0 }}>등록 화면과 동일한 편집 · 저장 시 목록으로 이동합니다</p>
+            <h1 style={{ fontSize: 17, fontWeight: 500, color: 'var(--ds-text-primary)', margin: '0 0 3px' }}>
+              {mode === 'edit' ? '상품 수정' : '상품 등록'}
+            </h1>
+            <p style={{ fontSize: 12, color: 'var(--ds-text-secondary)', margin: 0 }}>
+              {mode === 'edit'
+                ? '등록 화면과 동일한 편집 · 저장 시 목록으로 이동합니다'
+                : '등록 후 공개 설정에서 스토어 노출 여부를 결정합니다'}
+            </p>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <Link href="/admin/commerce/products" style={{ padding: '7px 13px', border: '1px solid var(--ds-border-default)', borderRadius: 8, background: 'transparent', fontSize: 12, color: 'var(--ds-text-primary)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>취소</Link>
@@ -1656,6 +1716,9 @@ export default function ListingEditClient({
                   rows={3}
                   style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical' }}
                 />
+                <p className={mod.fieldHint} style={{ color: '#1f5d3a', fontWeight: 600 }}>
+                  고객에게 노출됩니다 — 상세페이지에 표시되는 내용입니다
+                </p>
               </div>
               <div style={{ marginTop: 10 }}>
                 <label className={mod.fieldLabel}>용도 (메뉴 기준)</label>
@@ -2537,20 +2600,54 @@ export default function ListingEditClient({
               <div className={mod.card} style={{ marginTop: 12 }}>
                 <h2 className={mod.sectionTitle}>노출 · 배송 · 메모</h2>
                 <div className={mod.fieldStack}>
-                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, color: '#2b2b2b' }}>
-                    <input
-                      type="checkbox"
-                      checked={discontinued ? false : storefrontPublished}
-                      disabled={discontinued || pending}
-                      onChange={(e) => setStorefrontPublished(e.target.checked)}
-                    />
-                    <span>
-                      <strong>스토어에 공개</strong>
-                      <span className={mod.hint} style={{ display: 'block', marginTop: 4 }}>
-                        status=visible, is_visible=true
+                  {mode === 'new' ? (
+                    <>
+                      <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, color: '#2b2b2b' }}>
+                        <input
+                          type="radio"
+                          name="vis"
+                          checked={!storefrontPublished}
+                          onChange={() => setStorefrontPublished(false)}
+                        />
+                        <span>
+                          <strong>비공개</strong>
+                          <span className={mod.hint} style={{ display: 'block', marginTop: 4 }}>
+                            등록 후 직접 공개 처리합니다
+                          </span>
+                        </span>
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, color: '#2b2b2b' }}>
+                        <input
+                          type="radio"
+                          name="vis"
+                          checked={storefrontPublished}
+                          onChange={() => setStorefrontPublished(true)}
+                        />
+                        <span>
+                          <strong>공개</strong>
+                          <span className={mod.hint} style={{ display: 'block', marginTop: 4 }}>
+                            등록 즉시 구매 화면에 표시됩니다
+                          </span>
+                        </span>
+                      </label>
+                      <p className={mod.hint}>하단 버튼이 실제 저장 방식을 결정합니다.</p>
+                    </>
+                  ) : (
+                    <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, color: '#2b2b2b' }}>
+                      <input
+                        type="checkbox"
+                        checked={discontinued ? false : storefrontPublished}
+                        disabled={discontinued || pending}
+                        onChange={(e) => setStorefrontPublished(e.target.checked)}
+                      />
+                      <span>
+                        <strong>스토어에 공개</strong>
+                        <span className={mod.hint} style={{ display: 'block', marginTop: 4 }}>
+                          status=visible, is_visible=true
+                        </span>
                       </span>
-                    </span>
-                  </label>
+                    </label>
+                  )}
                 </div>
                 <div style={{ marginTop: 12 }}>
                   <label className={mod.fieldLabel}>배송 유형</label>
@@ -2567,15 +2664,27 @@ export default function ListingEditClient({
                     ))}
                   </select>
                 </div>
-                <div style={{ marginTop: 12 }}>
+                <div
+                  style={{
+                    marginTop: 12,
+                    padding: 12,
+                    background: 'var(--ds-neutral-50, #f4f4f5)',
+                    border: '1px solid var(--ds-border-subtle, #e5e7eb)',
+                    borderRadius: 8,
+                  }}
+                >
                   <label className={mod.fieldLabel}>관리자 메모</label>
                   <textarea
                     className={mod.input}
                     rows={3}
                     value={adminMemo}
                     onChange={(e) => setAdminMemo(e.target.value)}
+                    placeholder="예: 5/28까지 품절 유지"
                     style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical' }}
                   />
+                  <p className={mod.fieldHint} style={{ color: '#6b7280', fontWeight: 600 }}>
+                    내부 전용, 고객에게 안 보입니다 — 직원 간 소통용 메모입니다
+                  </p>
                 </div>
               </div>
             </div>
@@ -2587,14 +2696,43 @@ export default function ListingEditClient({
             <Link href="/admin/commerce/products" className={`${mod.btn} ${mod.btnCancel}`}>
               취소
             </Link>
-            <button
-              type="button"
-              className={`${mod.btn} ${mod.btnPrimary}`}
-              disabled={pending || isSubmitting}
-              onClick={() => saveListing()}
-            >
-              {pending || isSubmitting ? '저장 중…' : '저장'}
-            </button>
+            {mode === 'new' ? (
+              <>
+                <button
+                  type="button"
+                  className={`${mod.btn} ${mod.btnDraft}`}
+                  disabled={pending || isSubmitting}
+                  onClick={() => saveListing({ status: 'draft' })}
+                >
+                  임시저장
+                </button>
+                <button
+                  type="button"
+                  className={`${mod.btn} ${mod.btnNext}`}
+                  disabled={pending || isSubmitting}
+                  onClick={() => saveListing({ status: 'visible', andReset: true })}
+                >
+                  저장 후 다음 상품
+                </button>
+                <button
+                  type="button"
+                  className={`${mod.btn} ${mod.btnPrimary}`}
+                  disabled={pending || isSubmitting}
+                  onClick={() => saveListing({ status: 'visible' })}
+                >
+                  저장 후 공개
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className={`${mod.btn} ${mod.btnPrimary}`}
+                disabled={pending || isSubmitting}
+                onClick={() => saveListing()}
+              >
+                {pending || isSubmitting ? '저장 중…' : '저장'}
+              </button>
+            )}
           </div>
         </div>
       </div>
