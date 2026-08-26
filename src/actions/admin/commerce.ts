@@ -3002,15 +3002,52 @@ export async function reorderCategory(
   return { success: true, data: null }
 }
 
+/**
+ * Listing 삭제 — 물리 삭제가 아닌 soft delete(`deleted_at`)로 처리한다.
+ * getListings 등 조회 경로가 모두 `deleted_at IS NULL`을 걸고 있어 목록에서는 동일하게 사라진다.
+ */
 export async function deleteListing(id: string): Promise<ActionResult<null>> {
   const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
 
-  const { error } = await supabase
+  const listing_id = String(id ?? '').trim()
+  if (!listing_id) return { success: false, error: 'Listing ID가 필요합니다' }
+
+  const { data: row, error: fetchErr } = await supabase
     .from('commerce_product_listings')
-    .delete()
-    .eq('id', id)
+    .select('id, status, tenant_id')
+    .eq('id', listing_id)
+    .is('deleted_at', null)
+    .maybeSingle()
 
-  if (error) return { success: false, error: error.message }
+  if (fetchErr) return { success: false, error: fetchErr.message }
+  if (!row) return { success: false, error: 'Listing 을 찾을 수 없습니다' }
+  if ((row.tenant_id as string) !== PLATFORM_OWNER_TENANT) {
+    return { success: false, error: 'Listing 을 찾을 수 없습니다' }
+  }
+
+  const deletedAt = new Date().toISOString()
+
+  const { error: delErr } = await supabase
+    .from('commerce_product_listings')
+    .update({ deleted_at: deletedAt, is_visible: false, updated_at: deletedAt })
+    .eq('id', listing_id)
+    .eq('tenant_id', PLATFORM_OWNER_TENANT)
+    .is('deleted_at', null)
+
+  if (delErr) return { success: false, error: delErr.message }
+
+  const logRes = await insertAdminLog(supabase, {
+    admin_id: auth.ctx.user_id,
+    tenant_id: row.tenant_id as string,
+    action_type: 'listing_deleted',
+    target_table: 'commerce_product_listings',
+    target_id: listing_id,
+    old_value: { listing_id, status: row.status, deleted_at: null },
+    new_value: { listing_id, deleted_at: deletedAt },
+  })
+  if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
 
   revalidatePath('/admin/commerce/products')
   return { success: true, data: null }
