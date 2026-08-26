@@ -5,7 +5,12 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { analyzeProductStrengths } from '@/actions/admin/ai-product-analysis'
 import { createListingFull, updateListingFull } from '@/actions/admin/commerce'
 import { buildPlatformProductDisplayName } from '@/lib/commerce-utils'
-import type { ListingShippingType } from '@/lib/commerce-constants'
+import {
+  DEFAULT_BASE_SHIPPING_FEE,
+  requiresBaseShippingFee,
+  resolveBulkShippingType,
+  type ListingShippingType,
+} from '@/lib/commerce-constants'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import type { ActionResult } from '@/types/order'
 
@@ -303,12 +308,19 @@ function validateRow(row: BulkListingRow): string | null {
   if (!Number.isFinite(row.supply_price) || row.supply_price <= 0 || !Number.isInteger(row.supply_price)) {
     return 'supply_price는 1원 이상 정수'
   }
-  if (
-    !Number.isFinite(row.base_shipping_fee) ||
-    row.base_shipping_fee <= 0 ||
-    !Number.isInteger(row.base_shipping_fee)
-  ) {
-    return 'base_shipping_fee는 1원 이상 정수'
+  // 무료배송은 기본배송비가 의미 없으므로 요구하지 않는다. 값을 넣었다면 형식만 본다.
+  if (requiresBaseShippingFee(resolveBulkShippingType())) {
+    if (
+      !Number.isFinite(row.base_shipping_fee) ||
+      row.base_shipping_fee <= 0 ||
+      !Number.isInteger(row.base_shipping_fee)
+    ) {
+      return 'base_shipping_fee는 1원 이상 정수'
+    }
+  } else if (row.base_shipping_fee) {
+    if (!Number.isFinite(row.base_shipping_fee) || row.base_shipping_fee < 0 || !Number.isInteger(row.base_shipping_fee)) {
+      return 'base_shipping_fee는 0 이상 정수'
+    }
   }
   if (!normStr(row.category)) return 'category(대분류) 필수'
   return null
@@ -387,7 +399,12 @@ export async function bulkCreateListings(
     const brand_name = normStr(row.brand_name) || null
     const spec = normStr(row.spec) || null
     const product_name = cleanProductName(normStr(row.product_name), brand_name, spec)
-    const shippingType: ListingShippingType = 'free'
+    const shippingType = resolveBulkShippingType()
+    // 무료배송이라 미입력일 수 있으나 저장 경로가 1원 이상을 요구하므로 기본값으로 채운다
+    const baseShippingFee =
+      Number.isInteger(row.base_shipping_fee) && row.base_shipping_fee > 0
+        ? row.base_shipping_fee
+        : DEFAULT_BASE_SHIPPING_FEE
 
     let existingListingId: string | null = null
     try {
@@ -428,7 +445,7 @@ export async function bulkCreateListings(
           shipping_group_id: ctx.shipping_group_id,
           badge_labels: null,
           admin_memo: ctx.admin_memo,
-          base_shipping_fee: row.base_shipping_fee,
+          base_shipping_fee: baseShippingFee,
           free_shipping_qty: toOptionalInt(row.free_shipping_qty),
           bulk_qty: toOptionalInt(row.bulk_qty),
           bulk_discount_rate: toOptionalRate(row.bulk_discount_rate),
@@ -480,7 +497,7 @@ export async function bulkCreateListings(
           ai_usage,
           ai_summary,
           status: 'draft',
-          base_shipping_fee: row.base_shipping_fee,
+          base_shipping_fee: baseShippingFee,
           free_shipping_qty: toOptionalInt(row.free_shipping_qty),
           bulk_qty: toOptionalInt(row.bulk_qty),
           bulk_discount_rate: toOptionalRate(row.bulk_discount_rate),

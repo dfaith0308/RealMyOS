@@ -4,6 +4,7 @@ import { useCallback, useRef, useState, useTransition, type CSSProperties } from
 import { useRouter } from 'next/navigation'
 import { bulkCreateListings, type BulkListingRow } from '@/actions/admin/bulk-listing'
 import { parseBulkListingWorkbook } from '@/lib/bulk-listing-parse-xlsx'
+import { requiresBaseShippingFee, resolveBulkShippingType } from '@/lib/commerce-constants'
 
 function cellStr(v: unknown): string {
   if (v == null) return ''
@@ -20,7 +21,12 @@ function rowHasError(row: BulkListingRow): boolean {
   if (!cellStr(row.product_name)) return true
   if (!parseNumber(row.commerce_price) || row.commerce_price <= 0) return true
   if (!parseNumber(row.supply_price) || row.supply_price <= 0) return true
-  if (!parseNumber(row.base_shipping_fee) || row.base_shipping_fee <= 0) return true
+  // 무료배송은 기본배송비가 의미 없으므로 요구하지 않는다 (서버 validateRow 와 동일 기준)
+  if (requiresBaseShippingFee(resolveBulkShippingType())) {
+    if (!parseNumber(row.base_shipping_fee) || row.base_shipping_fee <= 0) return true
+  } else if (row.base_shipping_fee && row.base_shipping_fee < 0) {
+    return true
+  }
   if (!cellStr(row.category)) return true
   return false
 }
