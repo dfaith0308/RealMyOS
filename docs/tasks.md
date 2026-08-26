@@ -1929,6 +1929,11 @@ _(코드에서 “항상 빈 배열” 고정 반환이 아니라, 오류 시에
 - **알림**: 이메일 또는 카카오
 - **이유**: 사이트 장애 시 **고객보다 먼저 감지**해야 함
 
+#### [BUILD-CHECK-001] 빌드 타입체크 우회 설정 제거 검토
+- **위치**: `realmyos/next.config.js` — `typescript.ignoreBuildErrors: true`, `eslint.ignoreDuringBuilds: true`
+- **문제**: `next build`가 타입 에러를 통과시켜 빌드 성공이 타입 안전을 보장하지 않는다. 현재는 `npx tsc --noEmit`을 별도로 돌려야 확인된다.
+- **필요**: 전체 타입에러 정리 후 설정 제거 검토. 감사 시점 `src/` 0건이나 `scripts/*.ts`에 다수 잔존.
+
 ---
 
 ## 감사 요약 (집계)
