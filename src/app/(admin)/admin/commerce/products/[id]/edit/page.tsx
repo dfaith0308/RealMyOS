@@ -2,11 +2,13 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getListingForEdit, getShippingGroups } from '@/actions/admin/commerce'
 import ListingFormClient from '@/components/commerce/ListingFormClient'
+import { getProductDetailPhotoUrls } from '@/lib/product-detail-photos'
 import s from '../../../../../admin-shared.module.css'
 
 export default async function AdminCommerceProductEditPage(props: { params: Promise<{ id: string }> }) {
   const { id } = await props.params
   const [lr, sr] = await Promise.all([getListingForEdit(id), getShippingGroups()])
+  const detailPhotoUrls = getProductDetailPhotoUrls()
 
   if (!lr.success || !lr.data) {
     const msg = lr.error ?? ''
@@ -42,6 +44,7 @@ export default async function AdminCommerceProductEditPage(props: { params: Prom
     <main style={{ maxWidth: 1600, margin: '0 auto', width: '100%', boxSizing: 'border-box', padding: '20px 32px 96px' }}>
       <ListingFormClient
         mode="edit"
+        detailPhotoUrls={detailPhotoUrls}
         initial={lr.data}
         shippingGroups={sr.data.groups}
       />

@@ -272,15 +272,20 @@ function buildInitialFormValues(initial: ListingForEditData | null) {
   }
 }
 
-type ListingFormProps =
+type ListingFormProps = {
+  /** public/product-detail-photos/ 안의 사진 URL 목록 (서버 컴포넌트가 요청 시점에 읽어 전달) */
+  detailPhotoUrls?: string[]
+} & (
   | { mode: 'new'; initial?: undefined; shippingGroups?: undefined }
   | { mode: 'edit'; initial: ListingForEditData; shippingGroups: ShippingGroupListItem[] }
+)
 
 export default function ListingFormClient(props: ListingFormProps) {
   const mode: ListingFormMode = props.mode
   const initial: ListingForEditData | null = props.mode === 'edit' ? props.initial : null
   const initialShippingGroups: ShippingGroupListItem[] =
     props.mode === 'edit' ? props.shippingGroups : []
+  const detailPhotoUrls: string[] = props.detailPhotoUrls ?? []
   const v = useMemo(() => buildInitialFormValues(initial), [initial])
   const router = useRouter()
   const [pending, startTransition] = useTransition()
@@ -2270,6 +2275,8 @@ export default function ListingFormClient(props: ListingFormProps) {
               </div>
 
               <ProductDetailImageGenerator
+                detailPhotoUrls={detailPhotoUrls}
+                description={listingDescription}
                 productName={previewProductName}
                 brandName={brandName}
                 spec={spec}

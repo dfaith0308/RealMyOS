@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import html2canvas from 'html2canvas'
 import { extractPureProductName } from '@/lib/commerce-utils'
 
@@ -21,6 +21,10 @@ interface Props {
   aiUsage?: string
   aiSummary?: string
   thumbnailUrl?: string
+  /** 고객 노출 설명 — 값이 있을 때만 별도 섹션으로 표시 */
+  description?: string
+  /** public/product-detail-photos/ 안의 사진 URL 목록. 비어 있으면 사진 영역을 넣지 않는다 */
+  detailPhotoUrls?: string[]
   onGenerated: (file: File) => void
 }
 
@@ -28,6 +32,17 @@ export default function ProductDetailImageGenerator(props: Props) {
   const templateRef = useRef<HTMLDivElement>(null)
   const [generating, setGenerating] = useState(false)
   const [preview, setPreview] = useState<string | null>(null)
+
+  /**
+   * 폴더에 사진이 있으면 1장을 무작위로 고른다.
+   * SSR/CSR 결과가 어긋나지 않도록 마운트 이후에 고르고, 목록이 바뀌면 다시 고른다.
+   */
+  const photoKey = (props.detailPhotoUrls ?? []).join('|')
+  const [randomPhotoUrl, setRandomPhotoUrl] = useState<string | null>(null)
+  useEffect(() => {
+    const list = photoKey ? photoKey.split('|') : []
+    setRandomPhotoUrl(list.length > 0 ? list[Math.floor(Math.random() * list.length)] : null)
+  }, [photoKey])
 
   const pricePerHundredG =
     props.weightGrams && props.weightGrams > 0
@@ -124,14 +139,23 @@ export default function ProductDetailImageGenerator(props: Props) {
               핵심 <span style={{ color: '#e63329' }}>포인트!</span>
             </p>
           </div>
-          {props.thumbnailUrl && (
-            <img
-              src={props.thumbnailUrl}
-              alt=""
-              crossOrigin="anonymous"
-              style={{ width: 180, height: 180, objectFit: 'contain' }}
-            />
-          )}
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+            {randomPhotoUrl && (
+              <img
+                src={randomPhotoUrl}
+                alt=""
+                style={{ width: 180, height: 180, objectFit: 'cover', borderRadius: 8 }}
+              />
+            )}
+            {props.thumbnailUrl && (
+              <img
+                src={props.thumbnailUrl}
+                alt=""
+                crossOrigin="anonymous"
+                style={{ width: 180, height: 180, objectFit: 'contain' }}
+              />
+            )}
+          </div>
         </div>
 
         <div style={{ background: '#1f5d3a', padding: '12px 40px' }}>
