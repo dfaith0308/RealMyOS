@@ -1,0 +1,315 @@
+'use server'
+
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { createSupabaseAdmin } from '@/lib/supabase-admin'
+import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
+import { getAccountsReceivable, classifyAccountsReceivable, saleAmount } from '@/lib/ledger-calc'
+import { calcOrderCycle } from '@/lib/customer-logic'
+import { fetchInboundSupersededSubset } from '@/lib/inbound-payment-superseded'
+import { getAdminSettingNumber } from '@/actions/admin/policy-console'
+
+/**
+ * 관리자 대시보드 지표.
+ *
+ * 원칙
+ * - 계산값은 저장하지 않는다. 매 요청마다 실시간 계산한다.
+ * - 미수금/초과입금은 getAccountsReceivable + classifyAccountsReceivable,
+ *   재구매 주기는 calcOrderCycle 을 그대로 재사용한다. 다르게 계산하면
+ *   공급자 원장·거래처 화면과 숫자가 어긋난다.
+ * - 쿼리 수는 데이터 건수와 무관하게 고정이다 (행당 조회 없음).
+ * - Supabase 기본 1000행 제한 때문에 집계용 조회는 반드시 fetchAll 로 전량을 받는다.
+ *   limit 로 잘리면 숫자가 조용히 틀린다.
+ */
+
+/** 카드 클릭 시 보여줄 상세 목록의 공통 행 */
+export type MetricRow = {
+  id: string
+  name: string
+  meta: string
+  value: string
+  alert: boolean
+  /** 목록 정렬용 (표시하지 않음). 큰 값이 위로 — 심한 것부터 */
+  sortKey: number
+}
+
+export type MetricBlock = {
+  count: number
+  rows: MetricRow[]
+}
+
+const PAGE = 1000
+
+async function requireAdmin() {
+  const supabase = await createSupabaseServer()
+  const ctx = await getAuthCtx(supabase)
+  if (!ctx || ctx.role !== 'admin') return { ok: false as const, error: '권한 없음' }
+  return { ok: true as const, ctx }
+}
+
+/** 1000행 제한을 넘겨 전량을 받는다 — 집계가 조용히 잘리는 것을 막는다 */
+async function fetchAll<T>(
+  build: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+): Promise<T[]> {
+  const out: T[] = []
+  for (let page = 0; page < 200; page++) {
+    const from = page * PAGE
+    const { data, error } = await build(from, from + PAGE - 1)
+    if (error) throw new Error(error.message)
+    const rows = data ?? []
+    out.push(...rows)
+    if (rows.length < PAGE) break
+  }
+  return out
+}
+
+function todayKST(): Date {
+  const kst = new Date(Date.now() + 9 * 3600000)
+  return new Date(kst.toISOString().slice(0, 10) + 'T00:00:00Z')
+}
+
+function daysSince(dateStr: string, today: Date): number {
+  return Math.floor((today.getTime() - new Date(dateStr).getTime()) / 86400000)
+}
+
+function won(n: number): string {
+  return `${Math.round(n).toLocaleString('ko-KR')}원`
+}
+
+// ============================================================
+// 식당 현황
+// ============================================================
+
+export type RestaurantMetrics = {
+  cycleRisk: MetricBlock
+  repurchaseWait: MetricBlock
+  receivable: MetricBlock
+  prepayment: MetricBlock
+  newSignupNoOrder: MetricBlock
+  params: { cycleMultiplier: number; waitDays: number; noOrderDays: number }
+}
+
+type CustomerRow = {
+  id: string
+  tenant_id: string
+  name: string | null
+  opening_balance: number | null
+}
+type OrderRow = {
+  customer_id: string
+  total_amount: number
+  discount_amount: number | null
+  point_used: number | null
+  order_date: string
+}
+type PaymentRow = { id: string; customer_id: string; amount: number }
+
+const CYCLE_MULTIPLIER = 1.5
+const REPURCHASE_WAIT_DAYS = 30
+const NEW_SIGNUP_NO_ORDER_DAYS = 14
+
+export async function getRestaurantMetrics(): Promise<
+  { success: true; data: RestaurantMetrics } | { success: false; error: string }
+> {
+  const auth = await requireAdmin()
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  try {
+    const supabase = await createSupabaseAdmin()
+    const orderCycleCount = await getAdminSettingNumber('order_cycle_calculation_count', {
+      min: 2,
+      max: 90,
+    })
+    const today = todayKST()
+
+    // ── 조회 (건수와 무관하게 고정 횟수) ─────────────────────
+    const [customers, orders, payments, tenants] = await Promise.all([
+      fetchAll<CustomerRow>((from, to) =>
+        supabase
+          .from('customers')
+          .select('id, tenant_id, name, opening_balance')
+          .eq('is_buyer', true)
+          .is('deleted_at', null)
+          .range(from, to),
+      ),
+      fetchAll<OrderRow>((from, to) =>
+        supabase
+          .from('orders')
+          .select('customer_id, total_amount, discount_amount, point_used, order_date')
+          .eq('status', 'confirmed')
+          .is('deleted_at', null)
+          .not('customer_id', 'is', null)
+          .range(from, to),
+      ),
+      fetchAll<PaymentRow>((from, to) =>
+        supabase
+          .from('payments')
+          .select('id, customer_id, amount')
+          .eq('direction', 'inbound')
+          .eq('status', 'confirmed')
+          .is('reversal_of_id', null)
+          .not('customer_id', 'is', null)
+          .range(from, to),
+      ),
+      fetchAll<{ id: string; name: string | null }>((from, to) =>
+        supabase.from('tenants').select('id, name').is('deleted_at', null).range(from, to),
+      ),
+    ])
+
+    // append-only 상쇄로 무효화된 원본 입금은 제외 (원장과 동일 규칙)
+    const superseded = new Set(
+      await fetchInboundSupersededSubset(
+        supabase as SupabaseClient,
+        payments.map((p) => p.id),
+      ),
+    )
+
+    const tenantName = new Map(tenants.map((t) => [t.id, t.name ?? '(이름없음)']))
+
+    // ── 집계 ────────────────────────────────────────────────
+    const ordersByCustomer = new Map<string, OrderRow[]>()
+    for (const o of orders) {
+      const list = ordersByCustomer.get(o.customer_id)
+      if (list) list.push(o)
+      else ordersByCustomer.set(o.customer_id, [o])
+    }
+    for (const list of ordersByCustomer.values()) {
+      list.sort((a, b) => (a.order_date < b.order_date ? 1 : -1)) // 최신순 — ledger.ts 와 동일
+    }
+
+    const paidByCustomer = new Map<string, number>()
+    for (const p of payments) {
+      if (superseded.has(p.id)) continue
+      paidByCustomer.set(p.customer_id, (paidByCustomer.get(p.customer_id) ?? 0) + (p.amount ?? 0))
+    }
+
+    const cycleRisk: MetricRow[] = []
+    const repurchaseWait: MetricRow[] = []
+    const receivable: MetricRow[] = []
+    const prepayment: MetricRow[] = []
+
+    for (const c of customers) {
+      const list = ordersByCustomer.get(c.id) ?? []
+      const label = c.name?.trim() || '(이름없음)'
+      const owner = tenantName.get(c.tenant_id) ?? '알 수 없는 공급자'
+
+      // ① 미수금 / 초과입금 — 기존 원장과 동일한 계산식
+      const totalSales = list.reduce((sum, o) => sum + saleAmount(o), 0)
+      const ar = getAccountsReceivable(c.opening_balance ?? 0, totalSales, paidByCustomer.get(c.id) ?? 0, 0)
+      const arView = classifyAccountsReceivable(ar)
+      if (arView.kind === 'receivable') {
+        receivable.push({
+          id: c.id,
+          name: label,
+          meta: `${owner} · 거래처`,
+          value: won(arView.absolute),
+          alert: true,
+          sortKey: arView.absolute,
+        })
+      } else if (arView.kind === 'prepayment') {
+        prepayment.push({
+          id: c.id,
+          name: label,
+          meta: `${owner} · ${arView.hint ?? ''}`.trim(),
+          value: won(arView.absolute),
+          alert: false,
+          sortKey: arView.absolute,
+        })
+      }
+
+      if (list.length === 0) continue
+      const lastOrderDate = list[0].order_date
+      const sinceLast = daysSince(lastOrderDate, today)
+
+      // ② 주기 이탈 위험 — 구매 3회 이상 + 마지막 구매가 평균 주기의 1.5배 초과
+      if (list.length >= 3) {
+        const recentDates = list.slice(0, orderCycleCount).map((o) => o.order_date)
+        const cycle = calcOrderCycle(recentDates)
+        if (cycle !== null && cycle > 0 && sinceLast > cycle * CYCLE_MULTIPLIER) {
+          cycleRisk.push({
+            id: c.id,
+            name: label,
+            meta: `${owner} · 평균 ${cycle}일 주기 · 총 ${list.length}회 구매`,
+            value: `${sinceLast}일째 무주문`,
+            alert: true,
+            sortKey: sinceLast,
+          })
+        }
+      }
+
+      // ③ 신규 재구매 대기 — 구매 1~2회 + 마지막 구매 후 30일 경과
+      if (list.length <= 2 && sinceLast >= REPURCHASE_WAIT_DAYS) {
+        repurchaseWait.push({
+          id: c.id,
+          name: label,
+          meta: `${owner} · 총 ${list.length}회 구매 · 최종 ${lastOrderDate}`,
+          value: `${sinceLast}일 경과`,
+          alert: false,
+          sortKey: sinceLast,
+        })
+      }
+    }
+
+    // ④ 신규가입 후 미주문 — 식당 테넌트 기준
+    const cutoff = new Date(today.getTime() - NEW_SIGNUP_NO_ORDER_DAYS * 86400000).toISOString()
+    const restaurantTenants = await fetchAll<{ id: string; name: string | null; created_at: string }>(
+      (from, to) =>
+        supabase
+          .from('tenants')
+          .select('id, name, created_at')
+          .eq('role', 'restaurant')
+          .is('deleted_at', null)
+          .lte('created_at', cutoff)
+          .range(from, to),
+    )
+
+    // 주문 이력 조회는 대상 식당 테넌트로만 좁힌다 — commerce_orders 전체를 훑지 않는다
+    const restaurantIds = restaurantTenants.map((t) => t.id)
+    const orderedTenantIds = new Set(
+      restaurantIds.length === 0
+        ? []
+        : (
+            await fetchAll<{ tenant_id: string }>((from, to) =>
+              supabase
+                .from('commerce_orders')
+                .select('tenant_id')
+                .in('tenant_id', restaurantIds)
+                .range(from, to),
+            )
+          ).map((r) => r.tenant_id),
+    )
+
+    const newSignupNoOrder: MetricRow[] = restaurantTenants
+      .filter((t) => !orderedTenantIds.has(t.id))
+      .map((t) => ({
+        id: t.id,
+        name: t.name ?? '(이름없음)',
+        meta: `가입 ${t.created_at.slice(0, 10)}`,
+        value: `${daysSince(t.created_at.slice(0, 10), today)}일째 미주문`,
+        alert: true,
+        sortKey: daysSince(t.created_at.slice(0, 10), today),
+      }))
+
+    const block = (rows: MetricRow[]): MetricBlock => ({
+      count: rows.length,
+      rows: [...rows].sort((a, b) => b.sortKey - a.sortKey),
+    })
+
+    return {
+      success: true,
+      data: {
+        cycleRisk: block(cycleRisk),
+        repurchaseWait: block(repurchaseWait),
+        receivable: block(receivable),
+        prepayment: block(prepayment),
+        newSignupNoOrder: block(newSignupNoOrder),
+        params: {
+          cycleMultiplier: CYCLE_MULTIPLIER,
+          waitDays: REPURCHASE_WAIT_DAYS,
+          noOrderDays: NEW_SIGNUP_NO_ORDER_DAYS,
+        },
+      },
+    }
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : '식당 지표 계산 실패' }
+  }
+}

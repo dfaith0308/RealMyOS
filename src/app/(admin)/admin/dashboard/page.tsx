@@ -1,7 +1,19 @@
 import Link from 'next/link'
-import { AlertTriangle, CalendarClock, ScrollText } from 'lucide-react'
+import {
+  AlertTriangle,
+  CalendarClock,
+  Clock,
+  PiggyBank,
+  ScrollText,
+  Store,
+  TrendingDown,
+  UserPlus,
+  Wallet,
+} from 'lucide-react'
 import { getActionQueue, expireStaleItems, resolveActionQueueItem } from '@/actions/admin/action-queue'
+import { getRestaurantMetrics } from '@/actions/admin/dashboard-metrics'
 import s from '../../admin-blue.module.css'
+import MetricCard from './MetricCard'
 
 export const metadata = { title: '중앙 대시보드 — 식식이 관리자' }
 
@@ -9,7 +21,7 @@ export default async function AdminDashboardPage() {
   // 72h 초과 항목 만료 처리 (best-effort; 실패해도 페이지는 보여준다)
   await expireStaleItems().catch(() => {})
 
-  const q = await getActionQueue()
+  const [q, restaurant] = await Promise.all([getActionQueue(), getRestaurantMetrics()])
 
   const queue = q.data ?? []
   const critical = queue.filter((x) => x.priority === 'critical').slice(0, 10)
@@ -29,6 +41,61 @@ export default async function AdminDashboardPage() {
           <ScrollText size={15} /> 전체 로그 보기
         </Link>
       </header>
+
+      <section className={s.section}>
+        <div className={s.sectionHead}>
+          <h2 className={s.sectionTitle}>
+            <Store size={17} /> 식당 현황
+          </h2>
+          <span className={s.sectionNote}>
+            카드를 누르면 해당 목록으로 이동합니다
+          </span>
+        </div>
+        {!restaurant.success ? (
+          <div className={s.errText}>식당 지표를 불러오지 못했습니다 — {restaurant.error}</div>
+        ) : (
+          <div className={s.cardGrid}>
+            <MetricCard
+              label="주기 이탈 위험"
+              value={restaurant.data.cycleRisk.count}
+              basis="거래처 기준 · 구매 3회 이상, 마지막 구매가 평균 주기의 1.5배 초과"
+              icon={<TrendingDown size={17} />}
+              href="/admin/dashboard/restaurant-cycle-risk"
+              alert
+            />
+            <MetricCard
+              label="신규 재구매 대기"
+              value={restaurant.data.repurchaseWait.count}
+              basis="거래처 기준 · 구매 1~2회, 마지막 구매 후 30일 경과"
+              icon={<Clock size={17} />}
+              href="/admin/dashboard/restaurant-repurchase-wait"
+            />
+            <MetricCard
+              label="미수금 거래처"
+              value={restaurant.data.receivable.count}
+              basis="거래처 기준 · 기존 원장과 동일한 미수금 계산식"
+              icon={<Wallet size={17} />}
+              href="/admin/dashboard/restaurant-receivable"
+              alert
+            />
+            <MetricCard
+              label="초과입금 거래처"
+              value={restaurant.data.prepayment.count}
+              basis="거래처 기준 · 잔액이 음수 (다음 주문에 자동 차감)"
+              icon={<PiggyBank size={17} />}
+              href="/admin/dashboard/restaurant-prepayment"
+            />
+            <MetricCard
+              label="신규가입 후 미주문"
+              value={restaurant.data.newSignupNoOrder.count}
+              basis="식당 테넌트 기준 · 가입 14일 경과, 주문 이력 0건"
+              icon={<UserPlus size={17} />}
+              href="/admin/dashboard/restaurant-no-order"
+              alert
+            />
+          </div>
+        )}
+      </section>
 
       <section className={s.section}>
         <div className={s.sectionHead}>
