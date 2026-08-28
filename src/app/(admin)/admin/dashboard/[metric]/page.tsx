@@ -1,7 +1,11 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
-import { getRestaurantMetrics, type MetricBlock } from '@/actions/admin/dashboard-metrics'
+import {
+  getRestaurantMetrics,
+  getSupplierMetrics,
+  type MetricBlock,
+} from '@/actions/admin/dashboard-metrics'
 import s from '../../../admin-blue.module.css'
 
 /**
@@ -21,6 +25,15 @@ async function restaurantBlock(
   pick: (m: Awaited<ReturnType<typeof getRestaurantMetrics>>) => MetricBlock | null,
 ): Promise<{ block: MetricBlock; error?: string }> {
   const res = await getRestaurantMetrics()
+  const empty: MetricBlock = { count: 0, rows: [] }
+  if (!res.success) return { block: empty, error: res.error }
+  return { block: pick(res) ?? empty }
+}
+
+async function supplierBlock(
+  pick: (m: Awaited<ReturnType<typeof getSupplierMetrics>>) => MetricBlock | null,
+): Promise<{ block: MetricBlock; error?: string }> {
+  const res = await getSupplierMetrics()
   const empty: MetricBlock = { count: 0, rows: [] }
   if (!res.success) return { block: empty, error: res.error }
   return { block: pick(res) ?? empty }
@@ -57,6 +70,26 @@ const METRICS: Record<string, MetricDef> = {
     basis: "식당 테넌트(tenants role='restaurant') 기준 · 가입 14일 경과 · commerce_orders 주문 이력 0건",
     columnLabel: '경과',
     load: () => restaurantBlock((r) => (r.success ? r.data.newSignupNoOrder : null)),
+  },
+  'supplier-paid-unprocessed': {
+    title: '결제완료 후 미처리 주문',
+    basis: "commerce_orders 기준 · status='paid' 상태로 24시간 이상 머물러 있는 주문",
+    columnLabel: '대기 시간',
+    load: () => supplierBlock((r) => (r.success ? r.data.paidUnprocessed : null)),
+  },
+  'supplier-trial-ending': {
+    title: '무료체험 종료 임박',
+    basis:
+      "공급자 테넌트(tenants role='supplier') 기준 · plan_expires_at 이 지금부터 7일 이내 (프로모션 무료기간 포함)",
+    columnLabel: '남은 기간',
+    load: () => supplierBlock((r) => (r.success ? r.data.trialEnding : null)),
+  },
+  'supplier-no-login': {
+    title: '로그인 없음 (7일 이상)',
+    basis:
+      '공급자 테넌트 기준 · Supabase 인증(auth.users)의 last_sign_in_at 이 7일 이상 지났거나 로그인 기록이 없는 곳',
+    columnLabel: '경과',
+    load: () => supplierBlock((r) => (r.success ? r.data.noLogin : null)),
   },
 }
 

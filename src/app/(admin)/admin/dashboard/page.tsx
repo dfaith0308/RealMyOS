@@ -3,15 +3,18 @@ import {
   AlertTriangle,
   CalendarClock,
   Clock,
+  PackageCheck,
   PiggyBank,
   ScrollText,
   Store,
+  Truck,
   TrendingDown,
+  UserMinus,
   UserPlus,
   Wallet,
 } from 'lucide-react'
 import { getActionQueue, expireStaleItems, resolveActionQueueItem } from '@/actions/admin/action-queue'
-import { getRestaurantMetrics } from '@/actions/admin/dashboard-metrics'
+import { getRestaurantMetrics, getSupplierMetrics } from '@/actions/admin/dashboard-metrics'
 import s from '../../admin-blue.module.css'
 import MetricCard from './MetricCard'
 
@@ -21,7 +24,11 @@ export default async function AdminDashboardPage() {
   // 72h 초과 항목 만료 처리 (best-effort; 실패해도 페이지는 보여준다)
   await expireStaleItems().catch(() => {})
 
-  const [q, restaurant] = await Promise.all([getActionQueue(), getRestaurantMetrics()])
+  const [q, restaurant, supplier] = await Promise.all([
+    getActionQueue(),
+    getRestaurantMetrics(),
+    getSupplierMetrics(),
+  ])
 
   const queue = q.data ?? []
   const critical = queue.filter((x) => x.priority === 'critical').slice(0, 10)
@@ -91,6 +98,45 @@ export default async function AdminDashboardPage() {
               basis="식당 테넌트 기준 · 가입 14일 경과, 주문 이력 0건"
               icon={<UserPlus size={17} />}
               href="/admin/dashboard/restaurant-no-order"
+              alert
+            />
+          </div>
+        )}
+      </section>
+
+      <section className={s.section}>
+        <div className={s.sectionHead}>
+          <h2 className={s.sectionTitle}>
+            <Truck size={17} /> 공급자 현황
+          </h2>
+        </div>
+        {!supplier.success ? (
+          <div className={s.errText}>공급자 지표를 불러오지 못했습니다 — {supplier.error}</div>
+        ) : (
+          <div className={s.cardGrid}>
+            <MetricCard
+              label="결제완료 후 미처리"
+              value={supplier.data.paidUnprocessed.count}
+              unit="건"
+              basis="결제완료(paid) 상태로 24시간 이상 대기 중인 주문"
+              icon={<PackageCheck size={17} />}
+              href="/admin/dashboard/supplier-paid-unprocessed"
+              alert
+            />
+            <MetricCard
+              label="무료체험 종료 임박"
+              value={supplier.data.trialEnding.count}
+              basis="공급자 테넌트 · 구독 만료 7일 이내 (프로모션 무료기간 포함)"
+              icon={<CalendarClock size={17} />}
+              href="/admin/dashboard/supplier-trial-ending"
+              alert
+            />
+            <MetricCard
+              label="로그인 없음 (7일+)"
+              value={supplier.data.noLogin.count}
+              basis="공급자 테넌트 · 인증 기록(last_sign_in_at) 7일 이상 경과"
+              icon={<UserMinus size={17} />}
+              href="/admin/dashboard/supplier-no-login"
               alert
             />
           </div>

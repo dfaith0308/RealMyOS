@@ -313,3 +313,171 @@ export async function getRestaurantMetrics(): Promise<
     return { success: false, error: e instanceof Error ? e.message : '식당 지표 계산 실패' }
   }
 }
+
+// ============================================================
+// 공급자 현황
+// ============================================================
+
+export type SupplierMetrics = {
+  paidUnprocessed: MetricBlock
+  trialEnding: MetricBlock
+  noLogin: MetricBlock
+  params: { unprocessedHours: number; trialDays: number; noLoginDays: number }
+}
+
+const UNPROCESSED_HOURS = 24
+const TRIAL_ENDING_DAYS = 7
+const NO_LOGIN_DAYS = 7
+
+/**
+ * 마지막 로그인은 public 스키마에 기록이 없어 Supabase 인증(auth.users)의
+ * last_sign_in_at 을 service role 로 읽는다. 테넌트에 사용자가 여러 명이면
+ * 그중 가장 최근 로그인을 그 테넌트의 마지막 로그인으로 본다.
+ */
+async function fetchLastSignInByUserId(
+  supabase: SupabaseClient,
+): Promise<Map<string, string | null>> {
+  const out = new Map<string, string | null>()
+  for (let page = 1; page <= 50; page++) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: 1000 })
+    if (error) throw new Error(error.message)
+    const users = data?.users ?? []
+    for (const u of users) out.set(u.id, (u as { last_sign_in_at?: string | null }).last_sign_in_at ?? null)
+    if (users.length < 1000) break
+  }
+  return out
+}
+
+export async function getSupplierMetrics(): Promise<
+  { success: true; data: SupplierMetrics } | { success: false; error: string }
+> {
+  const auth = await requireAdmin()
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  try {
+    const supabase = await createSupabaseAdmin()
+    const today = todayKST()
+    const now = Date.now()
+
+    const unprocessedCutoff = new Date(now - UNPROCESSED_HOURS * 3600000).toISOString()
+    const trialCutoff = new Date(now + TRIAL_ENDING_DAYS * 86400000).toISOString()
+    const nowIso = new Date(now).toISOString()
+
+    const [paidOrders, tenants, supplierTenants, users] = await Promise.all([
+      // ① 결제완료 후 미처리 — paid 상태로 24시간 이상 머문 주문
+      fetchAll<{
+        id: string
+        order_number: string | null
+        tenant_id: string
+        total_amount: number
+        updated_at: string
+      }>((from, to) =>
+        supabase
+          .from('commerce_orders')
+          .select('id, order_number, tenant_id, total_amount, updated_at')
+          .eq('status', 'paid')
+          .lt('updated_at', unprocessedCutoff)
+          .range(from, to),
+      ),
+      fetchAll<{ id: string; name: string | null }>((from, to) =>
+        supabase.from('tenants').select('id, name').is('deleted_at', null).range(from, to),
+      ),
+      // ② 구독/무료기간 종료 임박 + ③ 로그인 없음 대상 — 공급자 테넌트
+      fetchAll<{ id: string; name: string | null; plan_expires_at: string | null }>((from, to) =>
+        supabase
+          .from('tenants')
+          .select('id, name, plan_expires_at')
+          .eq('role', 'supplier')
+          .is('deleted_at', null)
+          .range(from, to),
+      ),
+      fetchAll<{ id: string; tenant_id: string | null }>((from, to) =>
+        supabase.from('users').select('id, tenant_id').not('tenant_id', 'is', null).range(from, to),
+      ),
+    ])
+
+    const tenantName = new Map(tenants.map((t) => [t.id, t.name ?? '(이름없음)']))
+
+    const paidUnprocessed: MetricRow[] = paidOrders.map((o) => {
+      const hours = Math.floor((now - new Date(o.updated_at).getTime()) / 3600000)
+      return {
+        id: o.id,
+        name: o.order_number ?? o.id.slice(0, 8),
+        meta: `${tenantName.get(o.tenant_id) ?? '알 수 없음'} · ${won(o.total_amount ?? 0)}`,
+        value: `${hours}시간 대기`,
+        alert: true,
+        sortKey: hours,
+      }
+    })
+
+    const trialEnding: MetricRow[] = supplierTenants
+      .filter((t) => t.plan_expires_at && t.plan_expires_at > nowIso && t.plan_expires_at <= trialCutoff)
+      .map((t) => {
+        const left = Math.max(
+          0,
+          Math.ceil((new Date(t.plan_expires_at as string).getTime() - now) / 86400000),
+        )
+        return {
+          id: t.id,
+          name: t.name ?? '(이름없음)',
+          meta: `만료 ${(t.plan_expires_at as string).slice(0, 10)}`,
+          value: `${left}일 남음`,
+          alert: true,
+          // 남은 일수가 적을수록 위로
+          sortKey: -left,
+        }
+      })
+
+    // ③ 로그인 없음 — auth.users.last_sign_in_at 기준
+    const lastSignIn = await fetchLastSignInByUserId(supabase as SupabaseClient)
+    const lastSignInByTenant = new Map<string, string | null>()
+    for (const u of users) {
+      if (!u.tenant_id) continue
+      const at = lastSignIn.get(u.id) ?? null
+      const prev = lastSignInByTenant.get(u.tenant_id)
+      if (prev === undefined || (at !== null && (prev === null || at > prev))) {
+        lastSignInByTenant.set(u.tenant_id, at)
+      }
+    }
+
+    const noLoginCutoff = new Date(now - NO_LOGIN_DAYS * 86400000).toISOString()
+    const noLogin: MetricRow[] = supplierTenants
+      .filter((t) => {
+        if (!lastSignInByTenant.has(t.id)) return false // 계정이 아직 없는 테넌트는 제외
+        const at = lastSignInByTenant.get(t.id) ?? null
+        return at === null || at < noLoginCutoff
+      })
+      .map((t) => {
+        const at = lastSignInByTenant.get(t.id) ?? null
+        return {
+          id: t.id,
+          name: t.name ?? '(이름없음)',
+          meta: at ? `최종 로그인 ${at.slice(0, 10)}` : '로그인 기록 없음',
+          value: at ? `${daysSince(at.slice(0, 10), today)}일째` : '기록 없음',
+          alert: true,
+          sortKey: at ? daysSince(at.slice(0, 10), today) : 9999,
+        }
+      })
+
+    const block = (rows: MetricRow[]): MetricBlock => ({
+      count: rows.length,
+      rows: [...rows].sort((a, b) => b.sortKey - a.sortKey),
+    })
+
+    return {
+      success: true,
+      data: {
+        paidUnprocessed: block(paidUnprocessed),
+        trialEnding: block(trialEnding),
+        noLogin: block(noLogin),
+        params: {
+          unprocessedHours: UNPROCESSED_HOURS,
+          trialDays: TRIAL_ENDING_DAYS,
+          noLoginDays: NO_LOGIN_DAYS,
+        },
+      },
+    }
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : '공급자 지표 계산 실패' }
+  }
+}
