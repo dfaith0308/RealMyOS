@@ -4,10 +4,13 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { createCoupon, deleteCoupon, type CouponRow } from '@/actions/admin/coupons'
 
-const PLAN_LABEL: Record<CouponRow['plan'], string> = {
+// 영업 프로모션 코드(plan: 'any' | 'monthly')도 이 목록에 함께 나오므로 라벨을 포함한다
+const PLAN_LABEL: Record<string, string> = {
   earlybird: '얼리버드',
   pro: '월간',
   annual: '연간',
+  any: '모든 플랜',
+  monthly: '월간',
 }
 
 function formatDisplayCode(code: string) {
@@ -251,7 +254,7 @@ export default function CouponsClient({
                   <td style={{ padding: '12px 14px', fontFamily: 'monospace', fontWeight: 700 }}>
                     {formatDisplayCode(c.code)}
                   </td>
-                  <td style={{ padding: '12px 14px' }}>{PLAN_LABEL[c.plan]}</td>
+                  <td style={{ padding: '12px 14px' }}>{PLAN_LABEL[c.plan] ?? c.plan}</td>
                   <td style={{ padding: '12px 14px' }}>{c.free_months}개월</td>
                   <td style={{ padding: '12px 14px' }}>
                     {c.used_count ?? 0} / {c.max_uses ?? '∞'}
