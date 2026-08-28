@@ -32,11 +32,16 @@ export default async function AdminDashboardPage() {
 
   return (
     <main style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <header>
-        <h1 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>중앙 대시보드</h1>
-        <p style={{ fontSize: 13, color: 'var(--ds-text-secondary)', margin: 0 }}>
-          상태(What) + 행동(Action) + 우선순위(Priority) + 실행 큐(Queue)
-        </p>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+        <div>
+          <h1 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>중앙 대시보드</h1>
+          <p style={{ fontSize: 13, color: 'var(--ds-text-secondary)', margin: 0 }}>
+            상태(What) + 행동(Action) + 우선순위(Priority) + 실행 큐(Queue)
+          </p>
+        </div>
+        <Link href="/admin/logs" style={{ fontSize: 12, fontWeight: 700, color: 'var(--ds-text-secondary)', textDecoration: 'underline' }}>
+          전체 로그 보기
+        </Link>
       </header>
 
       <section style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
@@ -93,39 +98,6 @@ export default async function AdminDashboardPage() {
         </div>
       </section>
 
-      <section style={panelStyle}>
-        <div style={panelHeaderStyle}>
-          <h2 style={panelTitleStyle}>최근 관리자 로그</h2>
-          <Link href="/admin/logs" style={linkBtnStyle}>전체</Link>
-        </div>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={tableStyle}>
-            <thead>
-              <tr>
-                <th style={thStyle}>action_type</th>
-                <th style={thStyle}>admin_id</th>
-                <th style={thStyle}>tenant_id</th>
-                <th style={thStyle}>생성일</th>
-              </tr>
-            </thead>
-            <tbody>
-              {d.data.recentAdminLogs.map((l) => (
-                <tr key={l.id}>
-                  <td style={tdStyle}>{l.action_type ?? '-'}</td>
-                  <td style={tdStyle}>{l.admin_id ?? '-'}</td>
-                  <td style={tdStyle}>{l.tenant_id ?? '-'}</td>
-                  <td style={tdStyle}>{l.created_at ? new Date(l.created_at).toLocaleString('ko-KR') : '-'}</td>
-                </tr>
-              ))}
-              {d.data.recentAdminLogs.length === 0 && (
-                <tr>
-                  <td style={tdStyle} colSpan={4}>admin_logs 테이블이 없거나 로그가 없습니다.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
     </main>
   )
 }
