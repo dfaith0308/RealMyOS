@@ -62,7 +62,8 @@ const METRICS: Record<string, MetricDef> = {
   },
   'restaurant-repurchase-wait': {
     title: '신규 재구매 대기 식당',
-    basis: '공급자 거래처(customers) 기준 · 구매 이력 1~2회 · 마지막 구매 후 30일 경과, 추가 구매 없음',
+    basis:
+      '공급자 거래처(customers) 기준 · 구매 이력 1~2회 · 마지막 구매 후 30일 이상 90일 이내 (90일 초과는 이탈로 보고 제외)',
     columnLabel: '경과',
     load: () => restaurantBlock((r) => (r.success ? r.data.repurchaseWait : null)),
   },

@@ -85,7 +85,7 @@ export type RestaurantMetrics = {
   receivable: MetricBlock
   prepayment: MetricBlock
   newSignupNoOrder: MetricBlock
-  params: { cycleMultiplier: number; waitDays: number; noOrderDays: number }
+  params: { cycleMultiplier: number; waitDays: number; waitMaxDays: number; noOrderDays: number }
 }
 
 type CustomerRow = {
@@ -105,6 +105,8 @@ type PaymentRow = { id: string; customer_id: string; amount: number }
 
 const CYCLE_MULTIPLIER = 1.5
 const REPURCHASE_WAIT_DAYS = 30
+/** 상한 — 이보다 오래 끊긴 곳은 '재구매 대기'가 아니라 이탈로 본다 */
+const REPURCHASE_WAIT_MAX_DAYS = 90
 const NEW_SIGNUP_NO_ORDER_DAYS = 14
 
 export async function getRestaurantMetrics(): Promise<
@@ -236,8 +238,13 @@ export async function getRestaurantMetrics(): Promise<
         }
       }
 
-      // ③ 신규 재구매 대기 — 구매 1~2회 + 마지막 구매 후 30일 경과
-      if (list.length <= 2 && sinceLast >= REPURCHASE_WAIT_DAYS) {
+      // ③ 신규 재구매 대기 — 구매 1~2회 + 마지막 구매 후 30~90일
+      //    90일을 넘기면 재구매를 기다리는 상태가 아니라 사실상 이탈이라 제외한다
+      if (
+        list.length <= 2 &&
+        sinceLast >= REPURCHASE_WAIT_DAYS &&
+        sinceLast <= REPURCHASE_WAIT_MAX_DAYS
+      ) {
         repurchaseWait.push({
           id: c.id,
           name: label,
@@ -305,6 +312,7 @@ export async function getRestaurantMetrics(): Promise<
         params: {
           cycleMultiplier: CYCLE_MULTIPLIER,
           waitDays: REPURCHASE_WAIT_DAYS,
+          waitMaxDays: REPURCHASE_WAIT_MAX_DAYS,
           noOrderDays: NEW_SIGNUP_NO_ORDER_DAYS,
         },
       },

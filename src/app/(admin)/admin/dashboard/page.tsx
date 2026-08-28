@@ -80,7 +80,7 @@ export default async function AdminDashboardPage() {
             <MetricCard
               label="신규 재구매 대기"
               value={restaurant.data.repurchaseWait.count}
-              basis="거래처 기준 · 구매 1~2회, 마지막 구매 후 30일 경과"
+              basis="거래처 기준 · 구매 1~2회, 마지막 구매 후 30~90일"
               icon={<Clock size={17} />}
               href="/admin/dashboard/restaurant-repurchase-wait"
             />
