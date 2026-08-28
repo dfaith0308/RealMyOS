@@ -21,6 +21,15 @@ const MENU: MenuEntry[] = [
   { type: 'link', label: '학습센터', icon: '🧪', href: '/admin/learning' },
   { type: 'link', label: '분석엔진', icon: '🧷', href: '/admin/engine' },
   { type: 'link', label: '성장/영업 엔진', icon: '🚀', href: '/admin/growth' },
+  {
+    type: 'group',
+    label: '영업 관리',
+    icon: '📇',
+    children: [
+      { label: '리드 관리', href: '/admin/sales' },
+      { label: '프로모션 코드', href: '/admin/sales/promo' },
+    ],
+  },
   { type: 'link', label: '테넌트관리', icon: '🏢', href: '/admin/tenants' },
   {
     type: 'group',
