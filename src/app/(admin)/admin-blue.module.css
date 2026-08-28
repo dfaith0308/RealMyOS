@@ -154,9 +154,9 @@ a.cardAlert:hover {
 
 .cardTop {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
 }
 
 .cardIcon {
@@ -195,6 +195,7 @@ a.cardAlert:hover {
   font-size: 14px;
   font-weight: 800;
   color: var(--blue-text);
+  word-break: keep-all;
 }
 
 .cardBasis {
@@ -202,6 +203,7 @@ a.cardAlert:hover {
   color: var(--blue-muted);
   font-weight: 600;
   line-height: 1.5;
+  word-break: keep-all;
 }
 
 .cardUnit {
