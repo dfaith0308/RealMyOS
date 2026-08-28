@@ -9,12 +9,18 @@ import {
   Store,
   Truck,
   TrendingDown,
+  Handshake,
+  Sparkles,
   UserMinus,
   UserPlus,
   Wallet,
 } from 'lucide-react'
 import { getActionQueue, expireStaleItems, resolveActionQueueItem } from '@/actions/admin/action-queue'
-import { getRestaurantMetrics, getSupplierMetrics } from '@/actions/admin/dashboard-metrics'
+import {
+  getRestaurantMetrics,
+  getSalesMetrics,
+  getSupplierMetrics,
+} from '@/actions/admin/dashboard-metrics'
 import s from '../../admin-blue.module.css'
 import MetricCard from './MetricCard'
 
@@ -24,10 +30,11 @@ export default async function AdminDashboardPage() {
   // 72h 초과 항목 만료 처리 (best-effort; 실패해도 페이지는 보여준다)
   await expireStaleItems().catch(() => {})
 
-  const [q, restaurant, supplier] = await Promise.all([
+  const [q, restaurant, supplier, sales] = await Promise.all([
     getActionQueue(),
     getRestaurantMetrics(),
     getSupplierMetrics(),
+    getSalesMetrics(),
   ])
 
   const queue = q.data ?? []
@@ -137,6 +144,51 @@ export default async function AdminDashboardPage() {
               basis="공급자 테넌트 · 인증 기록(last_sign_in_at) 7일 이상 경과"
               icon={<UserMinus size={17} />}
               href="/admin/dashboard/supplier-no-login"
+              alert
+            />
+          </div>
+        )}
+      </section>
+
+      <section className={s.section}>
+        <div className={s.sectionHead}>
+          <h2 className={s.sectionTitle}>
+            <Handshake size={17} /> 오늘의 영업
+          </h2>
+          <span className={s.sectionNote}>sales_leads 기준</span>
+        </div>
+        {!sales.success ? (
+          <div className={s.errText}>영업 지표를 불러오지 못했습니다 — {sales.error}</div>
+        ) : sales.data.notReady ? (
+          <div className={s.noticeText}>
+            영업 리드 테이블이 아직 생성되지 않았습니다. sales_leads 마이그레이션을 적용하면 이
+            영역에 지표가 표시됩니다.
+          </div>
+        ) : (
+          <div className={s.cardGrid}>
+            <MetricCard
+              label="이번 주 신규 리드"
+              value={sales.data.newLeadsThisWeek.count}
+              unit="건"
+              basis="이번 주 월요일(KST) 이후 등록된 리드"
+              icon={<Sparkles size={17} />}
+              href="/admin/dashboard/sales-new-leads"
+            />
+            <MetricCard
+              label="미팅예정"
+              value={sales.data.meetingScheduled.count}
+              unit="건"
+              basis="리드 상태가 '미팅예정'인 건"
+              icon={<CalendarClock size={17} />}
+              href="/admin/dashboard/sales-meeting"
+            />
+            <MetricCard
+              label="무료체험 종료 임박 리드"
+              value={sales.data.leadTrialEnding.count}
+              unit="건"
+              basis="리드에 발급한 코드를 쓴 테넌트의 만료 7일 이내"
+              icon={<CalendarClock size={17} />}
+              href="/admin/dashboard/sales-trial-ending"
               alert
             />
           </div>

@@ -481,3 +481,174 @@ export async function getSupplierMetrics(): Promise<
     return { success: false, error: e instanceof Error ? e.message : '공급자 지표 계산 실패' }
   }
 }
+
+// ============================================================
+// 오늘의 영업
+// ============================================================
+
+export type SalesMetrics = {
+  newLeadsThisWeek: MetricBlock
+  meetingScheduled: MetricBlock
+  leadTrialEnding: MetricBlock
+  /** sales_leads 마이그레이션이 아직 적용되지 않은 상태 */
+  notReady: boolean
+  params: { trialDays: number }
+}
+
+/** 테이블/컬럼이 아직 없는 경우 (마이그레이션 미적용) */
+function isMissingRelation(message: string): boolean {
+  return /does not exist|could not find the table|schema cache|relation .* does not exist/i.test(message)
+}
+
+/** KST 기준 이번 주 월요일 00:00 */
+function weekStartKST(today: Date): string {
+  const dow = today.getUTCDay() // 0=일
+  const backToMonday = dow === 0 ? 6 : dow - 1
+  return new Date(today.getTime() - backToMonday * 86400000).toISOString()
+}
+
+export async function getSalesMetrics(): Promise<
+  { success: true; data: SalesMetrics } | { success: false; error: string }
+> {
+  const auth = await requireAdmin()
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const empty: MetricBlock = { count: 0, rows: [] }
+
+  try {
+    const supabase = await createSupabaseAdmin()
+    const today = todayKST()
+    const now = Date.now()
+    const weekStart = weekStartKST(today)
+    const trialCutoff = new Date(now + TRIAL_ENDING_DAYS * 86400000).toISOString()
+    const nowIso = new Date(now).toISOString()
+
+    const leads = await fetchAll<{
+      id: string
+      company_name: string
+      lead_type: string
+      status: string
+      created_at: string
+    }>((from, to) =>
+      supabase
+        .from('sales_leads')
+        .select('id, company_name, lead_type, status, created_at')
+        .range(from, to),
+    )
+
+    const typeLabel = (t: string) => (t === 'supplier' ? '공급자' : '식당')
+
+    const newLeadsThisWeek: MetricRow[] = leads
+      .filter((l) => l.created_at >= weekStart)
+      .map((l) => ({
+        id: l.id,
+        name: l.company_name,
+        meta: `${typeLabel(l.lead_type)} · 등록 ${l.created_at.slice(0, 10)}`,
+        value: `${daysSince(l.created_at.slice(0, 10), today)}일 전`,
+        alert: false,
+        sortKey: -daysSince(l.created_at.slice(0, 10), today),
+      }))
+
+    const meetingScheduled: MetricRow[] = leads
+      .filter((l) => l.status === 'meeting')
+      .map((l) => ({
+        id: l.id,
+        name: l.company_name,
+        meta: `${typeLabel(l.lead_type)} · 미팅예정`,
+        value: `등록 ${l.created_at.slice(0, 10)}`,
+        alert: false,
+        sortKey: -daysSince(l.created_at.slice(0, 10), today),
+      }))
+
+    // 리드에 발급한 프로모션 코드를 실제로 쓴 테넌트 중 만료 임박
+    const leadName = new Map(leads.map((l) => [l.id, l.company_name]))
+    const coupons = await fetchAll<{ id: string; lead_id: string | null }>((from, to) =>
+      supabase.from('coupons').select('id, lead_id').not('lead_id', 'is', null).range(from, to),
+    )
+
+    let leadTrialEnding: MetricRow[] = []
+    if (coupons.length > 0) {
+      const leadByCoupon = new Map(coupons.map((c) => [c.id, c.lead_id as string]))
+      const uses = await fetchAll<{ coupon_id: string; tenant_id: string }>((from, to) =>
+        supabase
+          .from('coupon_uses')
+          .select('coupon_id, tenant_id')
+          .in(
+            'coupon_id',
+            coupons.map((c) => c.id),
+          )
+          .range(from, to),
+      )
+
+      const tenantIds = Array.from(new Set(uses.map((u) => u.tenant_id)))
+      const expiring = new Map<string, { name: string | null; plan_expires_at: string }>()
+      if (tenantIds.length > 0) {
+        const rows = await fetchAll<{ id: string; name: string | null; plan_expires_at: string | null }>(
+          (from, to) =>
+            supabase
+              .from('tenants')
+              .select('id, name, plan_expires_at')
+              .in('id', tenantIds)
+              .not('plan_expires_at', 'is', null)
+              .gt('plan_expires_at', nowIso)
+              .lte('plan_expires_at', trialCutoff)
+              .range(from, to),
+        )
+        for (const r of rows) {
+          if (r.plan_expires_at) expiring.set(r.id, { name: r.name, plan_expires_at: r.plan_expires_at })
+        }
+      }
+
+      // 리드 단위로 중복 제거
+      const seen = new Set<string>()
+      for (const u of uses) {
+        const exp = expiring.get(u.tenant_id)
+        if (!exp) continue
+        const leadId = leadByCoupon.get(u.coupon_id)
+        if (!leadId || seen.has(leadId)) continue
+        seen.add(leadId)
+        const left = Math.max(0, Math.ceil((new Date(exp.plan_expires_at).getTime() - now) / 86400000))
+        leadTrialEnding.push({
+          id: leadId,
+          name: leadName.get(leadId) ?? '(리드 없음)',
+          meta: `가입 테넌트 ${exp.name ?? '(이름없음)'} · 만료 ${exp.plan_expires_at.slice(0, 10)}`,
+          value: `${left}일 남음`,
+          alert: true,
+          sortKey: -left,
+        })
+      }
+    }
+
+    const block = (rows: MetricRow[]): MetricBlock => ({
+      count: rows.length,
+      rows: [...rows].sort((a, b) => b.sortKey - a.sortKey),
+    })
+
+    return {
+      success: true,
+      data: {
+        newLeadsThisWeek: block(newLeadsThisWeek),
+        meetingScheduled: block(meetingScheduled),
+        leadTrialEnding: block(leadTrialEnding),
+        notReady: false,
+        params: { trialDays: TRIAL_ENDING_DAYS },
+      },
+    }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : '영업 지표 계산 실패'
+    // 영업 리드 마이그레이션 미적용 — 대시보드 전체를 깨뜨리지 않고 안내만 한다
+    if (isMissingRelation(message)) {
+      return {
+        success: true,
+        data: {
+          newLeadsThisWeek: empty,
+          meetingScheduled: empty,
+          leadTrialEnding: empty,
+          notReady: true,
+          params: { trialDays: TRIAL_ENDING_DAYS },
+        },
+      }
+    }
+    return { success: false, error: message }
+  }
+}

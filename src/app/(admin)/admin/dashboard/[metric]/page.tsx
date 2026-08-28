@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import {
   getRestaurantMetrics,
+  getSalesMetrics,
   getSupplierMetrics,
   type MetricBlock,
 } from '@/actions/admin/dashboard-metrics'
@@ -36,6 +37,18 @@ async function supplierBlock(
   const res = await getSupplierMetrics()
   const empty: MetricBlock = { count: 0, rows: [] }
   if (!res.success) return { block: empty, error: res.error }
+  return { block: pick(res) ?? empty }
+}
+
+async function salesBlock(
+  pick: (m: Awaited<ReturnType<typeof getSalesMetrics>>) => MetricBlock | null,
+): Promise<{ block: MetricBlock; error?: string }> {
+  const res = await getSalesMetrics()
+  const empty: MetricBlock = { count: 0, rows: [] }
+  if (!res.success) return { block: empty, error: res.error }
+  if (res.data.notReady) {
+    return { block: empty, error: '영업 리드 테이블이 아직 생성되지 않았습니다 (마이그레이션 미적용)' }
+  }
   return { block: pick(res) ?? empty }
 }
 
@@ -90,6 +103,25 @@ const METRICS: Record<string, MetricDef> = {
       '공급자 테넌트 기준 · Supabase 인증(auth.users)의 last_sign_in_at 이 7일 이상 지났거나 로그인 기록이 없는 곳',
     columnLabel: '경과',
     load: () => supplierBlock((r) => (r.success ? r.data.noLogin : null)),
+  },
+  'sales-new-leads': {
+    title: '이번 주 신규 리드',
+    basis: 'sales_leads 기준 · 이번 주 월요일(KST) 이후 등록된 리드',
+    columnLabel: '등록',
+    load: () => salesBlock((r) => (r.success ? r.data.newLeadsThisWeek : null)),
+  },
+  'sales-meeting': {
+    title: '미팅예정 리드',
+    basis: "sales_leads 기준 · status='meeting'(미팅예정)",
+    columnLabel: '등록일',
+    load: () => salesBlock((r) => (r.success ? r.data.meetingScheduled : null)),
+  },
+  'sales-trial-ending': {
+    title: '무료체험 종료 임박 리드',
+    basis:
+      '리드에 발급한 프로모션 코드(coupons.lead_id)를 실제 사용한 테넌트 중 plan_expires_at 이 7일 이내인 리드',
+    columnLabel: '남은 기간',
+    load: () => salesBlock((r) => (r.success ? r.data.leadTrialEnding : null)),
   },
 }
 
