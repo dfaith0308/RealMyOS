@@ -1,8 +1,9 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import { loadTossPayments } from '@tosspayments/tosspayments-sdk'
 import type { SubscriptionPlan } from '@/actions/subscribe'
+import { validatePromoCode, type PromoCheckResult } from '@/actions/subscribe-promo'
 
 type SelectablePlan = 'monthly' | 'annual'
 
@@ -39,6 +40,30 @@ export default function SubscribeClient({ status }: { status: SubscriptionStatus
   const selected = useMemo(() => PLANS.find((p) => p.id === selectedPlan) ?? PLANS[0], [selectedPlan])
   const [pending, setPending] = useState(false)
 
+  // 프로모션 코드 — 확인은 읽기 전용이고, 실제 차감은 결제 승인 시점에 서버에서 일어난다
+  const [promoCode, setPromoCode] = useState('')
+  const [promoCheck, setPromoCheck] = useState<PromoCheckResult | null>(null)
+  const [checking, startCheck] = useTransition()
+
+  const appliedPromo = promoCheck?.valid ? promoCode.trim() : ''
+
+  function choosePlan(p: SelectablePlan) {
+    setSelectedPlan(p)
+    // 플랜 전용 코드가 있으므로, 플랜이 바뀌면 확인 결과를 무효화한다
+    setPromoCheck(null)
+  }
+
+  function handleCheckPromo() {
+    const code = promoCode.trim()
+    if (!code) {
+      setPromoCheck({ valid: false, message: '코드를 입력하세요' })
+      return
+    }
+    startCheck(async () => {
+      setPromoCheck(await validatePromoCode({ code, plan: selectedPlan }))
+    })
+  }
+
   async function handleSubscribe() {
     const clientKey = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY
     if (!clientKey) {
@@ -51,9 +76,10 @@ export default function SubscribeClient({ status }: { status: SubscriptionStatus
     try {
       const tossPayments = await loadTossPayments(clientKey)
       const payment = tossPayments.payment({ customerKey })
+      const promoParam = appliedPromo ? `&promo=${encodeURIComponent(appliedPromo)}` : ''
       await payment.requestBillingAuth({
         method: 'CARD',
-        successUrl: `${window.location.origin}/subscribe/billing/success?plan=${selected.id}&amount=${selected.amount}&customerKey=${customerKey}`,
+        successUrl: `${window.location.origin}/subscribe/billing/success?plan=${selected.id}&amount=${selected.amount}&customerKey=${customerKey}${promoParam}`,
         failUrl: `${window.location.origin}/subscribe/billing/fail`,
       })
     } catch (err) {
@@ -103,7 +129,7 @@ export default function SubscribeClient({ status }: { status: SubscriptionStatus
         {/* 월간 */}
         <button
           type="button"
-          onClick={() => setSelectedPlan('monthly')}
+          onClick={() => choosePlan('monthly')}
           style={{
             textAlign: 'left',
             padding: 18,
@@ -140,7 +166,7 @@ export default function SubscribeClient({ status }: { status: SubscriptionStatus
         {/* 연간 (기본 선택) */}
         <button
           type="button"
-          onClick={() => setSelectedPlan('annual')}
+          onClick={() => choosePlan('annual')}
           style={{
             textAlign: 'left',
             padding: 18,
@@ -184,6 +210,72 @@ export default function SubscribeClient({ status }: { status: SubscriptionStatus
         </button>
       </div>
 
+      {/* 프로모션 코드 */}
+      <div
+        style={{
+          marginTop: 12,
+          padding: 16,
+          borderRadius: 14,
+          border: '1px solid #2b2b2b',
+          background: '#fff',
+        }}
+      >
+        <div style={{ fontSize: 14, fontWeight: 900, color: '#2b2b2b' }}>프로모션 코드</div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+          <input
+            value={promoCode}
+            onChange={(e) => {
+              setPromoCode(e.target.value.toUpperCase())
+              setPromoCheck(null)
+            }}
+            placeholder="코드를 입력하세요"
+            style={{
+              flex: 1,
+              minWidth: 180,
+              padding: '12px 12px',
+              borderRadius: 10,
+              border: '1px solid #2b2b2b',
+              fontSize: 14,
+              fontWeight: 700,
+              fontFamily: 'inherit',
+              color: '#2b2b2b',
+              background: '#fff',
+            }}
+          />
+          <button
+            type="button"
+            onClick={handleCheckPromo}
+            disabled={checking}
+            style={{
+              padding: '12px 18px',
+              borderRadius: 10,
+              border: 'none',
+              background: '#2b2b2b',
+              color: '#fff',
+              fontSize: 14,
+              fontWeight: 900,
+              fontFamily: 'inherit',
+              cursor: checking ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {checking ? '확인 중…' : '확인'}
+          </button>
+        </div>
+        {promoCheck && (
+          <div
+            style={{
+              marginTop: 10,
+              fontSize: 13,
+              fontWeight: 800,
+              color: promoCheck.valid ? '#15803d' : '#b91c1c',
+            }}
+          >
+            {promoCheck.valid ? '✓ ' : '✕ '}
+            {promoCheck.message}
+          </div>
+        )}
+      </div>
+
       {/* 하단 버튼 */}
       <div style={{ marginTop: 16 }}>
         <button
@@ -207,13 +299,17 @@ export default function SubscribeClient({ status }: { status: SubscriptionStatus
             ? '결제창 여는 중...'
             : !tossEnabled
               ? '결제 준비 중 (키 미설정)'
-              : selectedPlan === 'monthly'
-                ? '월간 구독 시작하기 · 99,000원/월'
-                : '연간 구독 시작하기 · 948,000원/년'}
+              : appliedPromo
+                ? `${promoCheck?.free_months}개월 무료로 시작하기`
+                : selectedPlan === 'monthly'
+                  ? '월간 구독 시작하기 · 99,000원/월'
+                  : '연간 구독 시작하기 · 948,000원/년'}
         </button>
 
         <div style={{ marginTop: 10, textAlign: 'center', fontSize: 12, color: '#2b2b2b', fontWeight: 700 }}>
-          토스페이먼츠로 안전하게 결제됩니다 · 언제든 해지 가능
+          {appliedPromo
+            ? '카드 등록만 진행되며 첫 결제는 청구되지 않습니다 · 언제든 해지 가능'
+            : '토스페이먼츠로 안전하게 결제됩니다 · 언제든 해지 가능'}
         </div>
       </div>
     </main>

@@ -6,8 +6,9 @@ import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import { getSolapiEnv, sendSolapiText } from '@/lib/solapi-admin'
 import type { ActionResult } from '@/types/order'
 
-/** 발송 이력은 리드 타임라인에 이 태그로 남는다 */
-export const SMS_NOTE_TAG = '문자발송'
+/** 발송 이력은 리드 타임라인에 이 태그로 남는다.
+ *  'use server' 파일은 async 함수만 export 할 수 있어 모듈 내부 상수로 둔다. */
+const SMS_NOTE_TAG = '문자발송'
 
 async function requireAdmin() {
   const supabase = await createSupabaseServer()

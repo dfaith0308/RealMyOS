@@ -20,9 +20,10 @@ export default async function BillingSuccessPage({
     customerKey?: string
     plan?: string
     amount?: string
+    promo?: string
   }>
 }) {
-  const { authKey, customerKey, plan, amount } = await searchParams
+  const { authKey, customerKey, plan, amount, promo } = await searchParams
 
   if (!authKey || !customerKey || !plan || !amount) {
     redirect('/subscribe/billing/fail?message=' + encodeURIComponent('결제 정보가 올바르지 않습니다'))
@@ -42,6 +43,7 @@ export default async function BillingSuccessPage({
       plan,
       amount: Number(amount),
       orderName: orderNameForPlan(plan),
+      ...(promo ? { promoCode: promo } : {}),
     }),
     cache: 'no-store',
   })
@@ -52,12 +54,18 @@ export default async function BillingSuccessPage({
     redirect(`/subscribe/billing/fail?message=${encodeURIComponent(data.error ?? '구독 결제 실패')}`)
   }
 
+  const freeMonths = typeof data.freeMonths === 'number' ? data.freeMonths : null
+
   return (
     <main style={{ maxWidth: 480, margin: '0 auto', padding: '40px 20px', textAlign: 'center' }}>
       <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 16, padding: '40px 24px' }}>
         <div style={{ fontSize: 56, marginBottom: 16 }}>🎉</div>
         <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 8px' }}>구독 완료!</h1>
-        <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: '0 0 24px' }}>구독이 시작됐습니다</p>
+        <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: '0 0 24px' }}>
+          {freeMonths
+            ? `프로모션 코드가 적용돼 ${freeMonths}개월 무료로 구독이 시작됐습니다. 첫 결제는 청구되지 않았습니다.`
+            : '구독이 시작됐습니다'}
+        </p>
         <a
           href="/dashboard"
           style={{
