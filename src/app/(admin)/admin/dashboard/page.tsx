@@ -1,146 +1,95 @@
 import Link from 'next/link'
-import { getAdminDashboard } from '@/actions/admin'
-import { expireStaleItems, getActionQueue, resolveActionQueueItem } from '@/actions/admin/action-queue'
+import { AlertTriangle, CalendarClock, ScrollText } from 'lucide-react'
+import { getActionQueue, expireStaleItems, resolveActionQueueItem } from '@/actions/admin/action-queue'
+import s from '../../admin-blue.module.css'
+
+export const metadata = { title: '중앙 대시보드 — 식식이 관리자' }
 
 export default async function AdminDashboardPage() {
   // 72h 초과 항목 만료 처리 (best-effort; 실패해도 페이지는 보여준다)
   await expireStaleItems().catch(() => {})
 
-  const [d, q] = await Promise.all([
-    getAdminDashboard(),
-    getActionQueue(),
-  ])
-
-  if (!d.success) {
-    return (
-      <main style={{ padding: 24 }}>
-        <h1 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>관리자 대시보드</h1>
-        <div style={{
-          background: 'var(--ds-status-danger-bg, #FEF2F2)', color: 'var(--ds-status-danger)',
-          border: '1px solid var(--ds-status-danger-border, #FECACA)', borderRadius: 10,
-          padding: '10px 12px', fontSize: 13,
-        }}>
-          {d.error}
-        </div>
-      </main>
-    )
-  }
+  const q = await getActionQueue()
 
   const queue = q.data ?? []
   const critical = queue.filter((x) => x.priority === 'critical').slice(0, 10)
   const today = queue.filter((x) => x.priority === 'today').slice(0, 10)
 
   return (
-    <main style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+    <main className={s.scope}>
+      <header className={s.header}>
         <div>
-          <h1 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>중앙 대시보드</h1>
-          <p style={{ fontSize: 13, color: 'var(--ds-text-secondary)', margin: 0 }}>
-            상태(What) + 행동(Action) + 우선순위(Priority) + 실행 큐(Queue)
+          <h1 className={s.title}>중앙 대시보드</h1>
+          <p className={s.subtitle}>
+            지금 무엇을 봐야 하는지 한 화면에 모았습니다. 모든 숫자는 저장값이 아니라 요청 시점에
+            실시간으로 계산됩니다.
           </p>
         </div>
-        <Link href="/admin/logs" style={{ fontSize: 12, fontWeight: 700, color: 'var(--ds-text-secondary)', textDecoration: 'underline' }}>
-          전체 로그 보기
+        <Link href="/admin/logs" className={s.headerLink}>
+          <ScrollText size={15} /> 전체 로그 보기
         </Link>
       </header>
 
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
-        <div style={cardStyle}>
-          <div style={cardTitle}>전체 테넌트</div>
-          <div style={cardValue}>{d.data.counts.total}</div>
+      <section className={s.section}>
+        <div className={s.sectionHead}>
+          <h2 className={s.sectionTitle}>
+            <CalendarClock size={17} /> 실행 큐
+          </h2>
+          <span className={s.sectionNote}>우선순위별로 오늘 처리해야 할 항목</span>
         </div>
-        <div style={cardStyle}>
-          <div style={cardTitle}>승인 대기</div>
-          <div style={cardValue}>{d.data.counts.pendingApproval}</div>
-        </div>
-        <div style={cardStyle}>
-          <div style={cardTitle}>승인 완료</div>
-          <div style={cardValue}>{d.data.counts.approved}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12 }}>
+          <QueuePanel title="Critical — 즉시 개입" items={critical} alert />
+          <QueuePanel title="Today — 오늘 처리" items={today} />
         </div>
       </section>
-
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
-        <QueuePanel title="[1순위] Critical — 즉시 개입" items={critical} />
-        <QueuePanel title="[2순위] Today — 오늘 처리" items={today} />
-      </section>
-
-      <section style={panelStyle}>
-        <div style={panelHeaderStyle}>
-          <h2 style={panelTitleStyle}>최근 가입 테넌트</h2>
-          <Link href="/admin/tenants" style={linkBtnStyle}>관리</Link>
-        </div>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={tableStyle}>
-            <thead>
-              <tr>
-                <th style={thStyle}>이름</th>
-                <th style={thStyle}>role</th>
-                <th style={thStyle}>승인여부</th>
-                <th style={thStyle}>생성일</th>
-              </tr>
-            </thead>
-            <tbody>
-              {d.data.recentTenants.map((t) => (
-                <tr key={t.id}>
-                  <td style={tdStyle}>{t.name ?? '-'}</td>
-                  <td style={tdStyle}>{t.role ?? '-'}</td>
-                  <td style={tdStyle}>{t.is_approved ? '승인' : '대기'}</td>
-                  <td style={tdStyle}>{t.created_at ? new Date(t.created_at).toLocaleString('ko-KR') : '-'}</td>
-                </tr>
-              ))}
-              {d.data.recentTenants.length === 0 && (
-                <tr>
-                  <td style={tdStyle} colSpan={4}>데이터가 없습니다.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
     </main>
   )
 }
 
-function QueuePanel({ title, items }: { title: string; items: any[] }) {
+function QueuePanel({
+  title,
+  items,
+  alert = false,
+}: {
+  title: string
+  items: any[]
+  alert?: boolean
+}) {
   async function resolve(id: string) {
     'use server'
     await resolveActionQueueItem(id)
   }
 
   return (
-    <section style={panelStyle}>
-      <div style={panelHeaderStyle}>
-        <h2 style={panelTitleStyle}>{title}</h2>
-        <Link href="/admin/trades" style={linkBtnStyle}>관제</Link>
+    <section className={s.panel}>
+      <div className={s.panelHeader}>
+        <h3 className={`${s.panelTitle} ${alert ? s.panelTitleAlert : ''}`}>
+          {alert && <AlertTriangle size={15} />}
+          {title}
+        </h3>
+        <Link href="/admin/trades" className={s.ghostBtn}>
+          관제
+        </Link>
       </div>
       {items.length === 0 ? (
-        <div style={{ padding: 14, color: 'var(--ds-text-muted)', fontSize: 13 }}>
-          항목이 없습니다.
-        </div>
+        <div className={s.empty}>항목이 없습니다.</div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
+        <div>
           {items.map((it) => (
-            <div key={it.id} style={{
-              padding: '12px 14px',
-              borderTop: '1px solid var(--ds-border-subtle)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-            }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--ds-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {it.title}
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--ds-text-secondary)', marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {it.description ?? ''}
-                </div>
+            <div key={it.id} className={s.queueRow}>
+              <div className={s.queueBody}>
+                <div className={s.queueTitle}>{it.title}</div>
+                <div className={s.queueDesc}>{it.description ?? ''}</div>
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div className={s.queueActions}>
                 <form action={resolve.bind(null, it.id)}>
-                  <button type="submit" style={primaryBtnStyle}>처리</button>
+                  <button type="submit" className={s.primaryBtn}>
+                    처리
+                  </button>
                 </form>
-                <Link href="/admin/trades" style={ghostBtnStyle}>상세</Link>
+                <Link href="/admin/trades" className={s.ghostBtn}>
+                  상세
+                </Link>
               </div>
             </div>
           ))}
@@ -149,77 +98,3 @@ function QueuePanel({ title, items }: { title: string; items: any[] }) {
     </section>
   )
 }
-
-const cardStyle: React.CSSProperties = {
-  background: 'var(--ds-surface-card)',
-  border: '1px solid var(--ds-border-default)',
-  borderRadius: 12,
-  padding: 16,
-}
-const cardTitle: React.CSSProperties = { fontSize: 12, color: 'var(--ds-text-secondary)', marginBottom: 8 }
-const cardValue: React.CSSProperties = { fontSize: 28, fontWeight: 800, color: 'var(--ds-text-primary)' }
-
-const panelStyle: React.CSSProperties = {
-  background: 'var(--ds-surface-card)',
-  border: '1px solid var(--ds-border-default)',
-  borderRadius: 12,
-  overflow: 'hidden',
-}
-const panelHeaderStyle: React.CSSProperties = {
-  padding: '12px 14px',
-  borderBottom: '1px solid var(--ds-border-subtle)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  gap: 12,
-}
-const panelTitleStyle: React.CSSProperties = { fontSize: 14, fontWeight: 800, margin: 0 }
-
-const tableStyle: React.CSSProperties = { width: '100%', borderCollapse: 'collapse' }
-const thStyle: React.CSSProperties = {
-  textAlign: 'left',
-  fontSize: 12,
-  color: 'var(--ds-text-secondary)',
-  padding: '10px 12px',
-  borderBottom: '1px solid var(--ds-border-subtle)',
-  whiteSpace: 'nowrap',
-}
-const tdStyle: React.CSSProperties = {
-  fontSize: 13,
-  color: 'var(--ds-text-primary)',
-  padding: '10px 12px',
-  borderBottom: '1px solid var(--ds-border-subtle)',
-  whiteSpace: 'nowrap',
-}
-
-const primaryBtnStyle: React.CSSProperties = {
-  padding: '7px 12px',
-  border: 'none',
-  borderRadius: 8,
-  background: 'var(--ds-brand-primary)',
-  color: '#fff',
-  fontSize: 12,
-  fontWeight: 800,
-  cursor: 'pointer',
-}
-const ghostBtnStyle: React.CSSProperties = {
-  padding: '7px 12px',
-  border: '1px solid var(--ds-border-default)',
-  borderRadius: 8,
-  background: 'var(--ds-surface-card)',
-  color: 'var(--ds-text-primary)',
-  fontSize: 12,
-  fontWeight: 800,
-  textDecoration: 'none',
-}
-const linkBtnStyle: React.CSSProperties = {
-  fontSize: 12,
-  fontWeight: 800,
-  color: 'var(--ds-text-primary)',
-  textDecoration: 'none',
-  border: '1px solid var(--ds-border-default)',
-  padding: '6px 10px',
-  borderRadius: 8,
-  background: 'var(--ds-surface-card)',
-}
-
