@@ -4,7 +4,7 @@ import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import type { ActionResult } from '@/types/order'
 import type { PaymentTermsType } from '@/lib/payment-terms'
 import { isSafeNumber } from '@/lib/is-safe-number'
-import { effectiveOrderAmount, saleAmount, getAccountsReceivable } from '@/lib/ledger-calc'
+import { saleAmount, getAccountsReceivable } from '@/lib/ledger-calc'
 
 export interface CustomerListItem {
   id: string
@@ -274,30 +274,23 @@ export async function getCustomerFinanceSummary(
       .maybeSingle(),
   ])
 
-  let lifetime = 0
+  let lifetimeSales = 0
   let monthSales = 0
   for (const o of orderRows ?? []) {
-    // lifetime → AR(미수) 입력 — deposit 차감
-    const recv = effectiveOrderAmount(o as {
-      final_amount?: number | null
+    const sale = saleAmount(o as {
       total_amount: number
       discount_amount?: number | null
       point_used?: number | null
-      deposit_used?: number | null
     })
-    lifetime += recv
-    // monthSales → 매출 KPI — deposit 미차감
+    // AR·누적매출: saleAmount (deposit 미차감)
+    lifetimeSales += sale
     if (o.order_date >= monthStart && o.order_date <= today) {
-      monthSales += saleAmount(o as {
-        total_amount: number
-        discount_amount?: number | null
-        point_used?: number | null
-      })
+      monthSales += sale
     }
   }
 
   const totalPayments = (paymentRows ?? []).reduce((s, p) => s + (p.amount ?? 0), 0)
-  const receivable = getAccountsReceivable(customer.opening_balance ?? 0, lifetime, totalPayments, 0)
+  const receivable = getAccountsReceivable(customer.opening_balance ?? 0, lifetimeSales, totalPayments, 0)
 
   const lastPaymentDate = lastPay?.payment_date ?? null
   let daysSince: number | null = null
@@ -313,7 +306,7 @@ export async function getCustomerFinanceSummary(
     data: {
       receivable,
       month_sales: monthSales,
-      lifetime_sales: lifetime,
+      lifetime_sales: lifetimeSales,
       last_payment_date: lastPaymentDate,
       days_since_last_payment: daysSince,
     },

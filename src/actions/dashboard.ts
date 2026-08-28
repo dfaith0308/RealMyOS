@@ -4,7 +4,6 @@ import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import { getCustomersWithScore } from '@/actions/ledger'
 import { getDailyFundPlan } from '@/actions/fund'
 import {
-  effectiveOrderAmount,
   saleAmount,
   isSalesOrder,
   buildCustomerKey,
@@ -386,7 +385,7 @@ export async function getTodayCollections(): Promise<ActionResult<CollectionTarg
     supabase.from('customers').select('id, name, opening_balance')
       .eq('tenant_id', tid).is('deleted_at', null),
     supabase.from('orders')
-      .select('customer_id, customer_name, final_amount, total_amount, order_type')
+      .select('customer_id, customer_name, final_amount, total_amount, discount_amount, point_used, order_type')
       .or(`seller_tenant_id.eq.${tid},tenant_id.eq.${tid}`)
       .eq('status', 'confirmed')
       .is('deleted_at', null),
@@ -415,7 +414,15 @@ export async function getTodayCollections(): Promise<ActionResult<CollectionTarg
       cid = nameToId.get(o.customer_name) ?? null
     }
     if (!cid) continue
-    finalMap.set(cid, (finalMap.get(cid) ?? 0) + effectiveOrderAmount(o))
+    finalMap.set(
+      cid,
+      (finalMap.get(cid) ?? 0) +
+        saleAmount(o as {
+          total_amount: number
+          discount_amount?: number | null
+          point_used?: number | null
+        }),
+    )
   }
 
   for (const p of payments ?? []) {

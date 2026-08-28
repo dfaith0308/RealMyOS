@@ -9,7 +9,7 @@ import {
   PAYMENTS_TYPE_PAYOUT_REVERSAL,
 } from '@/lib/inbound-payment-superseded'
 import type { ActionResult } from '@/types/order'
-import { effectiveOrderAmount, getAccountsReceivable, getCustomerDeposit } from '@/lib/ledger-calc'
+import { effectiveOrderAmount, saleAmount, getAccountsReceivable, getCustomerDeposit } from '@/lib/ledger-calc'
 
 export type PaymentMethod = 'transfer' | 'cash' | 'card' | 'platform'
 
@@ -625,7 +625,16 @@ export async function getCustomerBalance(
       .maybeSingle(),
   ])
 
-  const totalOrders   = (orderRows   ?? []).reduce((s, o) => s + effectiveOrderAmount(o as { final_amount?: number | null; total_amount: number; discount_amount?: number | null; point_used?: number | null; deposit_used?: number | null }), 0)
+  const totalOrders   = (orderRows   ?? []).reduce(
+    (s, o) =>
+      s +
+      saleAmount(o as {
+        total_amount: number
+        discount_amount?: number | null
+        point_used?: number | null
+      }),
+    0,
+  )
   const totalPayments = (paymentRows ?? []).reduce((s, p) => s + p.amount, 0)
   const balance       = getAccountsReceivable(customer.opening_balance ?? 0, totalOrders, totalPayments, 0)
   const deposit       = getCustomerDeposit((depRow as { balance?: number | null } | null)?.balance)

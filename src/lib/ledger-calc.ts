@@ -6,10 +6,15 @@
  * 음수 AR = 초과입금(선수금). UI는 classifyAccountsReceivable()로 라벨/색 분기.
  *
  * 매출(saleAmount): total - discount - point
- *   — deposit_used 제외. 예치금은 결제수단일 뿐 판매를 취소하지 않음.
- * 실청구/미수(effectiveOrderAmount = receivableAmount):
+ *   — deposit_used 미차감. 예치금은 결제수단일 뿐 판매를 취소하지 않음.
+ * 실청구(effectiveOrderAmount = receivableAmount):
  *   — total - discount - point - deposit (= DB final_amount)
  *   — 헤더 조정값이 없으면 final_amount → total_amount fallback
+ *   — 연체·주문별 미청구분 등 "남은 청구" 용. AR 합산에는 쓰지 않음.
+ *
+ * AR 합산 (예치금 미운영 2026-07-21):
+ *   getAccountsReceivable(opening, Σ saleAmount, Σ inbound paid)
+ *   deposit_used 로 매출을 0 만들지 않음 — 수금(payments)과 이중으로 차감되지 않게 함.
  */
 
 /** 매출액 — deposit_used 미차감 */
@@ -94,17 +99,18 @@ export function resolveCustomerName(order: {
  * Receivable Single Function — 미수금(Accounts Receivable)
  * 반품 도입 시 totalReturnAmount 에 합산 반영
  *
+ * @param totalConfirmedSales — Σ saleAmount (deposit 미차감). effectiveOrderAmount 금지.
  * 음수 = 초과입금(선수금). 예치금 미운영 정책(2026-07-21)에 따라
  * Math.max(0) 클램프하지 않고 부호 그대로 반환한다.
  */
 export function getAccountsReceivable(
   openingBalance: number,
-  totalConfirmedSalesFinal: number,
+  totalConfirmedSales: number,
   totalInboundPaidConfirmed: number,
   totalReturnAmount = 0,
 ): number {
   return (
-    openingBalance + totalConfirmedSalesFinal - totalInboundPaidConfirmed - totalReturnAmount
+    openingBalance + totalConfirmedSales - totalInboundPaidConfirmed - totalReturnAmount
   )
 }
 
