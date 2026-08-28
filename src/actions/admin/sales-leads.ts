@@ -243,6 +243,32 @@ export async function getSalesLead(
   }
 }
 
+/**
+ * 리드 → 테넌트 수동 연결용 목록.
+ * 기존 getTenantAdminList()는 사용자·통계까지 붙여 무겁기 때문에,
+ * 선택 목록에 필요한 id/이름만 한 번에 가져온다.
+ */
+export async function listTenantsForLink(): Promise<
+  ActionResult<{ tenants: Array<{ id: string; name: string }> }>
+> {
+  const auth = await requireAdmin()
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const supabase = await createSupabaseAdmin()
+  const { data, error } = await supabase
+    .from('tenants')
+    .select('id, name')
+    .is('deleted_at', null)
+    .order('name', { ascending: true })
+    .limit(1000)
+
+  if (error) return { success: false, error: error.message }
+  return {
+    success: true,
+    data: { tenants: (data ?? []) as Array<{ id: string; name: string }> },
+  }
+}
+
 export async function createSalesLead(input: {
   lead_type: LeadType
   company_name: string

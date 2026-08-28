@@ -1,0 +1,355 @@
+/* 관리자 영업(리드/프로모션) 전용 — admin-shared.module.css 의 --ds-* 토큰을 따른다 */
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  border-bottom: 1px solid var(--ds-border-default);
+  margin-bottom: 14px;
+}
+
+.tab {
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  color: var(--ds-text-secondary);
+  font-size: 14px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.tabActive {
+  color: var(--ds-text-primary);
+  border-bottom-color: #1f5d3a;
+}
+
+.filterRow {
+  background: var(--ds-surface-panel);
+  border: 1px solid var(--ds-border-default);
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.select,
+.textInput {
+  padding: 8px 10px;
+  border: 1px solid var(--ds-border-default);
+  border-radius: 10px;
+  font-size: 13px;
+  font-family: inherit;
+  background: var(--ds-surface-panel);
+  color: var(--ds-text-primary);
+}
+
+.textInput {
+  min-width: 180px;
+}
+
+.grow {
+  flex: 1;
+  min-width: 160px;
+}
+
+.statusBadge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.tagChip {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--ds-surface-canvas);
+  border: 1px solid var(--ds-border-default);
+  color: var(--ds-text-secondary);
+  margin-right: 4px;
+}
+
+.tagChipRemovable {
+  cursor: pointer;
+}
+
+.rowLink {
+  color: var(--ds-text-primary);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.rowLink:hover {
+  text-decoration: underline;
+}
+
+.stars {
+  letter-spacing: 1px;
+  font-size: 13px;
+  color: #d97706;
+  white-space: nowrap;
+}
+
+/* ── 상세 ── */
+
+.detailGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 380px);
+  gap: 14px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .detailGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.card {
+  background: var(--ds-surface-panel);
+  border: 1px solid var(--ds-border-default);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.cardTitle {
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--ds-text-primary);
+  margin: 0 0 12px;
+}
+
+.fieldRow {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--ds-border-default);
+  font-size: 13px;
+}
+
+.fieldRow:last-child {
+  border-bottom: none;
+}
+
+.fieldLabel {
+  width: 84px;
+  flex-shrink: 0;
+  color: var(--ds-text-secondary);
+  font-weight: 700;
+}
+
+.fieldValue {
+  color: var(--ds-text-primary);
+  word-break: break-all;
+  flex: 1;
+}
+
+.actionRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.actionBtn {
+  padding: 9px 14px;
+  border-radius: 9px;
+  border: 1px solid var(--ds-border-default);
+  background: var(--ds-surface-panel);
+  color: var(--ds-text-primary);
+  font-size: 13px;
+  font-weight: 800;
+  font-family: inherit;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.actionBtnPrimary {
+  background: #1f5d3a;
+  border-color: #1f5d3a;
+  color: #fff;
+}
+
+.actionBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.textarea {
+  width: 100%;
+  min-height: 92px;
+  padding: 10px;
+  border: 1px solid var(--ds-border-default);
+  border-radius: 10px;
+  font-size: 13px;
+  font-family: inherit;
+  line-height: 1.55;
+  background: var(--ds-surface-panel);
+  color: var(--ds-text-primary);
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.timelineItem {
+  border-left: 2px solid var(--ds-border-default);
+  padding: 2px 0 2px 12px;
+}
+
+.timelineMeta {
+  font-size: 11px;
+  color: var(--ds-text-secondary);
+  font-weight: 700;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.timelineBody {
+  font-size: 13px;
+  color: var(--ds-text-primary);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 4px 0 5px;
+}
+
+.linkBtn {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--ds-text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.errText {
+  color: #b91c1c;
+  font-size: 13px;
+  font-weight: 700;
+  margin: 8px 0 0;
+}
+
+.okText {
+  color: #15803d;
+  font-size: 13px;
+  font-weight: 700;
+  margin: 8px 0 0;
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--ds-text-secondary);
+  margin: 6px 0 0;
+}
+
+/* ── 모달 ── */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 60;
+}
+
+.modal {
+  background: var(--ds-surface-panel);
+  border: 1px solid var(--ds-border-default);
+  border-radius: 14px;
+  padding: 20px;
+  width: 100%;
+  max-width: 460px;
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+.modalTitle {
+  font-size: 16px;
+  font-weight: 900;
+  color: var(--ds-text-primary);
+  margin: 0 0 14px;
+}
+
+.formLabel {
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--ds-text-secondary);
+  margin: 12px 0 5px;
+}
+
+.formInput {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid var(--ds-border-default);
+  border-radius: 9px;
+  font-size: 13px;
+  font-family: inherit;
+  background: var(--ds-surface-panel);
+  color: var(--ds-text-primary);
+  box-sizing: border-box;
+}
+
+.checkGroup {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.checkItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ds-text-primary);
+  cursor: pointer;
+}
+
+.modalActions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.codeCell {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 800;
+  font-size: 13px;
+  color: var(--ds-text-primary);
+}
+
+.exhausted {
+  opacity: 0.5;
+}
