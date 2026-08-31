@@ -16,7 +16,6 @@ type MenuEntry =
 
 const MENU: MenuEntry[] = [
   { type: 'link', label: '대시보드', icon: '🧭', href: '/admin/dashboard' },
-  { type: 'link', label: '거래관제', icon: '🧬', href: '/admin/trades' },
   {
     type: 'group',
     label: '영업 관리',
@@ -52,7 +51,8 @@ const MENU: MenuEntry[] = [
       { label: '공급자 지급 원장', href: '/admin/commerce/payables' },
     ],
   },
-  { type: 'link', label: '정책/실험 콘솔', icon: '⚙️', href: '/admin/policy' },
+  { type: 'link', label: '거래관제', icon: '🧬', href: '/admin/trades' },
+  { type: 'link', label: '정책 콘솔', icon: '⚙️', href: '/admin/policy' },
   { type: 'link', label: '로그', icon: '🧾', href: '/admin/logs' },
 ]
 
