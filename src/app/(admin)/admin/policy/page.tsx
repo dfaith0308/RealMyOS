@@ -1,7 +1,6 @@
 import Link from 'next/link'
 import { getAdminSettings } from '@/actions/admin/policy-console'
 import PolicyConsoleClient from './PolicyConsoleClient'
-import ExperimentsClient from './ExperimentsClient'
 import s from '../../admin-shared.module.css'
 
 export default async function AdminPolicyPage() {
@@ -32,7 +31,19 @@ export default async function AdminPolicyPage() {
 
       <PolicyConsoleClient initial={res.data.grouped} />
 
-      <ExperimentsClient />
+      <section className={s.panel}>
+        <div className={s.panelHeader}>
+          <h2 className={s.panelTitle}>A/B 실험 (준비중)</h2>
+        </div>
+        <div className={s.panelBody}>
+          <div className={s.alert}>
+            실험 콘솔은 값을 <code>admin_settings</code> 의 <code>experiment_*</code> 키로 저장하기만 하고,
+            그 값을 읽어 동작을 가르는 코드가 아직 어디에도 없습니다. 분기 지점 없이 값만 쌓이면
+            실험을 하고 있다고 착각하게 되므로 입력 화면을 닫아 두었습니다.
+            정책값 변경은 위 목록에서 그대로 하시면 됩니다.
+          </div>
+        </div>
+      </section>
     </main>
   )
 }
