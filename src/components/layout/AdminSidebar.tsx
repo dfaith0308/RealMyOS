@@ -18,7 +18,6 @@ const MENU: MenuEntry[] = [
   { type: 'link', label: '대시보드', icon: '🧭', href: '/admin/dashboard' },
   { type: 'link', label: '거래관제', icon: '🧬', href: '/admin/trades' },
   { type: 'link', label: '참여자', icon: '🧠', href: '/admin/participants' },
-  { type: 'link', label: '학습센터', icon: '🧪', href: '/admin/learning' },
   {
     type: 'group',
     label: '영업 관리',
@@ -36,6 +35,7 @@ const MENU: MenuEntry[] = [
     children: [
       { label: '상품관리', href: '/admin/commerce/products' },
       { label: '카테고리', href: '/admin/commerce/categories' },
+      { label: '식자재 마스터', href: '/admin/commerce/ingredients' },
       { label: '주문처리', href: '/admin/commerce/orders' },
       { label: '가격 정책', href: '/admin/commerce/pricing' },
       { label: '무통장 입금', href: '/admin/commerce/storefront-bank' },
