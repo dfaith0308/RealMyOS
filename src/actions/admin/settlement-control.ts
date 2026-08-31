@@ -183,6 +183,70 @@ export interface SettlementSuggestionRow {
   days_pending: number
 }
 
+/**
+ * 플랫폼 GMV 추이 — 성장/영업 엔진에서 이전 (2026-08-31).
+ *
+ * 같은 orders(확정) 원장을 보던 지표라 수익/정산 화면으로 합쳤다.
+ * getPlatformRevenue 의 "이번달 GMV"는 달력 기준, 여기 gmv_30d 는
+ * 최근 30일 이동창 기준이라 서로 다른 질문에 답한다.
+ * 집계는 페이지네이션으로 전량을 받는다 — limit 로 잘리면 숫자가 조용히 틀린다.
+ */
+export type GmvTrend = {
+  gmv_30d: number
+  monthly: Array<{ month: string; gmv: number }>
+}
+
+/** KST 기준 N일 전 날짜(YYYY-MM-DD) */
+function kstDayAgo(days: number): string {
+  const d = new Date(Date.now() + 9 * 3600000)
+  d.setUTCDate(d.getUTCDate() - days)
+  return d.toISOString().slice(0, 10)
+}
+
+export async function getGmvTrend(): Promise<ActionResult<GmvTrend>> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const day30 = kstDayAgo(30)
+  const sinceDay = kstDayAgo(185)
+
+  const PAGE = 5000
+  const rows: Array<{ order_date: string; final_amount: number | null; total_amount: number | null }> = []
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await supabase
+      .from('orders')
+      .select('order_date, final_amount, total_amount')
+      .eq('status', 'confirmed')
+      .is('deleted_at', null)
+      .gte('order_date', sinceDay)
+      .order('order_date', { ascending: true })
+      .range(offset, offset + PAGE - 1)
+    if (error) return { success: false, error: error.message }
+    const page = (data ?? []) as typeof rows
+    rows.push(...page)
+    if (page.length < PAGE) break
+  }
+
+  const monthlyMap = new Map<string, number>()
+  let gmv_30d = 0
+  for (const o of rows) {
+    const amt = orderAmount(o)
+    const month = String(o.order_date).slice(0, 7)
+    monthlyMap.set(month, (monthlyMap.get(month) ?? 0) + amt)
+    if (String(o.order_date) >= day30) gmv_30d += amt
+  }
+
+  const anchor = new Date(Date.now() + 9 * 3600000)
+  const monthly = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() - (5 - i), 1))
+    const month = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+    return { month, gmv: monthlyMap.get(month) ?? 0 }
+  })
+
+  return { success: true, data: { gmv_30d, monthly } }
+}
+
 export async function getPlatformRevenue(): Promise<ActionResult<PlatformRevenue>> {
   const supabase = await createSupabaseServer()
   const auth = await requireAdmin(supabase)

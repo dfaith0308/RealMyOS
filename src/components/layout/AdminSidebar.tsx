@@ -20,7 +20,6 @@ const MENU: MenuEntry[] = [
   { type: 'link', label: '참여자', icon: '🧠', href: '/admin/participants' },
   { type: 'link', label: '학습센터', icon: '🧪', href: '/admin/learning' },
   { type: 'link', label: '분석엔진', icon: '🧷', href: '/admin/engine' },
-  { type: 'link', label: '성장/영업 엔진', icon: '🚀', href: '/admin/growth' },
   {
     type: 'group',
     label: '영업 관리',

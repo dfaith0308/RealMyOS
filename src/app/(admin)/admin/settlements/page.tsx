@@ -1,14 +1,15 @@
 import Link from 'next/link'
-import { getAutoSettlementSuggestions, getCreditLines, getPendingSettlements, getPlatformRevenue, getSettlementHistory, getUnifiedSettlementView } from '@/actions/admin/settlement-control'
+import { getAutoSettlementSuggestions, getCreditLines, getGmvTrend, getPendingSettlements, getPlatformRevenue, getSettlementHistory, getUnifiedSettlementView } from '@/actions/admin/settlement-control'
 import SettleOrderButton from './SettleOrderButton'
 import s from '../../admin-shared.module.css'
 
 export default async function AdminSettlementsPage() {
-  const [rev, pend, unified, hist] = await Promise.all([
+  const [rev, pend, unified, hist, gmv] = await Promise.all([
     getPlatformRevenue(),
     getPendingSettlements(),
     getUnifiedSettlementView(),
     getSettlementHistory(),
+    getGmvTrend(),
   ])
   const [creditLines, suggestions] = await Promise.all([getCreditLines(), getAutoSettlementSuggestions()])
 
@@ -22,8 +23,8 @@ export default async function AdminSettlementsPage() {
             <code className={s.code}>admin_settings</code> 에서만 조회합니다.
           </p>
         </div>
-        <Link href="/admin/growth" className={s.ghostBtnMd}>
-          성장 엔진
+        <Link href="/admin/dashboard" className={s.ghostBtnMd}>
+          대시보드
         </Link>
       </header>
 
@@ -48,6 +49,40 @@ export default async function AdminSettlementsPage() {
             <div className={s.kpiValueMd}>{rev.data.month_settled_amount.toLocaleString()}원</div>
           </div>
         </section>
+      )}
+
+      {gmv.success && gmv.data && (
+        <>
+          <section className={`${s.panel} ${s.panelPadded}`}>
+            <h2 className={s.panelTitle}>플랫폼 GMV (확정 주문 · 최근 30일)</h2>
+            <div className={s.gmvAmount}>
+              {gmv.data.gmv_30d.toLocaleString()}
+              <span className={s.gmvSuffix}>원</span>
+            </div>
+          </section>
+
+          <section className={s.panel}>
+            <div className={s.panelHeader}>
+              <h2 className={s.panelTitle}>월별 GMV 추이 (최근 6개월, 확정 주문)</h2>
+            </div>
+            <div className={s.chartRow}>
+              {gmv.data.monthly.map((b) => {
+                const max = Math.max(...gmv.data!.monthly.map((x) => x.gmv), 1)
+                const h = Math.round((b.gmv / max) * 120)
+                return (
+                  <div key={b.month} className={s.chartCol}>
+                    <div
+                      title={`${b.gmv.toLocaleString()}원`}
+                      className={s.chartBar}
+                      style={{ ['--bar-h' as string]: `${Math.max(4, h)}px` }}
+                    />
+                    <div className={s.chartMonth}>{b.month.slice(5)}월</div>
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+        </>
       )}
 
       {!pend.success || !pend.data ? (

@@ -1,7 +1,9 @@
 'use server'
 
+import { revalidatePath } from 'next/cache'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import { getAdminSettingNumber } from '@/actions/admin/policy-console'
+import { getRestaurantMetrics } from '@/actions/admin/dashboard-metrics'
 
 type ActionResult<T = void> = { success: boolean; data?: T; error?: string }
 
@@ -243,6 +245,184 @@ export async function upsertActionQueueForTradeAnomalies(): Promise<ActionResult
   if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
 
   return { success: true, data: { created: toInsert.length } }
+}
+
+// ============================================================
+// 이탈 위험 / 신뢰도 급락 — 성장엔진에서 이관 (2026-08-31)
+//
+// 판정은 대시보드 "주기 이탈 위험" 카드와 같은 함수를 쓴다
+// (getRestaurantMetrics 내부의 @/lib/churn-signal). 여기서 따로 계산하면
+// 화면과 큐의 숫자가 다시 어긋난다.
+// ============================================================
+
+function isoDaysAgo(days: number) {
+  return new Date(Date.now() - days * 86400000).toISOString()
+}
+
+/** 이미 큐에 올라 있는 dedup_key — 같은 대상을 두 번 쌓지 않는다 */
+async function loadExistingChurnKeys(supabase: any): Promise<Set<string>> {
+  const { data } = await supabase
+    .from('action_queue')
+    .select('action_options')
+    .eq('category', 'trade')
+    .in('status', ['pending', 'in_progress'])
+    .limit(600)
+
+  const keys = new Set<string>()
+  for (const e of (data ?? []) as any[]) {
+    const k = e.action_options?.dedup_key
+    if (k) keys.add(String(k))
+  }
+  return keys
+}
+
+async function loadChurnRiskCustomers(supabase: any): Promise<
+  Array<{ customer_id: string; tenant_id: string; dedup_key: string; name: string; reason: string }>
+> {
+  const res = await getRestaurantMetrics()
+  if (!res.success) throw new Error(res.error)
+
+  const rows = res.data.cycleRisk.rows
+  if (rows.length === 0) return []
+
+  // 거래처 소유 테넌트는 한 번에 받아 온다 — 행당 조회 없음
+  const { data: custRows, error } = await supabase
+    .from('customers')
+    .select('id, tenant_id')
+    .in('id', rows.map((r) => r.id))
+  if (error) throw new Error(error.message)
+
+  const ownerOf = new Map<string, string>(
+    ((custRows ?? []) as any[]).map((c) => [c.id as string, c.tenant_id as string]),
+  )
+
+  return rows.flatMap((r) => {
+    const tenant_id = ownerOf.get(r.id)
+    if (!tenant_id) return []
+    return [{
+      customer_id: r.id,
+      tenant_id,
+      dedup_key: `churn:cust:${tenant_id}:${r.id}`,
+      name: r.name,
+      reason: `${r.meta} · ${r.value}`,
+    }]
+  })
+}
+
+/** 신뢰도 급락 참여자 — 이탈과는 별개의 신호라 섞지 않는다 */
+async function loadTrustDropTenants(
+  supabase: any,
+): Promise<Array<{ tenant_id: string; dedup_key: string; reason: string }>> {
+  const { data: logs, error } = await supabase
+    .from('admin_logs')
+    .select('tenant_id, old_value, new_value, created_at')
+    .eq('action_type', 'trust_update')
+    .eq('target_table', 'trust_scores')
+    .gte('created_at', isoDaysAgo(30))
+    // 상한: 최근 30일 내 trust_update 폭주 시 엔진 보호(지표 집계와 무관)
+    .limit(800)
+
+  if (error) throw new Error(error.message)
+
+  const out: Array<{ tenant_id: string; dedup_key: string; reason: string }> = []
+  const seen = new Set<string>()
+  for (const row of (logs ?? []) as any[]) {
+    const tid = row.tenant_id as string | null
+    if (!tid || seen.has(tid)) continue
+
+    const os = row.old_value?.score
+    const ns = row.new_value?.score
+    if (typeof os !== 'number' || typeof ns !== 'number') continue
+    if (os - ns < 10) continue
+
+    seen.add(tid)
+    out.push({
+      tenant_id: tid,
+      dedup_key: `churn:trust:${tid}`,
+      reason: `30일 내 신뢰점수 ${os}→${ns} (△${os - ns})`,
+    })
+  }
+  return out
+}
+
+export async function detectChurnRisk(): Promise<ActionResult<{ created: number }>> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  try {
+    const [churnRows, trustRows, existing] = await Promise.all([
+      loadChurnRiskCustomers(supabase),
+      loadTrustDropTenants(supabase),
+      loadExistingChurnKeys(supabase),
+    ])
+
+    const base = {
+      priority: 'today' as const,
+      category: 'trade' as const,
+      status: 'pending' as const,
+      expires_at: null,
+      escalated_at: null,
+      resolved_by: null,
+      resolved_at: null,
+      created_at: kstNowIso(),
+    }
+
+    const inserts: any[] = []
+
+    for (const row of churnRows) {
+      if (existing.has(row.dedup_key)) continue
+      inserts.push({
+        ...base,
+        title: `이탈 위험 거래처: ${row.name}`,
+        description: row.reason,
+        action_options: {
+          dedup_key: row.dedup_key,
+          kind: 'churn_risk',
+          seller_tenant_id: row.tenant_id,
+          customer_id: row.customer_id,
+          reasons: [row.reason],
+        },
+        target_tenant_id: row.tenant_id,
+      })
+    }
+
+    for (const row of trustRows) {
+      if (existing.has(row.dedup_key)) continue
+      inserts.push({
+        ...base,
+        title: `신뢰도 급락 (${row.tenant_id.slice(0, 8)}…)`,
+        description: row.reason,
+        action_options: {
+          dedup_key: row.dedup_key,
+          kind: 'trust_drop',
+          seller_tenant_id: row.tenant_id,
+          customer_id: null,
+          reasons: [row.reason],
+        },
+        target_tenant_id: row.tenant_id,
+      })
+    }
+
+    if (inserts.length) {
+      const { error } = await supabase.from('action_queue').insert(inserts)
+      if (error) return { success: false, error: error.message }
+    }
+
+    const logRes = await insertAdminLog(supabase, {
+      admin_id: auth.ctx.user_id,
+      action_type: 'churn_risk_enqueue',
+      target_table: 'action_queue',
+      reason: 'detectChurnRisk enqueue',
+      new_value: { created: inserts.length, churn: churnRows.length, trust_drop: trustRows.length },
+    })
+    if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
+
+    revalidatePath('/admin/trades')
+    return { success: true, data: { created: inserts.length } }
+  } catch (e: any) {
+    return { success: false, error: e?.message ?? '이탈 위험 감지 실패' }
+  }
 }
 
 async function loadOrderStatusTimestamps(

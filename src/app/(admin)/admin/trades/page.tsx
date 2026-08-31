@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { getActionQueue, resolveActionQueueItem } from '@/actions/admin/action-queue'
-import { upsertActionQueueForTradeAnomalies } from '@/actions/admin/trade-monitor'
+import { detectChurnRisk, upsertActionQueueForTradeAnomalies } from '@/actions/admin/trade-monitor'
 import s from '../../admin-shared.module.css'
 
 function hoursSince(iso: string): number {
@@ -29,6 +29,11 @@ function priorityLabel(p: string) {
 export default async function AdminTradeMonitorPage() {
   await upsertActionQueueForTradeAnomalies().catch(() => {})
 
+  async function enqueueChurnRisk() {
+    'use server'
+    await detectChurnRisk()
+  }
+
   const [tradeQ, settleQ] = await Promise.all([
     getActionQueue({ category: 'trade' }),
     getActionQueue({ category: 'settlement' }),
@@ -53,6 +58,11 @@ export default async function AdminTradeMonitorPage() {
           <Link href="/rfq" className={s.ghostBtn}>
             RFQ 보기
           </Link>
+          <form action={enqueueChurnRisk}>
+            <button type="submit" className={s.primaryBtnMd}>
+              이탈 위험 감지 → 적재
+            </button>
+          </form>
         </div>
       </header>
 
