@@ -4,11 +4,13 @@ import { revalidatePath } from 'next/cache'
 import { createSupabaseAdmin } from '@/lib/supabase-admin'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import type { ActionResult } from '@/types/order'
+import { isCouponPlan, type CouponPlan } from '@/types/coupon'
 
 export type CouponRow = {
   id: string
   code: string
-  plan: 'earlybird' | 'pro' | 'annual'
+  /** 발급은 CouponPlan 으로만 하지만, 통일 이전에 남은 레거시 값도 읽어야 하므로 string */
+  plan: string
   free_months: number
   max_uses: number | null
   used_count: number | null
@@ -31,13 +33,19 @@ async function requireAdmin() {
 }
 
 export async function createCoupon(input: {
-  plan: 'earlybird' | 'pro' | 'annual'
+  plan: CouponPlan
   free_months: number
   max_uses: number
   expires_at?: string | null
 }): Promise<ActionResult<{ code: string }>> {
   const auth = await requireAdmin()
   if (!auth.ok) return { success: false, error: auth.error }
+
+  // 결제가 매칭할 수 없는 값(레거시 earlybird/pro)으로는 발급하지 않는다 —
+  // 만들어도 redeem_coupon() 이 걸러내서 쓸 수 없는 코드가 된다.
+  if (!isCouponPlan(input.plan)) {
+    return { success: false, error: '허용되지 않은 플랜 값입니다' }
+  }
 
   const supabase = await createSupabaseAdmin()
   const free_months = Math.max(1, Math.min(6, Math.floor(input.free_months)))

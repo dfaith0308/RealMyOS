@@ -6,19 +6,11 @@ import {
   createPromoCode,
   deletePromoCode,
   type PromoCodeRow,
-  type PromoPlan,
   type PromoUsageRow,
 } from '@/actions/admin/sales-promo'
+import { COUPON_PLAN_OPTIONS, couponPlanLabel, type CouponPlan } from '@/types/coupon'
 import s from '../../../admin-shared.module.css'
 import c from '../sales.module.css'
-
-const PLAN_LABEL: Record<string, string> = {
-  any: '모든 플랜',
-  monthly: '월간 전용',
-  annual: '연간 전용',
-  earlybird: '얼리버드(레거시)',
-  pro: '월간(레거시)',
-}
 
 function formatDate(iso: string | null): string {
   if (!iso) return '—'
@@ -46,7 +38,7 @@ export default function PromoCodesClient({
   const [unlimited, setUnlimited] = useState(false)
   const [maxUses, setMaxUses] = useState(1)
   const [expiresAt, setExpiresAt] = useState('')
-  const [plan, setPlan] = useState<PromoPlan>('any')
+  const [plan, setPlan] = useState<CouponPlan>('any')
   const [leadId, setLeadId] = useState('')
   const [memo, setMemo] = useState('')
 
@@ -169,7 +161,7 @@ export default function PromoCodesClient({
                         {row.memo && <div className={s.cellMutedXs}>{row.memo}</div>}
                       </td>
                       <td className={s.tdNowrap}>{row.free_months}개월</td>
-                      <td className={s.tdNowrap}>{PLAN_LABEL[row.plan] ?? row.plan}</td>
+                      <td className={s.tdNowrap}>{couponPlanLabel(row.plan)}</td>
                       <td className={s.tdNowrap}>
                         {row.used_count} / {row.max_uses === null ? '무제한' : row.max_uses}
                       </td>
@@ -295,11 +287,13 @@ export default function PromoCodesClient({
             <select
               className={c.formInput}
               value={plan}
-              onChange={(e) => setPlan(e.target.value as PromoPlan)}
+              onChange={(e) => setPlan(e.target.value as CouponPlan)}
             >
-              <option value="any">모든 플랜</option>
-              <option value="monthly">월간 전용</option>
-              <option value="annual">연간 전용</option>
+              {COUPON_PLAN_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
             </select>
 
             <label className={c.formLabel}>연결 리드 (선택)</label>

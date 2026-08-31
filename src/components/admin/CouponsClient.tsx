@@ -3,19 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { createCoupon, deleteCoupon, type CouponRow } from '@/actions/admin/coupons'
-
-// 영업 프로모션 코드(plan: 'any' | 'monthly')도 이 목록에 함께 나오므로 라벨을 포함한다
-const PLAN_LABEL: Record<string, string> = {
-  earlybird: '얼리버드',
-  pro: '월간',
-  annual: '연간',
-  any: '모든 플랜',
-  monthly: '월간',
-}
-
-function formatDisplayCode(code: string) {
-  return `SIKSIKI-${code}`
-}
+import { COUPON_PLAN_OPTIONS, couponPlanLabel, type CouponPlan } from '@/types/coupon'
 
 function formatDate(iso: string | null) {
   if (!iso) return '—'
@@ -32,7 +20,7 @@ export default function CouponsClient({
   const router = useRouter()
   const [pending, start] = useTransition()
   const [showForm, setShowForm] = useState(false)
-  const [plan, setPlan] = useState<'earlybird' | 'pro' | 'annual'>('earlybird')
+  const [plan, setPlan] = useState<CouponPlan>('any')
   const [freeMonths, setFreeMonths] = useState(2)
   const [maxUses, setMaxUses] = useState(1)
   const [expiresAt, setExpiresAt] = useState('')
@@ -63,7 +51,7 @@ export default function CouponsClient({
 
   async function copyCode(code: string) {
     try {
-      await navigator.clipboard.writeText(formatDisplayCode(code))
+      await navigator.clipboard.writeText(code)
       setCopyHint('복사됐습니다')
     } catch {
       setCopyHint('복사에 실패했습니다')
@@ -129,7 +117,7 @@ export default function CouponsClient({
         >
           <p style={{ fontSize: 13, fontWeight: 700, color: '#1f5d3a', margin: '0 0 8px' }}>쿠폰이 생성됐습니다</p>
           <p style={{ fontSize: 28, fontWeight: 800, letterSpacing: '.12em', margin: '0 0 12px', fontFamily: 'monospace' }}>
-            {formatDisplayCode(createdCode)}
+            {createdCode}
           </p>
           <button
             type="button"
@@ -166,12 +154,14 @@ export default function CouponsClient({
               <span style={{ fontWeight: 600 }}>플랜</span>
               <select
                 value={plan}
-                onChange={(e) => setPlan(e.target.value as typeof plan)}
+                onChange={(e) => setPlan(e.target.value as CouponPlan)}
                 style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid #e5e7eb' }}
               >
-                <option value="earlybird">얼리버드</option>
-                <option value="pro">월간</option>
-                <option value="annual">연간</option>
+                {COUPON_PLAN_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
               </select>
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13 }}>
@@ -252,9 +242,9 @@ export default function CouponsClient({
               coupons.map((c) => (
                 <tr key={c.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
                   <td style={{ padding: '12px 14px', fontFamily: 'monospace', fontWeight: 700 }}>
-                    {formatDisplayCode(c.code)}
+                    {c.code}
                   </td>
-                  <td style={{ padding: '12px 14px' }}>{PLAN_LABEL[c.plan] ?? c.plan}</td>
+                  <td style={{ padding: '12px 14px' }}>{couponPlanLabel(c.plan)}</td>
                   <td style={{ padding: '12px 14px' }}>{c.free_months}개월</td>
                   <td style={{ padding: '12px 14px' }}>
                     {c.used_count ?? 0} / {c.max_uses ?? '∞'}

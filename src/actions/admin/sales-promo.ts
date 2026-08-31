@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createSupabaseAdmin } from '@/lib/supabase-admin'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import type { ActionResult } from '@/types/order'
+import { isCouponPlan, type CouponPlan } from '@/types/coupon'
 
 /**
  * 구독료 프로모션 코드.
@@ -13,9 +14,6 @@ import type { ActionResult } from '@/types/order'
  * 이미 동일한 스펙이고, 결제 화면에서 코드 입력창이 둘로 갈리는 것을 피하기 위함).
  * 영업 리드 연결은 확장 컬럼 coupons.lead_id 로 한다.
  */
-
-/** 'any' = 모든 플랜. monthly/annual = 해당 플랜 전용 */
-export type PromoPlan = 'any' | 'monthly' | 'annual'
 
 export type PromoCodeRow = {
   id: string
@@ -55,7 +53,7 @@ export async function createPromoCode(input: {
   free_months: number
   max_uses: number | null
   expires_at?: string | null
-  plan?: PromoPlan
+  plan?: CouponPlan
   lead_id?: string | null
   memo?: string | null
 }): Promise<ActionResult<{ id: string; code: string }>> {
@@ -83,8 +81,8 @@ export async function createPromoCode(input: {
     max_uses = n
   }
 
-  const plan: PromoPlan =
-    input.plan === 'monthly' || input.plan === 'annual' ? input.plan : 'any'
+  // 값 체계는 @/types/coupon 한 곳에서만 정의한다 — 쿠폰 관리 화면과 동일
+  const plan: CouponPlan = isCouponPlan(input.plan) ? input.plan : 'any'
 
   let expires_at: string | null = null
   if (input.expires_at) {
