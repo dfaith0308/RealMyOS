@@ -1,6 +1,10 @@
 import Link from 'next/link'
 import { getActionQueue, resolveActionQueueItem } from '@/actions/admin/action-queue'
-import { detectChurnRisk, upsertActionQueueForTradeAnomalies } from '@/actions/admin/trade-monitor'
+import {
+  detectChurnRisk,
+  detectTrustRisk,
+  upsertActionQueueForTradeAnomalies,
+} from '@/actions/admin/trade-monitor'
 import s from '../../admin-shared.module.css'
 
 function hoursSince(iso: string): number {
@@ -29,18 +33,24 @@ function priorityLabel(p: string) {
 export default async function AdminTradeMonitorPage() {
   await upsertActionQueueForTradeAnomalies().catch(() => {})
 
-  async function enqueueChurnRisk() {
+  /** 수동 감지 — 이탈 위험 + 신뢰도 위험 (분석엔진에서 이관) */
+  async function runDetection() {
     'use server'
     await detectChurnRisk()
+    await detectTrustRisk()
   }
 
-  const [tradeQ, settleQ] = await Promise.all([
-    getActionQueue({ category: 'trade' }),
-    getActionQueue({ category: 'settlement' }),
-  ])
+  // action_queue 를 보여주는 곳은 여기 하나다 — 한 번만 읽고 카테고리로 나눈다
+  const q = await getActionQueue()
+  const items = q.data ?? []
 
-  const tradeItems = tradeQ.data ?? []
-  const settleItems = settleQ.data ?? []
+  const byCategory = (c: string) => items.filter((it) => it.category === c)
+  const trade = byCategory('trade')
+  const settlement = byCategory('settlement')
+  const trust = byCategory('trust')
+  const others = items.filter(
+    (it) => !['trade', 'settlement', 'trust'].includes(it.category),
+  )
 
   return (
     <main className={s.main}>
@@ -58,27 +68,39 @@ export default async function AdminTradeMonitorPage() {
           <Link href="/rfq" className={s.ghostBtn}>
             RFQ 보기
           </Link>
-          <form action={enqueueChurnRisk}>
+          <form action={runDetection}>
             <button type="submit" className={s.primaryBtnMd}>
-              이탈 위험 감지 → 적재
+              감지 실행 → 적재
             </button>
           </form>
         </div>
       </header>
 
-      <section className={s.grid2}>
+      <section className={s.grid4}>
+        <div className={s.kpiCard}>
+          <div className={s.kpiTitle}>미처리 Queue 전체</div>
+          <div className={s.kpiValue}>{items.length}</div>
+        </div>
         <div className={s.kpiCard}>
           <div className={s.kpiTitle}>Trade 이상</div>
-          <div className={s.kpiValue}>{tradeItems.length}</div>
+          <div className={s.kpiValue}>{trade.length}</div>
         </div>
         <div className={s.kpiCard}>
           <div className={s.kpiTitle}>Settlement 이상</div>
-          <div className={s.kpiValue}>{settleItems.length}</div>
+          <div className={s.kpiValue}>{settlement.length}</div>
+        </div>
+        <div className={s.kpiCard}>
+          <div className={s.kpiTitle}>신뢰도 위험</div>
+          <div className={s.kpiValue}>{trust.length}</div>
         </div>
       </section>
 
-      <Panel title="이상 감지 목록 — Trade" items={tradeItems} />
-      <Panel title="이상 감지 목록 — Settlement" items={settleItems} />
+      {!q.success && <div className={s.alert}>{q.error ?? 'Action Queue 조회 실패'}</div>}
+
+      <Panel title="이상 감지 목록 — Trade" items={trade} />
+      <Panel title="이상 감지 목록 — Settlement" items={settlement} />
+      <Panel title="이상 감지 목록 — 신뢰도" items={trust} />
+      {others.length > 0 && <Panel title="이상 감지 목록 — 기타" items={others} />}
     </main>
   )
 }

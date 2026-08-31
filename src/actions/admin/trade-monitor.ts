@@ -425,6 +425,81 @@ export async function detectChurnRisk(): Promise<ActionResult<{ created: number 
   }
 }
 
+/**
+ * 신뢰도 위험 참여자 — 분석엔진에서 이관 (2026-08-31).
+ * Level 2/3 참여자를 큐에 올린다. 분석엔진 페이지가 하던 일이며
+ * 규칙 자체는 그대로 옮겼다.
+ */
+export async function detectTrustRisk(): Promise<ActionResult<{ created: number }>> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const { data: lowTrust, error } = await supabase
+    .from('trust_scores')
+    .select('tenant_id, role, score, level, updated_at')
+    .gte('level', 2)
+    .order('updated_at', { ascending: false })
+    .limit(500)
+
+  if (error) return { success: false, error: error.message }
+
+  const rows = (lowTrust ?? []) as any[]
+  if (rows.length === 0) return { success: true, data: { created: 0 } }
+
+  const { data: existing } = await supabase
+    .from('action_queue')
+    .select('action_options')
+    .eq('category', 'trust')
+    .in('status', ['pending', 'in_progress'])
+    .limit(600)
+
+  const seen = new Set<string>()
+  for (const e of (existing ?? []) as any[]) {
+    const k = e.action_options?.dedup_key
+    if (k) seen.add(String(k))
+  }
+
+  const nowIso = kstNowIso()
+  const inserts: any[] = []
+  for (const r of rows) {
+    const dedup_key = `trust:${r.tenant_id}:${r.role}`
+    if (seen.has(dedup_key)) continue
+    seen.add(dedup_key)
+    inserts.push({
+      priority: r.level >= 3 ? 'critical' : 'today',
+      category: 'trust',
+      title: '신뢰도 위험 감지',
+      description: `${r.role} trust score ${r.score} (Level ${r.level})`,
+      status: 'pending',
+      action_options: { dedup_key, kind: 'trust_risk', role: r.role, score: r.score, level: r.level },
+      target_tenant_id: r.tenant_id,
+      expires_at: null,
+      escalated_at: null,
+      resolved_by: null,
+      resolved_at: null,
+      created_at: nowIso,
+    })
+  }
+
+  if (inserts.length) {
+    const { error: insErr } = await supabase.from('action_queue').insert(inserts)
+    if (insErr) return { success: false, error: insErr.message }
+  }
+
+  const logRes = await insertAdminLog(supabase, {
+    admin_id: auth.ctx.user_id,
+    action_type: 'trust_risk_enqueue',
+    target_table: 'action_queue',
+    reason: 'detectTrustRisk enqueue',
+    new_value: { created: inserts.length, candidates: rows.length },
+  })
+  if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
+
+  revalidatePath('/admin/trades')
+  return { success: true, data: { created: inserts.length } }
+}
+
 async function loadOrderStatusTimestamps(
   supabase: any,
   order_id: string,

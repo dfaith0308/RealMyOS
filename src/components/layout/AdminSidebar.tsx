@@ -19,7 +19,6 @@ const MENU: MenuEntry[] = [
   { type: 'link', label: '거래관제', icon: '🧬', href: '/admin/trades' },
   { type: 'link', label: '참여자', icon: '🧠', href: '/admin/participants' },
   { type: 'link', label: '학습센터', icon: '🧪', href: '/admin/learning' },
-  { type: 'link', label: '분석엔진', icon: '🧷', href: '/admin/engine' },
   {
     type: 'group',
     label: '영업 관리',

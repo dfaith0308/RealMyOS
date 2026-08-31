@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { calculateTrustScore, getParticipants, updateTrustScore, type ParticipantRow, type TrustRole } from '@/actions/admin/trust-engine'
+import { calculateTrustScore, getParticipants, runTrustSyncBatch, updateTrustScore, type ParticipantRow, type TrustRole } from '@/actions/admin/trust-engine'
 import s from '../../admin-shared.module.css'
 
 function levelBadgeClass(level: number) {
@@ -68,6 +68,23 @@ export default function ParticipantsClient({
     })
   }
 
+  /** 전체 배치 — 분석엔진 폐기(2026-08-31)로 이 화면이 유일한 진입점이 됐다 */
+  function runBatch() {
+    if (!confirm('전체 참여자의 신뢰도를 실제 거래 데이터로 다시 계산해 저장합니다. 진행할까요?')) return
+    setError(null)
+    startTransition(async () => {
+      const res = await runTrustSyncBatch()
+      if (!res.success || !res.data) {
+        setError(res.error ?? '배치 실패')
+        return
+      }
+      alert(
+        `신뢰도 배치 완료 — 갱신 ${res.data.updated_tenants} / 건너뜀 ${res.data.skipped} / 오류 ${res.data.errors}`,
+      )
+      refresh()
+    })
+  }
+
   async function recalc(tenant_id: string, r: TrustRole) {
     setError(null)
     startTransition(async () => {
@@ -104,6 +121,9 @@ export default function ParticipantsClient({
           <Link href="/admin/participants/relationships" className={s.ghostBtnMd}>
             관계 네트워크
           </Link>
+          <button type="button" onClick={runBatch} disabled={pending} className={s.ghostBtnMd}>
+            신뢰도 배치 실행
+          </button>
           <button type="button" onClick={refresh} disabled={pending} className={s.primaryBtnMd}>
             {pending ? '갱신 중…' : '새로고침'}
           </button>
