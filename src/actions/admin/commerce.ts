@@ -2035,7 +2035,8 @@ export async function createListingFull(input: {
   const listing_id = insertedListing.id as string
 
   try {
-    await upsertIngredientMaster({
+    // 상품 등록 자체는 막지 않되(비치명적), 실패는 반드시 눈에 보이게 남긴다.
+    const im = await upsertIngredientMaster({
       source_type: 'admin',
       source_id: listing_id,
       name: product_name,
@@ -2048,6 +2049,9 @@ export async function createListingFull(input: {
       price: input.commerce_price || null,
       tenant_id: PLATFORM_OWNER_TENANT,
     })
+    if (!im.success) {
+      console.error('ingredient_master 등록 실패 (비치명적):', im.error)
+    }
   } catch (e) {
     console.error('ingredient_master 등록 실패 (비치명적):', e)
   }

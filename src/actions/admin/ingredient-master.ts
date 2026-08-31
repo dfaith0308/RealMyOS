@@ -154,7 +154,9 @@ export async function upsertIngredientMaster(input: {
     masterId = newMaster.id
   }
 
-  await supabase.from('ingredient_mappings').upsert(
+  // 에러를 확인한다 — 예전에는 결과를 버려서, 유니크 인덱스 누락으로 이 upsert 가
+  // 항상 42P10 으로 실패하는데도 마스터만 생기고 매핑은 조용히 사라졌다.
+  const { error: mapErr } = await supabase.from('ingredient_mappings').upsert(
     {
       source_type: input.source_type,
       source_id: input.source_id,
@@ -166,6 +168,9 @@ export async function upsertIngredientMaster(input: {
     },
     { onConflict: 'source_type,source_id' },
   )
+  if (mapErr) {
+    return { success: false, error: `매핑 저장 실패: ${mapErr.message}`, master_id: masterId }
+  }
 
   return { success: true, master_id: masterId, matched_by: matchedBy, confidence: matchConfidence }
 }
