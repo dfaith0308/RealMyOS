@@ -4,7 +4,12 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { createSupabaseAdmin } from '@/lib/supabase-admin'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import { getAccountsReceivable, classifyAccountsReceivable, saleAmount } from '@/lib/ledger-calc'
-import { calcOrderCycle } from '@/lib/customer-logic'
+import {
+  CHURN_PARAMS,
+  classifyChurnSignal,
+  daysSince,
+  todayKST,
+} from '@/lib/churn-signal'
 import { fetchInboundSupersededSubset } from '@/lib/inbound-payment-superseded'
 import { getAdminSettingNumber } from '@/actions/admin/policy-console'
 
@@ -14,7 +19,7 @@ import { getAdminSettingNumber } from '@/actions/admin/policy-console'
  * 원칙
  * - 계산값은 저장하지 않는다. 매 요청마다 실시간 계산한다.
  * - 미수금/초과입금은 getAccountsReceivable + classifyAccountsReceivable,
- *   재구매 주기는 calcOrderCycle 을 그대로 재사용한다. 다르게 계산하면
+ *   이탈/재구매 판정은 @/lib/churn-signal 을 그대로 재사용한다. 다르게 계산하면
  *   공급자 원장·거래처 화면과 숫자가 어긋난다.
  * - 쿼리 수는 데이터 건수와 무관하게 고정이다 (행당 조회 없음).
  * - Supabase 기본 1000행 제한 때문에 집계용 조회는 반드시 fetchAll 로 전량을 받는다.
@@ -62,15 +67,6 @@ async function fetchAll<T>(
   return out
 }
 
-function todayKST(): Date {
-  const kst = new Date(Date.now() + 9 * 3600000)
-  return new Date(kst.toISOString().slice(0, 10) + 'T00:00:00Z')
-}
-
-function daysSince(dateStr: string, today: Date): number {
-  return Math.floor((today.getTime() - new Date(dateStr).getTime()) / 86400000)
-}
-
 function won(n: number): string {
   return `${Math.round(n).toLocaleString('ko-KR')}원`
 }
@@ -103,10 +99,6 @@ type OrderRow = {
 }
 type PaymentRow = { id: string; customer_id: string; amount: number }
 
-const CYCLE_MULTIPLIER = 1.5
-const REPURCHASE_WAIT_DAYS = 30
-/** 상한 — 이보다 오래 끊긴 곳은 '재구매 대기'가 아니라 이탈로 본다 */
-const REPURCHASE_WAIT_MAX_DAYS = 90
 const NEW_SIGNUP_NO_ORDER_DAYS = 14
 
 export async function getRestaurantMetrics(): Promise<
@@ -218,40 +210,30 @@ export async function getRestaurantMetrics(): Promise<
         })
       }
 
-      if (list.length === 0) continue
-      const lastOrderDate = list[0].order_date
-      const sinceLast = daysSince(lastOrderDate, today)
+      // ②③ 이탈/재구매 판정 — 성장 지표와 같은 함수를 쓴다 (@/lib/churn-signal)
+      const signal = classifyChurnSignal(
+        list.map((o) => o.order_date),
+        today,
+        orderCycleCount,
+      )
 
-      // ② 주기 이탈 위험 — 구매 3회 이상 + 마지막 구매가 평균 주기의 1.5배 초과
-      if (list.length >= 3) {
-        const recentDates = list.slice(0, orderCycleCount).map((o) => o.order_date)
-        const cycle = calcOrderCycle(recentDates)
-        if (cycle !== null && cycle > 0 && sinceLast > cycle * CYCLE_MULTIPLIER) {
-          cycleRisk.push({
-            id: c.id,
-            name: label,
-            meta: `${owner} · 평균 ${cycle}일 주기 · 총 ${list.length}회 구매`,
-            value: `${sinceLast}일째 무주문`,
-            alert: true,
-            sortKey: sinceLast,
-          })
-        }
-      }
-
-      // ③ 신규 재구매 대기 — 구매 1~2회 + 마지막 구매 후 30~90일
-      //    90일을 넘기면 재구매를 기다리는 상태가 아니라 사실상 이탈이라 제외한다
-      if (
-        list.length <= 2 &&
-        sinceLast >= REPURCHASE_WAIT_DAYS &&
-        sinceLast <= REPURCHASE_WAIT_MAX_DAYS
-      ) {
+      if (signal.kind === 'cycle_risk') {
+        cycleRisk.push({
+          id: c.id,
+          name: label,
+          meta: `${owner} · 평균 ${signal.cycleDays}일 주기 · 총 ${signal.orderCount}회 구매`,
+          value: `${signal.daysSinceLast}일째 무주문`,
+          alert: true,
+          sortKey: signal.daysSinceLast,
+        })
+      } else if (signal.kind === 'repurchase_wait') {
         repurchaseWait.push({
           id: c.id,
           name: label,
-          meta: `${owner} · 총 ${list.length}회 구매 · 최종 ${lastOrderDate}`,
-          value: `${sinceLast}일 경과`,
+          meta: `${owner} · 총 ${signal.orderCount}회 구매 · 최종 ${signal.lastOrderDate}`,
+          value: `${signal.daysSinceLast}일 경과`,
           alert: false,
-          sortKey: sinceLast,
+          sortKey: signal.daysSinceLast,
         })
       }
     }
@@ -309,12 +291,7 @@ export async function getRestaurantMetrics(): Promise<
         receivable: block(receivable),
         prepayment: block(prepayment),
         newSignupNoOrder: block(newSignupNoOrder),
-        params: {
-          cycleMultiplier: CYCLE_MULTIPLIER,
-          waitDays: REPURCHASE_WAIT_DAYS,
-          waitMaxDays: REPURCHASE_WAIT_MAX_DAYS,
-          noOrderDays: NEW_SIGNUP_NO_ORDER_DAYS,
-        },
+        params: { ...CHURN_PARAMS, noOrderDays: NEW_SIGNUP_NO_ORDER_DAYS },
       },
     }
   } catch (e) {

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
-import { getAdminSettingNumber } from '@/actions/admin/policy-console'
+import { getRestaurantMetrics } from '@/actions/admin/dashboard-metrics'
 
 type ActionResult<T = void> = { success: boolean; data?: T; error?: string }
 
@@ -71,14 +71,6 @@ async function fetchAllPaged<T>(
   return out
 }
 
-export interface ChurnCustomerRow {
-  seller_tenant_id: string
-  customer_id: string
-  customer_name: string
-  reasons: string[]
-  last_order_date: string | null
-}
-
 export interface DormantTenantRow {
   tenant_id: string
   tenant_label: string
@@ -93,7 +85,6 @@ export interface GrowthMetrics {
   dormant_tenants: number
   platform_gmv_30d: number
   monthly_gmv_trend: Array<{ month: string; gmv: number }>
-  churn_customer_rows: ChurnCustomerRow[]
   dormant_rows: DormantTenantRow[]
 }
 
@@ -139,89 +130,13 @@ async function loadExistingDormantKeys(supabase: any): Promise<Set<string>> {
   return keys
 }
 
-/** 최근 N일 확정 주문 스냅샷 — 거래처별 이탈 신호 계산에 사용 (FORENSIC-009: 고정 120일/limit 샘플링 제거) */
-async function fetchRecentConfirmedOrders(supabase: any, windowDays: number) {
-  const sinceDay = isoDayStartDaysAgo(windowDays)
-  type Row = {
-    id: string
-    order_date: string
-    customer_id: string
-    tenant_id: string | null
-    seller_tenant_id: string | null
-    status: string
-  }
+/**
+ * 신뢰도 급락 참여자 — 이탈과는 별개의 신호다.
+ * 이전에는 이탈 목록에 섞어 넣어 "이탈 위험" 숫자를 부풀렸다.
+ */
+type TrustDropRow = { tenant_id: string; dedup_key: string; reason: string }
 
-  return await fetchAllPaged<Row>(
-    (from, to) =>
-      supabase
-        .from('orders')
-        .select('id, order_date, customer_id, tenant_id, seller_tenant_id, status')
-        .eq('status', 'confirmed')
-        .is('deleted_at', null)
-        .gte('order_date', sinceDay)
-        .order('id', { ascending: true })
-        .range(from, to),
-    { pageSize: 5000 },
-  )
-}
-
-function buildChurnCustomerSignals(
-  orders: Awaited<ReturnType<typeof fetchRecentConfirmedOrders>>,
-): Map<string, ChurnCustomerRow & { dedup_key: string }> {
-  const t30 = isoDayStartDaysAgo(30)
-  const t60 = isoDayStartDaysAgo(60)
-
-  type Agg = { dates: string[]; seller: string; customer: string }
-  const byPair = new Map<string, Agg>()
-
-  for (const o of orders) {
-    const s = sellerKey(o)
-    if (!s || !o.customer_id) continue
-    const key = `${s}:${o.customer_id}`
-    let a = byPair.get(key)
-    if (!a) {
-      a = { dates: [], seller: s, customer: o.customer_id }
-      byPair.set(key, a)
-    }
-    a.dates.push(o.order_date)
-  }
-
-  const out = new Map<string, ChurnCustomerRow & { dedup_key: string }>()
-
-  for (const [pairKey, agg] of byPair) {
-    const sorted = [...new Set(agg.dates)].sort((a, b) => a.localeCompare(b))
-    const last = sorted.length ? sorted[sorted.length - 1]! : null
-
-    let recent = 0
-    let prev = 0
-    for (const d of sorted) {
-      if (d >= t30) recent++
-      else if (d >= t60 && d < t30) prev++
-    }
-
-    const reasons: string[] = []
-    if (last && last < t30) reasons.push('최근 30일 주문 없음')
-    if (prev > 0 && recent <= Math.floor(prev * 0.5)) reasons.push('주문 빈도 50% 이상 감소(30일 대비 직전 30일)')
-
-    if (reasons.length) {
-      out.set(pairKey, {
-        dedup_key: `churn:cust:${pairKey}`,
-        seller_tenant_id: agg.seller,
-        customer_id: agg.customer,
-        customer_name: '-',
-        reasons,
-        last_order_date: last,
-      })
-    }
-  }
-
-  return out
-}
-
-async function mergeTrustDropTenants(
-  supabase: any,
-  churnMap: Map<string, ChurnCustomerRow & { dedup_key: string }>,
-) {
+async function loadTrustDropTenants(supabase: any): Promise<TrustDropRow[]> {
   const since = isoDaysAgo(30)
   const { data: logs, error } = await supabase
     .from('admin_logs')
@@ -234,28 +149,63 @@ async function mergeTrustDropTenants(
 
   if (error) throw new Error(error.message)
 
-  const seenTenant = new Set<string>()
+  const out: TrustDropRow[] = []
+  const seen = new Set<string>()
   for (const row of (logs ?? []) as any[]) {
     const tid = row.tenant_id as string | null
-    if (!tid) continue
+    if (!tid || seen.has(tid)) continue
 
     const os = row.old_value?.score
     const ns = row.new_value?.score
     if (typeof os !== 'number' || typeof ns !== 'number') continue
     if (os - ns < 10) continue
-    if (seenTenant.has(tid)) continue
-    seenTenant.add(tid)
 
-    const dedup_key = `churn:trust:${tid}`
-    churnMap.set(dedup_key, {
-      dedup_key,
-      seller_tenant_id: tid,
-      customer_id: '',
-      customer_name: '(참여자 신뢰도 급락)',
-      reasons: [`30일 내 신뢰점수 ${os}→${ns} (△${os - ns})`],
-      last_order_date: null,
+    seen.add(tid)
+    out.push({
+      tenant_id: tid,
+      dedup_key: `churn:trust:${tid}`,
+      reason: `30일 내 신뢰점수 ${os}→${ns} (△${os - ns})`,
     })
   }
+  return out
+}
+
+/**
+ * 이탈 위험 거래처 — 판정은 대시보드 "주기 이탈 위험" 카드와 같은 함수를 쓴다.
+ * (getRestaurantMetrics 내부의 classifyChurnSignal / @/lib/churn-signal)
+ * 여기서 따로 계산하면 화면과 큐의 숫자가 다시 어긋난다.
+ */
+async function loadChurnRiskCustomers(supabase: any): Promise<
+  Array<{ customer_id: string; tenant_id: string; dedup_key: string; name: string; reason: string }>
+> {
+  const res = await getRestaurantMetrics()
+  if (!res.success) throw new Error(res.error)
+
+  const rows = res.data.cycleRisk.rows
+  if (rows.length === 0) return []
+
+  // 거래처 소유 테넌트는 한 번에 받아 온다 — 행당 조회 없음
+  const { data: custRows, error } = await supabase
+    .from('customers')
+    .select('id, tenant_id')
+    .in('id', rows.map((r) => r.id))
+  if (error) throw new Error(error.message)
+
+  const ownerOf = new Map<string, string>(
+    ((custRows ?? []) as any[]).map((c) => [c.id as string, c.tenant_id as string]),
+  )
+
+  return rows.flatMap((r) => {
+    const tenant_id = ownerOf.get(r.id)
+    if (!tenant_id) return []
+    return [{
+      customer_id: r.id,
+      tenant_id,
+      dedup_key: `churn:cust:${tenant_id}:${r.id}`,
+      name: r.name,
+      reason: `${r.meta} · ${r.value}`,
+    }]
+  })
 }
 
 export async function detectChurnRisk(): Promise<ActionResult<{ created: number }>> {
@@ -264,48 +214,57 @@ export async function detectChurnRisk(): Promise<ActionResult<{ created: number 
   if (!auth.ok) return { success: false, error: auth.error }
 
   try {
-    // FORENSIC-009: 이탈 감지 기간을 정책키 기반으로 동적 산정
-    // - 기본값: order_cycle_calculation_count=3 → 90일
-    const calcCount = await getAdminSettingNumber('order_cycle_calculation_count', { min: 2, max: 90 })
-    const windowDays = Math.max(90, Math.min(365, calcCount * 30))
-    const orders = await fetchRecentConfirmedOrders(supabase, windowDays)
-    const churnMap = buildChurnCustomerSignals(orders)
-    await mergeTrustDropTenants(supabase, churnMap)
-
-    const existing = await loadExistingTradeTodayKeys(supabase)
-    const customerIds = [...new Set([...churnMap.values()].map((r) => r.customer_id).filter(Boolean))]
-    const nameMap = new Map<string, string>()
-    if (customerIds.length) {
-      const { data: custRows } = await supabase.from('customers').select('id, name').in('id', customerIds).limit(2000)
-      for (const c of (custRows ?? []) as any[]) nameMap.set(c.id, c.name ?? '-')
-    }
+    const [churnRows, trustRows, existing] = await Promise.all([
+      loadChurnRiskCustomers(supabase),
+      loadTrustDropTenants(supabase),
+      loadExistingTradeTodayKeys(supabase),
+    ])
 
     const nowIso = new Date().toISOString()
+    const base = {
+      priority: 'today' as const,
+      category: 'trade' as const,
+      status: 'pending' as const,
+      expires_at: null,
+      escalated_at: null,
+      resolved_by: null,
+      resolved_at: null,
+      created_at: nowIso,
+    }
+
     const inserts: any[] = []
 
-    for (const row of churnMap.values()) {
+    for (const row of churnRows) {
       if (existing.has(row.dedup_key)) continue
-      const cname = row.customer_id ? nameMap.get(row.customer_id) ?? '-' : row.customer_name
       inserts.push({
-        priority: 'today',
-        category: 'trade',
-        title: row.customer_id ? `이탈 위험 거래처: ${cname}` : `이탈 위험: 신뢰도 급락 (${row.seller_tenant_id.slice(0, 8)}…)`,
-        description: row.reasons.join(' / '),
-        status: 'pending',
+        ...base,
+        title: `이탈 위험 거래처: ${row.name}`,
+        description: row.reason,
         action_options: {
           dedup_key: row.dedup_key,
           kind: 'churn_risk',
-          seller_tenant_id: row.seller_tenant_id,
-          customer_id: row.customer_id || null,
-          reasons: row.reasons,
-          last_order_date: row.last_order_date,
+          seller_tenant_id: row.tenant_id,
+          customer_id: row.customer_id,
+          reasons: [row.reason],
         },
-        target_tenant_id: row.seller_tenant_id,
-        expires_at: null,
-        escalated_at: null,
-        resolved_by: null,
-        resolved_at: null,
-        created_at: nowIso,
+        target_tenant_id: row.tenant_id,
+      })
+    }
+
+    for (const row of trustRows) {
+      if (existing.has(row.dedup_key)) continue
+      inserts.push({
+        ...base,
+        title: `신뢰도 급락 (${row.tenant_id.slice(0, 8)}…)`,
+        description: row.reason,
+        action_options: {
+          dedup_key: row.dedup_key,
+          kind: 'trust_drop',
+          seller_tenant_id: row.tenant_id,
+          customer_id: null,
+          reasons: [row.reason],
+        },
+        target_tenant_id: row.tenant_id,
       })
     }
 
@@ -320,7 +279,7 @@ export async function detectChurnRisk(): Promise<ActionResult<{ created: number 
       tenant_id: null,
       reason: 'detectChurnRisk enqueue',
       target_table: 'action_queue',
-      new_value: { created: inserts.length },
+      new_value: { created: inserts.length, churn: churnRows.length, trust_drop: trustRows.length },
     })
     if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
 
@@ -486,7 +445,7 @@ export async function getGrowthMetrics(): Promise<ActionResult<GrowthMetrics>> {
     tenantsNew,
     orders180,
     rfqRecent,
-    orders120,
+    restaurantMetrics,
   ] = await Promise.all([
     // FORENSIC-009: 신규 참여자 집계도 전체 기준(페이지네이션)
     fetchAllPaged<{ id: string; created_at: string }>(
@@ -528,12 +487,14 @@ export async function getGrowthMetrics(): Promise<ActionResult<GrowthMetrics>> {
           .range(from, to),
       { pageSize: 5000 },
     ),
-    (async () => {
-      const calcCount = await getAdminSettingNumber('order_cycle_calculation_count', { min: 2, max: 90 })
-      const windowDays = Math.max(90, Math.min(365, calcCount * 30))
-      return await fetchRecentConfirmedOrders(supabase, windowDays)
-    })(),
+    // 이탈 위험은 대시보드 카드와 같은 함수로 판정한다 — 여기서 다시 세지 않는다
+    getRestaurantMetrics(),
   ])
+
+  if (!restaurantMetrics.success) {
+    return { success: false, error: restaurantMetrics.error }
+  }
+  const churn_risk_customers = restaurantMetrics.data.cycleRisk.count
 
   const monthlyMap = new Map<string, number>()
   let gmv30 = 0
@@ -553,24 +514,6 @@ export async function getGrowthMetrics(): Promise<ActionResult<GrowthMetrics>> {
   for (const r of (rfqRecent ?? []) as any[]) {
     if (r.tenant_id) activeTenants.add(r.tenant_id)
   }
-
-  const churnMap = buildChurnCustomerSignals(orders120)
-  await mergeTrustDropTenants(supabase, churnMap)
-
-  const customerIds = [...new Set([...churnMap.values()].map((r) => r.customer_id).filter(Boolean))]
-  const nameMap = new Map<string, string>()
-  if (customerIds.length) {
-    const { data: custRows } = await supabase.from('customers').select('id, name').in('id', customerIds).limit(2000)
-    for (const c of (custRows ?? []) as any[]) nameMap.set(c.id, c.name ?? '-')
-  }
-
-  const churnRows: ChurnCustomerRow[] = [...churnMap.values()].map((r) => ({
-    seller_tenant_id: r.seller_tenant_id,
-    customer_id: r.customer_id,
-    customer_name: r.customer_id ? nameMap.get(r.customer_id) ?? '-' : r.customer_name,
-    reasons: r.reasons,
-    last_order_date: r.last_order_date,
-  }))
 
   // 휴면 목록은 detectDormant와 동일 규칙으로 계산(삽입 없이 표시만)
   const d90 = isoDayStartDaysAgo(90)
@@ -680,7 +623,7 @@ export async function getGrowthMetrics(): Promise<ActionResult<GrowthMetrics>> {
     target_table: 'growth_engine',
     new_value: {
       new_participants_30d: (tenantsNew ?? []).length,
-      churn_rows: churnRows.length,
+      churn_risk_customers,
       dormant: dormantRows.length,
     },
   }).catch(() => {})
@@ -690,11 +633,10 @@ export async function getGrowthMetrics(): Promise<ActionResult<GrowthMetrics>> {
       data: {
         new_participants_30d: (tenantsNew ?? []).length,
         active_participants_30d: activeTenants.size,
-        churn_risk_customers: churnRows.length,
+        churn_risk_customers,
         dormant_tenants: dormantRows.length,
         platform_gmv_30d: gmv30,
         monthly_gmv_trend,
-        churn_customer_rows: churnRows.slice(0, 80),
         dormant_rows: dormantRows.slice(0, 80),
       },
     }
