@@ -2,8 +2,12 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { calculateTrustScore, getParticipants, runTrustSyncBatch, updateTrustScore, type ParticipantRow, type TrustRole } from '@/actions/admin/trust-engine'
+import { calculateTrustScore, getParticipants, updateTrustScore, type ParticipantRow, type TrustRole } from '@/actions/admin/trust-engine'
 import s from '../../admin-shared.module.css'
+
+/** 신뢰도 산정이 준비중이라 쓰기 버튼에 붙이는 사유 — 화면 배너와 같은 내용 */
+const DISABLED_REASON =
+  '신뢰도 산정 준비중 — 납품완료·클레임 데이터가 아직 기록되지 않아 점수가 뒤집힙니다. 쓰기 동작을 잠가 두었습니다.'
 
 function levelBadgeClass(level: number) {
   if (level >= 3) return s.badgeL3
@@ -68,23 +72,6 @@ export default function ParticipantsClient({
     })
   }
 
-  /** 전체 배치 — 분석엔진 폐기(2026-08-31)로 이 화면이 유일한 진입점이 됐다 */
-  function runBatch() {
-    if (!confirm('전체 참여자의 신뢰도를 실제 거래 데이터로 다시 계산해 저장합니다. 진행할까요?')) return
-    setError(null)
-    startTransition(async () => {
-      const res = await runTrustSyncBatch()
-      if (!res.success || !res.data) {
-        setError(res.error ?? '배치 실패')
-        return
-      }
-      alert(
-        `신뢰도 배치 완료 — 갱신 ${res.data.updated_tenants} / 건너뜀 ${res.data.skipped} / 오류 ${res.data.errors}`,
-      )
-      refresh()
-    })
-  }
-
   async function recalc(tenant_id: string, r: TrustRole) {
     setError(null)
     startTransition(async () => {
@@ -97,21 +84,22 @@ export default function ParticipantsClient({
     })
   }
 
-  async function apply(tenant_id: string, r: TrustRole) {
-    if (!confirm('신뢰도를 업데이트하시겠습니까? (Level 3이면 Action Queue가 생성될 수 있습니다)')) return
-    setError(null)
-    startTransition(async () => {
-      const res = await updateTrustScore(tenant_id, r)
-      if (!res.success || !res.data) {
-        setError(res.error ?? '업데이트 실패')
-        return
-      }
-      refresh()
-    })
-  }
+  // 산정이 준비중이라 쓰기 경로는 잠가 둔다 — updateTrustScore 는 trust_scores 를
+  // upsert 하고 Level 3 이면 Action Queue 까지 만든다. 뒤집힌 점수가 정산·제재 판단으로
+  // 흘러가지 않도록 화면에서 막는다. (함수 자체는 남겨 둔다)
+  void updateTrustScore
 
   return (
     <div className={s.stackCol}>
+      <div className={s.alert}>
+        <strong>신뢰도 산정 준비중</strong> — 점수 구성요소 5개 중 4개가 아직 채워지지 않는
+        입력이라 지금 계산하면 결과가 뒤집힙니다. 납품률(35%)은{' '}
+        <code>order_status = &apos;납품완료&apos;</code> 로 세는데 운영 데이터에는 그 값이 한 건도
+        없어(접수/확인만 존재) 주문이 있는 참여자는 자동으로 0%가 되고, 클레임
+        (<code>contact_logs.outcome_type</code>)과 RFQ 완료율은 원본이 비어 있습니다. 그 결과 실제
+        거래 중인 공급자가 최하 Level 3, 거래가 없는 참여자가 100점으로 나옵니다. 쓰기 동작
+        (배치·적용)은 잠가 두었고 조회만 가능합니다. 납품완료·클레임 데이터가 쌓이면 다시 엽니다.
+      </div>
       <header className={s.headerBetween}>
         <div>
           <h1 className={s.title}>참여자 네트워크</h1>
@@ -121,8 +109,8 @@ export default function ParticipantsClient({
           <Link href="/admin/participants/relationships" className={s.ghostBtnMd}>
             관계 네트워크
           </Link>
-          <button type="button" onClick={runBatch} disabled={pending} className={s.ghostBtnMd}>
-            신뢰도 배치 실행
+          <button type="button" disabled title={DISABLED_REASON} className={s.ghostBtnMd}>
+            신뢰도 배치 (준비중)
           </button>
           <button type="button" onClick={refresh} disabled={pending} className={s.primaryBtnMd}>
             {pending ? '갱신 중…' : '새로고침'}
@@ -193,8 +181,8 @@ export default function ParticipantsClient({
                         <button type="button" className={s.ghostBtn} onClick={() => recalc(r.tenant_id, r.role)} disabled={pending}>
                           계산
                         </button>
-                        <button type="button" className={s.primaryBtn} onClick={() => apply(r.tenant_id, r.role)} disabled={pending}>
-                          적용
+                        <button type="button" className={s.primaryBtn} disabled title={DISABLED_REASON}>
+                          적용 (준비중)
                         </button>
                       </div>
                     </td>

@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { getAutoSettlementSuggestions, getCreditLines, getGmvTrend, getPendingSettlements, getPlatformRevenue, getSettlementHistory, getUnifiedSettlementView } from '@/actions/admin/settlement-control'
+import { getAutoSettlementSuggestions, getGmvTrend, getPendingSettlements, getPlatformRevenue, getSettlementHistory, getUnifiedSettlementView } from '@/actions/admin/settlement-control'
 import SettleOrderButton from './SettleOrderButton'
 import s from '../../admin-shared.module.css'
 
@@ -11,7 +11,9 @@ export default async function AdminSettlementsPage() {
     getSettlementHistory(),
     getGmvTrend(),
   ])
-  const [creditLines, suggestions] = await Promise.all([getCreditLines(), getAutoSettlementSuggestions()])
+  // 신용한도는 trust_scores.score x 10,000 인데 신뢰도 산정이 준비중이라 조회하지 않는다
+  // (getCreditLines 는 남겨 둔다 — 산정이 열리면 이 줄만 되돌리면 된다)
+  const suggestions = await getAutoSettlementSuggestions()
 
   return (
     <main className={s.main}>
@@ -91,41 +93,17 @@ export default async function AdminSettlementsPage() {
         <>
           <section className={s.panel}>
             <div className={s.panelHeader}>
-              <h2 className={s.panelTitle}>신용한도 관리 (구조)</h2>
-              <span className={s.inlineMuted}>FORENSIC-003-C · 기본 공식: score × 10,000원 · override는 admin_settings.credit_line_{`{tenant_id}`}</span>
+              <h2 className={s.panelTitle}>신용한도 관리 (준비중)</h2>
+              <span className={s.inlineMuted}>기본 공식: score × 10,000원</span>
             </div>
-            {!creditLines.success || !creditLines.data ? (
-              <div className={s.alert}>{creditLines.error ?? '조회 실패'}</div>
-            ) : creditLines.data.length === 0 ? (
-              <div className={s.empty}>신뢰도 배치 실행 후 신용한도가 계산됩니다</div>
-            ) : (
-              <div className={s.tableWrap}>
-                <table className={s.table}>
-                  <thead>
-                    <tr className={s.theadRow}>
-                      {['role', 'tenant', 'score', 'computed', 'override', 'effective'].map((h) => (
-                        <th key={h} className={s.th}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {creditLines.data.slice(0, 50).map((r) => (
-                      <tr key={`${r.role}:${r.tenant_id}`}>
-                        <td className={s.td}>{r.role}</td>
-                        <td className={s.td}>
-                          <div className={s.cellStrong}>{r.tenant_name ?? r.tenant_id.slice(0, 8) + '…'}</div>
-                          <div className={s.cellMutedSm}>{r.tenant_id}</div>
-                        </td>
-                        <td className={s.td}>{r.score ?? '-'}</td>
-                        <td className={s.td}>{(r.computed_credit_line ?? 0).toLocaleString()}원</td>
-                        <td className={s.td}>{r.override_credit_line != null ? `${r.override_credit_line.toLocaleString()}원` : '-'}</td>
-                        <td className={s.td}>{(r.effective_credit_line ?? 0).toLocaleString()}원</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            <div className={s.panelBody}>
+              <div className={s.alert}>
+                신뢰도 산정이 준비중이라 신용한도를 표시하지 않습니다. 점수 구성요소 5개 중 4개가
+                아직 기록되지 않는 입력(납품완료 상태·클레임·RFQ)이라, 지금 값으로 한도를 내면
+                실제 거래 중인 공급자에게 가장 낮은 한도가 매겨집니다. 납품완료·클레임 데이터가
+                쌓여 산정을 다시 열 때 이 섹션도 함께 켭니다.
               </div>
-            )}
+            </div>
           </section>
 
           <section className={s.panel}>
