@@ -145,7 +145,7 @@ export default async function DashboardMetricDetailPage(props: {
       <header className={s.header}>
         <div>
           <Link href="/admin/dashboard" className={s.backLink}>
-            <ArrowLeft size={14} /> 대시보드
+            <ArrowLeft size={14} /> 홈
           </Link>
           <h1 className={s.title} style={{ marginTop: 8 }}>
             {def.title} <span style={{ color: 'var(--blue-primary)' }}>{block.count}</span>

@@ -200,7 +200,7 @@ export default function TenantsClient({
     <main className={s.page}>
       <header className={s.pageHead}>
         <div>
-          <h1 className={s.pageTitle}>계정 관리</h1>
+          <h1 className={s.pageTitle}>회원관리</h1>
           <p className={s.pageSub}>식당 · 공급자 · 구독 플랜을 한 곳에서 관리합니다</p>
         </div>
         <div className={s.headActions}>

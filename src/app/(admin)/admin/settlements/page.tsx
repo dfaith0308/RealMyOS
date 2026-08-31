@@ -19,14 +19,14 @@ export default async function AdminSettlementsPage() {
     <main className={s.main}>
       <header className={s.headerBetween}>
         <div>
-          <h1 className={s.title}>수익/정산 통제</h1>
+          <h1 className={s.title}>매출/정산</h1>
           <p className={s.subtitleMax780}>
             PRODUCT §10-9 — 정산은 관리자 확인 버튼 이후에만 기록됩니다. 수수료율은{' '}
             <code className={s.code}>admin_settings</code> 에서만 조회합니다.
           </p>
         </div>
         <Link href="/admin/dashboard" className={s.ghostBtnMd}>
-          대시보드
+          홈
         </Link>
       </header>
 

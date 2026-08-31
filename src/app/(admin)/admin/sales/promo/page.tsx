@@ -19,7 +19,7 @@ export default async function AdminSalesPromoPage() {
           </p>
         </div>
         <Link href="/admin/sales" className={s.ghostBtnMd}>
-          영업 관리
+          영업/가입관리
         </Link>
       </header>
 

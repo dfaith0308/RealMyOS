@@ -50,7 +50,7 @@ export default async function AdminTradeDetailPage({ params }: { params: { id: s
             목록으로
           </Link>
           <Link href="/admin/dashboard" className={s.ghostBtn}>
-            대시보드
+            홈
           </Link>
         </div>
       </header>

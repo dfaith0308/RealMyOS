@@ -15,17 +15,17 @@ type MenuEntry =
   | { type: 'group'; label: string; icon: string; children: MenuItem[] }
 
 const MENU: MenuEntry[] = [
-  { type: 'link', label: '대시보드', icon: '🧭', href: '/admin/dashboard' },
+  { type: 'link', label: '홈', icon: '🧭', href: '/admin/dashboard' },
   {
     type: 'group',
-    label: '영업 관리',
+    label: '영업/가입관리',
     icon: '📇',
     children: [
       { label: '리드 관리', href: '/admin/sales' },
       { label: '프로모션 코드', href: '/admin/sales/promo' },
     ],
   },
-  { type: 'link', label: '테넌트관리', icon: '🏢', href: '/admin/tenants' },
+  { type: 'link', label: '회원관리', icon: '🏢', href: '/admin/tenants' },
   {
     type: 'group',
     label: '쇼핑몰관리',
@@ -43,7 +43,7 @@ const MENU: MenuEntry[] = [
   },
   {
     type: 'group',
-    label: '수익/정산 통제',
+    label: '매출/정산',
     icon: '💹',
     children: [
       { label: '정산 현황', href: '/admin/settlements' },
@@ -51,9 +51,9 @@ const MENU: MenuEntry[] = [
       { label: '공급자 지급 원장', href: '/admin/commerce/payables' },
     ],
   },
-  { type: 'link', label: '거래관제', icon: '🧬', href: '/admin/trades' },
-  { type: 'link', label: '정책 콘솔', icon: '⚙️', href: '/admin/policy' },
-  { type: 'link', label: '로그', icon: '🧾', href: '/admin/logs' },
+  { type: 'link', label: '이상거래 확인', icon: '🧬', href: '/admin/trades' },
+  { type: 'link', label: '설정', icon: '⚙️', href: '/admin/policy' },
+  { type: 'link', label: '활동 기록', icon: '🧾', href: '/admin/logs' },
 ]
 
 const STORAGE_KEY = 'admin-theme'

@@ -24,7 +24,7 @@ import {
 import s from '../../admin-blue.module.css'
 import MetricCard from './MetricCard'
 
-export const metadata = { title: '중앙 대시보드 — 식식이 관리자' }
+export const metadata = { title: '홈 — 식식이 관리자' }
 
 export default async function AdminDashboardPage() {
   // 72h 초과 항목 만료 처리 (best-effort; 실패해도 페이지는 보여준다)
@@ -45,14 +45,14 @@ export default async function AdminDashboardPage() {
     <main className={s.scope}>
       <header className={s.header}>
         <div>
-          <h1 className={s.title}>중앙 대시보드</h1>
+          <h1 className={s.title}>홈</h1>
           <p className={s.subtitle}>
             지금 무엇을 봐야 하는지 한 화면에 모았습니다. 모든 숫자는 저장값이 아니라 요청 시점에
             실시간으로 계산됩니다.
           </p>
         </div>
         <Link href="/admin/logs" className={s.headerLink}>
-          <ScrollText size={15} /> 전체 로그 보기
+          <ScrollText size={15} /> 활동 기록 전체 보기
         </Link>
       </header>
 
@@ -233,7 +233,7 @@ function QueuePanel({
           {title}
         </h3>
         <Link href="/admin/trades" className={s.ghostBtn}>
-          관제
+          이상거래 확인
         </Link>
       </div>
       {items.length === 0 ? (

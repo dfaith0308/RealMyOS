@@ -56,14 +56,14 @@ export default async function AdminTradeMonitorPage() {
     <main className={s.main}>
       <header className={s.headerBetween}>
         <div>
-          <h1 className={s.title}>거래 흐름 관제</h1>
+          <h1 className={s.title}>이상거래 확인</h1>
           <p className={s.subtitle}>
             이상 감지 → 자동 개입(Level) → Action Queue 생성 → 관리자 예외 처리
           </p>
         </div>
         <div className={s.actionsRow}>
           <Link href="/admin/dashboard" className={s.ghostBtn}>
-            대시보드
+            홈
           </Link>
           <Link href="/rfq" className={s.ghostBtn}>
             RFQ 보기

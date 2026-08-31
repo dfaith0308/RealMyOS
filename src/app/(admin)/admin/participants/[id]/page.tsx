@@ -40,7 +40,7 @@ export default async function ParticipantTrustDetailPage({
         </div>
         <div className={s.actionsRow}>
           <Link href="/admin/participants" className={s.ghostBtnMd}>목록</Link>
-          <Link href="/admin/trades" className={s.ghostBtnMd}>거래관제</Link>
+          <Link href="/admin/trades" className={s.ghostBtnMd}>이상거래 확인</Link>
         </div>
       </header>
 

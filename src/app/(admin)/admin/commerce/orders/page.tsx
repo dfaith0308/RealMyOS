@@ -120,7 +120,7 @@ export default async function AdminCommerceOrdersPage(props: {
             지급 예정 원장
           </Link>
           <Link href="/admin/dashboard" className={s.ghostBtn}>
-            대시보드
+            홈
           </Link>
         </div>
       </header>

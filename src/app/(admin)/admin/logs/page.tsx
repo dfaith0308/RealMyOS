@@ -3,7 +3,7 @@ import { ArrowLeft, ScrollText } from 'lucide-react'
 import { getAdminLogs } from '@/actions/admin'
 import s from '../../admin-blue.module.css'
 
-export const metadata = { title: '관리자 로그 — 식식이 관리자' }
+export const metadata = { title: '활동 기록 — 식식이 관리자' }
 
 export default async function AdminLogsPage(props: {
   searchParams?: Promise<{ action_type?: string | string[] }>
@@ -21,10 +21,10 @@ export default async function AdminLogsPage(props: {
       <main className={s.scope}>
         <header className={s.header}>
           <div>
-            <h1 className={s.title}>관리자 로그</h1>
+            <h1 className={s.title}>활동 기록</h1>
           </div>
           <Link href="/admin/dashboard" className={s.headerLink}>
-            <ArrowLeft size={15} /> 대시보드
+            <ArrowLeft size={15} /> 홈
           </Link>
         </header>
         <div className={s.errText}>{res.error}</div>
@@ -41,12 +41,12 @@ export default async function AdminLogsPage(props: {
         <div>
           <h1 className={s.title}>
             <ScrollText size={20} style={{ verticalAlign: '-3px', marginRight: 8 }} />
-            관리자 로그
+            활동 기록
           </h1>
           <p className={s.subtitle}>최근 관리자 행동 기록입니다. action_type으로 좁혀 볼 수 있습니다.</p>
         </div>
         <Link href="/admin/dashboard" className={s.headerLink}>
-          <ArrowLeft size={15} /> 대시보드
+          <ArrowLeft size={15} /> 홈
         </Link>
       </header>
 

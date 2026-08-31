@@ -7,7 +7,7 @@ export default async function AdminTenantsPage() {
   if (!res.success) {
     return (
       <main style={{ padding: 24 }}>
-        <h1 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>계정 관리</h1>
+        <h1 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>회원관리</h1>
         <div
           style={{
             background: 'var(--ds-status-danger-bg, #FEF2F2)',

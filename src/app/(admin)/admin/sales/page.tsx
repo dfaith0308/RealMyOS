@@ -5,7 +5,7 @@ import s from '../../admin-shared.module.css'
 import c from './sales.module.css'
 import SalesLeadsClient from './SalesLeadsClient'
 
-export const metadata = { title: '영업 관리 — 식식이 관리자' }
+export const metadata = { title: '영업/가입관리 — 식식이 관리자' }
 
 function one(v: string | string[] | undefined): string | undefined {
   const raw = Array.isArray(v) ? v[0] : v
@@ -52,7 +52,7 @@ export default async function AdminSalesPage(props: {
     <main className={s.main}>
       <header className={s.headerBetween}>
         <div>
-          <h1 className={s.title}>영업 관리</h1>
+          <h1 className={s.title}>영업/가입관리</h1>
           <p className={s.subtitleMax720}>
             공급자·식당 잠재거래처 발굴 활동을 리드 단위로 관리합니다. 리드를 눌러 메모 타임라인을 남기세요.
           </p>
