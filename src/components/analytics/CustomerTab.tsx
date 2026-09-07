@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { formatKRW } from '@/lib/calc'
 import type { CustomerAnalyticsResult } from '@/actions/analytics'
+import CostCoverageNotice from './CostCoverageNotice'
 
 const SORTS: { id: 'sales' | 'margin' | 'growth'; label: string }[] = [
   { id: 'sales',  label: '매출순' },
@@ -27,6 +28,7 @@ export default function CustomerTab({
 
   return (
     <>
+      <CostCoverageNotice coverage={data.cost_coverage} />
       <div style={s.kpiGrid}>
         <KpiCard
           label="상위 3개 거래처 비중"

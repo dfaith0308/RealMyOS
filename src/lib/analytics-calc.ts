@@ -75,6 +75,21 @@ export interface CustomerRow {
   growth_rate:   number | null
 }
 
+/**
+ * 원가 신뢰도.
+ * order_lines.cost_price 는 주문 시점 스냅샷이라, 그때 상품 원가가 비어 있었으면
+ * 0/1원이 그대로 박혀 있다. 그 라인은 원가가 없는 게 아니라 "모르는" 것이라서
+ * 순이익·마진율이 실제보다 높게 잡힌다. 숫자를 고치지 않고 얼마나 섞였는지만 알린다.
+ */
+export interface CostCoverage {
+  line_count:                number
+  unconfirmed_line_count:    number
+  revenue:                   number
+  unconfirmed_revenue:       number
+  /** 미확정 라인 매출이 전체 매출에서 차지하는 비중(%) */
+  unconfirmed_revenue_share: number
+}
+
 export interface OverviewSummary {
   revenue:           number
   cost:              number
@@ -264,6 +279,40 @@ export function buildOverviewSummary(
     revenue_growth:    prev_revenue !== 0 ? ((revenue - prev_revenue) / prev_revenue) * 100 : null,
     margin_growth:     prev_margin  !== 0 ? ((margin  - prev_margin)  / prev_margin)  * 100 : null,
     margin_rate_delta: prev_revenue !== 0 ? margin_rate - prev_margin_rate : null,
+  }
+}
+
+// ============================================================
+// 원가 신뢰도 (모든 탭 공통 경고용)
+// ============================================================
+
+/** 화면·서버가 같은 기준을 쓰도록 commerce-constants 의 판정과 값이 같다 */
+const UNCONFIRMED_COST_MAX = 1
+
+export function buildCostCoverage(orders: AnalyticsOrder[]): CostCoverage {
+  let line_count = 0
+  let unconfirmed_line_count = 0
+  let revenue = 0
+  let unconfirmed_revenue = 0
+
+  for (const o of orders) {
+    if (!isSalesOrder(o)) continue
+    for (const l of o.order_lines ?? []) {
+      line_count++
+      revenue += l.line_total
+      if (!Number.isFinite(l.cost_price) || l.cost_price <= UNCONFIRMED_COST_MAX) {
+        unconfirmed_line_count++
+        unconfirmed_revenue += l.line_total
+      }
+    }
+  }
+
+  return {
+    line_count,
+    unconfirmed_line_count,
+    revenue,
+    unconfirmed_revenue,
+    unconfirmed_revenue_share: revenue !== 0 ? (unconfirmed_revenue / revenue) * 100 : 0,
   }
 }
 

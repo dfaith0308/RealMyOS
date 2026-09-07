@@ -2,6 +2,7 @@
 
 import { formatKRW } from '@/lib/calc'
 import type { OverviewResult } from '@/actions/analytics'
+import CostCoverageNotice from './CostCoverageNotice'
 import {
   CartesianGrid,
   Legend,
@@ -31,6 +32,7 @@ export default function OverviewTab({ data }: { data: OverviewResult }) {
 
   return (
     <>
+      <CostCoverageNotice coverage={data.cost_coverage} />
       <div style={s.kpiGrid}>
         <KpiCard label="총 매출"   value={formatKRW(summary.revenue)}
                  deltaText={formatPct(summary.revenue_growth)} deltaColor={deltaColor(summary.revenue_growth)} />
