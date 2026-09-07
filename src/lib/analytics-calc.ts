@@ -9,6 +9,7 @@
  *  - sales 여부 판단: ledger-calc.isSalesOrder
  */
 
+import { isTestProductName } from '@/lib/commerce-constants'
 import {
   saleAmount,
   effectiveOrderAmount,
@@ -48,7 +49,10 @@ export interface AnalyticsOrder {
 
 export interface DateBucket {
   date:    string
+  /** 전체 매출 (원가 미확정 라인도 포함) */
   revenue: number
+  /** 원가가 확정된 라인의 매출 — 마진율 분모 */
+  cost_basis_revenue: number
   cost:    number
   margin:  number
 }
@@ -57,6 +61,8 @@ export interface ProductRow {
   product_name:        string
   quantity:            number
   revenue:             number
+  /** 원가가 확정된 라인의 매출 — 마진율 분모 */
+  cost_basis_revenue:  number
   cost:                number
   margin:              number
   margin_rate:         number
@@ -67,6 +73,8 @@ export interface CustomerRow {
   customer_key:  string
   customer_name: string
   revenue:       number
+  /** 원가가 확정된 라인의 매출 — 마진율 분모 */
+  cost_basis_revenue: number
   cost:          number
   margin:        number
   margin_rate:   number
@@ -84,6 +92,8 @@ export interface CustomerRow {
 export interface CostCoverage {
   line_count:                number
   unconfirmed_line_count:    number
+  /** [TEST] 시뮬레이션 라인 — 미확정 집계에서 분리해 따로 센다 */
+  test_line_count:           number
   revenue:                   number
   unconfirmed_revenue:       number
   /** 미확정 라인 매출이 전체 매출에서 차지하는 비중(%) */
@@ -91,7 +101,10 @@ export interface CostCoverage {
 }
 
 export interface OverviewSummary {
+  /** 전체 매출 — 원가 미확정 라인도 포함한다 (원장·정산과 같은 값) */
   revenue:           number
+  /** 원가가 확정된 라인의 매출 — 마진율 분모 */
+  cost_basis_revenue: number
   cost:              number
   margin:            number
   margin_rate:       number
@@ -105,6 +118,19 @@ export interface OverviewSummary {
 // ============================================================
 // 라인 단위 마진 (RULE-03 — order_lines 스냅샷만 사용)
 // ============================================================
+
+/** 화면(commerce-constants.isCostUnconfirmed)과 같은 기준 */
+const UNCONFIRMED_COST_MAX = 1
+
+/**
+ * 원가가 확정된 라인인가.
+ * 주문 시점에 상품 매입가가 비어 있었으면 order_lines.cost_price 에 0/1원이 박힌다.
+ * 그 라인은 원가가 "없는" 게 아니라 "모르는" 것이라, 원가·순이익·마진율 집계에서 뺀다.
+ * 매출은 실제로 판 금액이므로 그대로 센다 — 원장·정산과 어긋나면 안 된다.
+ */
+export function isCostConfirmed(line: AnalyticsLine): boolean {
+  return Number.isFinite(line.cost_price) && line.cost_price > UNCONFIRMED_COST_MAX
+}
 
 export function lineMargin(line: AnalyticsLine): number {
   return line.line_total - line.cost_price * line.quantity
@@ -123,11 +149,13 @@ export function aggregateByDate(orders: AnalyticsOrder[]): DateBucket[] {
   for (const o of orders) {
     if (!isSalesOrder(o)) continue
     const date = o.order_date
-    const cur = map.get(date) ?? { date, revenue: 0, cost: 0, margin: 0 }
+    const cur = map.get(date) ?? { date, revenue: 0, cost_basis_revenue: 0, cost: 0, margin: 0 }
     for (const l of o.order_lines ?? []) {
       cur.revenue += l.line_total
-      cur.cost    += lineCost(l)
-      cur.margin  += lineMargin(l)
+      if (!isCostConfirmed(l)) continue
+      cur.cost_basis_revenue += l.line_total
+      cur.cost               += lineCost(l)
+      cur.margin             += lineMargin(l)
     }
     map.set(date, cur)
   }
@@ -148,6 +176,7 @@ export function aggregateByProduct(orders: AnalyticsOrder[]): ProductRow[] {
         product_name:        l.product_name,
         quantity:            0,
         revenue:             0,
+        cost_basis_revenue:  0,
         cost:                0,
         margin:              0,
         margin_rate:         0,
@@ -155,15 +184,18 @@ export function aggregateByProduct(orders: AnalyticsOrder[]): ProductRow[] {
       }
       cur.quantity += l.quantity
       cur.revenue  += l.line_total
-      cur.cost     += lineCost(l)
-      const m       = lineMargin(l)
-      cur.margin   += m
-      totalMargin  += m
       map.set(l.product_name, cur)
+      if (!isCostConfirmed(l)) continue
+      cur.cost_basis_revenue += l.line_total
+      cur.cost               += lineCost(l)
+      const m                 = lineMargin(l)
+      cur.margin             += m
+      totalMargin            += m
     }
   }
   for (const r of map.values()) {
-    r.margin_rate         = r.revenue !== 0 ? (r.margin / r.revenue) * 100 : 0
+    // 분모는 원가 확정분 매출 — 전체 매출로 나누면 마진율이 실제보다 낮게 보인다
+    r.margin_rate         = r.cost_basis_revenue !== 0 ? (r.margin / r.cost_basis_revenue) * 100 : 0
     r.margin_contribution = totalMargin !== 0 ? (r.margin / totalMargin) * 100 : 0
   }
   return [...map.values()].sort((a, b) => b.margin - a.margin)
@@ -188,6 +220,7 @@ export function aggregateByCustomer(
       customer_key:  key,
       customer_name: name,
       revenue:       0,
+      cost_basis_revenue: 0,
       cost:          0,
       margin:        0,
       margin_rate:   0,
@@ -199,10 +232,12 @@ export function aggregateByCustomer(
       cur.customer_name = name
     }
     for (const l of o.order_lines ?? []) {
-      cur.revenue += l.line_total
-      cur.cost    += lineCost(l)
-      cur.margin  += lineMargin(l)
+      cur.revenue  += l.line_total
       totalRevenue += l.line_total
+      if (!isCostConfirmed(l)) continue
+      cur.cost_basis_revenue += l.line_total
+      cur.cost               += lineCost(l)
+      cur.margin             += lineMargin(l)
     }
     map.set(key, cur)
   }
@@ -223,7 +258,7 @@ export function aggregateByCustomer(
   rows.forEach((r, i) => {
     r.rank        = i + 1
     r.share       = totalRevenue !== 0 ? (r.revenue / totalRevenue) * 100 : 0
-    r.margin_rate = r.revenue !== 0 ? (r.margin / r.revenue) * 100 : 0
+    r.margin_rate = r.cost_basis_revenue !== 0 ? (r.margin / r.cost_basis_revenue) * 100 : 0
     const prev    = prevMap.get(r.customer_key) ?? 0
     r.growth_rate = prev !== 0 ? ((r.revenue - prev) / prev) * 100 : (r.revenue > 0 ? null : 0)
   })
@@ -254,31 +289,35 @@ export function buildOverviewSummary(
   orders: AnalyticsOrder[],
   prevOrders: AnalyticsOrder[],
 ): OverviewSummary {
-  let revenue = 0, cost = 0, margin = 0
+  let revenue = 0, cost_basis_revenue = 0, cost = 0, margin = 0
   for (const o of orders) {
     if (!isSalesOrder(o)) continue
     for (const l of o.order_lines ?? []) {
       revenue += l.line_total
-      cost    += lineCost(l)
-      margin  += lineMargin(l)
+      if (!isCostConfirmed(l)) continue
+      cost_basis_revenue += l.line_total
+      cost               += lineCost(l)
+      margin             += lineMargin(l)
     }
   }
-  let prev_revenue = 0, prev_margin = 0
+  let prev_revenue = 0, prev_cost_basis_revenue = 0, prev_margin = 0
   for (const o of prevOrders) {
     if (!isSalesOrder(o)) continue
     for (const l of o.order_lines ?? []) {
       prev_revenue += l.line_total
-      prev_margin  += lineMargin(l)
+      if (!isCostConfirmed(l)) continue
+      prev_cost_basis_revenue += l.line_total
+      prev_margin             += lineMargin(l)
     }
   }
-  const margin_rate       = revenue !== 0 ? (margin / revenue) * 100 : 0
-  const prev_margin_rate  = prev_revenue !== 0 ? (prev_margin / prev_revenue) * 100 : 0
+  const margin_rate       = cost_basis_revenue !== 0 ? (margin / cost_basis_revenue) * 100 : 0
+  const prev_margin_rate  = prev_cost_basis_revenue !== 0 ? (prev_margin / prev_cost_basis_revenue) * 100 : 0
   return {
-    revenue, cost, margin, margin_rate,
+    revenue, cost_basis_revenue, cost, margin, margin_rate,
     prev_revenue, prev_margin,
     revenue_growth:    prev_revenue !== 0 ? ((revenue - prev_revenue) / prev_revenue) * 100 : null,
     margin_growth:     prev_margin  !== 0 ? ((margin  - prev_margin)  / prev_margin)  * 100 : null,
-    margin_rate_delta: prev_revenue !== 0 ? margin_rate - prev_margin_rate : null,
+    margin_rate_delta: prev_cost_basis_revenue !== 0 ? margin_rate - prev_margin_rate : null,
   }
 }
 
@@ -286,12 +325,10 @@ export function buildOverviewSummary(
 // 원가 신뢰도 (모든 탭 공통 경고용)
 // ============================================================
 
-/** 화면·서버가 같은 기준을 쓰도록 commerce-constants 의 판정과 값이 같다 */
-const UNCONFIRMED_COST_MAX = 1
-
 export function buildCostCoverage(orders: AnalyticsOrder[]): CostCoverage {
   let line_count = 0
   let unconfirmed_line_count = 0
+  let test_line_count = 0
   let revenue = 0
   let unconfirmed_revenue = 0
 
@@ -300,16 +337,21 @@ export function buildCostCoverage(orders: AnalyticsOrder[]): CostCoverage {
     for (const l of o.order_lines ?? []) {
       line_count++
       revenue += l.line_total
-      if (!Number.isFinite(l.cost_price) || l.cost_price <= UNCONFIRMED_COST_MAX) {
-        unconfirmed_line_count++
-        unconfirmed_revenue += l.line_total
+      if (isCostConfirmed(l)) continue
+      // [TEST] 잔여물은 "매입가를 채워야 할 상품"이 아니다. 따로 센다.
+      if (isTestProductName(l.product_name)) {
+        test_line_count++
+        continue
       }
+      unconfirmed_line_count++
+      unconfirmed_revenue += l.line_total
     }
   }
 
   return {
     line_count,
     unconfirmed_line_count,
+    test_line_count,
     revenue,
     unconfirmed_revenue,
     unconfirmed_revenue_share: revenue !== 0 ? (unconfirmed_revenue / revenue) * 100 : 0,

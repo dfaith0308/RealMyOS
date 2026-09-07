@@ -29,6 +29,11 @@ function deltaColor(n: number | null | undefined): string {
 
 export default function OverviewTab({ data }: { data: OverviewResult }) {
   const { summary, by_date } = data
+  // 원가 기반 지표는 원가 확정 라인만으로 계산한다 — 총매출과 모집단이 다르다는 걸 카드에도 남긴다
+  const costNote =
+    data.cost_coverage.unconfirmed_line_count > 0
+      ? `원가 확정 ${formatKRW(summary.cost_basis_revenue)} 기준`
+      : undefined
 
   return (
     <>
@@ -36,10 +41,10 @@ export default function OverviewTab({ data }: { data: OverviewResult }) {
       <div style={s.kpiGrid}>
         <KpiCard label="총 매출"   value={formatKRW(summary.revenue)}
                  deltaText={formatPct(summary.revenue_growth)} deltaColor={deltaColor(summary.revenue_growth)} />
-        <KpiCard label="총 원가"   value={formatKRW(summary.cost)} />
-        <KpiCard label="총 마진"   value={formatKRW(summary.margin)}
+        <KpiCard label="총 원가" value={formatKRW(summary.cost)} note={costNote} />
+        <KpiCard label="총 마진"   value={formatKRW(summary.margin)} note={costNote}
                  deltaText={formatPct(summary.margin_growth)} deltaColor={deltaColor(summary.margin_growth)} />
-        <KpiCard label="마진율"
+        <KpiCard label="마진율" note={costNote}
                  value={`${(Math.round(summary.margin_rate * 10) / 10).toFixed(1)}%`}
                  deltaText={summary.margin_rate_delta !== null ? `${summary.margin_rate_delta > 0 ? '+' : ''}${(Math.round(summary.margin_rate_delta * 10) / 10).toFixed(1)}p` : undefined}
                  deltaColor={deltaColor(summary.margin_rate_delta)} />
@@ -102,14 +107,15 @@ export default function OverviewTab({ data }: { data: OverviewResult }) {
 }
 
 function KpiCard({
-  label, value, deltaText, deltaColor,
+  label, value, deltaText, deltaColor, note,
 }: {
-  label: string; value: string; deltaText?: string; deltaColor?: string
+  label: string; value: string; deltaText?: string; deltaColor?: string; note?: string
 }) {
   return (
     <div style={s.card}>
       <span style={s.cardLabel}>{label}</span>
       <span style={s.cardVal}>{value}</span>
+      {note && <span style={{ fontSize: 11, color: '#92400e', fontWeight: 600 }}>{note}</span>}
       {deltaText && (
         <span style={{ ...s.cardDelta, color: deltaColor ?? '#6b7280' }}>
           전기간 {deltaText}
