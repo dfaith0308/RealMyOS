@@ -88,12 +88,17 @@ function parseTags(raw: string): string[] {
   ).slice(0, 10)
 }
 
+/**
+ * KST 고정 포맷.
+ * toLocaleString 계열은 서버(UTC)와 브라우저(로컬 시간대)가 다른 문자열을 만들어
+ * 하이드레이션이 깨진다. 오프셋을 직접 더해 양쪽이 같은 결과를 내게 한다.
+ */
 function formatDateTime(iso: string): string {
   const d = new Date(iso)
-  return `${d.toLocaleDateString('ko-KR')} ${d.toLocaleTimeString('ko-KR', {
-    hour: '2-digit',
-    minute: '2-digit',
-  })}`
+  if (Number.isNaN(d.getTime())) return '—'
+  const k = new Date(d.getTime() + 9 * 60 * 60 * 1000)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${k.getUTCFullYear()}. ${k.getUTCMonth() + 1}. ${k.getUTCDate()}. ${pad(k.getUTCHours())}:${pad(k.getUTCMinutes())}`
 }
 
 export default function FieldObservationsClient({
