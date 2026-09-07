@@ -353,3 +353,379 @@
 .exhausted {
   opacity: 0.5;
 }
+
+/* ── 관찰기록 (현장 기록 → 리드 전환) ── */
+
+.obsForm {
+  background: var(--ds-surface-panel);
+  border: 1px solid var(--ds-border-default);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+/* 현장에서 한 손으로 누른다 — 손가락 크기(56px 이상)로 크게 */
+.photoBtn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 60px;
+  padding: 14px 16px;
+  border: 2px dashed var(--ds-border-default);
+  border-radius: 12px;
+  background: var(--ds-surface-canvas);
+  color: var(--ds-text-primary);
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.photoBtn:active {
+  border-color: #1f5d3a;
+}
+
+.photoBtnIcon {
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1;
+  color: #1f5d3a;
+}
+
+.photoBtnSub {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ds-text-secondary);
+}
+
+.hiddenInput {
+  display: none;
+}
+
+.photoGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.photoItem {
+  position: relative;
+  width: 92px;
+}
+
+.photoImg,
+.photoPlaceholder {
+  width: 92px;
+  height: 92px;
+  border-radius: 10px;
+  border: 1px solid var(--ds-border-default);
+  object-fit: cover;
+  display: block;
+  background: var(--ds-surface-canvas);
+}
+
+.photoPlaceholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ds-text-secondary);
+  text-align: center;
+}
+
+/* 잘못 찍은 사진을 바로 뺀다 — 터치 타깃 32px */
+.photoRemove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 1px solid var(--ds-border-default);
+  background: var(--ds-surface-panel);
+  color: var(--ds-text-primary);
+  font-size: 17px;
+  font-weight: 900;
+  line-height: 1;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.photoErr {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: #b91c1c;
+  margin-top: 3px;
+  word-break: break-word;
+}
+
+.obsTextarea {
+  width: 100%;
+  min-height: 110px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--ds-border-default);
+  border-radius: 10px;
+  /* 모바일 사파리는 16px 미만 입력창에서 화면을 확대해버린다 */
+  font-size: 16px;
+  font-family: inherit;
+  line-height: 1.55;
+  background: var(--ds-surface-panel);
+  color: var(--ds-text-primary);
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.obsForm .formInput {
+  margin-top: 10px;
+  font-size: 16px;
+  padding: 12px 10px;
+}
+
+.obsTagPreview {
+  margin-top: 8px;
+}
+
+.obsSaveBtn {
+  width: 100%;
+  min-height: 52px;
+  margin-top: 14px;
+  border-radius: 12px;
+  border: 1px solid #1f5d3a;
+  background: #1f5d3a;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 900;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.obsSaveBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.obsViewRow {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.obsViewBtn {
+  padding: 9px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--ds-border-default);
+  background: var(--ds-surface-panel);
+  color: var(--ds-text-secondary);
+  font-size: 13px;
+  font-weight: 800;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.obsViewBtnActive {
+  background: #1f5d3a;
+  border-color: #1f5d3a;
+  color: #fff;
+}
+
+.obsList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.obsCard {
+  background: var(--ds-surface-panel);
+  border: 1px solid var(--ds-border-default);
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.obsCardHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.obsDate {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--ds-text-secondary);
+}
+
+.obsBadgeDone,
+.obsBadgeGone {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.obsBadgeDone {
+  background: #16a34a;
+}
+
+.obsBadgeGone {
+  background: #6b7280;
+}
+
+.obsPhotos {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.obsThumb {
+  width: 78px;
+  height: 78px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--ds-border-default);
+  display: block;
+}
+
+.obsMemo {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ds-text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0 0 10px;
+}
+
+.obsCheckRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--ds-border-default);
+  padding-top: 10px;
+}
+
+/* 체크박스도 현장에서 누른다 — 라벨 전체가 터치 영역 */
+.obsCheck {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 42px;
+  padding: 6px 12px;
+  border: 1px solid var(--ds-border-default);
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ds-text-primary);
+  cursor: pointer;
+}
+
+.obsCheck input {
+  width: 18px;
+  height: 18px;
+}
+
+.obsCheckDanger {
+  color: #b91c1c;
+}
+
+.obsCompanyRow {
+  margin-top: 10px;
+}
+
+.obsCompanyLabel {
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--ds-text-secondary);
+  margin-bottom: 5px;
+}
+
+.obsCompanyRow .formInput {
+  font-size: 16px;
+  padding: 11px 10px;
+}
+
+/* 목록을 스크롤해도 확정 버튼이 따라온다 */
+.obsBar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--ds-border-default);
+  border-radius: 12px;
+  background: var(--ds-surface-panel);
+  box-shadow: 0 -4px 14px rgba(0, 0, 0, 0.1);
+  z-index: 20;
+}
+
+.obsBarText {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--ds-text-primary);
+}
+
+.obsBarLink {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ds-text-secondary);
+  text-decoration: underline;
+  margin-left: auto;
+}
+
+.obsBarBtn {
+  min-height: 46px;
+  padding: 0 22px;
+  border-radius: 10px;
+  border: 1px solid #1f5d3a;
+  background: #1f5d3a;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 900;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.obsBarBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .obsViewRow .textInput {
+    width: 100%;
+    min-width: 0;
+    flex-basis: 100%;
+    font-size: 16px;
+  }
+
+  .obsCheckRow {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .obsCheck {
+    min-height: 48px;
+  }
+
+  .obsBarLink {
+    display: none;
+  }
+
+  .obsBarBtn {
+    flex: 1;
+  }
+}

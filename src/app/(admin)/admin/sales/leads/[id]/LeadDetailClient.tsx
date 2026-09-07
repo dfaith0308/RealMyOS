@@ -301,6 +301,15 @@ export default function LeadDetailClient({
                         </span>
                       ))}
                     </div>
+                    {(n.photo_urls ?? []).length > 0 && (
+                      <div className={c.obsPhotos}>
+                        {(n.photo_urls ?? []).map((u) => (
+                          <a key={u} href={u} target="_blank" rel="noreferrer">
+                            <img src={u} alt="" className={c.obsThumb} />
+                          </a>
+                        ))}
+                      </div>
+                    )}
                     <div className={c.timelineBody}>{n.body}</div>
                     <button
                       type="button"
