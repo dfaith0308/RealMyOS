@@ -81,15 +81,16 @@ export default function ProductListClient({ products, marginThreshold }: Props) 
         </thead>
         <tbody>
           {products.map((p) => {
-            // [TEST] 가 우선이다. 원가 미확정 배지는 "매입가를 채워야 할 상품"만 가리켜야 한다.
+            // [TEST] 는 팔 수 없는 데이터라 마진 비교 대상이 아니다.
+            // 다만 매입가 자체는 값이 있으면 그대로 보여준다 — 배지가 숫자를 가리면 안 된다.
             const unsellable = isTestProductName(p.name)
-            const costUnconfirmed = !unsellable && isCostUnconfirmed(p.cost_price)
+            const costUnconfirmed = isCostUnconfirmed(p.cost_price)
             const margin = !costUnconfirmed && p.selling_price
               ? calcMarginRate(p.selling_price, p.cost_price) : null
             const threshold = p.min_margin_rate ?? marginThreshold
             const avgMargin = !costUnconfirmed && p.avg_unit_price
               ? calcMarginRate(p.avg_unit_price, p.cost_price) : null
-            const isWarning = avgMargin !== null && avgMargin < threshold
+            const isWarning = !unsellable && avgMargin !== null && avgMargin < threshold
 
             return (
               <tr key={p.id} style={{ borderBottom: '1px solid #f3f4f6', background: isWarning ? '#FFF9F9' : '#fff' }}>
@@ -102,12 +103,12 @@ export default function ProductListClient({ products, marginThreshold }: Props) 
                   {p.tax_type === 'exempt' && <span style={s.exemptBadge}>면세</span>}
                 </td>
                 <td style={{ ...td, fontVariantNumeric: 'tabular-nums' }}>
-                  {unsellable ? (
-                    <span style={unsellableBadge}>판매불가</span>
-                  ) : costUnconfirmed ? (
-                    <span style={unconfirmedBadge}>미확정</span>
-                  ) : (
+                  {!costUnconfirmed ? (
                     formatKRW(p.cost_price)
+                  ) : unsellable ? (
+                    <span style={{ color: '#d1d5db' }}>-</span>
+                  ) : (
+                    <span style={unconfirmedBadge}>미확정</span>
                   )}
                 </td>
                 <td style={{ ...td, fontVariantNumeric: 'tabular-nums' }}>{p.selling_price ? formatKRW(p.selling_price) : '-'}</td>
