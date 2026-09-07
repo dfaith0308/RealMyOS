@@ -44,3 +44,32 @@ export function resolveBulkShippingType(raw?: string | null): ListingShippingTyp
 export function requiresBaseShippingFee(shippingType: ListingShippingType): boolean {
   return shippingType !== 'free'
 }
+
+/**
+ * 매입가 없이 상품이 저장될 때 product_costs 에 넣는 자리값.
+ * 원가 행이 아예 없으면 주문 스냅샷(getCurrentCostPrice)이 원가를 찾지 못하므로
+ * 0원이 아니라 1원을 둔다. "아직 안 채운 값"이지 "진짜 1원"이 아니다.
+ */
+export const PLATFORM_COMMERCE_PLACEHOLDER_COST = 1
+
+/**
+ * "원가 미확정" 판정.
+ * 자리값(1원) 이하이거나 원가 행 자체가 없는 상품은 마진을 계산해봐야 의미가 없다.
+ * 화면에서는 마진율 대신 "원가 미확정"으로 보여주고, 원가 기반 집계에서는 따로 센다.
+ */
+export function isCostUnconfirmed(cost: number | null | undefined): boolean {
+  if (cost == null || !Number.isFinite(cost)) return true
+  return cost <= PLATFORM_COMMERCE_PLACEHOLDER_COST
+}
+
+/**
+ * 폼·엑셀에서 받은 매입가를 저장 가능한 정수로 정규화한다.
+ * 비었거나 0 이하면 null — 호출부가 "미입력"과 "0원"을 구분하지 않아도 되게 한다.
+ */
+export function normalizeCostPriceInput(raw: unknown): number | null {
+  if (raw == null || raw === '') return null
+  const n = typeof raw === 'number' ? raw : Number(String(raw).replace(/[^0-9.-]/g, ''))
+  if (!Number.isFinite(n)) return null
+  const i = Math.round(n)
+  return i > 0 ? i : null
+}

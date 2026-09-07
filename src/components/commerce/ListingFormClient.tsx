@@ -22,6 +22,7 @@ import {
 import { LISTING_SHIPPING_TYPES } from '@/lib/commerce-constants'
 import { formatDigitsForInput, formatKRW } from '@/lib/calc'
 import { extractPureProductName } from '@/lib/commerce-utils'
+import { isCostUnconfirmed } from '@/lib/commerce-constants'
 import mod from './listing-new-client.module.css'
 import ProductDetailImageGenerator from './ProductDetailImageGenerator'
 import { analyzeProductStrengths } from '@/actions/admin/ai-product-analysis'
@@ -232,10 +233,14 @@ function buildInitialFormValues(initial: ListingForEditData | null) {
   const positive = (n: number | null | undefined): string => (n != null && n > 0 ? String(n) : '')
   const shipping = initial?.shipping_type ?? ''
 
+  // 자리값(1원)은 "입력된 적 없는 값"이므로 빈 칸으로 둔다 — 그래야 화면이 "원가 미확정"으로 보인다
+  const savedCost = initial?.cost_price ?? null
+
   return {
     brandName: initial?.brand_name ?? '',
     productName: initial?.product_name ?? '',
     spec: initial?.spec ?? '',
+    supplyPrice: savedCost != null && !isCostUnconfirmed(savedCost) ? String(savedCost) : '',
     commercePrice: initial ? String(initial.commerce_price) : '',
     originalPrice: positive(initial?.original_price),
     shippingType: ((LISTING_SHIPPING_TYPES as readonly string[]).includes(shipping)
@@ -308,7 +313,7 @@ export default function ListingFormClient(props: ListingFormProps) {
     [productName, brandName, spec],
   )
 
-  const [supplyPrice, setSupplyPrice] = useState('')
+  const [supplyPrice, setSupplyPrice] = useState(v.supplyPrice)
   const [commercePrice, setCommercePrice] = useState(v.commercePrice)
   const [originalPrice, setOriginalPrice] = useState(v.originalPrice)
   const [marginMode, setMarginMode] = useState<'price' | 'margin'>('price')
@@ -539,13 +544,28 @@ export default function ListingFormClient(props: ListingFormProps) {
       ? ((originalPriceNum - bulkPrice) / originalPriceNum) * 100
       : null
 
+  /**
+   * 매입가가 비어 있으면(= 저장되면 자리값 1원) 마진을 계산할 근거가 없다.
+   * 이때 마진율을 '—'로 두면 "아직 안 나온 값"으로 읽히므로 "원가 미확정"이라고 못박는다.
+   */
+  const costUnconfirmed = costNum <= 0
+  const UNCONFIRMED_BADGE = {
+    label: '원가 미확정',
+    bg: '#fffbeb',
+    border: '#fde68a',
+    color: '#92400e',
+  }
+
   function marginBadge(rate: number | null): {
     label: string
     bg: string
     border: string
     color: string
   } {
-    if (rate === null) return { label: '—', bg: '#f9fafb', border: '#e5e7eb', color: '#6b7280' }
+    if (rate === null) {
+      if (costUnconfirmed) return UNCONFIRMED_BADGE
+      return { label: '—', bg: '#f9fafb', border: '#e5e7eb', color: '#6b7280' }
+    }
     if (rate <= 10)
       return { label: `${rate.toFixed(1)}% 🔴 위험`, bg: '#fef2f2', border: '#fecaca', color: '#dc2626' }
     if (rate <= 16)
@@ -987,7 +1007,7 @@ export default function ListingFormClient(props: ListingFormProps) {
     setBrandName(base.brandName)
     setProductName(base.productName)
     setSpec(base.spec)
-    setSupplyPrice('')
+    setSupplyPrice(base.supplyPrice)
     setCommercePrice(base.commercePrice)
     setOriginalPrice(base.originalPrice)
     setMarginMode('price')
@@ -1077,6 +1097,8 @@ export default function ListingFormClient(props: ListingFormProps) {
       spec: spec.trim() || null,
       category_id: effectiveCategoryId,
       commerce_price: price,
+      // 화면에서 받아만 두고 저장 경로로 넘기지 않아 원가가 전부 1원으로 들어가던 지점
+      cost_price: cost > 0 ? cost : null,
       original_price: op,
       shipping_type: shippingType,
       shipping_group_id: shippingGroupId.trim() || null,
@@ -1549,7 +1571,9 @@ export default function ListingFormClient(props: ListingFormProps) {
                     onChange={(e) => setSupplyPrice(e.target.value.replace(/\D/g, ''))}
                     placeholder="예: 18,000"
                   />
-                  <p className={mod.fieldHint}>내부 운영용. 구매자에게 노출 안 됨</p>
+                  <p className={mod.fieldHint}>
+                    내부 운영용. 구매자에게 노출 안 됨 · 상품의 매입가(원가)로 저장됩니다
+                  </p>
                 </div>
                 <div>
                   {marginMode === 'price' ? (
@@ -1577,6 +1601,21 @@ export default function ListingFormClient(props: ListingFormProps) {
                           }}
                         >
                           마진율 (PG 3.3%): {marginBadge(marginRateDisplay).label}
+                        </div>
+                      ) : costUnconfirmed ? (
+                        <div
+                          style={{
+                            marginTop: 6,
+                            padding: '7px 10px',
+                            border: `1px solid ${UNCONFIRMED_BADGE.border}`,
+                            borderRadius: 8,
+                            fontSize: 13,
+                            fontWeight: 600,
+                            background: UNCONFIRMED_BADGE.bg,
+                            color: UNCONFIRMED_BADGE.color,
+                          }}
+                        >
+                          마진율 (PG 3.3%): {UNCONFIRMED_BADGE.label} — 공급가를 입력하세요
                         </div>
                       ) : null}
                     </>
