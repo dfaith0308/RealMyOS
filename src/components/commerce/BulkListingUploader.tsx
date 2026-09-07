@@ -17,10 +17,17 @@ function parseNumber(v: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined
 }
 
+/** 매입가가 비어 있는 행 — 등록은 되지만 원가 미확정으로 남는다 */
+function rowCostUnconfirmed(row: BulkListingRow): boolean {
+  const n = parseNumber(row.supply_price)
+  return n == null || n <= 0
+}
+
+/** 매입가는 등록을 막는 조건이 아니다 — 없으면 원가 미확정으로 등록될 뿐이다 */
+
 function rowHasError(row: BulkListingRow): boolean {
   if (!cellStr(row.product_name)) return true
   if (!parseNumber(row.commerce_price) || row.commerce_price <= 0) return true
-  if (!parseNumber(row.supply_price) || row.supply_price <= 0) return true
   // 무료배송은 기본배송비가 의미 없으므로 요구하지 않는다 (서버 validateRow 와 동일 기준)
   if (requiresBaseShippingFee(resolveBulkShippingType())) {
     if (!parseNumber(row.base_shipping_fee) || row.base_shipping_fee <= 0) return true
@@ -154,6 +161,7 @@ export default function BulkListingUploader() {
 
   const preview = rows.slice(0, 5)
   const invalidCount = rows.filter(rowHasError).length
+  const unconfirmedCount = rows.filter((r) => !rowHasError(r) && rowCostUnconfirmed(r)).length
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -204,6 +212,11 @@ export default function BulkListingUploader() {
               {invalidCount > 0 ? (
                 <span style={{ color: '#b91c1c', fontWeight: 500 }}> · 필수값 누락 {invalidCount}행</span>
               ) : null}
+              {unconfirmedCount > 0 ? (
+                <span style={{ color: '#92400e', fontWeight: 500 }}>
+                  {' '}· 매입가 없음 {unconfirmedCount}행 (등록은 됩니다 · 원가 미확정)
+                </span>
+              ) : null}
             </p>
             <div style={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: 8 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
@@ -213,7 +226,7 @@ export default function BulkListingUploader() {
                     <th style={th}>상품명</th>
                     <th style={th}>대분류</th>
                     <th style={th}>소분류</th>
-                    <th style={th}>공급가</th>
+                    <th style={th}>공급가(매입가)</th>
                     <th style={th}>판매가</th>
                     <th style={th}>배송비</th>
                   </tr>
@@ -227,7 +240,13 @@ export default function BulkListingUploader() {
                         <td style={td}>{row.product_name || '—'}</td>
                         <td style={td}>{row.category || '—'}</td>
                         <td style={td}>{row.sub_category || '—'}</td>
-                        <td style={td}>{row.supply_price || '—'}</td>
+                        <td style={td}>
+                          {rowCostUnconfirmed(row) ? (
+                            <span style={{ color: '#92400e', fontWeight: 600 }}>원가 미확정</span>
+                          ) : (
+                            row.supply_price
+                          )}
+                        </td>
                         <td style={td}>{row.commerce_price || '—'}</td>
                         <td style={td}>{row.base_shipping_fee || '—'}</td>
                       </tr>

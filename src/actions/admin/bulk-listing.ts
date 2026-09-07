@@ -30,7 +30,8 @@ export type BulkListingRow = {
   spec?: string
   category?: string
   sub_category?: string
-  supply_price: number
+  /** 매입가(원가). 없어도 등록되며, 그때는 원가 미확정으로 남는다 */
+  supply_price?: number
   commerce_price: number
   base_shipping_fee: number
   original_price?: number
@@ -205,39 +206,6 @@ async function getListingContext(
   return data as ListingContext
 }
 
-async function applySupplyPrice(
-  supabase: SupabaseClient,
-  productId: string,
-  supplyPrice: number,
-): Promise<void> {
-  const today = new Date().toISOString().slice(0, 10)
-  const { data: existing, error: selErr } = await supabase
-    .from('product_costs')
-    .select('id')
-    .eq('product_id', productId)
-    .is('end_date', null)
-    .maybeSingle()
-
-  if (selErr) throw new Error(selErr.message)
-
-  if (existing?.id) {
-    const { error } = await supabase
-      .from('product_costs')
-      .update({ cost_price: supplyPrice })
-      .eq('id', existing.id)
-    if (error) throw new Error(error.message)
-    return
-  }
-
-  const { error: insErr } = await supabase.from('product_costs').insert({
-    product_id: productId,
-    cost_price: supplyPrice,
-    start_date: today,
-    end_date: null,
-  })
-  if (insErr) throw new Error(insErr.message)
-}
-
 async function resolveAiAnalysis(row: BulkListingRow): Promise<{
   ai_strengths: string | null
   ai_usage: string | null
@@ -305,8 +273,11 @@ function validateRow(row: BulkListingRow): string | null {
   if (!Number.isFinite(row.commerce_price) || row.commerce_price <= 0 || !Number.isInteger(row.commerce_price)) {
     return 'commerce_price는 1원 이상 정수'
   }
-  if (!Number.isFinite(row.supply_price) || row.supply_price <= 0 || !Number.isInteger(row.supply_price)) {
-    return 'supply_price는 1원 이상 정수'
+  // 매입가는 선택이다. 기존 템플릿에 컬럼이 없거나 칸이 비어 있어도 등록은 되고,
+  // 그 상품은 원가 미확정(자리값 1원)으로 남아 화면에서 따로 표시된다.
+  // 빈 칸과 0은 "미입력"으로 본다. 형식이 깨진 값만 막는다.
+  if (row.supply_price != null && row.supply_price > 0 && !Number.isInteger(row.supply_price)) {
+    return 'supply_price는 비워두거나 1원 이상 정수'
   }
   // 무료배송은 기본배송비가 의미 없으므로 요구하지 않는다. 값을 넣었다면 형식만 본다.
   if (requiresBaseShippingFee(resolveBulkShippingType())) {
@@ -439,6 +410,8 @@ export async function bulkCreateListings(
           spec,
           category_id: categoryId,
           commerce_price: row.commerce_price,
+          // 비어 있거나 0이면 null — 신규는 자리값(1원)으로, 수정은 기존 원가를 그대로 둔다
+          cost_price: row.supply_price && row.supply_price > 0 ? row.supply_price : null,
           original_price: toOptionalInt(row.original_price),
           storefront_published,
           shipping_type: st,
@@ -476,7 +449,6 @@ export async function bulkCreateListings(
           ai_usage,
           ai_summary,
         })
-        await applySupplyPrice(supabase, ctx.product_id, row.supply_price)
         updated += 1
       } else {
         const createRes = await createListingFull({
@@ -488,6 +460,8 @@ export async function bulkCreateListings(
           badge_labels: null,
           category_id: categoryId,
           commerce_price: row.commerce_price,
+          // 비어 있거나 0이면 null — 신규는 자리값(1원)으로, 수정은 기존 원가를 그대로 둔다
+          cost_price: row.supply_price && row.supply_price > 0 ? row.supply_price : null,
           original_price: toOptionalInt(row.original_price),
           shipping_type: shippingType,
           shipping_group_id: null,
@@ -518,7 +492,6 @@ export async function bulkCreateListings(
           continue
         }
 
-        await applySupplyPrice(supabase, createRes.data.product_id, row.supply_price)
         created += 1
       }
     } catch (e) {
