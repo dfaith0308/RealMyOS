@@ -73,3 +73,13 @@ export function normalizeCostPriceInput(raw: unknown): number | null {
   const i = Math.round(n)
   return i > 0 ? i : null
 }
+
+/**
+ * E2E 시뮬레이션이 남긴 [TEST] 상품인가.
+ * 실제로 팔 수 없는 데이터라 "원가 미확정"과 같은 칸에 세면 안 된다.
+ * 상품명은 buildPlatformProductDisplayName 으로 "브랜드 상품명 규격"이 되므로
+ * 앞머리에 [TEST] 가 붙는지만 본다.
+ */
+export function isTestProductName(name: string | null | undefined): boolean {
+  return /^\s*\[TEST\]/i.test(String(name ?? ''))
+}

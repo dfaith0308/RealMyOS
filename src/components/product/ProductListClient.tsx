@@ -5,12 +5,25 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { copyProduct, getProductUsers } from '@/actions/product'
 import { calcMarginRate, formatKRW } from '@/lib/calc'
-import { isCostUnconfirmed } from '@/lib/commerce-constants'
+import { isCostUnconfirmed, isTestProductName } from '@/lib/commerce-constants'
 import type { ProductListItem, ProductUser } from '@/actions/product'
 
 interface Props {
   products: ProductListItem[]
   marginThreshold: number
+}
+
+/** [TEST] 잔여물 — 팔 수 없는 데이터라 "원가 미확정"과 같은 배지로 세지 않는다 */
+const unsellableBadge: React.CSSProperties = {
+  display: 'inline-block',
+  padding: '2px 7px',
+  borderRadius: 6,
+  border: '1px solid #e5e7eb',
+  background: '#f3f4f6',
+  color: '#6b7280',
+  fontSize: 11,
+  fontWeight: 700,
+  whiteSpace: 'nowrap',
 }
 
 /** 매입가가 자리값(1원 이하)이면 마진을 계산해도 의미가 없다 — 표시만 바꾼다 */
@@ -68,7 +81,9 @@ export default function ProductListClient({ products, marginThreshold }: Props) 
         </thead>
         <tbody>
           {products.map((p) => {
-            const costUnconfirmed = isCostUnconfirmed(p.cost_price)
+            // [TEST] 가 우선이다. 원가 미확정 배지는 "매입가를 채워야 할 상품"만 가리켜야 한다.
+            const unsellable = isTestProductName(p.name)
+            const costUnconfirmed = !unsellable && isCostUnconfirmed(p.cost_price)
             const margin = !costUnconfirmed && p.selling_price
               ? calcMarginRate(p.selling_price, p.cost_price) : null
             const threshold = p.min_margin_rate ?? marginThreshold
@@ -87,11 +102,21 @@ export default function ProductListClient({ products, marginThreshold }: Props) 
                   {p.tax_type === 'exempt' && <span style={s.exemptBadge}>면세</span>}
                 </td>
                 <td style={{ ...td, fontVariantNumeric: 'tabular-nums' }}>
-                  {costUnconfirmed ? <span style={unconfirmedBadge}>미확정</span> : formatKRW(p.cost_price)}
+                  {unsellable ? (
+                    <span style={unsellableBadge}>판매불가</span>
+                  ) : costUnconfirmed ? (
+                    <span style={unconfirmedBadge}>미확정</span>
+                  ) : (
+                    formatKRW(p.cost_price)
+                  )}
                 </td>
                 <td style={{ ...td, fontVariantNumeric: 'tabular-nums' }}>{p.selling_price ? formatKRW(p.selling_price) : '-'}</td>
                 <td style={{ ...td, color: margin !== null && margin < threshold ? '#B91C1C' : '#374151', fontWeight: margin !== null && margin < threshold ? 600 : 400 }}>
-                  {costUnconfirmed ? (
+                  {unsellable ? (
+                    <span style={unsellableBadge} title="[TEST] 시뮬레이션 잔여 데이터 — 판매 대상이 아닙니다">
+                      판매불가
+                    </span>
+                  ) : costUnconfirmed ? (
                     <span style={unconfirmedBadge} title="매입가가 없어 마진을 계산할 수 없습니다">
                       원가 미확정
                     </span>
@@ -116,9 +141,11 @@ export default function ProductListClient({ products, marginThreshold }: Props) 
                   {p.avg_unit_price ? (
                     <span
                       title={
-                        costUnconfirmed
-                          ? '매입가 미확정 — 마진 비교 불가'
-                          : `마진 ${avgMargin?.toFixed(1)}% — 기준 ${threshold}%`
+                        unsellable
+                          ? '[TEST] 잔여 데이터 — 마진 비교 대상 아님'
+                          : costUnconfirmed
+                            ? '매입가 미확정 — 마진 비교 불가'
+                            : `마진 ${avgMargin?.toFixed(1)}% — 기준 ${threshold}%`
                       }
                     >
                       {formatKRW(p.avg_unit_price)}
