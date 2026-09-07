@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { requireAdmin as requireAdminAuth } from '@/lib/auth'
 import { createSupabaseAdmin } from '@/lib/supabase-admin'
 import { buildPlatformProductDisplayName, extractPureProductName } from '@/lib/commerce-utils'
@@ -9,6 +10,9 @@ import {
   COMMERCE_ORDER_STATUSES,
   COMMERCE_PAYMENT_METHODS,
   LISTING_SHIPPING_TYPES,
+  PLATFORM_COMMERCE_PLACEHOLDER_COST,
+  isCostUnconfirmed,
+  normalizeCostPriceInput,
   type CommerceOrderStatus,
   type CommercePaymentMethod,
   type ListingShippingType,
@@ -766,6 +770,8 @@ export type ListingForEditData = {
   product_name: string
   category_id: string | null
   commerce_price: number
+  /** 현재 적용 중인 매입가 (product_costs.end_date IS NULL). 자리값 1원이면 "원가 미확정" */
+  cost_price: number | null
   original_price: number | null
   status: ListingStatus
   is_visible: boolean
@@ -804,6 +810,8 @@ export type UpdateListingFullInput = {
   product_name: string
   category_id: string
   commerce_price: number
+  /** 매입가. undefined 면 손대지 않고, null/0 이면 자리값(1원)으로 되돌린다 */
+  cost_price?: number | null
   original_price: number | null
   /** 스토어 노출 = `status === 'visible'` & `is_visible` (getListings / COMMERCE-FLOW 정합) */
   storefront_published: boolean
@@ -884,6 +892,19 @@ function resolveStorefrontVisibility(
   return { ok: true, nextStatus: currentStatus, nextIsVisible: currentIsVisible }
 }
 
+/** products 임베드에 딸려온 product_costs 에서 현재 적용 중인 매입가를 고른다 (추가 조회 없음) */
+function pickActiveCostPrice(raw: unknown): number | null {
+  const rows = Array.isArray(raw) ? raw : []
+  const active = rows
+    .filter(
+      (c): c is { cost_price: number; start_date: string; end_date: string | null } =>
+        !!c && typeof c === 'object' && (c as { end_date?: unknown }).end_date == null,
+    )
+    .sort((a, b) => String(b.start_date).localeCompare(String(a.start_date)))
+  const top = active[0]
+  return top && Number.isFinite(top.cost_price) ? Math.round(top.cost_price) : null
+}
+
 export async function getListingForEdit(listingId: string): Promise<ActionResult<ListingForEditData>> {
   const supabase = await createSupabaseServer()
   const auth = await requireAdmin(supabase)
@@ -931,7 +952,7 @@ export async function getListingForEdit(listingId: string): Promise<ActionResult
       ai_strengths,
       ai_usage,
       ai_summary,
-      products ( id, name )
+      products ( id, name, product_costs ( cost_price, start_date, end_date ) )
     `,
     )
     .eq('id', lid)
@@ -950,7 +971,10 @@ export async function getListingForEdit(listingId: string): Promise<ActionResult
   if (!product_id) return { success: false, error: '연결된 상품이 없습니다' }
 
   const prod = Array.isArray(row.products) ? row.products[0] : row.products
-  const p = (prod ?? null) as { id?: string; name?: string | null } | null
+  const p = (prod ?? null) as
+    | { id?: string; name?: string | null; product_costs?: unknown }
+    | null
+  const cost_price = pickActiveCostPrice(p?.product_costs)
 
   const status = row.status as ListingStatus
   if (!(LISTING_STATUSES as readonly string[]).includes(status)) {
@@ -984,6 +1008,7 @@ export async function getListingForEdit(listingId: string): Promise<ActionResult
       ),
       category_id,
       sub_category_id,
+      cost_price,
       commerce_price:
         typeof row.commerce_price === 'number' && Number.isFinite(row.commerce_price)
           ? Math.round(row.commerce_price)
@@ -1211,7 +1236,7 @@ export async function updateListingFull(
       ai_strengths,
       ai_usage,
       ai_summary,
-      products ( id, name )
+      products ( id, name, product_costs ( cost_price, start_date, end_date ) )
     `,
     )
     .eq('id', listing_id)
@@ -1251,11 +1276,17 @@ export async function updateListingFull(
   }
 
   const prodJoin = Array.isArray(L.products) ? L.products[0] : L.products
-  const p0 = (prodJoin ?? null) as { name?: string | null } | null
+  const p0 = (prodJoin ?? null) as { name?: string | null; product_costs?: unknown } | null
   const before_product_name = String(p0?.name ?? '').trim()
+  const before_cost_price = pickActiveCostPrice(p0?.product_costs)
+
+  // 매입가는 "비우면 지운다"가 아니라 "비우면 손대지 않는다".
+  // 폼에서 칸을 비운 채 다른 항목만 고쳤을 때 이미 확정된 원가가 1원으로 되돌아가면 안 된다.
+  const next_cost_price = normalizeCostPriceInput(input.cost_price) ?? before_cost_price
 
   const beforeSnapshot = {
     product_name: before_product_name,
+    cost_price: before_cost_price,
     category_id: (L.category_id as string | null) ?? null,
     commerce_price:
       typeof L.commerce_price === 'number' && Number.isFinite(L.commerce_price)
@@ -1316,6 +1347,7 @@ export async function updateListingFull(
 
   const afterSnapshot = {
     product_name: dbProductName,
+    cost_price: next_cost_price,
     category_id,
     commerce_price: price,
     original_price,
@@ -1376,6 +1408,14 @@ export async function updateListingFull(
 
   if (changed_fields.length === 0) {
     return { success: true, data: { id: listing_id } }
+  }
+
+  // 매입가부터 반영한다. 여기서 실패하면 나머지는 아직 손대지 않은 상태라 그대로 재시도하면 된다.
+  // (products / commerce_product_listings / product_costs 3개 테이블 write 가 한 트랜잭션이
+  //  아닌 것은 이 함수의 기존 구조 그대로다. 원자화하려면 RPC 로 옮겨야 한다.)
+  if (next_cost_price != null && next_cost_price !== before_cost_price) {
+    const costRes = await applyPlatformCostPrice(supabase, product_id, next_cost_price)
+    if (!costRes.ok) return { success: false, error: `매입가 저장 실패: ${costRes.error}` }
   }
 
   const { error: pUpErr } = await supabase
@@ -1572,8 +1612,6 @@ export async function createListing(input: {
   return { success: true, data: { listing_id } }
 }
 
-/** createProduct()와 같이 product_costs 행이 필요해 최소값으로 둠(실제 판매가는 listing). */
-const PLATFORM_COMMERCE_PLACEHOLDER_COST = 1
 
 async function allocateProductCodeForPlatform(supabase: any): Promise<{ ok: true; code: string } | { ok: false; error: string }> {
   try {
@@ -1812,6 +1850,66 @@ export async function deleteShippingGroup(id: string): Promise<ActionResult> {
   return { success: true }
 }
 
+type ActiveCostRow = { id: string; cost_price: number; start_date: string }
+
+/**
+ * 매입가를 product_costs 에 반영한다 (이력 유지).
+ *
+ *  - 자리값(1원 이하)이던 행은 애초에 진짜 원가가 아니므로 이력을 남기지 않고 그 자리에서 고친다.
+ *    "1원 → 실제 원가"는 가격 변경이 아니라 누락값 채우기다.
+ *  - 같은 날 다시 저장하면 기간이 0일인 행이 생기므로 역시 덮어쓴다.
+ *  - 그 외에는 기존 행을 어제까지로 닫고 새 행을 넣는다 — 과거 원가는 그대로 둔다 (RULE-03).
+ */
+async function applyPlatformCostPrice(
+  supabase: SupabaseClient,
+  product_id: string,
+  next_cost: number,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const today = new Date().toISOString().slice(0, 10)
+
+  const { data: current, error: selErr } = await supabase
+    .from('product_costs')
+    .select('id, cost_price, start_date')
+    .eq('product_id', product_id)
+    .is('end_date', null)
+    .order('start_date', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (selErr) return { ok: false, error: selErr.message }
+
+  const cur = (current ?? null) as ActiveCostRow | null
+  if (cur && cur.cost_price === next_cost) return { ok: true }
+
+  if (!cur) {
+    const { error } = await supabase
+      .from('product_costs')
+      .insert({ product_id, cost_price: next_cost, start_date: today, end_date: null })
+    return error ? { ok: false, error: error.message } : { ok: true }
+  }
+
+  if (isCostUnconfirmed(cur.cost_price) || cur.start_date >= today) {
+    const { error } = await supabase
+      .from('product_costs')
+      .update({ cost_price: next_cost })
+      .eq('id', cur.id)
+    return error ? { ok: false, error: error.message } : { ok: true }
+  }
+
+  const end = new Date(`${today}T00:00:00Z`)
+  end.setUTCDate(end.getUTCDate() - 1)
+  const { error: closeErr } = await supabase
+    .from('product_costs')
+    .update({ end_date: end.toISOString().slice(0, 10) })
+    .eq('id', cur.id)
+  if (closeErr) return { ok: false, error: closeErr.message }
+
+  const { error: insErr } = await supabase
+    .from('product_costs')
+    .insert({ product_id, cost_price: next_cost, start_date: today, end_date: null })
+  if (insErr) return { ok: false, error: insErr.message }
+  return { ok: true }
+}
+
 export async function createListingFull(input: {
   brand_name: string | null
   product_name: string
@@ -1826,6 +1924,8 @@ export async function createListingFull(input: {
   shipping_group_id?: string | null
   admin_memo: string | null
   description?: string | null
+  /** 매입가. 비우면 자리값(1원)으로 저장하고 화면에서 "원가 미확정"으로 구분한다 */
+  cost_price?: number | null
   status: 'draft' | 'visible'
   base_shipping_fee?: number
   free_shipping_qty?: number | null
@@ -1958,9 +2058,13 @@ export async function createListingFull(input: {
   }
   const product_id = insertedProduct.id as string
 
+  // 입력된 매입가가 있으면 그대로 저장한다. 없을 때만 자리값(1원)으로 두고,
+  // 화면에서는 cost_price <= 1 을 "원가 미확정"으로 구분해 보여준다.
+  const cost_price = normalizeCostPriceInput(input.cost_price) ?? PLATFORM_COMMERCE_PLACEHOLDER_COST
+
   const { error: costErr } = await supabase.from('product_costs').insert({
     product_id,
-    cost_price: PLATFORM_COMMERCE_PLACEHOLDER_COST,
+    cost_price,
     start_date: today,
     end_date: null,
   })
@@ -2070,6 +2174,7 @@ export async function createListingFull(input: {
       brand_name,
       spec,
       commerce_price: price,
+      cost_price,
       status: statusIn,
       description: listing_description,
       image_urls: image_urls_db,
