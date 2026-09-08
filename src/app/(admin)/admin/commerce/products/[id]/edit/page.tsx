@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getListingForEdit, getShippingGroups } from '@/actions/admin/commerce'
 import ListingFormClient from '@/components/commerce/ListingFormClient'
+import ListingSupplierTransferPanel from '@/components/commerce/ListingSupplierTransferPanel'
 import { getProductDetailPhotoUrls } from '@/lib/product-detail-photos'
 import s from '../../../../../admin-shared.module.css'
 
@@ -48,6 +49,7 @@ export default async function AdminCommerceProductEditPage(props: { params: Prom
         initial={lr.data}
         shippingGroups={sr.data.groups}
       />
+      <ListingSupplierTransferPanel listingId={id} />
     </main>
   )
 }
