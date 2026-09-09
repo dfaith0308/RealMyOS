@@ -88,7 +88,16 @@ restaurant-os  로컬 main = 9856784 (08-03)   ←→   origin/main = 82d1910 (0
 | `20260909100000_sales_scripts_rls.sql` | RealMyOS | ✅ 있음 | ❌ **미실행** (커밋 메시지가 명시) |
 
 **→ 스키마는 dev 수준, 코드는 main 수준.** 1차 조사가 지적한 「역방향 드리프트」(2단계 보고서)와 같은 성격의 문제가 **브랜치 축에서도 반복**되고 있다.
-`sales_scripts` RLS는 파일만 main에 올라가고 실행이 안 됐으므로, 1차 조사의 보안 항목 **DR-06(다른 공급자 영업 스크립트가 비로그인 공개)은 지금도 열려 있다.** 운영 실측 `sales_scripts` = 7행.
+
+> ⚠️ **2단계 조사 결과에 따른 정정 (18:35 추가)**
+> 위 표의 마지막 줄 `sales_scripts_rls.sql` = "미실행"은 **커밋 메시지의 주장일 뿐이고, 운영 DB에는 그 정책이 실제로 존재한다.**
+> ```
+> sales_scripts_select roles={authenticated} USING ((tenant_id = get_my_tenant_id()) OR (tenant_id = '00000000-...'))
+> sales_scripts_insert / sales_scripts_update  — 둘 다 tenant 스코핑 CHECK 있음
+> ```
+> 익명 키 실측 = HTTP 200 · **0행** (service_role로는 7행). 즉 **1차 조사의 보안 항목 DR-06은 이미 닫혀 있다.**
+> 근거: `overnight-audit-log.md` §6-3 / `migration-drift-report.md` §8.
+> **대신 그 자리에 들어가야 할 진짜 보안 항목은 `message_logs`·`quote_logs`다** — RLS가 꺼진 채 `anon`에 `SELECT/INSERT/UPDATE/DELETE/TRUNCATE` 전권이 부여돼 있고, 익명 키로 메시지 본문 3행 전부가 읽힌다. `overnight-audit-log.md` §6-2 참조.
 
 ### D-03. 09-09 15:21의 커밋이 45분 전 커밋의 핫픽스다 — 운영에서 사용자가 막혔을 정황
 
@@ -239,7 +248,8 @@ restaurant-os  로컬 main = 9856784 (08-03)   ←→   origin/main = 82d1910 (0
 | 5 | **D / H / F / K** (표시·스타일·문서) | 언제든 |
 | **보류** | **A. 구독 자동 재청구** (RealMyOS) | **머지 = 다음 자정 실제 청구 시작.** 유료 전환 시점 결정이 선행. 기술 리뷰만으로 판단 불가 |
 | **보류** | **E. 잔여 정리 스크립트** | 배포 대상 아님(스크립트). 운영 데이터 삭제 도구이므로 별도 취급 |
-| **별건** | `sales_scripts` RLS (`e9651f5`) | main엔 있으나 **미실행.** 1차 조사 DR-06 보안 항목이 지금도 열려 있음 (`sales_scripts` 7행) |
+| **별건** | ~~`sales_scripts` RLS (`e9651f5`)~~ | ~~main엔 있으나 미실행~~ → **정정: 운영에 이미 적용돼 있다.** §D-02 참조. 배포 순서와 무관 |
+| **별건 (신규)** | 🔴 `message_logs` / `quote_logs` **RLS OFF + `anon` 전권** | 브랜치·배포와 무관하게 **운영 DB에서 지금 열려 있다.** 익명 키로 고객 메시지 본문이 읽힌다. 데이터가 3행일 때가 가장 싸게 고칠 시점. `improvement-suggestions.md` I-26 |
 
 ---
 

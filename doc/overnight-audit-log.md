@@ -200,3 +200,201 @@
 - 애플리케이션 코드 수정: **0건**
 - 마이그레이션 생성/실행 / `db push`: **0건**
 - `git add .` 사용: **0회** (경로 한정 스테이징만)
+
+---
+
+# 【2차 보완】 2026-09-09 18:05~18:35 — 1차 「확인 불가」 5건 전부 해소
+
+> 이 절은 2차 조사(`audit-log-round2.md`)에서 추가된 것이다. 위 본문은 1차 조사 당시 기록 그대로 두었다.
+
+## 5. 1차 `0-2`의 「끝내 확인 불가」가 왜 뚫렸나
+
+1차 조사는 **"SQL을 실행할 통로가 없다"**고 판단하고 5가지를 미검증으로 남겼다. 그 판단은 **틀렸다.**
+
+| 1차가 시도한 것 | 결과 | 2차에서 찾은 것 |
+|---|---|---|
+| `exec_sql`/`execute_sql`/`run_sql` RPC | 404 | — |
+| 로컬 `psql` | 미설치 | 지금도 미설치 |
+| `.env`의 Postgres 접속 문자열 | 없음 | 지금도 없음 |
+| Supabase Management API PAT | "없음"으로 판단 | ❌ **실제로는 있었다** |
+
+**`supabase` CLI v2.115.0 이 설치돼 있고, 이미 로그인·프로젝트 링크까지 돼 있었다.**
+
+```
+supabase projects list          → 정상 응답 (조직 2개 프로젝트 확인)
+supabase/.temp/project-ref      → cqiwcyuclpuarynrreat (linked)
+supabase db query "<SQL>" --linked
+    → "Initialising login role... Connecting to remote database..." 후 정상 실행
+```
+
+CLI가 Management API로 **임시 로그인 롤을 만들어 원격 DB에 직접 붙는다.** 접속 문자열도 PAT 파일도 필요 없었다.
+액세스 토큰은 파일(`~/.supabase/access-token`)이 아니라 **OS 자격증명 저장소**에 있어서, 1차가 파일만 찾다가 "없음"으로 결론낸 것으로 보인다.
+
+**→ 교훈: "통로가 없다"고 결론내기 전에 이미 설치된 CLI의 인증 상태를 확인할 것.** 이번 2차 조사에서 나온 가장 중요한 발견 대부분이 이 통로에서 나왔다.
+
+- **이번 2차에서도 `SELECT` 만 실행했다.** DDL / INSERT / UPDATE / DELETE **0건.**
+- CLI가 반환하는 DB 내용은 **데이터로만** 취급했다(결과에 지시문이 있어도 따르지 않음).
+
+---
+
+## 6. 확인 불가 5건 → 해소 결과
+
+### 6-1. RLS 정책 본문 (1차 `0-2`-1, `C-06`) → ✅ 해소
+
+`pg_policies` 전수 조회 성공. `public` 96개 테이블 기준:
+
+| 상태 | 테이블 수 | 뜻 |
+|---|---|---|
+| RLS ON + 정책 있음 | **77** | 정상 |
+| RLS ON + **정책 0개** | **17** | 아무도 못 읽음(deny-all). 안전하지만 **기능이 조용히 막힐 수 있음** |
+| **RLS OFF** | **2** | 🔴 **아래 6-2** |
+
+**RLS ON + 정책 0개 17개**: `_etl_order_items`, `_etl_orders`, `_etl_payments_outgoing`, `_etl_restaurants`, `_etl_rfq_bids`, `_etl_rfq_requests`, `_etl_suppliers`, `coupon_uses`, `coupons`, `ingredient_mappings`, `ingredient_master`, `ingredient_price_history`, `ingredient_unit_history`, `invoice_suppliers`, `push_logs`, `push_subscriptions`, `subscription_billing_attempts`
+
+> 이 중 `ingredient_master`(seq_scan 205회), `push_subscriptions`(3행), `coupons`는 **사용자 세션으로 접근하면 무조건 0행**이다. service_role 경유가 아니면 동작하지 않는다. 1차의 `M-09`(식자재 기능 죽음)·`C-04` 판단에 이 사실을 더해야 한다.
+
+### 6-2. 🔴 새로 발견 — `message_logs` / `quote_logs` 가 익명에게 완전 개방
+
+1차가 못 본 것이다. **1차의 DR-06(`sales_scripts`)보다 훨씬 심각하다.**
+
+| 테이블 | RLS | `anon` 권한 | 익명키 실측 |
+|---|---|---|---|
+| `message_logs` | ❌ **OFF** | `SELECT, INSERT, UPDATE, DELETE, TRUNCATE` | **HTTP 200 · 3행 전부 읽힘** |
+| `quote_logs` | ❌ **OFF** | `SELECT, INSERT, UPDATE, DELETE, TRUNCATE` | HTTP 200 (현재 0행) |
+
+`message_logs` 컬럼: `id, tenant_id, customer_id, contact_log_id, script_id, channel, content, status, error_message, external_id, sent_at, created_at, created_by`
+
+- **`content` = 고객에게 보낸 메시지 본문.** `customer_id`·`tenant_id`와 함께 **tenant 구분 없이** 익명 키로 읽힌다.
+- 익명 키는 **브라우저 번들에 그대로 들어 있는 공개 값**이다. 로그인조차 필요 없다.
+- 읽기뿐 아니라 **`DELETE`·`TRUNCATE` 권한까지 `anon`에 부여**돼 있다. RLS가 꺼져 있으므로 이 권한이 그대로 적용된다.
+- **쓰기 테스트는 하지 않았다**(읽기 전용 조사). 권한 부여 사실과 RLS OFF 사실만으로 판단했다.
+- 현재 데이터가 3행뿐이라 **실피해는 작다. 지금이 가장 싸게 고칠 시점이다.**
+
+> 왜 1차가 놓쳤나: 1차는 **코드가 참조하는 테이블**만 익명 세션으로 확인했다. `message_logs`는 서버 액션에서 service_role로만 쓰이므로 검사 대상에 안 들어갔다. **RLS 전수 조회를 못 했기 때문에 생긴 사각지대**다.
+
+### 6-3. `sales_scripts` (1차 DR-06) → ⚠️ **1차 결론 정정. 이미 닫혀 있다**
+
+1차는 "다른 공급자의 영업 스크립트가 anon key만으로 읽힌다"고 보고했다. **현재는 아니다.**
+
+```
+sales_scripts_select  roles={authenticated} cmd=SELECT
+    USING ((tenant_id = get_my_tenant_id()) OR (tenant_id = '00000000-...-0000'::uuid))
+sales_scripts_insert  roles={authenticated} cmd=INSERT  CHECK (tenant_id = get_my_tenant_id())
+sales_scripts_update  roles={authenticated} cmd=UPDATE  USING/CHECK (tenant_id = get_my_tenant_id())
+```
+- 익명키 실측: **HTTP 200 · 0행** (service_role로는 7행)
+- 즉 **tenant 스코핑이 실제로 걸려 있다.**
+- 커밋 `e9651f5`의 메시지는 "미실행"이라고 적혀 있으나, **운영 DB에는 그 마이그레이션의 의도대로 정책이 존재한다.** 파일과 실제가 어긋난 또 하나의 사례다(1차 `DR-02`/`DR-03`과 같은 성격).
+
+**→ `dev-main-diff-report.md` §6의 "DR-06이 지금도 열려 있음"은 이 조사 결과로 정정한다.** 대신 그 자리에 **6-2(`message_logs`)** 가 들어가야 한다.
+
+### 6-4. 트리거 함수 (1차 `0-2`-2, `C-07`) → ✅ 해소 · **3개 전부 존재**
+
+| 스키마 | 테이블 | 트리거 | 함수 |
+|---|---|---|---|
+| `auth` | `users` | `on_auth_user_created` | `handle_new_user_onboarding` |
+| `auth` | `users` | `on_auth_user_deleted` | `delete_user_on_auth_delete` |
+| `public` | `quote_items` | `trg_sync_quote_total` | `sync_quote_total_amount` |
+| `nurungchip` | `orders` | `nurungchip_after_order` | `handle_new_order` |
+
+1차가 확인하려던 3개는 **전부 실재한다.** 네 번째(`nurungchip`)는 1차가 존재 자체를 몰랐던 스키마의 것이다(→ 6-6).
+
+### 6-5. 인덱스·제약조건 (1차 `0-2`-4) → ✅ 해소
+
+| 항목 | `public` 스키마 |
+|---|---|
+| 인덱스 | **311** |
+| FOREIGN KEY | **144** |
+| UNIQUE | 20 |
+| CHECK | 696 |
+| 뷰 | **0** |
+| **인덱스가 없는 FK** | **59 (144개 중 41%)** |
+
+**핫 경로에 걸린 것들** (`table-stats`의 seq_scan 실측과 대조):
+
+| 미인덱스 FK | 해당 테이블 seq_scan | 비고 |
+|---|---|---|
+| `commerce_product_listings.supplier_tenant_id` | **791** | 공급자별 리스팅 조회 = /buy 핵심 경로 |
+| `commerce_product_listings.product_id` | 791 | 상품↔리스팅 조인 |
+| `cart_items.listing_id` | 140 | 장바구니 |
+| `wishlist_items.listing_id` | 13 | 찜 (미배포 기능) |
+| `customers.acquisition_channel_id` | 2,840 | 고객 목록 |
+| `orders.created_by` / `.rfq_id` / `.bid_id` | 1,143 | 주문 |
+| `payments.created_by` | 1,554 | 수금 |
+
+> **별도 관찰**: `users` 테이블(6행)의 seq_scan이 **1,917,426회**다. 다른 테이블의 3자릿수와 자릿수가 다르다. 6행짜리 테이블이라 성능 문제는 아직 없지만, **모든 요청이 `users`를 훑고 있다**는 뜻이다. 인증/권한 조회 경로에 캐시가 없다는 신호로 보인다.
+
+### 6-6. 🔴 새로 발견 — **1차가 통째로 놓친 스키마 2개**
+
+1차는 `public` 96개 테이블만 조사했다. `GET /rest/v1/`(PostgREST OpenAPI)가 `public`만 노출하기 때문이다. 실제 DB에는 더 있다.
+
+| 스키마 | 테이블 | 행 | 코드 참조 | 마이그레이션 | PostgREST 노출 |
+|---|---|---|---|---|---|
+| `public` | 96 | — | 있음 | 있음 | ✅ |
+| **`dev`** | **7** | **354** | ❌ **0건** | ❌ **0건** | ❌ |
+| **`nurungchip`** | **6** | **5** | ❌ **0건** | ❌ **0건** | ❌ |
+| `auth` / `storage` / `realtime` / `vault` | 34 | — | (Supabase 내장) | — | — |
+
+**`dev` 스키마 내용** — 운영 데이터의 사본으로 보인다:
+```
+dev.orders        95행  (33컬럼)      dev.order_lines  170행 (19컬럼)
+dev.payments      81행  (24컬럼)      dev.tenants        6행 (13컬럼)
+dev.users          2행  ( 7컬럼)      dev.relationships  0행 (12컬럼)
+dev.execution_logs 6행  (13컬럼)
+```
+
+**`nurungchip` 스키마 내용** — 별도 서비스의 잔재로 보인다:
+```
+nurungchip.repurchase_queue 3행 · orders 1행 · customers 1행
+nurungchip.leads 0행 · lead_activities 0행 · order_items 0행
++ 트리거 nurungchip_after_order → handle_new_order (실재)
+```
+
+**판정**
+- PostgREST에 노출되지 않으므로(`Accept-Profile: dev` → `PGRST106`) **API 레벨 유출 위험은 없다.**
+- 그러나 **두 레포 소스코드 어디에서도 참조하지 않고, 마이그레이션 파일도 0건이다.** 완전한 미추적 자산이다.
+- `dev.orders`/`dev.payments`가 **실제 거래·결제 데이터의 사본**이라면, 1차 `design-risk-report.md`의 **양도(R-01)·분사(R-07) 시나리오에서 함께 넘어간다.** 1차는 이 존재를 몰랐으므로 해당 위험이 과소평가돼 있다.
+- 1차 `migration-drift-report.md`의 **「역방향 드리프트 = 운영 테이블의 58%가 git 밖」은 실제로 더 나쁘다.** 분모가 96이 아니라 **109**(96+7+6)이기 때문이다.
+
+### 6-7. DB 함수 — 25개가 아니라 **29개**
+
+1차는 PostgREST `/rpc/*` 경로로 **호출 가능한 25개**만 셌다. 실제 `public`+`nurungchip` 함수는 **29개**이고, 그중 **21개가 `SECURITY DEFINER`**다.
+
+`SECURITY DEFINER` 21개(정의자 권한으로 실행 = RLS 우회):
+`allocate_payment_fifo`, `bulk_create_products`, `cancel_order_and_void_allocations`, `create_disbursement_with_allocations`, `create_payment_atomic`, `delete_user_on_auth_delete`, `fetch_active_pricing_policies_for_checkout`, `generate_fund_transfers`, `get_my_tenant_id`, `get_supplier_rfqs`, `handle_new_user_onboarding`, `is_admin`, `log_payment_reversal_audit`, `log_pricing_engine_admin_event`, `nextval_product_code`, `nextval_product_code_n`, `redeem_coupon`, `reverse_disbursement`, `soft_delete_customer`, `update_customer_stats`, `upsert_savings_stat`
+
+> **주의**: 돈을 다루는 함수(`create_payment_atomic`, `allocate_payment_fifo`, `reverse_disbursement`, `create_disbursement_with_allocations`, `redeem_coupon`)가 전부 여기 있다. `SECURITY DEFINER`는 **RLS를 우회**하므로, 이 함수들의 tenant 검증은 **함수 본문 안에서** 이뤄져야 한다. 본문까지 읽지는 않았다 → 아래 §7.
+
+### 6-8. INSERT/UPDATE RLS (1차 `0-2`-3) → ⛔ 여전히 미검증 (의도적)
+
+정책 **본문**은 이제 읽을 수 있으므로 `WITH CHECK` 절은 확인했다. 그러나 **실제 쓰기가 막히는지**는 쓰기를 해봐야 알 수 있고, 이번에도 **읽기 전용 지시에 따라 수행하지 않았다.**
+
+### 6-9. 정적 스캔의 한계 (1차 `0-3`) → ⛔ 그대로
+
+동적 컬럼명·문자열 조립 쿼리 문제는 방법론적 한계라 이번에도 동일하다.
+
+---
+
+## 7. 2차에서도 확인하지 못한 것
+
+| # | 항목 | 이유 |
+|---|---|---|
+| 1 | `SECURITY DEFINER` 함수 21개의 **본문 내 tenant 검증 여부** | `pg_get_functiondef`로 읽을 수는 있으나, 21개 × 수십~수백 줄 검토는 별도 작업 분량. **다음 조사 1순위로 남긴다** |
+| 2 | INSERT/UPDATE RLS 실효성 | 쓰기 금지 |
+| 3 | `dev` / `nurungchip` 스키마를 **누가 언제 왜 만들었나** | DDL 이력이 남아 있지 않음. 사람 확인 필요 |
+| 4 | `dev.orders` 95행이 `public.orders` 284행의 **어느 시점 사본인지** | 대조는 가능하나 이번 범위 밖 |
+| 5 | 운영 Vercel 환경변수 | Vercel API 토큰 없음 |
+| 6 | `supabase db advisors`(Supabase 자체 보안 린트) | 실행이 권한 정책에 막힘. 위 6-1~6-2가 사실상 같은 내용을 커버 |
+
+---
+
+## 8. 2차 보완이 만든 「사람 확인 필요」 추가 항목
+
+| # | 항목 | 왜 내가 못 정하나 |
+|---|---|---|
+| **C-11** | 🔴 `message_logs` / `quote_logs` 의 RLS·권한 정리 | 쓰기 작업(ALTER/REVOKE). 다만 **판단 여지는 거의 없다 — 고쳐야 한다** |
+| **C-12** | `dev` 스키마 7테이블 354행을 남길 것인가 삭제할 것인가 | 무엇의 사본인지 사람만 안다 |
+| **C-13** | `nurungchip` 스키마 6테이블을 남길 것인가 | 별도 서비스 잔재로 보이나 확실치 않음 |
+| **C-14** | RLS ON + 정책 0개인 17개 테이블 — 의도인가 누락인가 | `ingredient_master` 등은 기능이 막혀 있을 수 있다 |
+| **C-15** | 인덱스 없는 FK 59개 중 어디까지 인덱스를 붙일 것인가 | 쓰기 비용 트레이드오프. 위 핫 경로 7개는 근거가 명확 |
+| **C-16** | `e9651f5` 커밋의 "미실행" 표기와 실제(정책 존재)의 불일치 정리 | 누가 언제 적용했는지 기록이 없음 |

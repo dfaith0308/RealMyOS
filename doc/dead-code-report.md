@@ -366,3 +366,113 @@ _etl_rfq_requests       _etl_suppliers
 | 8 | **D-유지-03** 미참조 `export` 타입 200개 | 간단 | 이득이 작아 마지막 |
 
 > 이번 조사는 읽기 전용이므로 **아무것도 삭제하지 않았다.** 위는 전부 제안이다.
+
+---
+
+# 【2차 보완】 2026-09-09 — DB 층의 죽은 자산 (D-DB-01 ~ D-DB-03)
+
+> 2차 조사(`audit-log-round2.md`)에서 추가. 위 본문은 1차 기록 그대로 둔다.
+> 1차와 동일하게 **🟢 삭제해도 안전 / 🟡 확인 후 삭제 검토 / ⚪ 당장은 유지** 3단계로만 제안한다. **이번에도 아무것도 삭제하지 않았다.**
+
+## 7. 1차가 못 본 층 — 코드가 아니라 DB에 죽은 것이 있다
+
+1차는 `src/` 안의 미참조 `export`와 고아 파일을 찾았다. 그 방법으로는 **DB 안의 죽은 자산**이 잡히지 않는다. 2차에서 `supabase db query`로 DB를 직접 조회해 다음을 찾았다.
+
+### D-DB-01 · 🟡 **`dev` 스키마 — 7테이블 354행, 참조하는 코드가 없다**
+
+```
+dev.orders         95행 (33컬럼)     dev.order_lines   170행 (19컬럼)
+dev.payments       81행 (24컬럼)     dev.tenants         6행 (13컬럼)
+dev.users           2행 ( 7컬럼)     dev.execution_logs  6행 (13컬럼)
+dev.relationships   0행 (12컬럼)
+```
+
+| 검사 | 결과 |
+|---|---|
+| 두 레포 `src/` 참조 | **0건** |
+| 두 레포 `supabase/migrations/` 참조 | **0건** |
+| PostgREST 노출 | **없음** (`PGRST106: Only public, graphql_public`) |
+| 인덱스 | `orders`/`order_lines`/`payments`/`tenants`/`users` **전부 0 bytes (인덱스 없음)** |
+
+**판정: 🟡 확인 후 삭제 검토.**
+컬럼 수(33/19/24)가 `public` 대응 테이블과 비슷해 **운영 데이터의 스냅샷 사본**으로 보인다. 인덱스가 하나도 없다는 점이 "쓰기 전용 덤프"라는 해석을 뒷받침한다.
+그러나 **무엇의, 언제 사본인지 알 수 없다.** 백업 목적이라면 지우면 안 되고, 실험 잔재라면 지워야 한다. → `C-12`
+
+### D-DB-02 · 🟡 **`nurungchip` 스키마 — 6테이블, 별도 서비스 잔재로 보임**
+
+```
+nurungchip.repurchase_queue  3행     nurungchip.orders          1행
+nurungchip.customers         1행     nurungchip.leads           0행
+nurungchip.lead_activities   0행     nurungchip.order_items     0행
++ 함수 handle_new_order + 트리거 nurungchip_after_order (둘 다 실재)
+```
+
+| 검사 | 결과 |
+|---|---|
+| 두 레포 `src/` 참조 | **0건** |
+| 마이그레이션 참조 | **0건** |
+| PostgREST 노출 | 없음 |
+
+**판정: 🟡 확인 후 삭제 검토.**
+이름이 두 제품(`RealMyOS`/`restaurant-os`) 어느 쪽과도 무관하다. **트리거가 살아 있으므로** `nurungchip.orders`에 INSERT가 들어오면 지금도 함수가 돈다. 다만 넣는 코드가 없다. → `C-13`
+
+### D-DB-03 · 🟢 **뷰 0개 — 확인 결과 정리할 것 없음**
+
+`public` 스키마의 뷰는 **0개**다. 죽은 뷰를 찾을 필요가 없다. (기록 목적)
+
+---
+
+## 8. 죽은 코드가 아니라 「막힌 코드」 — RLS 정책 0개 테이블 17개
+
+1차의 3분류(삭제 안전/확인 후/유지)에 안 맞는 유형이라 별도로 적는다.
+**RLS는 켜져 있는데 정책이 하나도 없는** 테이블 17개는, 코드가 살아 있어도 **사용자 세션에서는 무조건 0행**이다.
+
+```
+ingredient_master, ingredient_mappings, ingredient_price_history, ingredient_unit_history,
+invoice_suppliers, coupons, coupon_uses, push_logs, push_subscriptions,
+subscription_billing_attempts,
+_etl_order_items, _etl_orders, _etl_payments_outgoing, _etl_restaurants,
+_etl_rfq_bids, _etl_rfq_requests, _etl_suppliers
+```
+
+| 묶음 | 1차 판정 | 2차가 더하는 것 |
+|---|---|---|
+| `ingredient_*` 4개 | `D-검토-04`·`C-04`「식자재 기능 존폐」 | **컬럼을 다 고쳐도 사용자 세션에서는 안 보인다.** 되살리려면 RLS 정책도 함께 만들어야 한다 |
+| `_etl_*` 7개 | 1차 「0행 테이블 37개」에 포함 | 전부 0행 + 정책 0개. **일회성 이관(ETL) 잔재로 보인다** → 🟡 삭제 검토 후보 |
+| `push_*` 2개 | 미언급 | `push_subscriptions` 3행 존재. 푸시 기능이 service_role 경유로만 동작 |
+| `coupons`/`coupon_uses` | 1차 「0행」 | `redeem_coupon`이 `SECURITY DEFINER`라 함수 경유로만 동작하는 **의도된 설계로 보임** → ⚪ 유지 |
+
+---
+
+## 9. 죽지는 않았지만 낭비 — 인덱스 없는 FK 59개
+
+`public` FK **144개 중 59개(41%)** 에 인덱스가 없다. 1차 조사가 `0-2`-4에서 「OpenAPI가 노출하지 않아 미검증」으로 남긴 항목이다.
+
+실측 `seq_scan` 횟수와 대조해 **실제로 자주 훑히는 것**만 추린다:
+
+| 테이블 (seq_scan) | 인덱스 없는 FK |
+|---|---|
+| `customers` (2,840) | `acquisition_channel_id`, `deleted_by`, `linked_tenant_id` |
+| `payments` (1,554) | `created_by`, `supplier_contact_id` |
+| `orders` (1,143) | `created_by`, `rfq_id`, `bid_id` |
+| `commerce_product_listings` (791) | `supplier_tenant_id`, `product_id`, `category_id`, `shipping_group_id` |
+| `cart_items` (140) | `listing_id` |
+| `wishlist_items` (13) | `listing_id` — 미배포 기능(1단계 G묶음) |
+
+**판정: ⚪ 당장은 유지.** 현재 데이터 규모(최대 522행)에서는 성능 문제가 없다. 다만 `commerce_product_listings.supplier_tenant_id`는 **/buy 상품 목록의 핵심 조인**이므로 리스팅이 수백 개로 늘면 가장 먼저 문제가 된다. → `C-15`
+
+### 별도 관찰 · `users` 테이블 seq_scan 1,917,426회
+6행짜리 테이블인데 순차 스캔이 **191만 회**다. 다른 테이블이 3~4자릿수인 것과 자릿수가 다르다.
+행이 6개라 지금은 비용이 사실상 0이지만, **모든 요청이 `users`를 훑고 있다**는 뜻이다. 인증·권한 조회 경로에 캐시가 없다는 신호다. 죽은 코드는 아니므로 여기서는 기록만 하고, 개선안은 `improvement-suggestions.md`로 넘긴다.
+
+---
+
+## 10. 1차 §6 「정리 제안」에 추가
+
+| 순위 | 작업 | 난이도 | 이유 |
+|---|---|---|---|
+| (신규) | **D-DB-01/02** `dev`·`nurungchip` 스키마 존폐 결정 | — | **제품/보안 결정이 먼저**(`C-12`,`C-13`). 삭제 시 354행이 사라지므로 되돌릴 수 없다 |
+| (신규) | **D-DB-03** `_etl_*` 7테이블 (전부 0행 + 정책 0개) | 간단 | 이관 잔재로 보임. 위 결정과 묶어서 |
+| (신규) | RLS 정책 0개 17개 테이블 — 의도/누락 판별 | 중간 | `ingredient_*`는 기능 복구와 직결(`C-14`) |
+
+> 1차와 동일하게 **이번 조사도 읽기 전용이며 아무것도 삭제하지 않았다.** 위는 전부 제안이다.

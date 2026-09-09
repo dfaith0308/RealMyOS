@@ -351,3 +351,103 @@ coupons              → 소유 컬럼 없음 (created_by, lead_id 만)
 pricing_policies     → 소유 컬럼 없음 (created_by 만). 타깃은 pricing_policy_targets 로 분리
 ```
 이 중 `product_costs`(R-02)와 `product_stats`가 이관 시 문제가 된다. 나머지는 플랫폼 전용이라 의도된 설계로 보이나, **양도 시 "플랫폼 전용 = 인수자에게 전부 넘어감"이라는 뜻**이 된다는 점은 기록해둔다.
+
+---
+
+# 【2차 보완】 2026-09-09 — 위험 3건 추가 (R-08 ~ R-10)
+
+> 2차 조사(`audit-log-round2.md`)에서 추가. 위 본문은 1차 기록 그대로 둔다.
+> 1차와 동일하게 **문제 지점만 적는다.** 대안 설계는 `improvement-suggestions.md`로 넘긴다.
+
+## 5. 추가 위험 요약
+
+| # | 위험 | 시나리오 | 심각도 | 되돌릴 수 있나 |
+|---|---|---|---|---|
+| **R-08** | 코드·마이그레이션이 모르는 **스키마 2개**(`dev` 7테이블 354행 / `nurungchip` 6테이블)가 운영 DB에 있음 | ①③ 양도·분사 | 🔴 | 판단 불가 (무엇의 사본인지 모름) |
+| **R-09** | 돈을 다루는 로직이 **`SECURITY DEFINER` 함수 21개**에 들어 있음 — RLS를 우회한다 | ③ tenant 재편 | 🟠 | 함수 본문 수정 필요 |
+| **R-10** | `message_logs`·`quote_logs`가 **소유 축 검증 없이(RLS OFF) 익명 전권** | ①②③ 전부 | 🔴 | 즉시 수정 가능 (지금이 가장 쌈) |
+
+---
+
+## R-08. 이관 대상 목록에 잡히지 않는 스키마가 있다
+
+1차 조사는 `public` 96개 테이블을 기준으로 **소유 축(tenant_id) 유무**를 판정했다. 그 범위 밖에 두 개가 더 있다.
+
+```
+dev.orders        95행 (33컬럼)    dev.order_lines  170행 (19컬럼)
+dev.payments      81행 (24컬럼)    dev.tenants        6행 (13컬럼)
+dev.users          2행 ( 7컬럼)    dev.relationships  0행 (12컬럼)
+dev.execution_logs 6행 (13컬럼)
+
+nurungchip.repurchase_queue 3행 · orders 1행 · customers 1행
+nurungchip.leads 0 · lead_activities 0 · order_items 0
++ 트리거 nurungchip_after_order → handle_new_order (실재)
+```
+
+- 두 레포 소스 참조 **0건**, 마이그레이션 참조 **0건** (`grep -rl` 실측)
+- PostgREST 미노출(`PGRST106`) → API 유출 위험은 없다
+
+**시나리오별 문제**
+
+| 시나리오 | 문제 |
+|---|---|
+| ① 사업 양도 | Supabase 프로젝트를 통째로 넘기면 **`dev.orders`/`dev.payments` 사본도 함께 넘어간다.** 그런데 인수인계 문서 어디에도 이 스키마가 없다. 무엇이 넘어가는지 **양쪽 다 모르는 상태로 넘어간다** |
+| ③ 식당OS 분사 | 분리 대상 산정에서 누락된다. `dev.tenants`(6행)가 `public.tenants`(8행)와 어떤 관계인지 불명 |
+| ③ tenant 병합/분할 | `dev.*`에 `tenant_id`가 있다면 병합 대상인데, 아무 코드도 이걸 갱신하지 않는다 → **영구히 옛 tenant를 가리킨다** |
+
+**1차 `R-01`(플랫폼 tenant ID가 16곳에 상수로 박힘)과 같은 성격이지만 더 나쁘다.** `R-01`은 최소한 코드에 보이기라도 한다. 이건 **아무 데도 안 보인다.**
+
+---
+
+## R-09. RLS를 우회하는 함수 21개에 결제 로직이 들어 있다
+
+`public` 함수 28개 + `nurungchip` 1개 = **29개** 중 **21개가 `SECURITY DEFINER`**다. `SECURITY DEFINER`는 **호출자가 아니라 정의자 권한으로 실행**되므로 **RLS가 적용되지 않는다.**
+
+그중 돈을 직접 움직이는 것:
+
+```
+create_payment_atomic(p_tenant_id, p_customer_id, p_amount, ...)
+allocate_payment_fifo(p_tenant_id, p_payment_id)
+create_disbursement_with_allocations(p_tenant_id, p_counterparty_name, p_amount, ...)
+reverse_disbursement(p_tenant_id, p_payment_id)
+cancel_order_and_void_allocations(p_tenant_id, p_order_id)
+generate_fund_transfers(p_tenant_id, p_rows)
+redeem_coupon(p_code, p_tenant_id, p_plan)
+update_customer_stats(p_tenant_id, p_customer_id, p_balance_delta, ...)
+fetch_active_pricing_policies_for_checkout(p_listing_ids, p_restaurant_tenant_id)
+```
+
+**패턴이 보인다: 전부 `p_tenant_id`를 인자로 받는다.**
+RLS가 안 걸리므로, 이 tenant 값이 맞는지는 **오직 함수 본문 안에서만** 검증될 수 있다. 호출자가 남의 `tenant_id`를 넣으면 어떻게 되는지는 본문을 읽어야 안다.
+
+**이번 조사에서 본문은 읽지 않았다** (21개 × 수십~수백 줄, 별도 분량). → `overnight-audit-log.md` §7-1 에 **다음 조사 1순위**로 기록.
+
+**설계 관점 문제**: 1차 `ARCH-01`의 전제 2 「모든 쿼리에 `tenant_id` 필수, 예외 없음」이 **RLS로 강제된다고 가정**하고 있는데, 이 21개 함수는 그 강제 밖에 있다. **tenant 격리의 실제 경계가 RLS가 아니라 「함수 본문 21벌」에 분산돼 있다.** 1차 `dead-code-report.md`가 지적한 「`requireAdmin`·`insertAdminLog` 보안 로직 21벌 분산」과 **같은 형태의 문제가 DB 층에도 있다.**
+
+---
+
+## R-10. 소유 축 이전에 접근 통제 자체가 없는 테이블
+
+`message_logs`(3행) / `quote_logs`(0행): **RLS OFF** + `anon`에 `SELECT/INSERT/UPDATE/DELETE/TRUNCATE`.
+익명 키(브라우저 번들 공개 값)로 `message_logs` 3행 전부 조회됨 — HTTP 200 실측.
+`message_logs.content` = 고객 발송 메시지 본문. `tenant_id` 컬럼은 있으나 **아무것도 그것을 강제하지 않는다.**
+
+근거·상세: `overnight-audit-log.md` §6-2.
+
+**시나리오별 문제**: ② 사업자 정보 변경과 무관하게, **① 양도 실사(due diligence)에서 곧바로 문제가 된다.** "고객 메시지 로그가 공개 접근 가능"은 인수자 쪽 보안 점검에서 반드시 걸린다. 지금 3행일 때 고치는 비용과 나중 비용의 차이가 크다.
+
+---
+
+## 6. 부록 갱신 · 소유 축이 없는 테이블 (1차 부록에 추가)
+
+1차 부록은 `public` 6개 테이블을 열거했다. 여기에 더한다.
+
+```
+dev.*         (7테이블)  → 스키마 자체가 소유 축 밖. 코드·마이그레이션 참조 0건
+nurungchip.*  (6테이블)  → 동일
+```
+
+1차 부록의 마지막 문장 —
+> 「플랫폼 전용 = 인수자에게 전부 넘어감」이라는 뜻이 된다는 점은 기록해둔다
+
+— 이 문장이 **`dev`·`nurungchip` 13개 테이블에도 그대로 적용된다.** 그런데 1차 시점에는 그 존재를 몰랐다.

@@ -270,3 +270,97 @@ GET /storage/v1/bucket
 2. DR-02 / DR-03의 모순된 주석을 정리한다(`실행 금지` vs `적용 완료`).
 3. DR-06을 보안 항목으로 별도 처리한다.
 4. 추적 방식 자체를 바꾸는 제안은 `improvement-suggestions.md` I-02.
+
+---
+
+# 【2차 보완】 2026-09-09 — ⛔ 로 남겼던 2건 해소 + 결론 1건 정정
+
+> 2차 조사(`audit-log-round2.md`)에서 추가. 위 본문은 1차 기록 그대로 둔다.
+
+## 7. 「원천적으로 불가」였던 2건이 가능해졌다
+
+1차 §0의 결론표에서 ⛔로 남긴 두 줄을 채운다. 통로는 `supabase db query --linked` (근거: `overnight-audit-log.md` §5).
+
+| 1차 결론 | 2차 결과 |
+|---|---|
+| **RLS 정책 본문 검증** — ⛔ 원천적으로 불가 | ✅ **가능. 전수 조회 완료** |
+| **트리거 함수 3개 존재 검증** — ⛔ 불가 | ✅ **3개 전부 존재 확인** |
+
+### 7-1. RLS 정책 — 56개 `CREATE POLICY` 선언 대조 결과
+
+| 상태 | `public` 테이블 수 |
+|---|---|
+| RLS ON + 정책 있음 | **77** |
+| RLS ON + 정책 0개 | **17** |
+| **RLS OFF** | **2** (`message_logs`, `quote_logs`) |
+
+1차가 "본문 대조 0건"이라고 남긴 부분이 이제 대조 가능하다. 다만 **마이그레이션 파일의 `CREATE POLICY` 56개와 운영 정책을 1:1로 이름 대조하는 작업은 이번에도 하지 않았다** — 2차의 우선순위는 「운영 현재 상태가 안전한가」였기 때문이다. 파일↔운영 정책 대조는 다음 조사로 남긴다.
+
+### 7-2. 트리거 함수 — 3개 전부 실재 (+ 1개 추가 발견)
+
+| 스키마 | 테이블 | 트리거 | 함수 | 1차 예상 |
+|---|---|---|---|---|
+| `auth` | `users` | `on_auth_user_created` | `handle_new_user_onboarding` | ✅ 맞음 |
+| `auth` | `users` | `on_auth_user_deleted` | `delete_user_on_auth_delete` | ✅ 맞음 |
+| `public` | `quote_items` | `trg_sync_quote_total` | `sync_quote_total_amount` | ✅ 맞음 |
+| **`nurungchip`** | `orders` | `nurungchip_after_order` | `handle_new_order` | ❌ **존재 자체를 몰랐음** |
+
+---
+
+## 8. ⚠️ `DR-06` 정정 — `sales_scripts`는 이미 닫혀 있다
+
+1차 결론: 「즉시 확인 필요한 보안 항목은 **DR-06 `sales_scripts` 비로그인 공개**」
+**2차 실측: 아니다.**
+
+```
+sales_scripts_select  roles={authenticated} cmd=SELECT
+    USING ((tenant_id = get_my_tenant_id()) OR (tenant_id = '00000000-0000-0000-0000-000000000000'))
+sales_scripts_insert  roles={authenticated} cmd=INSERT  CHECK (tenant_id = get_my_tenant_id())
+sales_scripts_update  roles={authenticated} cmd=UPDATE  USING/CHECK (tenant_id = get_my_tenant_id())
+```
+익명 키 실측 = **HTTP 200 · 0행** (service_role로는 7행). tenant 스코핑이 실제로 작동한다.
+
+**대신 그 자리에 들어가야 할 진짜 보안 항목은 `message_logs` / `quote_logs`다** (`overnight-audit-log.md` §6-2):
+RLS **OFF** + `anon`에 `SELECT/INSERT/UPDATE/DELETE/TRUNCATE` 전권 → 익명 키로 메시지 본문 3행 전부 읽힘.
+
+### 8-1. 여기서 파생되는 새 드리프트 — `DR-07`
+
+커밋 `e9651f5`(`20260909100000_sales_scripts_rls.sql`)는 메시지에 **"미실행"**이라고 적혀 있다. 그런데 **운영 DB에는 그 마이그레이션이 의도한 정책이 존재한다.**
+
+| | 파일이 주장하는 것 | 운영 실제 |
+|---|---|---|
+| `20260909100000_sales_scripts_rls.sql` | 미실행 | **정책 3개 존재** |
+
+1차의 `DR-02`/`DR-03`(「실행 금지」인데 적용돼 있음)과 **정확히 같은 유형이 하나 더 늘었다.** 누가 언제 적용했는지 기록이 없다 → 사람 확인 필요(`C-16`).
+
+---
+
+## 9. 역방향 드리프트는 1차가 말한 것보다 더 나쁘다
+
+1차: 「운영 테이블 **56/96개(58%)** 가 레포에 DDL 없음」
+2차: 분모가 96이 아니다. 애플리케이션 스키마가 **3개**다.
+
+| 스키마 | 테이블 | 마이그레이션 파일 | 코드 참조 |
+|---|---|---|---|
+| `public` | 96 | 일부 있음 | 있음 |
+| **`dev`** | **7** (354행) | **0건** | **0건** |
+| **`nurungchip`** | **6** (5행) | **0건** | **0건** |
+| **합계** | **109** | | |
+
+`grep -rlE 'nurungchip|CREATE SCHEMA' supabase/migrations/` = **0건** (양쪽 레포 모두).
+→ **역방향 드리프트는 56/96(58%)이 아니라 최소 69/109(63%)다.** 그리고 `dev`·`nurungchip`은 "컬럼이 안 맞는" 수준이 아니라 **스키마의 존재 자체가 git 밖**이다.
+
+`dev.orders`(95행)·`dev.order_lines`(170행)·`dev.payments`(81행)는 운영 거래·결제 데이터의 사본으로 보인다. 무엇의 사본인지, 지워도 되는지는 사람만 안다(`C-12`).
+
+---
+
+## 10. 1차 §6 「권고」에 대한 2차 갱신
+
+1차 권고 4항은 그대로 유효하다. 다음을 더한다.
+
+| # | 권고 | 근거 |
+|---|---|---|
+| 5 | **RECORD-ONLY 덤프 범위에 `dev`·`nurungchip` 스키마를 포함**하라 | 지금은 존재조차 git에 없다 |
+| 6 | **RLS 상태(ON/OFF·정책 수)를 스키마 덤프에 함께 기록**하라 | `message_logs` 같은 구멍이 5개월간 아무 신호 없이 유지됐다 |
+| 7 | `DR-06` 대신 **`message_logs`/`quote_logs`를 1순위 보안 항목**으로 교체 | §8 |
+| 8 | 「미실행/실행금지」 주석과 실제를 대조하는 절차를 만들라 | 같은 유형이 `DR-02`·`DR-03`·`DR-07` 3건으로 늘었다 |

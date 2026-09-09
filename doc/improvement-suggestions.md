@@ -391,3 +391,99 @@ components/product/BarcodeScanner.tsx
 | 13 | **I-12/I-24/I-25** 중복 정리 | 중간 | 이미 사고가 한 번 났다 |
 | 14 | **I-04** 리스팅 원가 축 분리 | 큼 | "원가는 누구 것인가" 결정 선행 |
 | 15 | **I-08/I-09/I-10/I-13** 추적·정산 화면 | 중간 | 제품 로드맵과 함께 |
+
+---
+
+# 【2차 보완】 2026-09-09 — 추가 제안 I-26 ~ I-32
+
+> 2차 조사(`audit-log-round2.md`)에서 추가. 위 본문은 1차 기록 그대로 둔다.
+> 1차와 동일하게 **강제 사항 아님.** 난이도 기준도 동일(간단 = 하루 이내 / 중간 = 며칠·스키마 변경 / 큼 = 설계 결정 선행).
+
+## F. 접근 통제
+
+### I-26 · 🔴 `message_logs` / `quote_logs` RLS 켜기 + `anon` 권한 회수 — **최우선**
+**난이도: 간단** (ALTER + REVOKE 각 2줄)
+
+**왜**: 두 테이블은 **RLS가 꺼진 채 `anon` 롤에 `SELECT/INSERT/UPDATE/DELETE/TRUNCATE`가 전부 부여**돼 있다. 익명 키(브라우저 번들에 그대로 들어 있는 공개 값)만으로 `message_logs` 3행 전부가 읽힌다 — HTTP 200 실측. `content` 컬럼은 고객에게 보낸 메시지 본문이다.
+근거: `overnight-audit-log.md` §6-2 / `design-risk-report.md` R-10.
+
+```
+-- 개념 (실행은 사람이 판단)
+ALTER TABLE public.message_logs ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.message_logs FROM anon;
+CREATE POLICY ... USING (tenant_id = get_my_tenant_id() OR is_admin());
+-- quote_logs 동일
+```
+같은 형태의 정책이 `action_logs`·`contact_logs`에 이미 있다(`USING ((tenant_id = get_my_tenant_id()) OR is_admin())`). **그대로 복사하면 된다.**
+
+**지금 해야 하는 이유**: 현재 3행 / 0행이다. 데이터가 쌓인 뒤에는 같은 작업이 "기존 접근을 끊는" 변경이 되어 위험해진다. **지금이 가장 싸다.**
+
+### I-27 · RLS 상태를 스키마 계약 테스트(I-01)에 포함
+**난이도: 간단** (I-01에 쿼리 한 줄 추가)
+
+**왜**: `message_logs`의 RLS OFF 상태가 **아무 신호 없이** 유지됐다. 1차 조사도 못 잡았다 — 코드가 참조하는 테이블만 봤기 때문이다.
+`I-01`(코드 참조 컬럼 vs 운영 스키마 자동 대조)에 다음을 더하면 같은 사고가 재발하지 않는다:
+```
+-- CI에서 실패시켜야 할 조건
+1) public 테이블 중 relrowsecurity = false 인 것          → 현재 2건
+2) RLS ON 인데 정책 0개인 것                              → 현재 17건 (허용목록 관리)
+3) anon 롤에 INSERT/UPDATE/DELETE/TRUNCATE 가 부여된 것    → 현재 3건
+```
+이 셋은 **`supabase db query` 한 번**이면 전부 나온다. 통로는 이미 있다(`overnight-audit-log.md` §5).
+
+### I-28 · `SECURITY DEFINER` 함수 21개의 tenant 검증 감사
+**난이도: 중간** (읽기만 하면 되지만 분량이 있다)
+
+**왜**: 돈을 움직이는 함수(`create_payment_atomic`, `allocate_payment_fifo`, `reverse_disbursement`, `create_disbursement_with_allocations`, `redeem_coupon`, `generate_fund_transfers`)가 전부 `SECURITY DEFINER`다. **RLS를 우회**하므로 tenant 검증이 **함수 본문 안에만** 있을 수 있다. 전부 `p_tenant_id`를 인자로 받는 구조라, 호출자가 남의 tenant를 넣었을 때 무엇이 막는지 확인해야 한다.
+`pg_get_functiondef`로 21개 전문을 읽을 수 있다. **이번 조사에서 통로는 열었으나 본문은 안 읽었다.**
+근거: `design-risk-report.md` R-09.
+
+## G. 스키마 관리
+
+### I-29 · `dev` / `nurungchip` 스키마 존폐 결정 + 결정 기록
+**난이도: 큼** (설계 결정 선행)
+
+**왜**: 코드 참조 0건 / 마이그레이션 0건인 스키마가 **2개, 13테이블, 359행** 있다. `dev.orders`(95행)·`dev.payments`(81행)는 운영 거래·결제 데이터의 사본으로 보인다.
+- 남긴다면: **왜 남기는지를 `docs/CONTEXT.md`에 적어야 한다.** 지금은 아무 문서에도 없어서, 다음 사람이 또 못 본다.
+- 지운다면: 359행이 사라지므로 되돌릴 수 없다. 무엇의 사본인지 먼저 확인.
+- 어느 쪽이든 **`I-02`(RECORD-ONLY 스키마 덤프)의 범위에 포함**시켜야 한다.
+근거: `dead-code-report.md` D-DB-01/02, `design-risk-report.md` R-08.
+
+### I-30 · `I-02`(스키마 덤프)의 범위를 `public` 밖으로 확장
+**난이도: 간단** (`I-02` 확정 시 함께)
+
+**왜**: 1차는 「운영 테이블 58%가 git 밖」이라고 했는데, 분모가 96(=`public`만)이었다. 실제 애플리케이션 스키마는 3개고 분모는 **109**다. 덤프를 `public`으로 한정하면 **같은 사각지대가 그대로 남는다.**
+
+## H. 성능 (지금은 문제 아님 · 기록용)
+
+### I-31 · 핫 경로 FK 인덱스 7개
+**난이도: 간단**
+
+**왜**: FK 144개 중 **59개(41%)** 에 인덱스가 없다. 현재 최대 522행이라 성능 문제는 없지만, `seq_scan` 실측 기준 다음이 먼저 문제가 된다:
+`commerce_product_listings.supplier_tenant_id`·`.product_id`(791회) / `customers.acquisition_channel_id`(2,840회) / `payments.created_by`(1,554회) / `orders.created_by`·`.rfq_id`·`.bid_id`(1,143회) / `cart_items.listing_id`(140회)
+**리스팅이 수백 개로 늘기 전에 붙이는 게 싸다.** 지금은 급하지 않다.
+
+### I-32 · `users` 조회 경로 확인
+**난이도: 간단** (원인 확인만)
+
+**왜**: 6행짜리 `users` 테이블의 `seq_scan`이 **1,917,426회**다. 다른 테이블(3~4자릿수)과 자릿수가 다르다. 행이 6개라 비용은 사실상 0이지만, **모든 요청이 `users`를 훑는다**는 뜻이다. 인증·권한 조회에 캐시가 없거나 미들웨어가 매 요청 조회하는 구조로 보인다. 사용자가 수백 명이 되면 그때 문제가 된다.
+지금 할 일은 **고치는 게 아니라 왜 그런지 확인해두는 것**이다.
+
+---
+
+## I. 2차 기준 우선순위 (1차 §마지막 표에 병합)
+
+1차 표의 15항은 그대로 유효하다. 2차 항목을 끼워 넣으면 다음과 같다.
+
+| 순위 | 항목 | 난이도 | 이유 |
+|---|---|---|---|
+| **0** | **I-26** `message_logs`/`quote_logs` 잠그기 | 간단 | **익명키로 고객 메시지 본문이 읽힌다.** 3행일 때가 가장 쌈. 판단 여지 거의 없음 |
+| 1 | **I-01** 스키마 계약 테스트 | 간단 | (1차 1순위 유지) |
+| 1+ | **I-27** 위에 RLS·권한 검사 추가 | 간단 | I-01과 같이 하면 추가 비용 거의 0 |
+| 2~13 | (1차 표 I-07, I-14, I-11, I-03, I-19, I-06, I-02 …) | | **단, I-14(`sales_scripts` RLS)는 이미 적용돼 있다** → `migration-drift-report.md` §8 정정 참조. 순위에서 제외 |
+| 2+ | **I-30** 덤프 범위 확장 | 간단 | I-02와 묶어서 |
+| 중 | **I-28** `SECURITY DEFINER` 21개 감사 | 중간 | 읽기만. 결과에 따라 순위가 올라갈 수 있다 |
+| 하 | **I-31 / I-32** 인덱스·조회 경로 | 간단 | 지금은 문제 아님. 데이터 늘기 전에 |
+| 별도 | **I-29** `dev`/`nurungchip` 존폐 | 큼 | 제품 결정 선행 |
+
+> **1차 표에서 내려야 할 항목**: `I-14 sales_scripts RLS`(3순위) — 운영에 이미 적용돼 있음이 2차에서 확인됐다.

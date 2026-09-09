@@ -376,3 +376,57 @@ soft_delete_customer, update_customer_stats, update_order_lines, upsert_savings_
 | 9 | **M-10 / M-11** product_costs·product_stats tenant_id | 현재 무피해. 다만 되살릴 때 반드시 걸림 |
 
 > 근본 대책은 개별 수정이 아니라 **CI에서 코드 참조 컬럼과 운영 스키마를 자동 대조**하는 것이다. `improvement-suggestions.md` I-01 참조.
+
+---
+
+# 【2차 보완】 2026-09-09 — 조사 범위 자체가 좁았다
+
+> 2차 조사(`audit-log-round2.md` / `overnight-audit-log.md` §5~8)에서 추가. 위 본문은 1차 기록 그대로 둔다.
+
+## 5. 이 보고서의 분모가 틀렸다 — 96이 아니라 109
+
+1차는 「운영 DB `public` 스키마 테이블 **96개**」를 전수로 놓고 코드와 대조했다.
+그 96이라는 숫자는 **PostgREST OpenAPI(`GET /rest/v1/`)가 노출하는 것만** 센 값이다. PostgREST는 `public`과 `graphql_public`만 노출한다(`PGRST106`으로 실측 확인).
+
+실제 DB에는 애플리케이션 스키마가 **3개** 있다.
+
+| 스키마 | 테이블 | 행 | 코드 참조 | 마이그레이션 |
+|---|---|---|---|---|
+| `public` | 96 | — | 있음 | 있음 |
+| **`dev`** | **7** | **354** | **0건** | **0건** |
+| **`nurungchip`** | **6** | **5** | **0건** | **0건** |
+
+**→ 이 보고서의 "코드-DB 불일치 전수 스캔"은 `dev`·`nurungchip` 13개 테이블을 한 번도 보지 않았다.**
+다만 두 레포 소스 어디에서도 이 스키마들을 참조하지 않으므로(`grep -rl nurungchip src/` = 0건), **"불일치" 항목이 추가로 나오지는 않는다.** 성격이 다른 문제이므로 `dead-code-report.md` §7 과 `design-risk-report.md` §5 로 넘겼다.
+
+## 6. `M-09`(식자재) 판정에 추가할 사실 — RLS 정책이 0개다
+
+1차는 `ingredients` 7개 컬럼이 없어서 기능이 죽었다고 봤다. 2차에서 `pg_policies`를 전수 조회한 결과, **컬럼 문제와 별개로 접근 자체가 막혀 있다.**
+
+`RLS는 켜져 있는데 정책이 하나도 없는` 테이블 **17개** (= 사용자 세션으로는 무조건 0행):
+
+```
+ingredient_master, ingredient_mappings, ingredient_price_history, ingredient_unit_history,
+invoice_suppliers, coupons, coupon_uses, push_logs, push_subscriptions,
+subscription_billing_attempts,
+_etl_order_items, _etl_orders, _etl_payments_outgoing, _etl_restaurants,
+_etl_rfq_bids, _etl_rfq_requests, _etl_suppliers
+```
+
+| 영향받는 1차 항목 | 추가 사실 |
+|---|---|
+| `M-09` `ingredients` 7컬럼 | `ingredient_master`·`ingredient_mappings`·`ingredient_price_history`·`ingredient_unit_history` **4개 모두 정책 0개.** 컬럼을 다 채워도 **사용자 세션에서는 여전히 0행**이다. `C-04`(기능 존폐) 판단 시 함께 고려해야 한다 |
+| — | `push_subscriptions`(3행)·`push_logs` 정책 0개 → 푸시 알림이 service_role 경유가 아니면 동작 불가 |
+| — | `coupons`·`coupon_uses` 정책 0개 → `redeem_coupon`이 `SECURITY DEFINER`라 RLS를 우회한다. 함수 경유로만 동작하는 설계로 보인다 |
+| `D-01`(1단계 보고서 A묶음) | `subscription_billing_attempts` 정책 0개 — 구독 청구는 크론(service_role)만 쓰므로 의도된 것으로 보인다 |
+
+## 7. 🔴 1차가 놓친 불일치 — 이건 「코드-DB 불일치」가 아니라 「권한 불일치」다
+
+`message_logs` / `quote_logs` 두 테이블이 **RLS가 꺼진 채 `anon` 롤에 전권이 부여**돼 있다. 익명 키만으로 `message_logs` 3행 전부가 읽힌다(HTTP 200 실측).
+상세와 근거는 **`overnight-audit-log.md` §6-2** 에 있다. 이 보고서의 심각도 체계로는 **🔴 즉시 에러**보다 위인 **보안** 등급이 필요하다.
+
+1차가 못 본 이유: 이 보고서는 **코드가 참조하는 테이블**만 익명 세션으로 확인했다. `message_logs`는 서버 액션에서 service_role로만 쓰여 검사 대상에 들어가지 않았다.
+
+## 8. 정정 — `sales_scripts`(1차 DR-06)는 이미 닫혀 있다
+
+`migration-drift-report.md`의 `DR-06`은 "다른 공급자 영업 스크립트가 비로그인 공개"라고 했으나, 정책 본문 조회 결과 **tenant 스코핑이 실제로 걸려 있고 익명 조회는 0행**이다. 근거는 `overnight-audit-log.md` §6-3.
