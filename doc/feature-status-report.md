@@ -277,3 +277,92 @@ orders 총 284건
 | 4 | `SECURITY DEFINER` 함수 21개를 거치는 경로 | RLS를 우회하므로 위 세션 실측으로는 판정 불가. `improvement-suggestions.md` I-28 |
 | 5 | 클라이언트 컴포넌트만 있는 화면(`/payments/new`, `/products/bulk` 등)의 쿼리 | 서버 액션 import가 없어 정적 추적이 닿지 않음 |
 | 6 | 데이터가 0행인 37화면이 **데이터가 있을 때** 정상 동작하는지 | 데이터를 넣어야 알 수 있고, 그건 쓰기다 |
+
+---
+
+# 【2차 심화】 2026-09-09 — §7 미확인 항목 2건 해소 + 판정 1건 정정
+
+## 8. §7-5 해소 — 클라이언트 컴포넌트만 있던 화면 6개의 실제 경로
+
+§7-5에 "서버 액션 import가 없어 정적 추적이 닿지 않음"으로 남긴 화면들이다. 클라이언트 컴포넌트를 한 단계 더 따라가 확인했다.
+
+| 화면 | 클라이언트 컴포넌트 | 실제 호출 서버 액션 | 판정 |
+|---|---|---|---|
+| `/payments/new` | `payment/PaymentCreateForm` | `payment`, `customer-deposits`, `order` | 🟢 정상 |
+| `/products/bulk` | `product/ProductBulkUpload` | `product` | 🟢 정상 |
+| `/purchases/new` | `purchases/PurchaseCreateClient` | `purchase` | 🟢 정상 |
+| `/admin/push` | `admin/PushSendClient` | `admin/push` | 🟡 코드 정상 · `push_subscriptions` 정책 0개 |
+| `/admin/commerce/products/new` | `commerce/ListingFormClient` | `admin/commerce`, `admin/ai-product-analysis` | 🟢 정상 |
+| `/admin/commerce/products/bulk` | `commerce/BulkListingUploader` | `admin/bulk-listing` | 🟢 정상 |
+
+**→ 「추적 불가」였을 뿐 전부 정상 동작하는 화면이었다.** §6 종합 집계에 변화 없다.
+
+## 9. ⚠️ 판정 정정 — `/orders/quotes/*`와 `/sales`는 리다이렉트다
+
+§3 표에서 `/orders/quotes/*` 3화면을 「⚠️ 중복 — 액션 import 0」으로 적었다. **파일을 열어보니 의도된 legacy 리다이렉트였다.**
+
+```tsx
+(app)/orders/quotes/page.tsx        → redirect('/quotes')
+(app)/orders/quotes/[id]/page.tsx   → redirect(`/quotes/${params.id}`)
+(app)/orders/quotes/new/page.tsx    → redirect('/quotes/new')
+(app)/sales/page.tsx                → redirect('/sales/schedule')
+```
+
+**정정 판정: 🟢 정상 (옛 URL 호환 처리).** 정리 대상이 아니다.
+
+반면 **`/automation/*` 3개는 문제가 맞다** — `redirect`가 아니라 **컴포넌트 re-export**이고, `src/app/automation/`에 `layout.tsx`가 없어 `(app)` 레이아웃 밖에서 **사이드바 없이 렌더링된다.**
+
+```tsx
+src/app/automation/schedule/page.tsx
+  import SalesSchedulePage from '@/app/(app)/sales/schedule/page'
+  export default SalesSchedulePage          // 리다이렉트 아님
+```
+
+## 10. 🔴 §5에 추가 — RLS를 우회하는 실행 경로
+
+§5(지금은 안 터지지만 조건이 갖춰지면 터지는 것)에 `G-04`를 추가한다.
+
+### G-04. `SECURITY DEFINER` 함수 21개가 전부 익명에게 열려 있다
+
+| 항목 | 실측 |
+|---|---|
+| `SECURITY DEFINER` 함수 | 21 |
+| `anon`에 `EXECUTE` 부여 | **21 (전부)** |
+| 그중 `p_tenant_id`를 받으면서 **검증이 없는** 것 | **5** (`create_payment_atomic`, `upsert_savings_stat`, `generate_fund_transfers`, `redeem_coupon`, `bulk_create_products`) |
+| `SET search_path` 누락 | 3 |
+
+`create_payment_atomic`은 `payments`에 `status='confirmed'`로 INSERT하는 함수다. 같은 수금 흐름의 형제 함수 4개에는 `get_my_tenant_id()` 대조 + `RAISE`가 있는데 **이 함수에만 없다.**
+
+**읽기 전용 실측**
+```
+POST /rest/v1/rpc/fetch_active_pricing_policies_for_checkout
+     (익명 키 · 남의 tenant id)  → HTTP 200   ← 거부되지 않는다
+```
+**쓰기 RPC는 시도하지 않았다.** 운영 데이터가 바뀌기 때문이다.
+
+**G-01(order_lines RLS 비대칭)과의 차이**: G-01은 소유 축이 갈라질 때 터지는 **잠재** 문제인데, **G-04는 조건이 이미 갖춰져 있다.** 다만 실제 악용 여부는 확인하지 않았다.
+
+전체 근거: `overnight-audit-log.md` §10 / `design-risk-report.md` R-11.
+
+## 11. §6 종합 표 — 변화 없음
+
+| 판정 | 식당OS | 공급자OS | 관리자OS | 계 |
+|---|---|---|---|---|
+| 🟢 정상 | 14 | **23** (+3, `/orders/quotes/*` 정정) | 8 | **45** |
+| 🟡 부분작동 | 2 | 6 | 4 | 12 |
+| 🔴 작동안함 | 5 | 4 | 0 | 9 |
+| ⚫ 빈 껍데기 | 15 | 12 | 10 | 37 |
+| ⛔ 미배포·미구현·도달불가 | 1 | 3 | 2 | 6 |
+
+> 정정으로 「⚠️ 중복」 3건이 🟢로 이동했다. **깨진 것의 수에는 변화가 없다.**
+
+## 12. §7 갱신 — 남은 미확인 항목
+
+| # | 항목 | 상태 |
+|---|---|---|
+| 1 | 관리자OS 세션 실측 | ⛔ `E2E_ADMIN_EMAIL` 로그인 실패. 그대로 |
+| 2 | 브라우저 렌더링 확인 | ⛔ 그대로 |
+| 3 | INSERT/UPDATE 경로 작동 | ⛔ 쓰기 금지. 다만 §10에서 **권한 구조로는 판정**했다 |
+| 4 | `SECURITY DEFINER` 경유 경로 | ✅ **해소** — §10 |
+| 5 | 클라이언트 전용 화면의 쿼리 | ✅ **해소** — §8 |
+| 6 | 0행 37화면이 데이터가 있을 때 도는지 | ⛔ 그대로 (쓰기 필요) |

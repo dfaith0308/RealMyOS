@@ -238,3 +238,96 @@ commerce_product_listings 38건 중 supplier_tenant_id 가 채워진 것 = 2건 
 | **C-19** | `customers.linked_tenant_id`로 두 앱 사용자를 이을 것인가 | 142건 전부 미연결. 이걸 이어야 재구매·영업 자동화가 의미를 갖는다 |
 | **C-20** | `/orders/quotes/*` 3개, `/automation/*` 3개 중복 라우트 정리 | N-01·N-02. 특히 `/automation/*`은 레이아웃이 없다 |
 | **C-21** | `pricing_policies` 0행 — 가격 정책 기능을 쓸 것인가 | 결제 경로(DB 함수)가 이미 이 테이블을 읽고 있다 |
+
+---
+
+# 【2차 심화】 2026-09-09 — `N-01` 정정 + 앱 간 실행 경로 추가
+
+## 11. ⚠️ `N-01` 정정 — `/orders/quotes/*`는 중복이 아니라 리다이렉트다
+
+§7 표에서 이렇게 적었다.
+> `N-01` … `/orders/quotes/*`는 **액션 import가 0개인 껍데기**
+
+**틀렸다.** 파일을 열어 확인한 실제 내용:
+
+```tsx
+(app)/orders/quotes/page.tsx        → redirect('/quotes')
+(app)/orders/quotes/[id]/page.tsx   → redirect(`/quotes/${params.id}`)
+(app)/orders/quotes/new/page.tsx    → redirect('/quotes/new')
+```
+
+**옛 URL을 새 URL로 보내주는 정상적인 처리다.** `N-01`을 중복 목록에서 **제거**하고, `C-20`(중복 라우트 정리)에서도 이 3개를 뺀다. `/sales` → `redirect('/sales/schedule')`도 마찬가지다.
+
+### `N-02`는 유효하다 — 성격이 다르다
+
+```tsx
+src/app/automation/schedule/page.tsx
+  import SalesSchedulePage from '@/app/(app)/sales/schedule/page'
+  export default SalesSchedulePage        // redirect 가 아니라 re-export
+```
+`redirect`가 아니라 **컴포넌트 재수출**이고, `src/app/automation/`에 `layout.tsx`가 없다 → `(app)` 레이아웃 밖에서 렌더링 → **사이드바 없이 뜬다.** `C-20`은 이 3개에 대해서만 유효하다.
+
+### 정정된 중복 목록
+
+| # | 중복 | 상태 |
+|---|---|---|
+| ~~N-01~~ | ~~`/quotes` vs `/orders/quotes`~~ | ⚪ **정정 — 정상적인 legacy 리다이렉트** |
+| **N-02** | `/sales/*` vs `/automation/*` | ⚠️ **유효** — re-export + layout 없음 |
+| N-03 | `/admin`이 두 앱에 모두 있음 | ⚠️ 유효 |
+| N-04 | 관리자OS 잔재 4파일 (`page.tsx` 없음) | ⚠️ 유효 |
+| N-05 | 두 레포 100% 동일 파일 4쌍 | ⚠️ 유효 |
+| N-06 | 감사 문서 양쪽 사본 | ⚪ 의도됨 |
+
+---
+
+## 12. 🔴 앱 경계를 무시하는 연결이 하나 더 있다 — DB 함수
+
+§8에서 "두 앱이 같은 테이블을 공유하는 구조"를 다뤘다. **테이블뿐 아니라 함수도 공유하며, 그쪽은 RLS 경계가 없다.**
+
+| | 테이블 공유 | **함수 공유** |
+|---|---|---|
+| 접근 통제 | RLS 정책이 tenant를 강제 | **`SECURITY DEFINER` = RLS 우회** |
+| 호출 권한 | `anon`/`authenticated`/`service_role` + RLS | **`anon` 포함 21개 전부 개방** |
+| tenant 검증 위치 | 정책 1곳 | **함수 본문 21벌에 분산 — 5개엔 없음** |
+
+**돈이 움직이는 연결이 전부 이 경로를 지난다.**
+```
+식당OS 결제  → lib/commerce-order-erp.ts → payments / supplier_payables / admin_logs
+공급자OS 수금 → create_payment_atomic()   → payments  (tenant 검증 없음)
+공급자OS 지급 → create_disbursement_with_allocations() (검증 있음)
+관리자OS 정산 → allocate_payment_fifo()   (검증 있음)
+```
+
+§8에서 「한 앱의 버그가 세 앱에 퍼지는 경로」라고 적었는데, **함수 층에서는 버그가 아니라 권한 자체가 열려 있다.**
+근거: `overnight-audit-log.md` §10 / `design-risk-report.md` R-11.
+
+---
+
+## 13. 연결 상태 요약 갱신
+
+§9의 한 문장은 그대로 유효하다.
+> "구매(커머스) 한 줄기만 끝까지 이어져 있고, 나머지는 앱 경계에서 끊겨 있다."
+
+여기에 한 줄을 더한다.
+
+> **"데이터 연결은 앱 경계에서 끊겨 있는데, 권한 경계는 앱 경계를 넘어 열려 있다."**
+
+| 축 | 데이터 연결 | 권한 경계 |
+|---|---|---|
+| 관리자OS → 식당OS (상품) | ✅ 이어짐 | RLS로 통제 |
+| 식당OS → 관리자OS (주문·결제) | ✅ 이어짐 | RLS + `SECURITY DEFINER` 혼재 |
+| 관리자OS → 공급자OS (정산) | 🔴 끊김 | — |
+| 식당OS ↔ 공급자OS (발주·거래처) | 🔴 끊김 | — |
+| **DB 함수 21개** | — | 🔴 **익명에게 전부 개방** |
+
+---
+
+## 14. 「사람 확인 필요」 갱신
+
+| # | 항목 | 상태 |
+|---|---|---|
+| C-17 ~ C-19 | RFQ 존폐 / 리스팅 공급자 지정 / 계정 연결 | 유효 |
+| **C-20** | 중복 라우트 정리 | ⚠️ **범위 축소** — `/orders/quotes/*` 제외. **`/automation/*` 3개만** |
+| C-21 | `pricing_policies` 0행 | 유효 |
+| **C-28** | 🔴 `SECURITY DEFINER` 21개의 `anon` EXECUTE 회수 | **신규** — `improvement-suggestions.md` I-33 |
+| **C-29** | 🔴 `create_payment_atomic` 등 5개에 tenant 가드 추가 | **신규** — I-34 |

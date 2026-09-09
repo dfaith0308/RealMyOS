@@ -364,3 +364,120 @@ RLS **OFF** + `anon`에 `SELECT/INSERT/UPDATE/DELETE/TRUNCATE` 전권 → 익명
 | 6 | **RLS 상태(ON/OFF·정책 수)를 스키마 덤프에 함께 기록**하라 | `message_logs` 같은 구멍이 5개월간 아무 신호 없이 유지됐다 |
 | 7 | `DR-06` 대신 **`message_logs`/`quote_logs`를 1순위 보안 항목**으로 교체 | §8 |
 | 8 | 「미실행/실행금지」 주석과 실제를 대조하는 절차를 만들라 | 같은 유형이 `DR-02`·`DR-03`·`DR-07` 3건으로 늘었다 |
+
+---
+
+# 【2차 심화】 2026-09-09 — `DR-08` 부분 적용 드리프트 + 정책 1:1 대조 완료
+
+> §7-1에서 "파일↔운영 정책 이름 대조는 다음 조사로 남긴다"고 한 것을 이번에 완료했다.
+> 상세 근거는 `overnight-audit-log.md` §11.
+
+## 11. 파일 ↔ 운영 정책 1:1 대조 결과
+
+| | 개수 |
+|---|---|
+| 운영 정책 (`public` 스키마) | **102** (고유 이름 93) |
+| 마이그레이션 `CREATE POLICY` 선언 (RealMyOS 51 + restaurant-os 6) | **57** (고유) |
+| **파일에만 있고 운영에 없음** | **6** → 그중 진짜 미적용 **3** |
+| **운영에만 있고 파일에 없음** | **42** |
+
+### 11-1. 「파일에만 있음」 6건 분해
+
+| 정책 | 선언 파일 | 판정 |
+|---|---|---|
+| `commerce_images_insert_admin` | — | ⚪ 오탐 (`storage.objects`에 실재) |
+| `commerce_images_select_public` | — | ⚪ 오탐 (동일) |
+| `admin_settings_admin` | `20260508040000_fix_missing_rls_policies.sql` | ⚪ 정상 — `20260508050000`이 `admin_settings_read/write/update/delete` 4개로 **세분화 교체** |
+| **`ingredient_price_history_tenant`** | `20260518120000_create_ingredient_price_history.sql` | 🔴 **미적용** |
+| **`invoice_suppliers_tenant`** | `20260518130000_create_invoice_suppliers.sql` | 🔴 **미적용** |
+| **`tenant_assets_select_public`** | `20260715140000_tenants_statement_fields.sql` | 🔴 **미적용** (버킷은 실재) |
+
+---
+
+## 12. 🔴 `DR-08` — 마이그레이션이 **한 파일 안에서 부분 적용**될 수 있다
+
+기존에 기록한 드리프트 유형은 두 가지였다.
+- `DR-02`/`DR-03`/`DR-07`: **주석과 실제가 반대** (「실행 금지」인데 적용됨 / 「미실행」인데 적용됨)
+- 역방향 드리프트: **운영에 있는데 파일에 없음**
+
+여기에 세 번째가 추가된다.
+
+```sql
+-- restaurant-os/supabase/migrations/20260518120000_create_ingredient_price_history.sql
+-- WARNING: Migration file only. Already applied via Supabase SQL Editor. Do not re-run.
+
+CREATE TABLE IF NOT EXISTS public.ingredient_price_history (...)   → ✅ 적용됨
+ALTER TABLE ... ENABLE ROW LEVEL SECURITY;                          → ✅ 적용됨
+CREATE POLICY "ingredient_price_history_tenant" ...                 → ❌ 적용 안 됨
+```
+
+**실측 확인**
+```
+ingredient_price_history   테이블 존재 · RLS = ON · 정책 0개
+ingredient_unit_history    테이블 존재 · RLS = ON · 정책 0개
+invoice_suppliers          테이블 존재 · RLS = ON · 정책 0개
+```
+
+### 12-1. 이것이 1차 결론과 모순되지 않는다는 점이 중요하다
+
+1차 §0의 결론은 이랬다.
+
+> 「"적용 완료" 주장 44개 파일의 **컬럼·테이블 수준** 정합성 → ✅ 불일치 0건 — 주장은 신뢰할 수 있다」
+
+**이 결론은 지금도 맞다.** 테이블과 컬럼은 정말로 전부 적용됐다.
+빠진 것은 **같은 파일 안의 `CREATE POLICY` 절**이고, 1차는 정책을 조회할 수단이 없었으므로(`⛔ 원천적으로 불가`) 그 절반을 볼 수 없었다.
+
+**→ 따라서 정확한 표현은 이렇게 바뀌어야 한다:**
+> 「'적용 완료' 주장은 **컬럼·테이블 수준에서는** 신뢰할 수 있다. **정책 수준에서는 신뢰할 수 없다** — 최소 3건이 테이블만 적용되고 정책은 누락됐다.」
+
+### 12-2. 실제 피해
+
+| 테이블 | 결과 |
+|---|---|
+| `ingredient_price_history` | 사용자 세션에서 **영구히 0행** |
+| `ingredient_unit_history` | 동일 |
+| `invoice_suppliers` | 동일 (명세서 OCR 공급업체 후보) |
+| `tenant-assets` 버킷 | 공개 읽기 정책 없음 → 도장 이미지가 안 보일 수 있다 |
+
+식당OS 식자재 기능이 안 도는 **3중 장벽**(① 컬럼 없음 ② RLS 정책 없음 ③ 데이터 0행) 중 **②의 원인이 이것**이다. `connection-gap-report.md` §4 참조.
+
+---
+
+## 13. 정책 역방향 드리프트 42건 — 핵심 업무 테이블이 전부 포함된다
+
+운영에만 있고 마이그레이션 파일에 없는 정책 42개:
+
+```
+orders: all              order_lines: all         payments: all
+customers: all           products: all            product_costs: all
+product_stats: all       product_prices: all      product_logs: all / same tenant
+quotes: all              quote_items: all         settings: all
+tenants: select/insert/update
+users: select/insert/update/delete
+accounts / account_purposes / fund_rules / fund_transfers : same tenant
+action_logs / contact_logs / collection_schedules / categories : same tenant
+customer_product_prices: all    customer_monthly_stats: all
+opening_balance_logs: all / _policy    notices: all
+product_categories: all / _storefront_read / _all_storefront_read
+product_code_sequences: all     order_logs: all
+tenant_isolation    rfq_bid_access    acquisition_channels_policy
+admin can insert admin_logs
+```
+
+**주문·결제·고객·상품·사용자의 RLS 정책이 전부 git 밖에 있다.**
+1차가 「운영 테이블의 58%가 git 밖」이라고 한 것과 **같은 규모의 문제가 정책 층에도 있다.** 스키마 변경뿐 아니라 **접근 통제 변경도 리뷰·이력에 안 잡힌다.**
+
+이 상태에서는 `message_logs`·`quote_logs`의 RLS OFF 같은 구멍이(2단계 §6-2) **언제 어떻게 생겼는지 추적할 방법이 없다.**
+
+---
+
+## 14. §10 「권고」 갱신
+
+1차 권고 4항 + 2차 권고 4항(§10)에 다음을 더한다.
+
+| # | 권고 | 근거 |
+|---|---|---|
+| 9 | **RECORD-ONLY 덤프에 `CREATE POLICY` 102개를 전부 포함**하라 | §13. 지금 42개가 git 밖 |
+| 10 | 미적용 정책 3건(`ingredient_price_history_tenant`, `invoice_suppliers_tenant`, `tenant_assets_select_public`) 적용 여부 결정 | §12-2. `C-26` |
+| 11 | 마이그레이션 검증을 **테이블·컬럼 수준에서 정책 수준까지 확장**하라 | `DR-08`. 지금의 검증 방식은 부분 적용을 못 잡는다 |
+| 12 | 「Already applied via Supabase SQL Editor」 방식 자체를 재검토 | 수동 실행이라 **파일의 일부만 붙여넣는 사고**가 가능하다. `DR-08` 3건이 그 흔적으로 보인다 |

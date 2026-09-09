@@ -487,3 +487,92 @@ CREATE POLICY ... USING (tenant_id = get_my_tenant_id() OR is_admin());
 | 별도 | **I-29** `dev`/`nurungchip` 존폐 | 큼 | 제품 결정 선행 |
 
 > **1차 표에서 내려야 할 항목**: `I-14 sales_scripts RLS`(3순위) — 운영에 이미 적용돼 있음이 2차에서 확인됐다.
+
+---
+
+# 【2차 심화】 2026-09-09 — 추가 제안 I-33 ~ I-37
+
+> `I-28`(SECURITY DEFINER 감사)을 실제로 수행한 결과 나온 항목들이다. 근거는 `overnight-audit-log.md` §10~§13.
+
+## J. RLS 우회 경로 정리
+
+### I-33 · 🔴 `SECURITY DEFINER` 함수 21개의 `anon` EXECUTE 권한 회수 — **I-26과 함께 최우선**
+**난이도: 간단** (`REVOKE` 21줄) / **다만 영향 확인이 선행**
+
+**왜**: 21개 전부가 `anon`에게 `EXECUTE`로 열려 있다. `SECURITY DEFINER`는 **RLS를 우회**하므로, 로그인하지 않은 호출자가 tenant 격리를 우회하는 함수를 호출할 수 있다.
+
+```
+-- 개념 (실행은 사람이 판단)
+REVOKE EXECUTE ON FUNCTION public.create_payment_atomic(...) FROM anon;
+-- 21개 각각. authenticated 는 함수별로 판단
+```
+
+**영향 확인이 먼저**: 서버 액션은 `service_role`로 호출하므로 `anon` 회수로 깨질 가능성이 낮다. 다만 **클라이언트 컴포넌트가 `supabase.rpc()`를 직접 호출하는 곳이 있는지** 확인해야 한다. `ARCH-01` 전제 6(「Server Action 전용, 클라이언트에서 직접 Supabase 쿼리 금지」)이 지켜졌다면 안전하다.
+
+### I-34 · 🔴 `create_payment_atomic`에 tenant 가드 추가
+**난이도: 간단** (형제 함수에서 3줄 복사)
+
+**왜**: `p_tenant_id`를 받아 `payments`에 `status='confirmed'`로 INSERT하는데 **호출자가 그 tenant의 주인인지 확인하는 코드가 한 줄도 없다.** `SECURITY DEFINER`라 RLS도 안 걸리고, `anon`이 실행할 수 있다.
+
+**같은 흐름의 형제 함수에는 이미 있다** — `allocate_payment_fifo`, `cancel_order_and_void_allocations`, `create_disbursement_with_allocations`, `reverse_disbursement` 4개 전부 `get_my_tenant_id()` 대조 + `RAISE EXCEPTION`을 갖고 있다.
+
+```
+-- 개념: 형제 함수와 같은 자리에 같은 것을 넣는다
+IF p_tenant_id IS DISTINCT FROM get_my_tenant_id() AND NOT is_admin() THEN
+  RAISE EXCEPTION 'forbidden';
+END IF;
+```
+
+같은 처리가 필요한 나머지: `upsert_savings_stat`, `generate_fund_transfers`, `redeem_coupon`, `bulk_create_products`.
+
+> **이 조사는 실제 악용을 시도하지 않았다.** 쓰기가 발생하기 때문이다. 위 판정은 함수 정의·권한·형제 함수 대조에 근거한다. 조치 전 **안전한 환경에서 사람이 재현 확인**하는 것이 맞다.
+
+### I-35 · 🟠 `SET search_path` 누락 3건
+**난이도: 간단** (기계적)
+
+`create_payment_atomic`, `upsert_savings_stat`, `delete_user_on_auth_delete`.
+나머지 18개는 `SET search_path TO 'public'`이 붙어 있다. 이 3개만 빠졌다. `SECURITY DEFINER`에서 `search_path` 고정은 표준 하드닝이다.
+
+## K. 마이그레이션 검증 확장
+
+### I-36 · 🔴 미적용 정책 3건 적용 여부 결정
+**난이도: 간단** (적용 자체는) / **효과 큼**
+
+```
+ingredient_price_history_tenant   (20260518120000)  → 미적용
+invoice_suppliers_tenant          (20260518130000)  → 미적용
+tenant_assets_select_public       (20260715140000)  → 미적용 (버킷은 실재)
+```
+
+**왜**: 이 3개가 안 붙어서 해당 테이블들이 **RLS ON + 정책 0개 = 사용자 세션에서 영구히 0행**이 됐다.
+식당OS 식자재 기능의 3중 장벽(① 컬럼 ② 정책 ③ 데이터) 중 **②가 이것**이다. 컬럼만 고쳐도(이미 dev에 있음) 화면은 여전히 빈다.
+
+### I-37 · 🔴 `I-01`(스키마 계약 테스트)의 검사 범위를 **정책 수준까지** 확장
+**난이도: 간단** (`I-01`/`I-27`에 쿼리 2개 추가)
+
+**왜**: `DR-08`(부분 적용)은 **테이블·컬럼만 보는 검증으로는 절대 안 잡힌다.** 1차 조사가 "적용 완료 주장 44개 전부 불일치 0건"이라고 결론낸 것도 그 때문이다 — 테이블은 정말 다 맞았고, 같은 파일의 `CREATE POLICY`만 빠졌다.
+
+```
+-- I-27에 추가할 검사
+4) 마이그레이션의 CREATE POLICY 이름 ↔ pg_policies 대조   → 현재 미적용 3건
+5) SECURITY DEFINER 함수 중 anon 에 EXECUTE 부여된 것      → 현재 21건
+6) SECURITY DEFINER 함수 중 SET search_path 없는 것        → 현재 3건
+```
+셋 다 `supabase db query` 한 번씩이면 나온다.
+
+---
+
+## L. 우선순위 재정리 (2차 심화 반영)
+
+| 순위 | 항목 | 난이도 | 이유 |
+|---|---|---|---|
+| **0** | **I-26** `message_logs`/`quote_logs` 잠그기 | 간단 | 익명키로 고객 메시지 본문이 읽힌다 |
+| **0** | **I-34** `create_payment_atomic` 가드 | 간단 | 형제 함수 4개엔 있는데 이것만 없다. **결제 생성 경로** |
+| **0+** | **I-33** `anon` EXECUTE 회수 | 간단 | 위 둘의 공통 뿌리. 영향 확인 선행 |
+| 1 | **I-36** 미적용 정책 3건 | 간단 | 식자재 기능 장벽 ②의 원인 |
+| 2 | **I-01 + I-27 + I-37** 스키마·권한·정책 계약 테스트 | 간단 | 이번에 나온 것이 **전부** 이걸로 잡힌다 |
+| 3 | **I-35** `search_path` 3건 | 간단 | 기계적 |
+| 4 | **I-24** `upsert_savings_stat` 등 나머지 4개 가드 | 간단 | I-34와 같은 유형 |
+| 5~ | (기존 I-07, I-11, I-03, I-19, I-06, I-02, I-30 …) | | 1차·2차 표 유지 |
+
+> **관찰**: 이번 심화에서 나온 최우선 3건(`I-26`, `I-34`, `I-33`)이 **전부 "만들다 만 것"이 아니라 "권한 설정 누락"**이다. 코드는 정상이고 **권한만 잘못 열려 있다.** 그래서 셋 다 난이도가 「간단」이다.

@@ -451,3 +451,97 @@ nurungchip.*  (6테이블)  → 동일
 > 「플랫폼 전용 = 인수자에게 전부 넘어감」이라는 뜻이 된다는 점은 기록해둔다
 
 — 이 문장이 **`dev`·`nurungchip` 13개 테이블에도 그대로 적용된다.** 그런데 1차 시점에는 그 존재를 몰랐다.
+
+---
+
+# 【2차 심화】 2026-09-09 — `R-09` 본문 감사 완료 + `R-11` 추가
+
+> `R-09`는 "함수 본문까지 읽지는 않았다"로 남겨뒀다. 이번에 21개 전문을 읽었다.
+> 전체 근거는 `overnight-audit-log.md` §10.
+
+## 7. `R-09` 갱신 — 추정이 아니라 확인된 사실로
+
+### 기존 서술
+> "이 함수들의 tenant 검증은 함수 본문 안에서 이뤄져야 한다. 본문까지 읽지는 않았다."
+
+### 확인 결과 — **절반은 되어 있고, 절반은 안 되어 있다**
+
+| 가드 상태 | 함수 | 개수 |
+|---|---|---|
+| 🟢 `get_my_tenant_id()` 대조 + `RAISE` | `allocate_payment_fifo`, `cancel_order_and_void_allocations`, `create_disbursement_with_allocations`, `reverse_disbursement`, `log_payment_reversal_audit`, `get_supplier_rfqs` | 6 |
+| 🟡 부분 (`auth.uid()`만 / `RAISE`만) | `log_pricing_engine_admin_event`, `soft_delete_customer`, `update_customer_stats` | 3 |
+| 🔴 **`p_tenant_id`를 받는데 검증 0** | **`create_payment_atomic`**, `upsert_savings_stat`, `generate_fund_transfers`, `redeem_coupon`, `bulk_create_products` | **5** |
+| 🟠 읽기 전용 + 검증 0 | `fetch_active_pricing_policies_for_checkout` | 1 |
+| ⚪ tenant 무관 (채번·트리거·가드 자체) | `nextval_product_code`, `nextval_product_code_n`, `handle_new_user_onboarding`, `delete_user_on_auth_delete`, `get_my_tenant_id`, `is_admin` | 6 |
+
+**따라서 `R-09`의 원래 우려는 절반만 맞았다.** 설계 의도는 분명히 "본문에서 검증한다"였고 **6개는 정확히 그렇게 되어 있다.** 문제는 **같은 패턴을 따르지 않은 5개**다.
+
+`allocate_payment_fifo`와 `create_payment_atomic`은 **같은 수금 흐름의 짝**인데, 앞의 것에는 가드가 있고 뒤의 것에는 없다. **일관성 결여이지 설계 부재가 아니다.**
+
+---
+
+## R-11 · 🔴 RLS를 우회하는 함수 21개가 **전부 익명에게 열려 있다**
+
+| 항목 | 시나리오 | 심각도 | 되돌릴 수 있나 |
+|---|---|---|---|
+| **R-11** | `SECURITY DEFINER` 함수 21개 전부 `anon`에 `EXECUTE` 부여 | ①②③ 전부 | 🔴 | 즉시 회수 가능 |
+
+```
+information_schema.role_routine_grants 실측
+  21개 전부 → anon, authenticated, service_role
+```
+
+**왜 설계 위험인가**
+
+`ARCH-01` 전제 2는 「모든 쿼리에 `tenant_id` 필수, 예외 없음」이고, 그 강제 수단이 RLS다.
+그런데 `SECURITY DEFINER`는 RLS를 우회하며, 그 21개가 **로그인조차 하지 않은 호출자에게 열려 있다.**
+
+**→ tenant 격리의 실제 경계는 RLS가 아니라 「21개 함수 본문 각각」이고, 그중 5개에는 경계가 없다.**
+
+이는 1차 `dead-code-report.md`가 지적한 「`requireAdmin`·`insertAdminLog` 보안 로직이 21벌로 분산돼 가드 누락 10건을 낳았다」와 **정확히 같은 형태의 문제가 DB 층에서 반복된 것**이다. 애플리케이션 층에서 배운 교훈이 DB 층에 적용되지 않았다.
+
+**실측 (읽기 전용 RPC만)**
+```
+POST /rest/v1/rpc/fetch_active_pricing_policies_for_checkout
+     (익명 키 · p_restaurant_tenant_id = 남의 tenant)     → HTTP 200
+POST /rest/v1/rpc/get_my_tenant_id  (익명 키)             → null
+POST /rest/v1/rpc/is_admin          (익명 키)             → false
+```
+가드 함수는 익명을 올바르게 거른다. **가드를 호출하지 않는 함수가 문제다.**
+
+**쓰기 RPC는 시도하지 않았다.** 운영 데이터가 바뀌기 때문이다. 판정은 함수 정의 + 권한 구조 + 형제 함수 대조로만 했다.
+
+### 시나리오별 영향
+
+| 시나리오 | 문제 |
+|---|---|
+| ① 사업 양도 실사 | "RLS 우회 함수가 익명에게 열려 있고 그중 결제 생성 함수에 tenant 검증이 없다"는 보안 점검에서 반드시 걸린다 |
+| ③ tenant 재편·분사 | tenant 경계가 RLS가 아니라 함수 본문 21벌에 흩어져 있어, 경계를 옮기려면 **21개를 전부 검토**해야 한다 |
+| ③ 식당OS 분사 | 두 앱이 같은 함수를 공유하므로 분리 시 함수 소유도 갈라야 한다 |
+
+---
+
+## 8. `R-08` 보강 — 미추적 자산에 **정책 42개**를 더한다
+
+`R-08`은 코드·마이그레이션이 모르는 **스키마 2개(13테이블)** 를 다뤘다. 여기에 같은 성격의 것이 하나 더 있다.
+
+```
+운영 RLS 정책 93개(고유) 중 마이그레이션 파일에 없는 것 = 42개
+  포함: orders / order_lines / payments / customers / products /
+        product_costs / quotes / settings / tenants / users ...
+```
+
+**주문·결제·고객·상품의 접근 통제 규칙이 git 밖에 있다.**
+양도·분사 시 「누가 무엇을 볼 수 있는가」를 정의하는 규칙 절반이 **문서화되지 않은 채 넘어간다.** `R-01`(플랫폼 tenant ID가 코드 16곳에 상수로 박힘)보다 나쁜데, 그건 최소한 코드에 보이기 때문이다.
+
+---
+
+## 9. 위험 요약표 갱신
+
+| # | 위험 | 시나리오 | 심각도 | 상태 |
+|---|---|---|---|---|
+| R-01 ~ R-07 | (1차) | | | 변화 없음 |
+| R-08 | 코드가 모르는 스키마 2개 + **정책 42개** | ①③ | 🔴 | §8에서 확장 |
+| **R-09** | `SECURITY DEFINER` 21개에 돈 로직 — **본문 감사 완료: 5개에 tenant 검증 없음** | ③ | 🔴 | 🟠→🔴 **상향** |
+| R-10 | `message_logs`·`quote_logs` 익명 전권 | ①②③ | 🔴 | 변화 없음 |
+| **R-11** | 그 21개가 **전부 익명에게 EXECUTE 개방** | ①②③ | 🔴 | **신규** |

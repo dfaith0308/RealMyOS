@@ -398,3 +398,230 @@ nurungchip.leads 0행 · lead_activities 0행 · order_items 0행
 | **C-14** | RLS ON + 정책 0개인 17개 테이블 — 의도인가 누락인가 | `ingredient_master` 등은 기능이 막혀 있을 수 있다 |
 | **C-15** | 인덱스 없는 FK 59개 중 어디까지 인덱스를 붙일 것인가 | 쓰기 비용 트레이드오프. 위 핫 경로 7개는 근거가 명확 |
 | **C-16** | `e9651f5` 커밋의 "미실행" 표기와 실제(정책 존재)의 불일치 정리 | 누가 언제 적용했는지 기록이 없음 |
+
+---
+
+# 【2차 심화】 2026-09-09 19:05~19:40 — 남겨둔 「확인 못 한 것」 4건 해소
+
+> `overnight-audit-log.md` §7(2차에서도 확인하지 못한 것)에 남긴 항목을 이어서 처리했다.
+> 여전히 **읽기 전용**이다. `SELECT` 및 **읽기 전용 RPC 호출** 외에는 실행하지 않았다.
+
+## 9. §7 목록의 처리 결과
+
+| §7 # | 항목 | 이번 결과 |
+|---|---|---|
+| 1 | `SECURITY DEFINER` 함수 21개의 본문 내 tenant 검증 | ✅ **21개 전문 전수 확인** → §10 |
+| 2 | INSERT/UPDATE RLS 실효성 | ⛔ 여전히 미검증 (쓰기 금지) — 다만 §10에서 **권한 구조로 판정**했다 |
+| 3 | `dev`/`nurungchip` 스키마를 누가 언제 만들었나 | ⛔ DDL 이력 없음. 사람 확인 필요(`C-12`,`C-13`) |
+| 4 | `dev.orders` 95행이 어느 시점 사본인지 | ⛔ 범위 밖 유지 |
+| 5 | 운영 Vercel 환경변수 | ⛔ 토큰 없음 |
+| 6 | Supabase 자체 보안 린트 | ⛔ 실행이 권한 정책에 막힘 |
+| — | `migration-drift-report.md` §7-1이 남긴 **파일↔운영 정책 1:1 이름 대조** | ✅ **완료** → §11 |
+| — | `feature-status-report.md` §7-5가 남긴 **클라이언트 컴포넌트만 있는 화면의 쿼리 경로** | ✅ **완료** → §12 |
+
+---
+
+## 10. 🔴 `SECURITY DEFINER` 함수 21개 전수 감사 결과
+
+### 10-1. 가장 중요한 사실 — **21개 전부 `anon`이 실행할 수 있다**
+
+```
+EXECUTE 권한 실측 (information_schema.role_routine_grants)
+  21개 전부 → anon, authenticated, service_role
+```
+
+`SECURITY DEFINER`는 **호출자가 아니라 정의자 권한으로 실행되므로 RLS가 적용되지 않는다.**
+즉 **로그인조차 하지 않은 호출자가 RLS를 우회하는 함수 21개를 전부 호출할 수 있다.**
+
+**실측 (읽기 전용 RPC만 호출했다)**
+```
+POST /rest/v1/rpc/fetch_active_pricing_policies_for_checkout   (익명 키, 남의 tenant id 지정)
+  → HTTP 200                      ← 거부되지 않는다
+
+POST /rest/v1/rpc/get_my_tenant_id  (익명 키) → null
+POST /rest/v1/rpc/is_admin          (익명 키) → false
+```
+가드 함수(`get_my_tenant_id`, `is_admin`)는 익명에게 올바르게 `null`/`false`를 준다. **문제는 그 가드를 호출하지 않는 함수들이다.**
+
+### 10-2. 본문 감사 — 가드 유무 전수표
+
+| 함수 | `p_tenant_id` 받음 | 본문 내 가드 | `SET search_path` | 판정 |
+|---|---|---|---|---|
+| `get_my_tenant_id` | — | `auth.uid()` | ✅ | 🟢 가드 자체 |
+| `is_admin` | — | `auth.uid()` | ✅ | 🟢 가드 자체 |
+| `allocate_payment_fifo` | ✅ | `get_my_tenant_id()` + `RAISE` | ✅ | 🟢 |
+| `cancel_order_and_void_allocations` | ✅ | `get_my_tenant_id()` + `RAISE` | ✅ | 🟢 |
+| `create_disbursement_with_allocations` | ✅ | `get_my_tenant_id()` + `RAISE` | ✅ | 🟢 |
+| `reverse_disbursement` | ✅ | `get_my_tenant_id()` + `RAISE` | ✅ | 🟢 |
+| `log_payment_reversal_audit` | ✅ | `get_my_tenant_id()` + `auth.uid()` + `RAISE` | ✅ | 🟢 |
+| `get_supplier_rfqs` | ✅ | `get_my_tenant_id()` | ✅ | 🟢 |
+| `log_pricing_engine_admin_event` | ✅ | `auth.uid()` | ✅ | 🟡 uid만 확인, tenant 대조 없음 |
+| `soft_delete_customer` | ✅ | `RAISE`만 | ✅ | 🟡 |
+| `update_customer_stats` | ✅ | `RAISE`만 | ✅ | 🟡 |
+| **`create_payment_atomic`** | ✅ | ❌ **없음** | ❌ **없음** | 🔴 |
+| **`upsert_savings_stat`** | ✅ | ❌ **없음** | ❌ **없음** | 🔴 |
+| **`generate_fund_transfers`** | ✅ | ❌ **없음** | ✅ | 🔴 |
+| **`redeem_coupon`** | ✅ | ❌ **없음** | ✅ | 🔴 |
+| **`bulk_create_products`** | ✅ | ❌ **없음** | ✅ | 🔴 |
+| `fetch_active_pricing_policies_for_checkout` | ✅ | ❌ 없음 | ✅ | 🟠 읽기 전용 |
+| `nextval_product_code` / `_n` | — | ❌ 없음 | ✅ | ⚪ 채번만 |
+| `handle_new_user_onboarding` | — | ❌ 없음 | ✅ | ⚪ 트리거 전용 |
+| `delete_user_on_auth_delete` | — | ❌ 없음 | ❌ **없음** | ⚪ 트리거 전용 |
+
+### 10-3. 🔴 `create_payment_atomic` — 가장 위험한 조합
+
+```sql
+CREATE OR REPLACE FUNCTION public.create_payment_atomic(
+  p_tenant_id uuid, p_customer_id uuid, p_amount integer, ...)
+ SECURITY DEFINER            -- RLS 우회
+AS $function$                -- SET search_path 없음
+BEGIN
+  SELECT COALESCE(opening_balance,0) INTO v_opening
+    FROM customers WHERE id = p_customer_id AND tenant_id = p_tenant_id;
+  ...
+  INSERT INTO payments (tenant_id, customer_id, amount, ..., status, ...)
+  VALUES (p_tenant_id, p_customer_id, p_amount, ..., 'confirmed', ...);
+  ...
+END;
+```
+
+| 요소 | 상태 |
+|---|---|
+| `p_tenant_id`가 **호출자의 tenant인지 확인** | ❌ **한 줄도 없다** |
+| RLS | ❌ `SECURITY DEFINER`라 우회 |
+| `EXECUTE` 권한 | ❌ **`anon` 포함** |
+| `SET search_path` | ❌ 없음 |
+| 쓰는 것 | `payments` INSERT (`status='confirmed'`), `collection_schedules` UPDATE |
+
+**즉 구조적으로는 "임의의 tenant에 확정 수금 기록을 만들 수 있는 경로"다.**
+`allocate_payment_fifo` 같은 형제 함수들은 **똑같은 자리에 `get_my_tenant_id()` 검사와 `RAISE`가 들어 있다.** 이 함수만 빠졌다.
+
+> **⚠️ 이 조사는 실제로 시도하지 않았다.** 운영 데이터에 쓰기가 발생하기 때문이다.
+> 판정은 **함수 정의 + 권한 구조 + 형제 함수와의 대조**로만 했다. 실제 악용 가능 여부는 사람이 안전한 환경에서 확인해야 한다.
+> 같은 이유로 `upsert_savings_stat`·`generate_fund_transfers`·`redeem_coupon`·`bulk_create_products`도 시도하지 않았다.
+
+### 10-4. `SET search_path` 누락 3건
+
+`create_payment_atomic`, `upsert_savings_stat`, `delete_user_on_auth_delete`.
+`SECURITY DEFINER` 함수에 `search_path`가 고정돼 있지 않으면 호출자가 스키마 해석을 흔들 수 있다. 나머지 18개는 `SET search_path TO 'public'`이 붙어 있으므로 **이 3개는 누락으로 보인다.**
+
+---
+
+## 11. 🔴 새 드리프트 유형 — 마이그레이션의 **부분 적용** (정책만 빠졌다)
+
+`migration-drift-report.md` §7-1이 "파일↔운영 정책 1:1 이름 대조는 다음 조사로 남긴다"고 한 부분이다. 이번에 했다.
+
+| | 개수 |
+|---|---|
+| 운영 정책 (`public`) | **102** (고유 이름 93) |
+| 마이그레이션 `CREATE POLICY` 선언 (realmyos 51 + restaurant 6) | **57** (고유) |
+| **파일에만 있고 운영에 없음** | **6** |
+| **운영에만 있고 파일에 없음** | **42** |
+
+### 11-1. 「파일에만 있음」 6건의 정체
+
+| 정책 | 판정 |
+|---|---|
+| `commerce_images_insert_admin` | ⚪ 오탐 — `storage.objects`에 실재 (`public` 스키마만 대조했기 때문) |
+| `commerce_images_select_public` | ⚪ 오탐 — 동일 |
+| `admin_settings_admin` | ⚪ 정상 — `20260508050000`이 `admin_settings_read/write/update/delete` 4개로 **세분화하며 교체**했다 |
+| **`ingredient_price_history_tenant`** | 🔴 **미적용** |
+| **`invoice_suppliers_tenant`** | 🔴 **미적용** |
+| **`tenant_assets_select_public`** | 🔴 **미적용** — `tenant-assets` 버킷은 실재하는데 공개 읽기 정책이 없다 |
+
+### 11-2. 🔴 이것이 「RLS ON + 정책 0개 17개」의 원인이다
+
+```
+restaurant-os/supabase/migrations/20260518120000_create_ingredient_price_history.sql
+  -- WARNING: Migration file only. Already applied via Supabase SQL Editor. Do not re-run.
+  CREATE TABLE ...           → ✅ 적용됨 (테이블 실재)
+  ALTER TABLE ... ENABLE RLS → ✅ 적용됨 (relrowsecurity = true)
+  CREATE POLICY "ingredient_price_history_tenant" ... → ❌ 적용 안 됨
+```
+
+`invoice_suppliers`(`20260518130000`)도 동일하다. 실측:
+```
+ingredient_price_history   RLS=ON  정책 0
+ingredient_unit_history    RLS=ON  정책 0
+invoice_suppliers          RLS=ON  정책 0
+```
+
+**결과**: 테이블은 존재하고 RLS는 켜져 있는데 정책이 없으므로 → **사용자 세션에서 영구히 0행.** 서비스는 조용히 아무것도 못 읽는다.
+
+> **1차 조사가 이걸 못 본 이유가 여기서 설명된다.**
+> 1차는 「'적용 완료' 주장 44개 파일의 **컬럼·테이블 수준** 정합성 = 불일치 0건」이라고 결론냈다. **그 결론은 맞다.** 테이블과 컬럼은 정말로 다 적용됐다.
+> 빠진 것은 **같은 파일 안의 `CREATE POLICY` 부분**이었고, 1차는 정책을 조회할 수단이 없어 그 절반을 볼 수 없었다.
+> → **`DR-08`: 마이그레이션이 「전부 적용 / 전부 미적용」이 아니라 「부분 적용」될 수 있다.** 이것이 세 번째 드리프트 유형이다(`DR-02`·`DR-03`·`DR-07`은 주석과 실제의 불일치, `DR-08`은 한 파일 내 부분 적용).
+
+### 11-3. 정책 역방향 드리프트 42건
+
+운영에만 있고 파일에 없는 정책 42개에는 **핵심 업무 테이블이 대거 포함**된다:
+```
+orders: all · order_lines: all · payments: all · customers: all
+products: all · product_costs: all · product_stats: all · product_prices: all
+quotes: all · quote_items: all · settings: all
+tenants: select/insert/update · users: select/insert/update/delete
+account_purposes / accounts / fund_rules / fund_transfers : same tenant
+action_logs / contact_logs / collection_schedules : same tenant
+tenant_isolation · rfq_bid_access · acquisition_channels_policy ...
+```
+**주문·결제·고객·상품의 RLS 정책이 전부 git 밖에 있다.** 1차의 「역방향 드리프트」가 테이블뿐 아니라 **정책 층에도 같은 규모로 존재**한다.
+
+---
+
+## 12. 액션 import가 없던 화면들의 실제 데이터 경로 (확인 완료)
+
+`feature-status-report.md` §7-5가 남긴 항목이다. 클라이언트 컴포넌트를 따라가 서버 액션까지 연결했다.
+
+| 화면 | 클라이언트 컴포넌트 | 실제 호출 서버 액션 | 판정 |
+|---|---|---|---|
+| `/payments/new` | `payment/PaymentCreateForm` | `payment`, `customer-deposits`, `order` | 🟢 정상 |
+| `/products/bulk` | `product/ProductBulkUpload` | `product` | 🟢 정상 |
+| `/purchases/new` | `purchases/PurchaseCreateClient` | `purchase` | 🟢 정상 |
+| `/admin/push` | `admin/PushSendClient` | `admin/push` | 🟢 (단 `push_subscriptions` 정책 0개) |
+| `/admin/commerce/products/new` | `commerce/ListingFormClient` | `admin/commerce`, `admin/ai-product-analysis` | 🟢 정상 |
+| `/admin/commerce/products/bulk` | `commerce/BulkListingUploader` | `admin/bulk-listing` | 🟢 정상 |
+
+**→ 이 6화면은 「추적 불가」가 아니라 정상 동작하는 화면이었다.** 4단계 판정에 변화 없음(전부 🟢였다).
+
+---
+
+## 13. ⚠️ 앞선 문서의 오류 정정 2건
+
+### 13-1. `/orders/quotes/*` 3개는 「껍데기」가 아니라 **의도된 legacy 리다이렉트**다
+
+`connection-gap-report.md` N-01과 `feature-map-supplier.md` §5에서 "액션 import가 0개인 껍데기"라고 적었다. **틀렸다.** 파일을 열어 확인한 실제 내용:
+
+```tsx
+// (app)/orders/quotes/page.tsx
+export default function QuotesLegacyRedirectPage() { redirect('/quotes') }
+// (app)/orders/quotes/[id]/page.tsx
+export default function QuoteDetailLegacyRedirectPage({ params }) { redirect(`/quotes/${params.id}`) }
+// (app)/orders/quotes/new/page.tsx
+export default function NewQuoteLegacyRedirectPage() { redirect('/quotes/new') }
+```
+**옛 URL을 새 URL로 보내주는 정상적인 처리다.** 정리 대상이 아니다. `C-20`에서 이 항목을 뺀다.
+
+### 13-2. `/sales`도 리다이렉트다
+`redirect('/sales/schedule')`. `feature-map-supplier.md`에 "액션 import 없음 — 리다이렉트/셸로 보임"이라고 적었는데, **리다이렉트가 맞다.**
+
+### 13-3. 반면 `/automation/*` 3개는 정정 대상이 아니다 — 문제가 맞다
+```tsx
+// src/app/automation/schedule/page.tsx
+import SalesSchedulePage from '@/app/(app)/sales/schedule/page'
+export default SalesSchedulePage        // 리다이렉트가 아니라 re-export
+```
+`redirect`가 아니라 **컴포넌트 재수출**이고, `src/app/automation/`에 `layout.tsx`가 없어 `(app)` 레이아웃 밖에서 렌더링된다 → **사이드바 없이 뜬다.** `C-20`은 이 3개에 대해 유효하다.
+
+---
+
+## 14. 이번 심화에서 추가된 「사람 확인 필요」
+
+| # | 항목 | 왜 |
+|---|---|---|
+| **C-22** | 🔴 `create_payment_atomic`에 tenant 가드 추가 여부 | 형제 함수 4개에는 있고 이 함수만 없다. **판단 여지가 거의 없어 보이나 쓰기 변경이라 사람이 해야 한다** |
+| **C-23** | 🔴 `SECURITY DEFINER` 21개의 `anon` EXECUTE 권한 회수 범위 | 전부 회수하면 무엇이 깨지는지 확인 필요. 서버 액션은 service_role을 쓰므로 영향이 없을 가능성이 높다 |
+| **C-24** | `upsert_savings_stat`·`generate_fund_transfers`·`redeem_coupon`·`bulk_create_products` 가드 추가 | 동일 유형 |
+| **C-25** | `SET search_path` 누락 3건 | 기계적이나 쓰기 변경 |
+| **C-26** | 미적용 정책 3건 적용 여부 (`ingredient_price_history`, `invoice_suppliers`, `tenant_assets`) | 적용하면 식자재 기능의 3중 장벽 중 하나가 풀린다 |
+| **C-27** | 운영 정책 42개를 파일로 기록할 것인가 | `I-02`/`I-30`(RECORD-ONLY 덤프)에 정책을 포함하는 문제 |

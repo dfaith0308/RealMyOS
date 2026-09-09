@@ -114,7 +114,8 @@
 | 견적 상세 | `/quotes/[id]` | `/orders/quotes/[id]` | 견적 1건 | 동일 |
 | 견적 등록 | `/quotes/new` | `/orders/quotes/new` | 견적 작성 | `order.ts` |
 
-> ⚠️ **같은 기능이 두 URL에 있다.** 사이드바는 `/quotes`를 가리킨다. `/orders/quotes/*` 3개는 액션 import가 없는 껍데기다. 5단계에서 다룬다.
+> ⚠️ **같은 기능이 두 URL에 있다.** 사이드바는 `/quotes`를 가리킨다.
+> **【2차 심화 정정】** `/orders/quotes/*` 3개는 「껍데기」가 아니라 **의도된 legacy 리다이렉트**다 — 각각 `redirect('/quotes')`, `redirect('/quotes/'+id)`, `redirect('/quotes/new')`. 정리 대상이 아니다.
 > 운영 실측: `quotes` **1행 · 2026-07-31** / `quote_items` **0행** / `quote_logs` **0행** — 사실상 미사용.
 > 부가: `quote-export.ts` → `quotes`,`quote_logs`,`settings`
 
@@ -210,7 +211,7 @@
 | 실행센터 | `/sales/exec` | 오늘 연락할 대상 실행 | `sales.ts`, `customer-query.ts` |
 | 영업이력 | `/sales/history` | 연락 기록 | `sales.ts` |
 | 스크립트관리 | `/sales/scripts` | 문자·통화 스크립트 관리 | `sales.ts` → `sales_scripts` |
-| (그룹 페이지) | `/sales` | 액션 import 없음 — 리다이렉트/셸로 보임 | — |
+| (그룹 페이지) | `/sales` | **`redirect('/sales/schedule')`** — 2차 심화에서 확인 | — |
 
 **중복 라우트 3개**
 ```
