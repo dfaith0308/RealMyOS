@@ -107,3 +107,12 @@ export const LISTING_TRANSFER_ACTION_TYPE = 'listing_supplier_transferred'
  * 필요하면 별도로 정해 이 값보다 낮게 건다.
  */
 export const MAX_COST_PRICE = 2147483647
+
+/**
+ * 매입가 업무 상한 (1,000만원).
+ *
+ * MAX_COST_PRICE 는 DB(int4)가 받아줄 수 있는 최대일 뿐 업무적으로는 의미가 없다.
+ * 취급 품목 기준으로 1,000만원을 넘는 매입가는 오타로 본다. 이 값이 먼저 걸린다.
+ * 실제로 이 상한이 없던 동안 9,999만원짜리 매입가가 정상 값으로 저장된 적이 있다.
+ */
+export const MAX_BUSINESS_COST_PRICE = 10_000_000

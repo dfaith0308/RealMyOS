@@ -37,7 +37,12 @@
 
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
-import { LISTING_TRANSFER_ACTION_TYPE, MAX_COST_PRICE, normalizeCostPriceInput } from '@/lib/commerce-constants'
+import {
+  LISTING_TRANSFER_ACTION_TYPE,
+  MAX_BUSINESS_COST_PRICE,
+  MAX_COST_PRICE,
+  normalizeCostPriceInput,
+} from '@/lib/commerce-constants'
 import type { ActionResult } from '@/types/order'
 
 const PLATFORM_OWNER_TENANT = '00000000-0000-0000-0000-000000000000'
@@ -405,6 +410,13 @@ export async function transferListingSupplier(input: {
     return {
       success: false,
       error: `매입가가 너무 큽니다 (최대 ${MAX_COST_PRICE.toLocaleString()}원)`,
+    }
+  }
+  // 업무 상한이 먼저 걸린다. int4 상한은 그 뒤를 받치는 기술적 방어선으로 남겨둔다.
+  if (newCostPrice > MAX_BUSINESS_COST_PRICE) {
+    return {
+      success: false,
+      error: `매입가가 업무 상한을 넘습니다 (최대 ${MAX_BUSINESS_COST_PRICE.toLocaleString()}원). 오타가 아닌지 확인해 주세요`,
     }
   }
 
