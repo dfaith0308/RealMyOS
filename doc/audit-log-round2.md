@@ -17,8 +17,8 @@
 | 2 | 1차 조사 미완성분 보완 | 18:14 | **18:22** | 기존 6종 갱신 + `dev-main-diff-report.md` 정정 |
 | 3 | 기능 전체 목록 | 18:23 | **18:43** | `feature-map-restaurant/supplier/admin.md` |
 | 4 | 실제 작동 여부 검증 | 18:43 | **18:48** | `feature-status-report.md` |
-| 5 | 화면 간 연결 상태 | 18:48 | — | `connection-gap-report.md` |
-| 6 | 기능 조합 아이디어 | — | — | `combination-ideas.md` |
+| 5 | 화면 간 연결 상태 | 18:48 | **18:58** | `connection-gap-report.md` |
+| 6 | 기능 조합 아이디어 | 18:58 | — | `combination-ideas.md` |
 | 7 | 부족한 기능 정리 | — | — | `missing-features-report.md` |
 
 ---
