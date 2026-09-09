@@ -26,6 +26,7 @@ const MENU: MenuEntry[] = [
     ],
   },
   { type: 'link', label: '회원관리', icon: '🏢', href: '/admin/tenants' },
+  { type: 'link', label: '식자재 대신 등록', icon: '🥬', href: '/admin/ingredient-entry' },
   {
     type: 'group',
     label: '쇼핑몰관리',
