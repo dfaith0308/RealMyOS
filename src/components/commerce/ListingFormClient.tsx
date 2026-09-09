@@ -2728,8 +2728,23 @@ export default function ListingFormClient(props: ListingFormProps) {
                     placeholder="예: 5/28까지 품절 유지"
                     style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical' }}
                   />
+                  {/*
+                    이 안내는 사실과 다르면 안 된다. admin_memo 는 화면에 노출하지 않을 뿐
+                    DB 수준에서는 보호되지 않는다 — commerce_listings_read 정책에 TO 절이
+                    없어 anon(비로그인) 도 이 컬럼을 읽는다. 운영 확인(2026-09-09):
+                      GET /rest/v1/commerce_product_listings?select=id,admin_memo  [anon]
+                      → HTTP 200, admin_memo 컬럼 반환
+                    지금은 전 행이 null 이라 실제로 새는 값이 없을 뿐이다.
+                  */}
                   <p className={mod.fieldHint} style={{ color: '#6b7280', fontWeight: 600 }}>
-                    내부 전용, 고객에게 안 보입니다 — 직원 간 소통용 메모입니다
+                    화면에는 노출되지 않지만, <strong>공개 데이터로 조회될 수 있습니다.</strong>{' '}
+                    직원 간 소통용 메모로만 쓰세요.
+                  </p>
+                  <p
+                    className={mod.fieldHint}
+                    style={{ color: '#b45309', fontWeight: 700, marginTop: 4, lineHeight: 1.6 }}
+                  >
+                    ⚠️ 매입가·거래처 단가·공급 조건 등 외부에 알려지면 안 되는 정보는 적지 마세요.
                   </p>
                 </div>
               </div>
