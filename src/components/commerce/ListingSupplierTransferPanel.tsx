@@ -56,6 +56,8 @@ export default function ListingSupplierTransferPanel({ listingId }: { listingId:
   const [preview, setPreview] = useState<ListingTransferPreview | null>(null)
   const [acknowledged, setAcknowledged] = useState(false)
   const [reason, setReason] = useState('')
+  // 새 공급자의 매입가. 플랫폼 매입가는 이 화면에 표시하지도, 기본값으로 넣지도 않는다.
+  const [newCostPrice, setNewCostPrice] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<string | null>(null)
 
@@ -95,6 +97,7 @@ export default function ListingSupplierTransferPanel({ listingId }: { listingId:
       const res = await transferListingSupplier({
         listing_id: listingId,
         supplier_tenant_id: supplierId,
+        new_cost_price: newCostPrice,
         reason: reason.trim() || null,
       })
       if (!res.success || !res.data) {
@@ -104,12 +107,18 @@ export default function ListingSupplierTransferPanel({ listingId }: { listingId:
       setDone(res.data.listing_id)
       setPreview(null)
       setAcknowledged(false)
+      setNewCostPrice('')
       router.refresh()
     })
   }
 
   const targetName = suppliers?.find((s) => s.id === supplierId)?.name ?? ''
   const blocked = (preview?.blockers.length ?? 0) > 0
+  // 서버(transferListingSupplier)와 같은 기준: 정수이고 1원 자리값보다 커야 한다.
+  const costPriceValid = (() => {
+    const n = Number(newCostPrice)
+    return newCostPrice.trim() !== '' && Number.isFinite(n) && Math.round(n) > 1
+  })()
   const productStaysOnPlatform =
     preview?.product_tenant_id != null && preview.product_tenant_id === PLATFORM_OWNER_TENANT
 
@@ -236,9 +245,10 @@ export default function ListingSupplierTransferPanel({ listingId }: { listingId:
                 lineHeight: 1.7,
               }}
             >
-              이 리스팅의 상품(products)은 플랫폼 tenant 소유로 남습니다. 정산 대상은 새 공급자로
-              바뀌지만, 원가(product_costs)는 여전히 플랫폼 상품에 묶여 있어 구독 할인 계산의 원가
-              기준이 새 공급자의 매입가와 다를 수 있습니다. 상품 이관 방침은 별도 결정 사항입니다.
+              이관하면 새 공급자 tenant 에 상품(products)을 새로 만들고, 이 리스팅이 그 상품을
+              가리키도록 바꿉니다. listing_id 는 그대로라 식당의 재주문 목록과 과거 주문 가격은
+              보존됩니다. 기존 플랫폼 상품과 그 매입가 이력은 지우지 않고 과거 기록으로 남으며,
+              이관 후에는 이 리스팅에서 플랫폼 매입가로 도달할 수 없습니다.
             </div>
           )}
 
@@ -295,11 +305,45 @@ export default function ListingSupplierTransferPanel({ listingId }: { listingId:
                 </span>
               </label>
 
+              {/*
+                새 공급자 매입가 — 필수 입력.
+                플랫폼 매입가는 조회하지도, 기본값으로 채우지도 않는다. 빈 칸에서 시작한다.
+              */}
+              <label style={{ display: 'block', marginTop: 14, fontSize: 13 }}>
+                <span style={{ display: 'block', marginBottom: 6, fontWeight: 600 }}>
+                  새 공급자 매입가 <span style={{ color: '#b91c1c' }}>*</span>
+                </span>
+                <input
+                  type="number"
+                  min={2}
+                  step={1}
+                  inputMode="numeric"
+                  value={newCostPrice}
+                  onChange={(e) => setNewCostPrice(e.target.value)}
+                  placeholder="예: 12000"
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px',
+                    borderRadius: 8,
+                    border: '1px solid #d1d5db',
+                    fontSize: 14,
+                  }}
+                />
+                <span style={{ display: 'block', marginTop: 6, fontSize: 12, color: '#6b7280', lineHeight: 1.6 }}>
+                  새로 만들 공급자 상품의 매입가입니다. 이관일부터 적용됩니다. 이 값이 구독 할인
+                  계산의 원가 기준이 되며, 플랫폼 매입가는 사용되지 않습니다.
+                </span>
+              </label>
+
               <button
                 type="button"
-                style={{ ...dangerBtn, marginTop: 12, opacity: acknowledged && !isPending ? 1 : 0.5 }}
+                style={{
+                  ...dangerBtn,
+                  marginTop: 12,
+                  opacity: acknowledged && costPriceValid && !isPending ? 1 : 0.5,
+                }}
                 onClick={handleTransfer}
-                disabled={!acknowledged || isPending}
+                disabled={!acknowledged || !costPriceValid || isPending}
               >
                 {isPending ? '이관 중…' : '이관 실행'}
               </button>
