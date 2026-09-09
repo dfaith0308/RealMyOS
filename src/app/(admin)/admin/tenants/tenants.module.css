@@ -27,6 +27,7 @@
 .badgeRestaurant { background: #EEF2FF; color: #4338CA; }
 .badgeSupplier { background: #E8F5EF; color: var(--ds-brand-primary); }
 .badgeAdmin { background: #F5F3FF; color: #7C3AED; }
+.badgeUnassigned { background: #FEF3C7; color: #92400E; }
 .plan { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; white-space: nowrap; }
 .planFree { background: #F3F4F6; color: #6B7280; }
 .planEarlybird { background: #FFF7ED; color: #C2410C; }

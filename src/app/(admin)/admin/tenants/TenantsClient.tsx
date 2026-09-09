@@ -10,7 +10,9 @@ import {
   getTenantDetail,
   suspendTenant,
   updateTenant,
+  updateTenantRole,
   type TenantAdminRow,
+  type TenantRole,
 } from '@/actions/admin'
 import { updateTenantSubscription, type SubscriptionPlan } from '@/actions/admin/subscription'
 import s from './tenants.module.css'
@@ -61,6 +63,10 @@ export default function TenantsClient({
   const [subPlan, setSubPlan] = useState<Record<string, SubscriptionPlan>>({})
   const [subPending, setSubPending] = useState<Record<string, boolean>>({})
 
+  // 역할 미지정 계정 해소용 — 행별 선택값/진행상태
+  const [rolePick, setRolePick] = useState<Record<string, TenantRole>>({})
+  const [rolePending, setRolePending] = useState<Record<string, boolean>>({})
+
   const [createRole, setCreateRole] = useState<CreateRole>('supplier')
   const [createName, setCreateName] = useState('')
   const [createEmail, setCreateEmail] = useState('')
@@ -79,6 +85,7 @@ export default function TenantsClient({
     all: rows.length,
     supplier: rows.filter(r => r.role === 'supplier').length,
     restaurant: rows.filter(r => r.role === 'restaurant').length,
+    unassigned: rows.filter(r => !isAdminTenant(r) && r.role !== 'restaurant' && r.role !== 'supplier').length,
     approved: rows.filter(r => r.is_approved === true).length,
     pending: rows.filter(r => !r.is_approved).length,
   }), [rows])
@@ -86,7 +93,9 @@ export default function TenantsClient({
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return rows.filter(r => {
-      if (filterRole !== 'all' && r.role !== filterRole) return false
+      if (filterRole === 'unassigned') {
+        if (r.role === 'restaurant' || r.role === 'supplier' || isAdminTenant(r)) return false
+      } else if (filterRole !== 'all' && r.role !== filterRole) return false
       if (filterStatus === 'approved' && !r.is_approved) return false
       if (filterStatus === 'pending' && r.is_approved) return false
       if (filterPlan !== 'all' && (r.subscription_plan ?? 'free') !== filterPlan) return false
@@ -178,6 +187,17 @@ export default function TenantsClient({
     })
   }
 
+  async function handleRoleApply(tenantId: string) {
+    const role = rolePick[tenantId]
+    if (!role) { setPageError('지정할 역할을 선택해주세요.'); return }
+    setRolePending(p => ({ ...p, [tenantId]: true }))
+    const res = await updateTenantRole({ tenant_id: tenantId, role })
+    setRolePending(p => ({ ...p, [tenantId]: false }))
+    if (!res.success) { setPageError(res.error ?? '역할 지정 실패'); return }
+    setPageError(null)
+    refreshList()
+  }
+
   async function handleSubApply(tenantId: string) {
     const plan = subPlan[tenantId] ?? 'free'
     setSubPending(p => ({ ...p, [tenantId]: true }))
@@ -223,6 +243,7 @@ export default function TenantsClient({
           <option value="all">역할: 전체</option>
           <option value="restaurant">식당</option>
           <option value="supplier">공급자</option>
+          <option value="unassigned">미지정</option>
         </select>
         <select className={s.filterSelect} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
           <option value="all">승인상태: 전체</option>
@@ -267,12 +288,36 @@ export default function TenantsClient({
               </div>
 
               <div>
-                {admin
-                  ? <span className={`${s.badge} ${s.badgeAdmin}`}>관리자</span>
-                  : row.role === 'restaurant'
-                    ? <span className={`${s.badge} ${s.badgeRestaurant}`}>식당</span>
-                    : <span className={`${s.badge} ${s.badgeSupplier}`}>공급자</span>
-                }
+                {admin ? (
+                  <span className={`${s.badge} ${s.badgeAdmin}`}>관리자</span>
+                ) : row.role === 'restaurant' ? (
+                  <span className={`${s.badge} ${s.badgeRestaurant}`}>식당</span>
+                ) : row.role === 'supplier' ? (
+                  <span className={`${s.badge} ${s.badgeSupplier}`}>공급자</span>
+                ) : (
+                  <>
+                    <span className={`${s.badge} ${s.badgeUnassigned}`}>미지정</span>
+                    <div style={{ display: 'flex', gap: 4, marginTop: 6, alignItems: 'center' }}>
+                      <select
+                        style={{ height: 26, fontSize: 11, borderRadius: 6, border: '1px solid var(--ds-border-default)', padding: '0 6px', fontFamily: 'inherit', background: 'var(--color-bg-card)', color: 'var(--ds-text-primary)' }}
+                        value={rolePick[row.id] ?? ''}
+                        onChange={e => setRolePick(p => ({ ...p, [row.id]: e.target.value as TenantRole }))}
+                        disabled={rolePending[row.id] ?? false}
+                        aria-label="역할 선택"
+                      >
+                        <option value="" disabled>역할 선택</option>
+                        <option value="restaurant">식당</option>
+                        <option value="supplier">공급자</option>
+                      </select>
+                      <button
+                        type="button"
+                        style={{ height: 26, padding: '0 8px', fontSize: 11, borderRadius: 6, border: '1px solid var(--ds-border-default)', background: 'var(--color-bg-card)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+                        disabled={(rolePending[row.id] ?? false) || !rolePick[row.id]}
+                        onClick={() => handleRoleApply(row.id)}
+                      >지정</button>
+                    </div>
+                  </>
+                )}
               </div>
 
               <div>

@@ -63,6 +63,8 @@ type AdminLogRow = {
   created_at: string | null
 }
 
+const ADMIN_TENANT_ID = '00000000-0000-0000-0000-000000000000'
+
 async function requireAdmin(supabase: any) {
   const ctx = await getAuthCtx(supabase)
   if (!ctx) return { ok: false as const, error: '로그인 필요' }
@@ -504,6 +506,125 @@ export async function updateTenant(input: {
   })
 
   if (!logRes.ok) return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
+
+  return { success: true }
+}
+
+export type TenantRole = 'supplier' | 'restaurant'
+
+/**
+ * tenants.role 지정 (미지정 계정 해소용).
+ *
+ * getAuthCtx()는 role 을 user_metadata → users.role 순으로 읽고 tenants.role 은 보지 않는다.
+ * 그래서 세 곳을 함께 맞춰야 실제로 로그인 게이트가 풀린다.
+ * (createTenantWithUser 가 생성 시 세 곳을 모두 채우는 것과 같은 이유)
+ *
+ * 연결된 사용자가 없는 tenant 도 허용한다 — 가입이 중단돼 tenant 행만 남은 경우가 있고,
+ * 이때는 tenants.role 만 갱신한다.
+ */
+export async function updateTenantRole(input: {
+  tenant_id: string
+  role: TenantRole
+  reason?: string
+}): Promise<ActionResult<void>> {
+  const supabase = await createSupabaseServer()
+  const auth = await requireAdmin(supabase)
+  if (!auth.ok) return { success: false, error: auth.error }
+
+  const tenant_id = input.tenant_id?.trim()
+  if (!tenant_id) return { success: false, error: 'tenant_id가 올바르지 않습니다.' }
+  if (input.role !== 'supplier' && input.role !== 'restaurant') {
+    return { success: false, error: '역할은 supplier 또는 restaurant 만 지정할 수 있습니다.' }
+  }
+  if (tenant_id === ADMIN_TENANT_ID) {
+    return { success: false, error: '관리자 계정의 역할은 변경할 수 없습니다.' }
+  }
+
+  const admin = await createSupabaseAdmin()
+
+  const { data: tenant, error: tenantErr } = await admin
+    .from('tenants')
+    .select('id, name, role')
+    .eq('id', tenant_id)
+    .is('deleted_at', null)
+    .maybeSingle()
+
+  if (tenantErr) return { success: false, error: tenantErr.message }
+  if (!tenant) return { success: false, error: '테넌트를 찾을 수 없습니다.' }
+
+  const prevRole = (tenant as { role?: string | null }).role ?? null
+  if (prevRole === 'admin') {
+    return { success: false, error: '관리자 계정의 역할은 변경할 수 없습니다.' }
+  }
+  if (prevRole === input.role) {
+    return { success: false, error: '이미 같은 역할입니다.' }
+  }
+
+  const { data: userRow, error: userRowErr } = await admin
+    .from('users')
+    .select('id, role')
+    .eq('tenant_id', tenant_id)
+    .maybeSingle()
+
+  if (userRowErr) return { success: false, error: userRowErr.message }
+
+  const userId = (userRow as { id?: string } | null)?.id ?? null
+  const prevUserRole = (userRow as { role?: string | null } | null)?.role ?? null
+
+  // 1) tenants.role
+  const { error: tenantUpdErr } = await admin
+    .from('tenants')
+    .update({ role: input.role })
+    .eq('id', tenant_id)
+  if (tenantUpdErr) return { success: false, error: tenantUpdErr.message }
+
+  // 되돌리기 — 이후 단계가 실패하면 tenants.role 을 원래대로 돌린다
+  async function rollbackTenantRole() {
+    await admin.from('tenants').update({ role: prevRole }).eq('id', tenant_id)
+  }
+
+  // 2) users.role  3) auth user_metadata.role — 사용자가 있을 때만
+  if (userId) {
+    const { error: userUpdErr } = await admin
+      .from('users')
+      .update({ role: input.role })
+      .eq('id', userId)
+    if (userUpdErr) {
+      await rollbackTenantRole()
+      return { success: false, error: userUpdErr.message }
+    }
+
+    const { error: metaErr } = await admin.auth.admin.updateUserById(userId, {
+      user_metadata: { role: input.role, tenant_id },
+    })
+    if (metaErr) {
+      await admin.from('users').update({ role: prevUserRole }).eq('id', userId)
+      await rollbackTenantRole()
+      return { success: false, error: metaErr.message }
+    }
+  }
+
+  const logRes = await insertAdminLog(supabase, {
+    admin_id: auth.ctx.user_id,
+    tenant_id,
+    action_type: 'tenant_role_update',
+    reason: input.reason?.trim() || 'admin assign tenant role',
+    target_table: 'tenants',
+    target_id: tenant_id,
+    old_value: { role: prevRole, users_role: prevUserRole, has_user: !!userId },
+    new_value: { role: input.role, users_role: userId ? input.role : null, has_user: !!userId },
+  })
+
+  if (!logRes.ok) {
+    if (userId) {
+      await admin.auth.admin.updateUserById(userId, {
+        user_metadata: { role: prevUserRole ?? null, tenant_id },
+      })
+      await admin.from('users').update({ role: prevUserRole }).eq('id', userId)
+    }
+    await rollbackTenantRole()
+    return { success: false, error: `admin_logs 기록 실패: ${logRes.error}` }
+  }
 
   return { success: true }
 }
