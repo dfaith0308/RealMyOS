@@ -10,6 +10,7 @@ import {
   COMMERCE_ORDER_STATUSES,
   COMMERCE_PAYMENT_METHODS,
   LISTING_SHIPPING_TYPES,
+  LISTING_TRANSFER_ACTION_TYPE,
   PLATFORM_COMMERCE_PLACEHOLDER_COST,
   isCostUnconfirmed,
   normalizeCostPriceInput,
@@ -1565,6 +1566,28 @@ export async function createListing(input: {
     .maybeSingle()
 
   if (dup) return { success: false, error: '이미 등록된 상품입니다' }
+
+  // 판매자 이관으로 빠져나간 플랫폼 상품은 다시 등록하지 않는다.
+  // 이관(P3)은 리스팅의 product_id 를 새 공급자 상품으로 옮기고 옛 플랫폼 상품은
+  // 과거 원가·마진 기록으로 남겨둔다(삭제하지 않는다). 그래서 이 상품에는
+  // 플랫폼 리스팅이 하나도 없는 상태가 되어 위 중복 검사에 걸리지 않는다.
+  // 다시 등록하면 같은 물건이 플랫폼 원가로 두 번 팔리게 된다.
+  const { data: transferredLogs, error: tlErr } = await supabase
+    .from('admin_logs')
+    .select('id, target_id, created_at')
+    .eq('action_type', LISTING_TRANSFER_ACTION_TYPE)
+    .eq('old_value->>from_product_id', product_id)
+    .limit(1)
+
+  if (tlErr) return { success: false, error: `이관 이력 조회 실패: ${tlErr.message}` }
+  if ((transferredLogs ?? []).length > 0) {
+    return {
+      success: false,
+      error:
+        '판매자 이관으로 공급자에게 넘어간 상품입니다. 다시 등록할 수 없습니다. ' +
+        '새로 판매하려면 상품을 새로 만들어 주세요.',
+    }
+  }
 
   const { data: inserted, error: insErr } = await supabase
     .from('commerce_product_listings')

@@ -73,3 +73,26 @@ export function normalizeCostPriceInput(raw: unknown): number | null {
   const i = Math.round(n)
   return i > 0 ? i : null
 }
+
+/**
+ * E2E 시뮬레이션이 남긴 [TEST] 상품인가.
+ * 실제로 팔 수 없는 데이터라 "원가 미확정"과 같은 칸에 세면 안 된다.
+ * 상품명은 buildPlatformProductDisplayName 으로 "브랜드 상품명 규격"이 되므로
+ * 앞머리에 [TEST] 가 붙는지만 본다.
+ */
+export function isTestProductName(name: string | null | undefined): boolean {
+  return /^\s*\[TEST\]/i.test(String(name ?? ''))
+}
+
+/**
+ * 리스팅 판매자 이관 기록의 admin_logs.action_type.
+ *
+ * 이관(P3)은 리스팅의 product_id 를 새 공급자 상품으로 옮기고, 옛 플랫폼 상품은
+ * 과거 원가·마진 기록으로 남겨둔다(삭제하지 않는다). 그 결과 옛 상품에는 플랫폼
+ * 리스팅이 하나도 없는 상태가 되어 "이미 등록된 상품" 검사에 걸리지 않는다.
+ * 다시 등록되는 것을 막으려면 이 이력을 봐야 한다.
+ *
+ * admin_logs.old_value->>'from_product_id' 에 이관되어 나간 플랫폼 product_id 가 들어 있다.
+ * 서버 액션 파일('use server')은 async 함수만 export 할 수 있어 여기에 둔다.
+ */
+export const LISTING_TRANSFER_ACTION_TYPE = 'listing_supplier_transferred'

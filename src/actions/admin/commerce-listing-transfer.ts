@@ -1,29 +1,70 @@
 'use server'
 
 // ============================================================
-// 리스팅 판매자 이관 (플랫폼 직판 → 외부 공급자)
+// 리스팅 판매자 이관 (플랫폼 직판 → 외부 공급자) — P3 방식
 //
 // 식당이 보는 상품은 commerce_product_listings 행이고, 식당OS 재주문 목록의
 // 중복제거 키는 listing_id 하나뿐이다
 // (restaurant-os src/actions/buy.ts getRecentOrderItems 의 seen.add(lid)).
 // 따라서 리스팅을 지우고 다시 만들면 listing_id 가 바뀌어 식당의 재주문 이력과
-// 가격 이력이 그 지점에서 끊긴다.
+// 가격 이력이 그 지점에서 끊긴다. 그래서 리스팅 행은 제자리에서 갱신한다.
 //
-// 이 파일은 리스팅 행을 그대로 두고 소유 컬럼만 제자리에서 갱신한다.
-//   owner_type       → 'approved_supplier'
-//   owner_tenant_id  → 새 공급자 tenant
-//   supplier_tenant_id → 새 공급자 tenant
+// [P1 을 폐기하고 P3 로 바꾼 이유]
+// P1 은 product_id 를 그대로 둔 채 소유 컬럼만 바꿨다. 그러면 이관 후에도 리스팅이
+// 플랫폼 상품을 가리키고, restaurant-os calcCartDiscount(buy.ts:1471)가
+//   listing.product_id → product_costs(end_date IS NULL)
+// 순서로 원가를 읽기 때문에 디닷페이스 매입가가 새 공급자 상품의 할인 계산 기준이 된다.
+// 할인액은 마진율 공식의 연속 함수라 역산으로 매입가가 드러난다.
+// 플랫폼 매입가는 어떤 경로로도 다른 tenant 에 닿으면 안 된다.
 //
-// id / product_id / tenant_id 는 건드리지 않는다. 과거 commerce_order_items 도
-// 손대지 않는다 — 주문 라인은 listing_id 와 당시 스냅샷(listing_title, unit_price)을
-// 이미 들고 있어 이관 후에도 그대로 읽힌다.
+// [P3 가 하는 일]
+//   1) 새 공급자 tenant 로 products 행을 새로 만든다 (표시 정보만 복사)
+//   2) 새 상품에 product_costs 를 새로 넣는다 (매입가는 화면에서 입력받는다)
+//   3) 리스팅의 product_id 를 새 상품으로 교체하고 소유 컬럼을 갱신한다
+//   4) 교체 후 listing_id 불변과 product_id 교체를 다시 읽어 확인한다
+//
+// 이렇게 하면 이관된 리스팅에서 플랫폼 product_costs 로 가는 경로가 구조적으로
+// 사라진다 — calcCartDiscount 가 service role 로 읽으므로 RLS 가 아니라
+// "리스팅이 그 product_id 를 더 이상 가리키지 않는다"는 사실이 차단 근거다.
+//
+// id / tenant_id 는 건드리지 않는다. 과거 commerce_order_items 도 손대지 않는다 —
+// 주문 라인은 listing_id 와 당시 스냅샷(listing_title, unit_price)을 이미 들고 있어
+// 이관 후에도 그대로 읽힌다.
+// 옛 플랫폼 products 행과 그 product_costs 는 지우지 않는다. 디닷페이스의 과거
+// 원가·마진 기록이다. 대신 다시 리스팅되지 않도록 getProducts 가 이관 이력을 보고
+// 걸러낸다 (admin/commerce.ts, LISTING_TRANSFER_ACTION_TYPE 참조).
 // ============================================================
 
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
+import { LISTING_TRANSFER_ACTION_TYPE, normalizeCostPriceInput } from '@/lib/commerce-constants'
 import type { ActionResult } from '@/types/order'
 
 const PLATFORM_OWNER_TENANT = '00000000-0000-0000-0000-000000000000'
+
+/**
+ * 새 공급자 상품으로 복사할 products 컬럼.
+ *
+ * 여기 없는 것과 그 이유:
+ * - cost_price 계열 : products 에 없다. 원가는 product_costs 로만 관리되고,
+ *                     이관 시 반드시 새로 입력받는다 (플랫폼 값 복사 금지).
+ * - product_code    : 새로 채번한다 (아래 issueProductCode).
+ * - category_id     : product_categories 는 tenant 스코프다(운영 실측: 플랫폼 16행 /
+ *                     공급자 13행). 그대로 복사하면 새 상품이 플랫폼 카테고리를
+ *                     가리켜 tenant 경계를 넘는다. null 로 두고 공급자가 지정한다.
+ * - supplier_id / default_supplier_id / supplier_contact_id
+ *                   : 옛 tenant 의 customers / supplier_contacts 를 가리키는 FK 다.
+ *                     복사하면 새 공급자가 플랫폼 거래처를 참조하게 된다. null.
+ */
+const PRODUCT_CLONE_COLUMNS = [
+  'name',
+  'barcode',
+  'tax_type',
+  'procurement_type',
+  'min_margin_rate',
+  'ingredients',
+  'item_report_number',
+] as const
 
 /**
  * 아직 allocation 이 만들어지지 않았고, 앞으로 'paid' 로 넘어가면서 정산이 생길 수 있는
@@ -103,8 +144,53 @@ export type ListingTransferPreview = {
 
 export type ListingTransferResult = {
   listing_id: string
-  from: { owner_type: string; owner_tenant_id: string; supplier_tenant_id: string | null }
-  to: { owner_type: string; owner_tenant_id: string; supplier_tenant_id: string }
+  from: {
+    owner_type: string
+    owner_tenant_id: string
+    supplier_tenant_id: string | null
+    /** 이관 전 리스팅이 가리키던 플랫폼 상품. 지우지 않고 그대로 남는다. */
+    product_id: string | null
+  }
+  to: {
+    owner_type: string
+    owner_tenant_id: string
+    supplier_tenant_id: string
+    /** 새로 만든 공급자 상품 */
+    product_id: string
+    product_code: string
+  }
+}
+
+/**
+ * product_code 채번. product_code_seq 는 tenant 와 무관한 전역 시퀀스라
+ * (tenant_id, product_code) UNIQUE 를 자동으로 만족한다.
+ * 운영 실측(2026-09-09): products 199행에서 product_code 전역 중복 0건.
+ * product.ts createProduct 와 같은 방식을 쓴다.
+ */
+async function issueProductCode(
+  supabase: any,
+  tenant_id: string,
+): Promise<{ ok: true; product_code: string } | { ok: false; error: string }> {
+  const { data: seqData } = await supabase.rpc('nextval_product_code')
+  let seqNum = typeof seqData === 'number' ? seqData : Number(seqData)
+
+  if (!Number.isFinite(seqNum) || seqNum <= 0) {
+    // 시퀀스를 못 읽으면 그 tenant 안의 최대값 + 1 로 떨어진다 (product.ts 와 동일).
+    const { data: last, error } = await supabase
+      .from('products')
+      .select('product_code')
+      .eq('tenant_id', tenant_id)
+      .like('product_code', 'P%')
+      .order('product_code', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (error) return { ok: false, error: `product_code 채번 실패: ${error.message}` }
+    seqNum = last?.product_code
+      ? (parseInt(String(last.product_code).replace(/[^0-9]/g, ''), 10) || 0) + 1
+      : 1
+  }
+
+  return { ok: true, product_code: `P${String(seqNum).padStart(4, '0')}` }
 }
 
 type ListingRow = {
@@ -286,6 +372,8 @@ export async function getTransferableSuppliers(): Promise<
 export async function transferListingSupplier(input: {
   listing_id: string
   supplier_tenant_id: string
+  /** 새 공급자의 매입가. 필수 — 비우면 이관하지 않는다. 플랫폼 값을 복사하지 않는다. */
+  new_cost_price: number | string
   reason?: string | null
 }): Promise<ActionResult<ListingTransferResult>> {
   const supabase = await createSupabaseServer()
@@ -299,6 +387,16 @@ export async function transferListingSupplier(input: {
   if (!UUID_RE.test(nextSupplierId)) return { success: false, error: '공급자를 선택해 주세요' }
   if (nextSupplierId === PLATFORM_OWNER_TENANT) {
     return { success: false, error: '플랫폼 자신에게는 이관할 수 없습니다' }
+  }
+
+  // 새 공급자 매입가는 필수다. 자리값(1원)도 받지 않는다 — 원가 미확정 상태로 이관하면
+  // 그 시점부터 새 공급자 상품의 마진 계산이 틀린 값으로 굳는다.
+  const newCostPrice = normalizeCostPriceInput(input.new_cost_price)
+  if (newCostPrice == null) {
+    return { success: false, error: '새 공급자의 매입가를 입력해 주세요' }
+  }
+  if (newCostPrice <= 1) {
+    return { success: false, error: '매입가는 1원보다 커야 합니다 (1원은 원가 미확정 자리값입니다)' }
   }
 
   const ctx = await loadTransferContext(supabase, lid)
@@ -338,46 +436,153 @@ export async function transferListingSupplier(input: {
     }
   }
 
+  if (!listing.product_id) {
+    return { success: false, error: '리스팅에 연결된 상품이 없어 이관할 수 없습니다' }
+  }
+
+  // ── 1) 원본 플랫폼 상품에서 표시 정보만 읽는다 ──────────────────────────────
+  // 원가는 읽지 않는다. product_costs 를 아예 조회하지 않으므로 플랫폼 매입가가
+  // 이 함수의 어떤 변수에도 들어오지 않는다.
+  const { data: srcProduct, error: spErr } = await supabase
+    .from('products')
+    .select(['id', 'tenant_id', ...PRODUCT_CLONE_COLUMNS].join(', '))
+    .eq('id', listing.product_id)
+    .maybeSingle()
+
+  if (spErr) return { success: false, error: `원본 상품 조회 실패: ${spErr.message}` }
+  if (!srcProduct) return { success: false, error: '원본 상품을 찾을 수 없습니다' }
+
+  // select 문자열을 배열에서 조합하므로 supabase-js 가 행 타입을 좁히지 못한다.
+  // 복사 대상 컬럼은 PRODUCT_CLONE_COLUMNS 로 고정되어 있어 여기서는 인덱싱만 한다.
+  const src = srcProduct as unknown as Record<string, unknown>
+
+  // ── 2) 새 공급자 tenant 에 상품 생성 ────────────────────────────────────────
+  const codeRes = await issueProductCode(supabase, nextSupplierId)
+  if (!codeRes.ok) return { success: false, error: codeRes.error }
+
+  const clonePayload: Record<string, unknown> = {
+    tenant_id: nextSupplierId,
+    product_code: codeRes.product_code,
+    // tenant 경계를 넘는 FK 는 명시적으로 비운다 (PRODUCT_CLONE_COLUMNS 주석 참조)
+    category_id: null,
+    supplier_id: null,
+    default_supplier_id: null,
+    supplier_contact_id: null,
+  }
+  for (const col of PRODUCT_CLONE_COLUMNS) clonePayload[col] = src[col] ?? null
+
+  const { data: newProduct, error: npErr } = await supabase
+    .from('products')
+    .insert(clonePayload)
+    .select('id, tenant_id, product_code')
+    .single()
+
+  if (npErr || !newProduct) {
+    return { success: false, error: `새 공급자 상품 생성 실패: ${npErr?.message ?? '알 수 없는 오류'}` }
+  }
+  const newProductId = newProduct.id as string
+
+  if (newProduct.tenant_id !== nextSupplierId) {
+    await supabase.from('products').update({ deleted_at: new Date().toISOString() }).eq('id', newProductId)
+    return { success: false, error: '새 상품이 다른 tenant 로 생성되었습니다. 이관을 중단합니다' }
+  }
+
+  // ── 3) 새 상품의 매입가 이력 ────────────────────────────────────────────────
+  // start_date = 이관일, end_date = null. 플랫폼 원가는 참조하지 않는다.
+  const transferDate = new Date().toISOString().slice(0, 10)
+  const { error: costErr } = await supabase.from('product_costs').insert({
+    product_id: newProductId,
+    cost_price: newCostPrice,
+    start_date: transferDate,
+    end_date: null,
+  })
+
+  if (costErr) {
+    // 방금 만든 상품만 되돌린다 (commerce.ts createPlatformCommerceProduct 와 같은 보상 처리).
+    // 리스팅은 아직 손대지 않았으므로 이 시점 실패는 리스팅에 아무 영향이 없다.
+    await supabase.from('products').update({ deleted_at: new Date().toISOString() }).eq('id', newProductId)
+    return { success: false, error: `새 공급자 매입가 저장 실패: ${costErr.message}` }
+  }
+
   const from = {
     owner_type: listing.owner_type,
     owner_tenant_id: listing.owner_tenant_id,
     supplier_tenant_id: listing.supplier_tenant_id,
+    product_id: listing.product_id,
   }
   const to = {
     owner_type: 'approved_supplier',
     owner_tenant_id: nextSupplierId,
     supplier_tenant_id: nextSupplierId,
+    product_id: newProductId,
+    product_code: newProduct.product_code as string,
   }
 
-  // 제자리 UPDATE — id / product_id / tenant_id 는 payload 에 넣지 않는다.
-  // 조회 조건에 현재 소유자를 함께 걸어, 그 사이 다른 관리자가 바꿨으면 덮어쓰지 않는다.
+  // ── 4) 제자리 UPDATE — id / tenant_id 는 payload 에 넣지 않는다 ─────────────
+  // product_id 는 새 상품으로 교체한다. 조회 조건에 현재 소유자와 현재 product_id 를
+  // 함께 걸어, 그 사이 다른 관리자가 바꿨으면 덮어쓰지 않는다.
   const { data: updated, error: uErr } = await supabase
     .from('commerce_product_listings')
     .update({
       owner_type: to.owner_type,
       owner_tenant_id: to.owner_tenant_id,
       supplier_tenant_id: to.supplier_tenant_id,
+      product_id: to.product_id,
       updated_at: new Date().toISOString(),
     })
     .eq('id', lid)
     .eq('tenant_id', PLATFORM_OWNER_TENANT)
     .eq('owner_tenant_id', from.owner_tenant_id)
+    .eq('product_id', from.product_id)
     .is('deleted_at', null)
     .select('id, owner_type, owner_tenant_id, supplier_tenant_id, product_id')
     .maybeSingle()
 
-  if (uErr) return { success: false, error: uErr.message }
-  if (!updated) {
-    return { success: false, error: '이관 중 리스팅이 변경되었습니다. 새로고침 후 다시 시도해 주세요' }
+  if (uErr || !updated) {
+    // 리스팅이 안 바뀌었으므로 새 상품은 아무도 가리키지 않는 고아다.
+    // 리스팅 후보에 뜨지 않도록 되돌린다. product_costs 행은 append-only 라 남지만
+    // 삭제된 상품에 붙어 있어 어떤 리스팅에서도 도달할 수 없다.
+    await supabase.from('products').update({ deleted_at: new Date().toISOString() }).eq('id', newProductId)
+    return {
+      success: false,
+      error: uErr
+        ? `리스팅 갱신 실패: ${uErr.message}`
+        : '이관 중 리스팅이 변경되었습니다. 새로고침 후 다시 시도해 주세요',
+    }
   }
-  if (updated.id !== lid) {
+
+  // ── 5) 교체 후 재확인 (요구사항 3) ──────────────────────────────────────────
+  // UPDATE 응답만 믿지 않고 다시 읽어서 확인한다.
+  const { data: verify, error: vErr } = await supabase
+    .from('commerce_product_listings')
+    .select('id, product_id, owner_tenant_id, supplier_tenant_id, tenant_id, products(tenant_id)')
+    .eq('id', lid)
+    .maybeSingle()
+
+  if (vErr || !verify) {
+    return { success: false, error: `이관 후 재확인 실패: ${vErr?.message ?? '리스팅을 다시 읽지 못했습니다'}` }
+  }
+  if (verify.id !== lid) {
     return { success: false, error: 'listing_id 가 보존되지 않았습니다. 이관을 중단합니다' }
+  }
+  if (verify.product_id !== newProductId) {
+    return { success: false, error: `product_id 교체가 반영되지 않았습니다 (현재 ${verify.product_id})` }
+  }
+  if (verify.tenant_id !== PLATFORM_OWNER_TENANT) {
+    return { success: false, error: '리스팅 tenant_id 가 변경되었습니다. 이관을 중단합니다' }
+  }
+  const verifiedProductTenant = (verify.products as { tenant_id?: string } | null)?.tenant_id ?? null
+  if (verifiedProductTenant !== nextSupplierId) {
+    return {
+      success: false,
+      error: `새 상품이 이관 대상 공급자 소유가 아닙니다 (${verifiedProductTenant}). 이관을 중단합니다`,
+    }
   }
 
   const logRes = await insertAdminLog(supabase, {
     admin_id: auth.ctx.user_id,
     tenant_id: nextSupplierId,
-    action_type: 'listing_supplier_transferred',
+    action_type: LISTING_TRANSFER_ACTION_TYPE,
     reason: (input.reason ?? '').trim() || null,
     target_table: 'commerce_product_listings',
     target_id: lid,
@@ -387,6 +592,9 @@ export async function transferListingSupplier(input: {
       owner_tenant_id: from.owner_tenant_id,
       supplier_tenant_id: from.supplier_tenant_id,
       owner_name: preview.current_owner_name,
+      // 이관되어 나간 플랫폼 상품. 지우지 않고 남기되, getProducts 가 이 값을 보고
+      // 다시 리스팅 후보에 올리지 않는다.
+      from_product_id: from.product_id,
     },
     new_value: {
       listing_id: lid,
@@ -394,9 +602,13 @@ export async function transferListingSupplier(input: {
       owner_tenant_id: to.owner_tenant_id,
       supplier_tenant_id: to.supplier_tenant_id,
       owner_name: (target.name as string | null) ?? null,
-      // product_id 는 이관 대상이 아니다. 어디를 가리킨 채 넘어갔는지 기록만 남긴다.
-      product_id_unchanged: updated.product_id,
-      product_tenant_id: preview.product_tenant_id,
+      // P3: product_id 를 새 공급자 상품으로 교체했다.
+      from_product_id: from.product_id,
+      to_product_id: to.product_id,
+      to_product_code: to.product_code,
+      // 새로 입력받은 공급자 매입가. 플랫폼 매입가는 이 기록 어디에도 넣지 않는다.
+      new_cost_price: newCostPrice,
+      cost_start_date: transferDate,
       settled_order_item_count: preview.settled_order_item_count,
       order_item_count: preview.order_item_count,
     },
