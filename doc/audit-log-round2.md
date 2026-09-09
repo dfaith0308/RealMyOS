@@ -13,10 +13,10 @@
 | 단계 | 내용 | 시작 | 완료 | 산출물 |
 |---|---|---|---|---|
 | 0 | 재개 전 상태 점검 | 18:01 | 18:05 | 이 문서 §1 |
-| 1 | dev/main 전체 차이 목록화 | 18:05 | **18:47** | `dev-main-diff-report.md` |
-| 2 | 1차 조사 미완성분 보완 | 18:05 | **18:40** | 기존 6종 갱신 + `dev-main-diff-report.md` 정정 |
-| 3 | 기능 전체 목록 | — | — | `feature-map-*.md` ×3 |
-| 4 | 실제 작동 여부 검증 | — | — | `feature-status-report.md` |
+| 1 | dev/main 전체 차이 목록화 | 18:05 | **18:14** | `dev-main-diff-report.md` |
+| 2 | 1차 조사 미완성분 보완 | 18:14 | **18:22** | 기존 6종 갱신 + `dev-main-diff-report.md` 정정 |
+| 3 | 기능 전체 목록 | 18:23 | **18:43** | `feature-map-restaurant/supplier/admin.md` |
+| 4 | 실제 작동 여부 검증 | 18:43 | — | `feature-status-report.md` |
 | 5 | 화면 간 연결 상태 | — | — | `connection-gap-report.md` |
 | 6 | 기능 조합 아이디어 | — | — | `combination-ideas.md` |
 | 7 | 부족한 기능 정리 | — | — | `missing-features-report.md` |
