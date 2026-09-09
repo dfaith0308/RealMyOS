@@ -5,6 +5,7 @@
 //   2) 확인 체크 → "이관 실행"   : 리스팅 행을 제자리 UPDATE 한다 (listing_id 보존)
 
 import { useState, useTransition } from 'react'
+import { MAX_COST_PRICE } from '@/lib/commerce-constants'
 import { useRouter } from 'next/navigation'
 import {
   getListingTransferPreview,
@@ -117,7 +118,8 @@ export default function ListingSupplierTransferPanel({ listingId }: { listingId:
   // 서버(transferListingSupplier)와 같은 기준: 정수이고 1원 자리값보다 커야 한다.
   const costPriceValid = (() => {
     const n = Number(newCostPrice)
-    return newCostPrice.trim() !== '' && Number.isFinite(n) && Math.round(n) > 1
+    const i = Math.round(n)
+    return newCostPrice.trim() !== '' && Number.isFinite(n) && i > 1 && i <= MAX_COST_PRICE
   })()
   const productStaysOnPlatform =
     preview?.product_tenant_id != null && preview.product_tenant_id === PLATFORM_OWNER_TENANT
@@ -126,8 +128,9 @@ export default function ListingSupplierTransferPanel({ listingId }: { listingId:
     <section style={box}>
       <h2 style={{ fontSize: 15, fontWeight: 800, margin: '0 0 4px' }}>판매자 이관</h2>
       <p style={{ fontSize: 12, color: '#6b7280', margin: '0 0 16px', lineHeight: 1.6 }}>
-        이 리스팅의 판매자를 외부 공급자로 넘깁니다. 리스팅 행을 그대로 두고 소유 정보만 바꾸므로
-        식당 화면의 재주문 목록과 지난 주문 가격은 그대로 유지됩니다.
+        이 리스팅의 판매자를 외부 공급자로 넘깁니다. 새 공급자 앞으로 상품을 새로 만들고 이
+        리스팅이 그 상품을 가리키게 바꾸며, 리스팅 행 자체(listing_id)는 그대로 둡니다. 그래서
+        식당 화면의 재주문 목록과 지난 주문 가격은 유지되고, 플랫폼 매입가는 넘어가지 않습니다.
       </p>
 
       {done && (
@@ -316,6 +319,7 @@ export default function ListingSupplierTransferPanel({ listingId }: { listingId:
                 <input
                   type="number"
                   min={2}
+                  max={MAX_COST_PRICE}
                   step={1}
                   inputMode="numeric"
                   value={newCostPrice}

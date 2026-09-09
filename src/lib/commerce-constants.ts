@@ -96,3 +96,14 @@ export function isTestProductName(name: string | null | undefined): boolean {
  * 서버 액션 파일('use server')은 async 함수만 export 할 수 있어 여기에 둔다.
  */
 export const LISTING_TRANSFER_ACTION_TYPE = 'listing_supplier_transferred'
+
+/**
+ * 매입가 상한. product_costs.cost_price 는 postgres int4 라 2,147,483,647 을 넘으면
+ * insert 가 22003 (out of range) 으로 터진다. 애플리케이션에서 먼저 걸러
+ * 읽을 수 있는 메시지를 주기 위한 기술적 상한이다.
+ *
+ * 주의: 이것은 "DB 가 받아줄 수 있는 최대"이지 "사업적으로 말이 되는 최대"가 아니다.
+ * 예를 들어 9,999만원짜리 매입가도 이 상한은 통과한다. 품목 성격에 맞는 업무 상한이
+ * 필요하면 별도로 정해 이 값보다 낮게 건다.
+ */
+export const MAX_COST_PRICE = 2147483647

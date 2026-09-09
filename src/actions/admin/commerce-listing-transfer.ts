@@ -37,7 +37,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
-import { LISTING_TRANSFER_ACTION_TYPE, normalizeCostPriceInput } from '@/lib/commerce-constants'
+import { LISTING_TRANSFER_ACTION_TYPE, MAX_COST_PRICE, normalizeCostPriceInput } from '@/lib/commerce-constants'
 import type { ActionResult } from '@/types/order'
 
 const PLATFORM_OWNER_TENANT = '00000000-0000-0000-0000-000000000000'
@@ -397,6 +397,15 @@ export async function transferListingSupplier(input: {
   }
   if (newCostPrice <= 1) {
     return { success: false, error: '매입가는 1원보다 커야 합니다 (1원은 원가 미확정 자리값입니다)' }
+  }
+  // 상한이 없으면 product_costs.cost_price(int4) 범위를 넘는 값이 그대로 DB 까지 내려가
+  // 22003 raw 에러로 터진다. 상품이 이미 만들어진 뒤라 보상 삭제가 돌긴 하지만,
+  // 애초에 여기서 걸러 사용자에게 읽을 수 있는 메시지를 준다.
+  if (newCostPrice > MAX_COST_PRICE) {
+    return {
+      success: false,
+      error: `매입가가 너무 큽니다 (최대 ${MAX_COST_PRICE.toLocaleString()}원)`,
+    }
   }
 
   const ctx = await loadTransferContext(supabase, lid)
