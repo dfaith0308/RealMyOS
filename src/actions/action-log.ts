@@ -17,7 +17,6 @@ export interface LogActionInput {
   action_type: ActionType
   triggered_message?: string
   message_key?: string
-  message_template_id?: string   // 선택한 템플릿 id (선택 옵션 — 강제 아님)
   customer_status?: CustomerStatus
   score_at_time?: number
   amount_at_time?: number
@@ -48,14 +47,21 @@ export async function logAction(
         amount_at_time:    input.amount_at_time ?? null,
         conversion_status:    'unknown',
         result_type:          'none',
-        message_template_id:  input.message_template_id ?? null,
       })
       .select('id')
       .single()
 
-    if (error || !data) return null
+    // 실패를 조용히 삼키지 않는다.
+    // 운영에 없는 message_template_id 를 insert 하던 동안 이 함수는 매번 42703 으로
+    // 실패했지만 null 만 돌려줘서, action_logs 가 5개월간(마지막 기록 2026-04-07)
+    // 비어 있는 것을 아무도 알아채지 못했다.
+    if (error || !data) {
+      console.error('[logAction] action_logs insert 실패', error)
+      return null
+    }
     return data.id
-  } catch {
+  } catch (e) {
+    console.error('[logAction] 예외', e)
     return null
   }
 }
