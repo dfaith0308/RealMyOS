@@ -5,7 +5,7 @@
 //   2) 확인 체크 → "이관 실행"   : 리스팅 행을 제자리 UPDATE 한다 (listing_id 보존)
 
 import { useState, useTransition } from 'react'
-import { MAX_COST_PRICE } from '@/lib/commerce-constants'
+import { MAX_BUSINESS_COST_PRICE, MAX_COST_PRICE } from '@/lib/commerce-constants'
 import { useRouter } from 'next/navigation'
 import {
   getListingTransferPreview,
@@ -119,7 +119,13 @@ export default function ListingSupplierTransferPanel({ listingId }: { listingId:
   const costPriceValid = (() => {
     const n = Number(newCostPrice)
     const i = Math.round(n)
-    return newCostPrice.trim() !== '' && Number.isFinite(n) && i > 1 && i <= MAX_COST_PRICE
+    return (
+      newCostPrice.trim() !== '' &&
+      Number.isFinite(n) &&
+      i > 1 &&
+      i <= MAX_COST_PRICE &&
+      i <= MAX_BUSINESS_COST_PRICE
+    )
   })()
   const productStaysOnPlatform =
     preview?.product_tenant_id != null && preview.product_tenant_id === PLATFORM_OWNER_TENANT
@@ -319,7 +325,7 @@ export default function ListingSupplierTransferPanel({ listingId }: { listingId:
                 <input
                   type="number"
                   min={2}
-                  max={MAX_COST_PRICE}
+                  max={MAX_BUSINESS_COST_PRICE}
                   step={1}
                   inputMode="numeric"
                   value={newCostPrice}
@@ -335,7 +341,8 @@ export default function ListingSupplierTransferPanel({ listingId }: { listingId:
                 />
                 <span style={{ display: 'block', marginTop: 6, fontSize: 12, color: '#6b7280', lineHeight: 1.6 }}>
                   새로 만들 공급자 상품의 매입가입니다. 이관일부터 적용됩니다. 이 값이 구독 할인
-                  계산의 원가 기준이 되며, 플랫폼 매입가는 사용되지 않습니다.
+                  계산의 원가 기준이 되며, 플랫폼 매입가는 사용되지 않습니다. 최대{' '}
+                  {MAX_BUSINESS_COST_PRICE.toLocaleString()}원까지 입력할 수 있습니다.
                 </span>
               </label>
 
