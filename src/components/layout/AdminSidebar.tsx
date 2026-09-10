@@ -21,7 +21,7 @@ const MENU: MenuEntry[] = [
     label: '영업/가입관리',
     icon: '📇',
     children: [
-      { label: '리드 관리', href: '/admin/sales' },
+      { label: '잠재고객 관리', href: '/admin/sales' },
       { label: '프로모션 코드', href: '/admin/sales/promo' },
     ],
   },
