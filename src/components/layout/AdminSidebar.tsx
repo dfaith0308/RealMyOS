@@ -26,7 +26,6 @@ const MENU: MenuEntry[] = [
     ],
   },
   { type: 'link', label: '회원관리', icon: '🏢', href: '/admin/tenants' },
-  { type: 'link', label: '식자재 대신 등록', icon: '🥬', href: '/admin/ingredient-entry' },
   {
     type: 'group',
     label: '쇼핑몰관리',
@@ -35,6 +34,7 @@ const MENU: MenuEntry[] = [
       { label: '상품관리', href: '/admin/commerce/products' },
       { label: '카테고리', href: '/admin/commerce/categories' },
       { label: '식자재 마스터', href: '/admin/commerce/ingredients' },
+      { label: '식자재 대신 등록', href: '/admin/ingredient-entry' },
       { label: '주문처리', href: '/admin/commerce/orders' },
       { label: '가격 정책', href: '/admin/commerce/pricing' },
       { label: '무통장 입금', href: '/admin/commerce/storefront-bank' },
