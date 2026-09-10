@@ -238,7 +238,11 @@ export async function getSalesLead(
         ...(lead as SalesLeadRow),
         contact_methods: ((lead as any).contact_methods ?? []) as ContactMethod[],
       },
-      notes: ((notes ?? []) as SalesLeadNoteRow[]).map((n) => ({ ...n, tags: n.tags ?? [] })),
+      notes: ((notes ?? []) as SalesLeadNoteRow[]).map((n) => ({
+        ...n,
+        tags: n.tags ?? [],
+        photo_urls: n.photo_urls ?? [],
+      })),
     },
   }
 }

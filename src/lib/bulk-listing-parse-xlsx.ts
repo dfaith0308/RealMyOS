@@ -131,7 +131,8 @@ export function parseBulkListingWorkbook(buffer: ArrayBuffer): {
       spec: partial.spec,
       category: partial.category,
       sub_category: partial.sub_category,
-      supply_price: partial.supply_price ?? 0,
+      // 매입가는 선택 입력이다. 빈 칸을 0으로 채우면 "0원 원가"와 구분되지 않는다.
+      supply_price: partial.supply_price,
       commerce_price: partial.commerce_price ?? 0,
       base_shipping_fee: partial.base_shipping_fee ?? 0,
       original_price: partial.original_price,

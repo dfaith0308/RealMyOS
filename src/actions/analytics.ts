@@ -8,10 +8,12 @@ import {
   aggregateByDate,
   aggregateByProduct,
   aggregateByCustomer,
+  buildCostCoverage,
   buildOverviewSummary,
   prevPeriodRange,
   isSalesOrder,
   type AnalyticsOrder,
+  type CostCoverage,
   type DateBucket,
   type ProductRow,
   type CustomerRow,
@@ -54,6 +56,8 @@ async function fetchOrdersInRange(
 export interface OverviewResult {
   summary:  OverviewSummary
   by_date:  DateBucket[]
+  /** 원가가 비어 있던 라인이 얼마나 섞였는지 — 숫자는 그대로 두고 경고만 띄운다 */
+  cost_coverage: CostCoverage
   from:     string
   to:       string
 }
@@ -74,7 +78,8 @@ export async function getAnalyticsOverview(
     ])
     const summary = buildOverviewSummary(orders, prevOrders)
     const by_date = aggregateByDate(orders)
-    return { success: true, data: { summary, by_date, from, to } }
+    const cost_coverage = buildCostCoverage(orders)
+    return { success: true, data: { summary, by_date, cost_coverage, from, to } }
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : 'fetch failed' }
   }
@@ -87,6 +92,7 @@ export async function getAnalyticsOverview(
 export interface MarginResult {
   rows:                ProductRow[]
   top5_revenue_share:  number
+  cost_coverage:       CostCoverage
 }
 
 export async function getMarginByProduct(
@@ -106,7 +112,7 @@ export async function getMarginByProduct(
                                   .reduce((s, r) => s + r.revenue, 0)
     const top5_revenue_share = totalRevenue !== 0 ? (top5Revenue / totalRevenue) * 100 : 0
 
-    return { success: true, data: { rows, top5_revenue_share } }
+    return { success: true, data: { rows, top5_revenue_share, cost_coverage: buildCostCoverage(orders) } }
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : 'fetch failed' }
   }
@@ -126,6 +132,7 @@ export interface CustomerAnalyticsResult {
   rows:           CustomerRow[]
   top3_share:     number
   kpi:            CustomerAnalyticsKpi
+  cost_coverage:  CostCoverage
 }
 
 export async function getMarginByCustomer(
@@ -266,6 +273,7 @@ export async function getMarginByCustomer(
         rows,
         top3_share,
         kpi: { avg_collection_days, receivable_ratio, repeat_purchase_rate },
+        cost_coverage: buildCostCoverage(orders),
       },
     }
   } catch (e) {

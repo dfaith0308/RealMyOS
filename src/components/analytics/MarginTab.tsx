@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { formatKRW } from '@/lib/calc'
 import type { MarginResult } from '@/actions/analytics'
+import CostCoverageNotice from './CostCoverageNotice'
 
 const SORTS: { id: 'margin' | 'contribution' | 'qty'; label: string }[] = [
   { id: 'margin',       label: '마진순' },
@@ -21,6 +22,7 @@ export default function MarginTab({
 
   return (
     <>
+      <CostCoverageNotice coverage={data.cost_coverage} />
       <div style={s.toolbar}>
         <div style={s.sortRow}>
           {SORTS.map((opt) => {

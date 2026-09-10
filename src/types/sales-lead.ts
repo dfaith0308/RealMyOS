@@ -75,6 +75,8 @@ export type SalesLeadNoteRow = {
   lead_id: string
   body: string
   tags: string[]
+  /** 현장 관찰기록에서 전환될 때 원본 사진이 그대로 넘어온다 */
+  photo_urls: string[]
   created_by: string | null
   created_at: string
 }

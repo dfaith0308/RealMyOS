@@ -10,6 +10,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
+import { isTestProductName } from '../src/lib/commerce-constants'
 
 const PLATFORM_OWNER_TENANT = '00000000-0000-0000-0000-000000000000'
 /** 화면(commerce-constants.isCostUnconfirmed)과 같은 기준 */
@@ -80,11 +81,15 @@ async function main() {
   }
 
   const rows = (listings ?? []) as unknown as Row[]
-  const bad = rows
-    .map((r) => ({ r, cost: activeCost(r.products.product_costs) }))
-    .filter((x) => x.cost == null || x.cost <= PLACEHOLDER_COST)
+  const withCost = rows.map((r) => ({ r, cost: activeCost(r.products.product_costs) }))
+  const unpriced = withCost.filter((x) => x.cost == null || x.cost <= PLACEHOLDER_COST)
+  // [TEST] 잔여물은 매입가를 채울 대상이 아니다 — 사장님이 볼 목록에서 분리한다
+  const bad = unpriced.filter((x) => !isTestProductName(x.r.products.name))
+  const test = unpriced.filter((x) => isTestProductName(x.r.products.name))
 
-  console.log(`판매 listing ${rows.length}건 중 원가 미확정 ${bad.length}건\n`)
+  console.log(
+    `판매 listing ${rows.length}건 중 원가 미확정 ${bad.length}건 (별도: [TEST] 잔여물 ${test.length}건)\n`,
+  )
   console.log(
     ['코드', '상품명', '판매가', '원가', '상태', '등록일', 'listing_id'].join('\t'),
   )
@@ -100,6 +105,15 @@ async function main() {
         r.id,
       ].join('\t'),
     )
+  }
+
+  if (test.length > 0) {
+    console.log(`\n[TEST] 잔여물 ${test.length}건 — 매입가 입력 대상 아님, 정리 대상`)
+    for (const { r } of test) {
+      console.log(
+        [r.products.product_code, r.products.name, r.is_visible ? `${r.status}/노출` : r.status, r.id].join('\t'),
+      )
+    }
   }
 
   // listing 이 없는 채로 남은 상품도 같이 본다 — 화면에서는 안 보이지만 원가는 잘못 들어가 있다
@@ -119,7 +133,9 @@ async function main() {
     commerce_product_listings: { id: string; deleted_at: string | null }[] | null
   }
   const noListing = ((orphans ?? []) as unknown as OrphanRow[]).filter(
-    (p) => (p.commerce_product_listings ?? []).filter((l) => !l.deleted_at).length === 0,
+    (p) =>
+      !isTestProductName(p.name) &&
+      (p.commerce_product_listings ?? []).filter((l) => !l.deleted_at).length === 0,
   )
 
   console.log(`\n판매 listing 이 없는 상태로 원가만 자리값인 상품 ${noListing.length}건`)

@@ -48,7 +48,7 @@ export const BULK_LISTING_KOREAN_HEADERS = [
   '규격·용량',
   '대분류',
   '소분류',
-  '공급가',
+  '공급가(매입가)',
   '식식이판매가',
   '기본배송비',
   '마진율(PG3.3%) [자동]',
@@ -101,7 +101,8 @@ const HEADER_KIND: ('required' | 'auto' | 'optional')[] = [
   'optional',
   'required',
   'optional',
-  'required',
+  // 공급가(매입가) — 선택. 기존 템플릿처럼 비어 있어도 등록되고, 원가 미확정으로 남는다.
+  'optional',
   'required',
   'required',
   'auto',
@@ -246,7 +247,8 @@ function marginFormula(excelRow: number): string {
 }
 
 function marginGradeFormula(excelRow: number): string {
-  return `IF(I${excelRow}="","",IF(I${excelRow}<=10,"🔴 위험",IF(I${excelRow}<=16,"🟡 주의","🟢 정상")))`
+  // 공급가(F)가 비면 마진을 낼 근거가 없다. 빈칸으로 두면 "아직 계산 안 된 값"으로 읽히므로 못박는다.
+  return `IF(F${excelRow}="","원가 미확정",IF(I${excelRow}="","",IF(I${excelRow}<=10,"🔴 위험",IF(I${excelRow}<=16,"🟡 주의","🟢 정상"))))`
 }
 
 function customerDiscountFormula(excelRow: number): string {
@@ -260,7 +262,7 @@ function buildMainSheet(dataRows: BulkListingTemplateDataRow[]): XLSX.WorkSheet 
 
   const sectionRow = [
     { label: '① 상품 정보', from: 0, to: 4 },
-    { label: '② 가격·배송 (필수)', from: 5, to: 7 },
+    { label: '② 가격·배송', from: 5, to: 7 },
     { label: '③ 마진 (자동)', from: 8, to: 9 },
     { label: '④ 시중가·할인', from: 10, to: 11 },
     { label: '⑤ 선택 입력', from: 12, to: colCount - 1 },
@@ -378,7 +380,12 @@ function buildGuideSheet(): XLSX.WorkSheet {
     '3. 4행은 입력 예시입니다. 실제 등록 시 5행부터 덮어써 주세요.',
     '',
     '【필수 입력】',
-    '· 상품명, 대분류, 공급가, 식식이판매가, 기본배송비',
+    '· 상품명, 대분류, 식식이판매가, 기본배송비',
+    '',
+    '【공급가(매입가)】',
+    '· 선택 입력입니다. 비워도 등록은 되지만 그 상품은 "원가 미확정"으로 남아',
+    '  마진율이 계산되지 않고 매출분석의 원가 기반 수치에서도 빠집니다.',
+    '· 나중에 상품 수정 화면에서 공급가를 넣으면 그때 원가가 확정됩니다.',
     '',
     '【자동 계산】',
     '· 마진율(PG 3.3% 반영), 마진등급, 고객할인율 — 수식으로 자동 계산됩니다.',
