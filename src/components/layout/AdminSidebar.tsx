@@ -25,6 +25,9 @@ const MENU: MenuEntry[] = [
       { label: '프로모션 코드', href: '/admin/sales/promo' },
     ],
   },
+  // 문의관리는 고객이 먼저 연락해 온 것(CS), 위의 영업/가입관리는 우리가 먼저 찾아가는 것.
+  // 성격이 반대라 상위 메뉴를 나눈다.
+  { type: 'link', label: '문의관리', icon: '📞', href: '/admin/inquiries' },
   { type: 'link', label: '회원관리', icon: '🏢', href: '/admin/tenants' },
   {
     type: 'group',
