@@ -9,6 +9,7 @@ npm install            # 이 폴더 전용. 루트 package.json 은 건드리지
 node stage1.test.mjs          # 배송 추적 SQL
 node stage1.ts.test.mjs       # 조회 창구 TS + DB 전체 경로
 node stage1.render.test.mjs   # 식당 배송 타임라인 렌더 (restaurant-os 필요)
+node stage2.test.mjs          # 상세페이지 템플릿 SQL + 상속 + 화면 모델 + 렌더
 ```
 
 - 레포 위치가 다르면 `REALMYOS_DIR`, `RESTAURANT_OS_DIR` 환경변수로 지정한다.

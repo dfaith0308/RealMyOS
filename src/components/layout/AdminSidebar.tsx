@@ -35,6 +35,7 @@ const MENU: MenuEntry[] = [
     icon: '🛒',
     children: [
       { label: '상품관리', href: '/admin/commerce/products' },
+      { label: '상세페이지 템플릿', href: '/admin/commerce/detail-templates' },
       { label: '카테고리', href: '/admin/commerce/categories' },
       { label: '식자재 마스터', href: '/admin/commerce/ingredients' },
       { label: '식자재 대신 등록', href: '/admin/ingredient-entry' },
