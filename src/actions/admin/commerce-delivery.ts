@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createSupabaseServer, getAuthCtx } from '@/lib/supabase-server'
 import { createSupabaseAdmin } from '@/lib/supabase-admin'
 import { buildManualDedupeKey, isUuid, recordDeliveryObservation } from '@/lib/delivery-tracking/gateway'
+import { drainDomainEvents } from '@/lib/domain-events/drain'
 import {
   DELIVERY_MIGRATION_HINT,
   isMissingDeliverySchema,
@@ -58,6 +59,18 @@ export async function recordAdminDeliveryStatus(
     note: input.note ?? null,
   })
   if (!res.ok) return { success: false, error: res.error }
+
+  // 배송 완료가 처음 반영됐으면 자체 사건(delivery_completed)을 바로 처리한다.
+  // 이 액션은 메시지 규칙을 모른다 — 사건 처리기를 깨울 뿐이다. 실패해도 배송 입력은 성공이다
+  // (사건 행이 남아 있어 관리자 「지금 한 번 돌려보기」·크론이 다시 줍는다).
+  if (res.becameDelivered) {
+    try {
+      const drained = await drainDomainEvents(admin, auth.ctx.user_id)
+      if (!drained.ok) console.error('[delivery] delivery_completed 처리 보류', drained.error)
+    } catch (e) {
+      console.error('[delivery] delivery_completed 처리 예외', e instanceof Error ? e.message : e)
+    }
+  }
 
   revalidatePath('/admin/commerce/orders')
   revalidatePath('/admin/commerce/deliveries')

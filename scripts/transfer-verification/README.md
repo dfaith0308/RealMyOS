@@ -10,6 +10,8 @@ node stage1.test.mjs          # 배송 추적 SQL
 node stage1.ts.test.mjs       # 조회 창구 TS + DB 전체 경로
 node stage1.render.test.mjs   # 식당 배송 타임라인 렌더 (restaurant-os 필요)
 node stage2.test.mjs          # 상세페이지 템플릿 SQL + 상속 + 화면 모델 + 렌더
+node stage3.sql.test.mjs      # 자동 메시지 SQL: 사건·판정·claim·finish
+node stage3.ts.test.mjs       # 자동 메시지 TS: 광고 금지·안전장치·알림톡→문자·전체 경로 (외부 발송 없음 — 가짜 채널)
 ```
 
 - 레포 위치가 다르면 `REALMYOS_DIR`, `RESTAURANT_OS_DIR` 환경변수로 지정한다.
