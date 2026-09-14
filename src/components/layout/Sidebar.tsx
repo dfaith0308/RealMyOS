@@ -34,6 +34,7 @@ const MENU: MenuGroup[] = [
     items: [
       { label: '주문 목록', href: '/orders' },
       { label: '주문 등록', href: '/orders/new' },
+      { label: '스토어 주문 배송', href: '/storefront-deliveries' },
     ],
   },
   {

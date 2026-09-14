@@ -1,0 +1,8 @@
+{
+  "name": "transfer-verification",
+  "private": true,
+  "description": "이식 1~3단계 검증 스크립트 — 운영 DB 없이 PGlite(WASM Postgres)에 마이그레이션을 적용해 확인한다",
+  "dependencies": {
+    "@electric-sql/pglite": "0.5.8"
+  }
+}

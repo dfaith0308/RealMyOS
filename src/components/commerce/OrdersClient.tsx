@@ -18,6 +18,7 @@ import {
 import type { CommerceOrderStatus } from '@/lib/commerce-constants'
 import { formatKRW } from '@/lib/calc'
 import s from '@/app/(admin)/admin-shared.module.css'
+import DeliveryStatusPanel from '@/components/commerce/DeliveryStatusPanel'
 
 const PAYMENT_LABEL: Record<string, string> = {
   card: '카드',
@@ -502,6 +503,10 @@ export default function OrdersClient({
                       ))}
                     </tbody>
                   </table>
+                </div>
+                {/* 배송 추적(1단계 이식) — 결제·주문 상태와 독립. 별도 조회라 마이그레이션 전에도 이 모달은 그대로 뜬다 */}
+                <div style={{ marginTop: 16 }}>
+                  <DeliveryStatusPanel mode="admin" orderId={detail.id} />
                 </div>
                 {detail.allocations && detail.allocations.length > 0 ? (
                   <div style={{ marginTop: 16 }}>

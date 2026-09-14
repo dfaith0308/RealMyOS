@@ -39,6 +39,7 @@ const MENU: MenuEntry[] = [
       { label: '식자재 마스터', href: '/admin/commerce/ingredients' },
       { label: '식자재 대신 등록', href: '/admin/ingredient-entry' },
       { label: '주문처리', href: '/admin/commerce/orders' },
+      { label: '배송 현황', href: '/admin/commerce/deliveries' },
       { label: '가격 정책', href: '/admin/commerce/pricing' },
       { label: '무통장 입금', href: '/admin/commerce/storefront-bank' },
       { label: '쿠폰 관리', href: '/admin/coupons' },

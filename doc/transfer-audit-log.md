@@ -33,8 +33,8 @@
 
 ## 0단계 — 문서 재가공
 
-- 시작: 2026-09-14 23:30 (원문 정독 + 두 레포 구조 파악 포함)
-- 완료: 2026-09-14 23:52
+- 시작: 2026-09-14 23:22 (원문 정독 + 두 레포 구조 파악 포함)
+- 완료: 2026-09-14 23:40 (커밋 realmyos `907b97a` / restaurant-os `fdf3f92`)
 
 ### 0-01. 원문 위치
 - `C:\Users\babok\Downloads\siksiki-transfer-brief.md` (2026-09-14 23:22 수정). 이것을 원문으로 삼았다.
@@ -75,3 +75,92 @@
 
 ### 0-07. 운영 사실(하루 1회 조회 등)
 - 원문 2-4절 "현재 하루 1회, 요금제 제약"은 선물답게의 운영 사실이다. 식식이는 조회 업체가 없으므로 문장에서 빼고 「이식 메모」로 사실을 적었다. 원칙(자동 조회·수동 조회·자동 멈춤·링크 병행) 항목은 그대로 남겼다.
+
+---
+
+## 1단계 — 배송 추적
+
+- 시작: 2026-09-14 23:41
+- 완료: 2026-09-14 23:58 (커밋은 이 섹션과 같은 커밋)
+
+### 1-01. 상태 코드와 8개 이름
+| 코드 | 이름 | 구분 | 순위 |
+|---|---|---|---|
+| `not_registered` | 송장 등록 전 | 진행 | 0 |
+| `ready` | 배송 준비 | 진행 | 1 |
+| `picked_up` | 집화 | 진행 | 2 |
+| `in_transit` | 배송 중 | 진행 | 3 |
+| `out_for_delivery` | 배달 중 | 진행 | 4 |
+| `delivered` | 배송 완료 | 진행(끝) | 5 |
+| `attention` | 확인 필요 | 예외 | — |
+| `lookup_error` | 조회 오류 | 예외 | — |
+
+- 코드값은 영문, 라벨은 앱이 가진다 — `inquiries`가 코드값+앱 라벨로 간 것과 같은 방식(2순위).
+- **CHECK는 건다.** inquiries는 "선택지가 계속 늘어나는 값"이라 CHECK를 뺐지만, 배송 상태는 판정 함수가 분기하는 **닫힌 집합**이다(inquiries.match_status에 CHECK를 건 것과 같은 이유).
+
+### 1-02. 기존 `commerce_orders.status`와의 관계 → 갈아엎지 않고 `delivery_status`를 나란히 얹음
+- `status`는 결제·회계 흐름에 묶여 있다: `paid`→allocation 생성 + 플랫폼 입금 기록, `cancelled`→reversal, `refunded`→환불 경고(`actions/admin/commerce.ts updateCommerceOrderStatus`). 배송 단계를 여기에 섞으면 이 분기들이 흔들린다.
+- **판단**: `status`는 한 글자도 안 바꾼다. 새 컬럼 `delivery_status`(NULL 허용)를 추가. 기존 주문은 NULL = "추적 시작 전"으로 남는다(1순위).
+- 둘을 자동으로 맞추지 않는다(예: 배송 완료 → status completed 자동 전환 없음). 자동 전환을 넣으면 배송 입력 한 번이 회계 분기를 건드리게 된다. 관리자 주문처리 화면의 기존 버튼(준비 시작/배송 시작/수령 확인)은 그대로 동작한다.
+- 배송 입력은 `status ∈ (paid, preparing, shipped, completed)`일 때만 받는다. 결제 전·취소·환불 주문은 거부.
+
+### 1-03. 규칙을 어디서 강제하나 → DB 함수 하나 (`apply_commerce_delivery_event`)
+- 원칙 3 "판정은 한 곳에서만". 앱 두 개(공급자·관리자 화면)와 앞으로 붙을 조회 업체가 모두 같은 함수를 부른다.
+- 함수 안에서: 주문 행 `FOR UPDATE` 잠금 → 중복 키 확인 → 후퇴/완료 판정 → 이벤트 INSERT → 반영이면 UPDATE → 관리자 입력이면 `admin_logs` INSERT. **한 트랜잭션**(RULE-19, inquiries `match_inquiry_to_tenant`와 같은 구조).
+- 규칙 세부:
+  - **모르는 값 → `lookup_error`**: 앱(provider)이 옮기고, DB 함수가 체계 밖 값을 한 번 더 `lookup_error`로 막는다(이중 방어).
+  - **후퇴 금지**: "이미 도달한 최고 진행 순위"보다 낮은 단계는 `ignored_regress`. 최고 순위는 **이벤트 행에서 매번 계산**한다(저장 안 함).
+  - **예외 상태**: 완료 전 어느 단계에서든 들어갈 수 있다. 빠져나올 때는 이미 도달한 단계 이상으로만 — 예외를 거쳐 후퇴하는 우회를 막는다.
+  - **배송 완료는 끝**: 이후 모든 입력은 `ignored_terminal`. 확인 필요로도 못 돌린다.
+  - **원본 보관**: 무시된 입력도 `raw_status`·`raw_payload`와 함께 이벤트 행으로 남긴다.
+- 알려진 한계(⚠️ 사장님 판단 필요): 관리자가 **실수로 "배송 완료"를 누르면 되돌릴 방법이 없다.** 원문 규칙(후퇴 금지)과 3단계 메시지 방아쇠 보호를 우선했다. 정정 기능이 필요하면 "정정 사유 + 메시지 발송 전일 때만" 같은 별도 경로로 추가하는 것이 안전하다 — 이번 범위에서는 만들지 않았다.
+
+### 1-04. 중복 처리 방지 → 키 2겹 + 인덱스 1겹
+1. `(commerce_order_id, dedupe_key)` UNIQUE — 같은 사건은 행이 하나. 같은 키 재전송은 처음 결과를 돌려주고 끝.
+2. 수동 입력 키 = `manual:<제출 UUID>`. 화면이 버튼을 누를 때 쓰는 UUID는 **서버 응답을 받기 전까지 바꾸지 않는다** → 더블클릭·네트워크 재시도가 한 번만 반영. (storefront 주문의 `checkout_submission_id`와 같은 발상 — 2순위)
+3. 업체 조회 키 = `provider:<id>:<송장>:<원본상태>:<시각>` — 결정적이라 같은 조회 결과가 몇 번 와도 같다.
+4. 마지막 벽: `mapped_status='delivered' AND outcome='applied'` partial unique index → 적용된 배송 완료는 주문당 1행만 존재 가능. 앱 버그가 있어도 메시지 방아쇠가 두 번 생기지 않는다.
+
+### 1-05. 가드 트리거 추가 (지시서에 없던 것 — 추가 판단)
+- 발견: `commerce_orders`의 기존 RLS `commerce_orders_tenant`는 구매자(식당)에게 **FOR ALL**이다. 판정 함수만 막아도 식당 세션이 PostgREST PATCH로 `delivery_status='delivered'`를 직접 쓸 수 있다. 3단계에서 그게 메시지 방아쇠가 된다.
+- **판단**: `delivery_status`는 판정 함수 안에서만 바뀌게 BEFORE UPDATE/INSERT 트리거로 막는다(함수가 트랜잭션 한정 설정값을 켜고 쓴다). 기존 코드는 이 컬럼을 쓰지 않으므로 기존 흐름 영향 없음 — PGlite에서 `status` 변경이 가드에 안 걸리는 것까지 확인했다.
+- 판정 함수 EXECUTE는 `service_role`에만. anon/authenticated는 REVOKE.
+- 기존 RLS 자체(식당이 자기 주문 `status`를 바꿀 수 있는 것)는 **이번 범위 밖이라 손대지 않았다.** 기존 감사 문서 범위의 문제다.
+
+### 1-06. 조회 창구(공통 인터페이스) 구조
+```
+화면(관리자 / 공급자)
+   ↓ server action (권한·스코프 확인)
+src/lib/delivery-tracking/gateway.ts  recordDeliveryObservation()   ← 창구: 이것만 부른다
+   ↓ provider.mapRawStatus()  (provider.ts — manual_admin / manual_supplier, 업체는 여기에 추가)
+   ↓ rpc apply_commerce_delivery_event()   ← 판정
+```
+- 택배 조회 업체가 생기면 `DeliveryTrackingProvider`를 구현한 파일 1개 + `PROVIDERS` 등록 1줄. 주문·화면·메시지 코드는 그대로.
+- 자동 조회·자동 멈춤(원문 2-4)은 업체가 없어 **만들지 않았다**. 인터페이스에 `fetchEvents?` 자리만 뒀다.
+- 택배사 조회 링크(원문 2-4 병행 링크)도 **만들지 않았다**: 택배사별 조회 URL 형식을 이 환경에서 확인할 방법이 없어, 추측으로 링크를 만드는 것은 원칙 2(추측 금지)에 어긋난다. 송장번호는 화면에 그대로 보여준다.
+
+### 1-07. 공급자 입력 권한 — "단독 공급 주문만"
+- 공급자는 `commerce_orders`를 RLS로 못 읽는다. 공급자 화면은 service role로 읽되 `commerce_order_allocations.supplier_tenant_id = 로그인 공급자`로 스코프를 건다.
+- 배송 상태는 **주문 단위 하나**다. 공급자 A·B가 따로 보내는 주문에서 A가 "배송 완료"를 누르면 B 몫까지 완료로 보이고 메시지가 나간다.
+- **판단**: 취소 안 된 allocation이 전부 자기 것인 주문만 입력 가능. 여러 공급자 주문은 공급자에게 읽기만 주고 관리자가 입력한다(보수적). 품목(allocation) 단위 배송으로 쪼개는 것은 테이블 구조가 커져 이번 범위에서 하지 않았다.
+- 권한 판정은 `resolveSupplierOrderAccess()` 한 함수에서만 한다(목록 표시용 `sole_supplier`도 같은 기준).
+- allocation이 없는 주문(공급자 식별 실패 — 기존에도 있는 경우)은 공급자 화면에 안 보이고 관리자 화면에서만 입력된다.
+
+### 1-08. 계산값 저장 금지 적용
+- 저장하지 않은 것: `delivered_at`, "마지막 갱신 시각", "도달한 최고 단계" — 전부 이벤트 행에서 같은 값으로 다시 구해진다(RULE-00).
+- 저장한 것: `delivery_status`(현재 상태 — `status`와 같은 성격, 후퇴 금지를 쓰기 시점에 강제하려면 필요), 이벤트의 `outcome/status_before/status_after`(쓰는 순간의 판정 사실. 나중에 규칙이 바뀌어도 당시 판단이 남아야 한다 — append-only 기록).
+- `commerce_orders.updated_at`은 배송 입력 때 **건드리지 않는다**. 결제·회계 쪽 "주문 변경" 신호와 섞지 않기 위해서다.
+
+### 1-09. 화면 — 기존 화면을 안 깨뜨리는 방식
+| 화면 | 방식 |
+|---|---|
+| 관리자 주문처리 상세 모달 | `OrdersClient.tsx`에 **패널 1개 삽입(5줄)**. 기존 목록 쿼리(`ORDER_LIST_SELECT`)에 새 컬럼을 **넣지 않았다** — 마이그레이션 전에 배포되면 목록 전체가 500이 되기 때문. 패널은 별도 액션으로 따로 읽고, 실패하면 "마이그레이션 미적용" 문구만 보인다 |
+| 관리자 배송 현황 (신규) | `/admin/commerce/deliveries` — 상태별 건수 현황판 + 필터 + 행별 입력. 사이드바 「배송 현황」 |
+| 공급자 스토어 주문 배송 (신규) | `/storefront-deliveries` — 내게 배정된 주문 + 배송 상태 입력 버튼. 사이드바 주문관리 > 「스토어 주문 배송」 |
+| 식당 주문 상세 | 기존 3단계 `BuyOrderTimeline` **그대로 두고**, 그 아래 `BuyDeliveryTimeline`(6단계 세로 + 예외 안내)을 **병행**. 추적 시작 전 주문·마이그레이션 전에는 아무것도 안 붙는다(`catch → null`) |
+
+- 3단계 타임라인을 확장하지 않고 병행한 이유: 기존 3단계는 **결제 흐름**(주문접수/결제완료/완료)이고 새 6단계는 **배송 흐름**이다. 한 줄로 합치면 "결제완료인데 배송 중" 같은 조합을 표현할 수 없다. 기존 컴포넌트 주석도 "중간 단계를 쓰기 시작하면 STEPS만 늘리면 된다"고 했지만, 그건 `status` 중간값 얘기라 이번 구조와 다르다.
+- 식당 화면은 이벤트의 메모·입력자·원본 값을 **읽지 않는다**(내부 정보). 상태·시각만 service role + `tenant_id` 스코프로 읽는다. 이벤트 테이블 RLS는 관리자 SELECT만 연다(inquiries와 같은 설계).
+
+### 1-10. 식당OS 쪽 상수 복제
+- `resturant_os/src/lib/delivery-status.ts` — realmyos `status.ts`의 라벨·순위만 복제. 두 앱은 저장소가 달라 공유 패키지가 없다. 기존 `admin-settings-read.ts`(D-018)가 같은 방식으로 복제하고 있어 따랐다(2순위). 파일 머리에 원본 경로를 적었다.
